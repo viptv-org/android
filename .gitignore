@@ -5,3 +5,5 @@
 /.env
 /.air-tv/
 node_modules/
+/corpus/output/
+/benchmark/output/

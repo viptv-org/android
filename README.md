@@ -9,6 +9,11 @@ The first backend benchmark is `open-ani/mediamp` (Apache-2.0), with selected
 MIT ideas from `kdroidFilter/ComposeMediaPlayer`. No backend is considered
 supported until it passes Air's media corpus on real target hardware.
 
+`corpus/generate.sh` creates copyright-free fixtures, and
+`benchmark/run-mpv-linux.sh` records the initial Linux MPV engine baseline in an
+ignored local report. Wrapper/API mapping and hardware-rendering measurements
+remain separate gates.
+
 ```bash
 ./gradlew jvmTest jsNodeTest wasmJsNodeTest
 ```

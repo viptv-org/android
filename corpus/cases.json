@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "mkv-h264-multitrack",
+      "path": "output/h264-multitrack.mkv",
+      "kind": "on-demand",
+      "container": "matroska",
+      "videoCodec": "h264",
+      "audioTracks": 2,
+      "subtitleTracks": 2,
+      "subtitleFormats": ["subrip", "ass"],
+      "seekable": true
+    },
+    {
+      "id": "mkv-hevc",
+      "path": "output/hevc.mkv",
+      "kind": "on-demand",
+      "container": "matroska",
+      "videoCodec": "hevc",
+      "audioTracks": 1,
+      "subtitleTracks": 0,
+      "seekable": true
+    },
+    {
+      "id": "mkv-av1",
+      "path": "output/av1.mkv",
+      "kind": "on-demand",
+      "container": "matroska",
+      "videoCodec": "av1",
+      "audioTracks": 1,
+      "subtitleTracks": 0,
+      "seekable": true
+    },
+    {
+      "id": "mpeg-ts-h264",
+      "path": "output/live.ts",
+      "kind": "live",
+      "container": "mpegts",
+      "videoCodec": "h264",
+      "audioTracks": 1,
+      "subtitleTracks": 0,
+      "seekable": false
+    },
+    {
+      "id": "hls-event",
+      "path": "output/hls/event.m3u8",
+      "kind": "seekable-live",
+      "container": "hls",
+      "videoCodec": "h264",
+      "seekable": true
+    },
+    {
+      "id": "hls-live",
+      "path": "output/hls/live.m3u8",
+      "kind": "live",
+      "container": "hls",
+      "videoCodec": "h264",
+      "seekable": false
+    }
+  ]
+}
