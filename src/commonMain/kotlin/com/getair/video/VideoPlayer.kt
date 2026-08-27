@@ -55,6 +55,9 @@ data class PlaybackState(
     val positionMillis: Long = 0,
     val bufferedPositionMillis: Long? = null,
     val timeline: PlaybackTimeline? = null,
+    val selectedAudioTrackId: String? = null,
+    val selectedSubtitleTrackId: String? = null,
+    val selectedVideoTrackId: String? = null,
     val error: PlaybackError? = null,
 )
 

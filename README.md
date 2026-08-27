@@ -14,6 +14,10 @@ supported until it passes Air's media corpus on real target hardware.
 ignored local report. Wrapper/API mapping and hardware-rendering measurements
 remain separate gates.
 
+`DefaultVideoPlayer` is the shared state machine. Backends report level-triggered
+facts through `VideoBackend`; the common boundary enforces live seek rejection,
+track selection, buffering, lifecycle, typed failures, and redacted sources.
+
 ```bash
 ./gradlew jvmTest jsNodeTest wasmJsNodeTest
 ```
