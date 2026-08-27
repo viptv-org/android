@@ -59,12 +59,32 @@ class DefaultVideoPlayerTest {
         assertEquals(TrackSelectionResult.NotSupported, player.selectAudioTrack(null))
         backend.eventsFlow.emit(
             BackendEvent.Failed(
+                checkNotNull(backend.lastSessionId),
                 PlaybackError(PlaybackErrorCode.Decode, "Decoder failed", recoverable = true),
             ),
         )
         testScheduler.runCurrent()
         assertEquals(PlaybackStatus.Error, player.state.value.status)
         assertEquals(PlaybackErrorCode.Decode, player.state.value.error?.code)
+        player.close()
+    }
+
+    @Test
+    fun ignoresLateEventsFromAReplacedPlaybackSession() = runTest {
+        val backend = FakeBackend(OpenedMedia(PlaybackTimeline(PlaybackKind.OnDemand, 10_000)))
+        val player = DefaultVideoPlayer(backend, StandardTestDispatcher(testScheduler))
+        player.open(PlaybackSource("https://example.invalid/first.mkv"))
+        val firstSession = checkNotNull(backend.lastSessionId)
+        player.open(PlaybackSource("https://example.invalid/second.mkv"))
+        val secondSession = checkNotNull(backend.lastSessionId)
+
+        backend.eventsFlow.emit(BackendEvent.PositionChanged(firstSession, 9_000))
+        backend.eventsFlow.emit(BackendEvent.PlaybackEnded(firstSession))
+        backend.eventsFlow.emit(BackendEvent.PositionChanged(secondSession, 2_000))
+        testScheduler.runCurrent()
+
+        assertEquals(PlaybackStatus.Ready, player.state.value.status)
+        assertEquals(2_000, player.state.value.positionMillis)
         player.close()
     }
 
@@ -80,8 +100,16 @@ class DefaultVideoPlayerTest {
         override val events: Flow<BackendEvent> = eventsFlow
         var seekCalls = 0
         var lastSeek: Long? = null
+        var lastSessionId: PlaybackSessionId? = null
 
-        override suspend fun open(source: PlaybackSource, playWhenReady: Boolean): OpenedMedia = opened
+        override suspend fun open(
+            sessionId: PlaybackSessionId,
+            source: PlaybackSource,
+            playWhenReady: Boolean,
+        ): OpenedMedia {
+            lastSessionId = sessionId
+            return opened
+        }
         override fun play() = Unit
         override fun pause() = Unit
         override fun seekTo(positionMillis: Long) { seekCalls += 1; lastSeek = positionMillis }

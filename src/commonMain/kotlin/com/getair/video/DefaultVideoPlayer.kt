@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.jvm.JvmInline
 
 data class OpenedMedia(
     val timeline: PlaybackTimeline,
@@ -29,26 +30,56 @@ data class OpenedMedia(
     val selectedVideoTrackId: String? = null,
 )
 
+@JvmInline
+value class PlaybackSessionId(val value: Long)
+
 sealed interface BackendEvent {
-    data class PlaybackChanged(val isPlaying: Boolean, val playWhenReady: Boolean) : BackendEvent
-    data class BufferingChanged(val isBuffering: Boolean, val bufferedPositionMillis: Long? = null) : BackendEvent
-    data class PositionChanged(val positionMillis: Long) : BackendEvent
-    data class TimelineChanged(val timeline: PlaybackTimeline) : BackendEvent
+    val sessionId: PlaybackSessionId
+
+    data class PlaybackChanged(
+        override val sessionId: PlaybackSessionId,
+        val isPlaying: Boolean,
+        val playWhenReady: Boolean,
+    ) : BackendEvent
+    data class BufferingChanged(
+        override val sessionId: PlaybackSessionId,
+        val isBuffering: Boolean,
+        val bufferedPositionMillis: Long? = null,
+    ) : BackendEvent
+    data class PositionChanged(
+        override val sessionId: PlaybackSessionId,
+        val positionMillis: Long,
+    ) : BackendEvent
+    data class TimelineChanged(
+        override val sessionId: PlaybackSessionId,
+        val timeline: PlaybackTimeline,
+    ) : BackendEvent
     data class TracksChanged(
+        override val sessionId: PlaybackSessionId,
         val audio: List<AudioTrack>,
         val subtitles: List<SubtitleTrack>,
         val video: List<VideoTrack>,
     ) : BackendEvent
-    data class SeekFinished(val positionMillis: Long) : BackendEvent
-    data object PlaybackEnded : BackendEvent
-    data class Failed(val error: PlaybackError) : BackendEvent
+    data class SeekFinished(
+        override val sessionId: PlaybackSessionId,
+        val positionMillis: Long,
+    ) : BackendEvent
+    data class PlaybackEnded(override val sessionId: PlaybackSessionId) : BackendEvent
+    data class Failed(
+        override val sessionId: PlaybackSessionId,
+        val error: PlaybackError,
+    ) : BackendEvent
 }
 
 interface VideoBackend : AutoCloseable {
     val capabilities: PlayerCapabilities
     val events: Flow<BackendEvent>
 
-    suspend fun open(source: PlaybackSource, playWhenReady: Boolean): OpenedMedia
+    suspend fun open(
+        sessionId: PlaybackSessionId,
+        source: PlaybackSource,
+        playWhenReady: Boolean,
+    ): OpenedMedia
     fun play()
     fun pause()
     fun seekTo(positionMillis: Long)
@@ -72,6 +103,8 @@ class DefaultVideoPlayer(
     private val _subtitleTracks = MutableStateFlow<List<SubtitleTrack>>(emptyList())
     private val _videoTracks = MutableStateFlow<List<VideoTrack>>(emptyList())
     private var released = false
+    private var nextSessionValue = 0L
+    private var activeSessionId: PlaybackSessionId? = null
 
     override val state: StateFlow<PlaybackState> = _state.asStateFlow()
     override val events: SharedFlow<PlaybackEvent> = _events.asSharedFlow()
@@ -87,13 +120,15 @@ class DefaultVideoPlayer(
     override suspend fun open(source: PlaybackSource, playWhenReady: Boolean) = openMutex.withLock {
         ensureActive()
         withContext(scope.coroutineContext) {
+            val sessionId = PlaybackSessionId(++nextSessionValue)
+            activeSessionId = sessionId
             _state.value = PlaybackState(
                 status = PlaybackStatus.Opening,
                 playWhenReady = playWhenReady,
                 isBuffering = true,
             )
             try {
-                val opened = backend.open(source, playWhenReady)
+                val opened = backend.open(sessionId, source, playWhenReady)
                 _audioTracks.value = opened.audioTracks
                 _subtitleTracks.value = opened.subtitleTracks
                 _videoTracks.value = opened.videoTracks
@@ -174,6 +209,7 @@ class DefaultVideoPlayer(
 
     override fun stop() {
         if (released) return
+        activeSessionId = null
         backend.stop()
         clearMedia(PlaybackStatus.Idle)
     }
@@ -181,6 +217,7 @@ class DefaultVideoPlayer(
     override fun close() {
         if (released) return
         released = true
+        activeSessionId = null
         backend.close()
         clearMedia(PlaybackStatus.Released)
         scope.cancel()
@@ -205,7 +242,7 @@ class DefaultVideoPlayer(
     }
 
     private fun applyBackendEvent(event: BackendEvent) {
-        if (released) return
+        if (released || event.sessionId != activeSessionId) return
         when (event) {
             is BackendEvent.PlaybackChanged -> _state.update {
                 it.copy(isPlaying = event.isPlaying, playWhenReady = event.playWhenReady)
@@ -229,7 +266,7 @@ class DefaultVideoPlayer(
                 _state.update { it.copy(positionMillis = event.positionMillis.coerceAtLeast(0)) }
                 _events.tryEmit(PlaybackEvent.SeekCompleted(event.positionMillis))
             }
-            BackendEvent.PlaybackEnded -> {
+            is BackendEvent.PlaybackEnded -> {
                 _state.update { it.copy(status = PlaybackStatus.Ended, isPlaying = false, playWhenReady = false) }
                 _events.tryEmit(PlaybackEvent.Ended)
             }

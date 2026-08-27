@@ -39,6 +39,10 @@ A platform adapter supplies only two things:
 1. `VideoBackendFactory`: stable ID, runtime probe, player creation.
 2. `VideoBackend`: open/control/track commands plus level-triggered backend facts.
 
+Every open receives a monotonically increasing `PlaybackSessionId`, and every
+backend event must echo it. Shared state ignores callbacks from replaced or
+stopped sessions, eliminating old-player position/end/error races.
+
 Everything else remains shared: source redaction, lifecycle, live-vs-DVR seek
 rules, typed track selection, capability matching, fallback decisions, and UI.
 Adapters must not implement app controls, persistence, navigation, or their own
