@@ -115,14 +115,22 @@ data class PlayerCapabilities(
     val videoCodecs: Set<String> = emptySet(),
     val audioCodecs: Set<String> = emptySet(),
     val subtitleFormats: Set<String> = emptySet(),
+    val adaptiveProtocols: Set<String> = emptySet(),
+    val drmSchemes: Set<String> = emptySet(),
     val supportsAudioTrackSelection: Boolean = false,
     val supportsSubtitleTrackSelection: Boolean = false,
     val supportsVideoTrackSelection: Boolean = false,
     val supportsExternalSubtitles: Boolean = false,
+    val supportsLive: Boolean = false,
+    val supportsSeekableLive: Boolean = false,
+    val supportsPlaybackRate: Boolean = false,
     val supportsPictureInPicture: Boolean = false,
     val supportsHdr: Boolean = false,
     val supportsAudioPassthrough: Boolean = false,
+    val hardwareAcceleration: HardwareAcceleration = HardwareAcceleration.Unknown,
 )
+
+enum class HardwareAcceleration { Unknown, None, Decode, DecodeAndRender }
 
 enum class PlaybackErrorCode { Network, UnsupportedContainer, UnsupportedCodec, Decode, Source, Internal }
 
