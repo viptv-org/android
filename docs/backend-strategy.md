@@ -13,6 +13,9 @@ the public common API.
 | iOS / tvOS | AVFoundation | optional MPV experiment outside the default artifact | Best power, thermal, PiP, and system integration. Unsupported MKV/audio/subtitle combinations must fail explicitly or use a separately validated remux/MPV route. |
 | Browser / Wasm | native video + MSE adapter | Shaka-style adaptive adapter | Browser codec/container support is authoritative. MKV is not promised; HLS/DASH can use MSE where the browser supports it. |
 
+Implemented now: the Android/Android TV Media3 adapter and common capability
+router. Desktop MPV, Apple, and browser adapters remain gated work.
+
 The router probes installed adapters lazily in application priority order, so
 an optional native fallback is not loaded when the lightweight platform engine
 already fits. It never treats a README claim as a runtime capability. A requirement

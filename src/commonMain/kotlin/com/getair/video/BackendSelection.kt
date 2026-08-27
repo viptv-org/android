@@ -137,7 +137,11 @@ private fun PlayerCapabilities.rejections(requirements: PlaybackRequirements): S
     if (requirements.hdr && !supportsHdr) add(BackendRejection.Hdr)
     if (
         requirements.hardwareAcceleration &&
-        hardwareAcceleration !in setOf(HardwareAcceleration.Decode, HardwareAcceleration.DecodeAndRender)
+        if (requirements.videoCodec != null) {
+            !hardwareAcceleratedVideoCodecs.supports(requirements.videoCodec)
+        } else {
+            hardwareAcceleration !in setOf(HardwareAcceleration.Decode, HardwareAcceleration.DecodeAndRender)
+        }
     ) {
         add(BackendRejection.HardwareAcceleration)
     }

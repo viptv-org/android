@@ -18,6 +18,7 @@ class BackendSelectionTest {
                 audioCodecs = setOf("aac"),
                 subtitleFormats = setOf("vtt"),
                 adaptiveProtocols = setOf("hls", "dash"),
+                hardwareAcceleratedVideoCodecs = setOf("h264", "hevc"),
                 supportsLive = true,
                 supportsAudioTrackSelection = true,
                 supportsSubtitleTrackSelection = true,
@@ -32,6 +33,7 @@ class BackendSelectionTest {
                 audioCodecs = setOf("aac", "dts"),
                 subtitleFormats = setOf("ass", "srt", "vtt"),
                 adaptiveProtocols = setOf("hls"),
+                hardwareAcceleratedVideoCodecs = setOf("h264", "hevc", "av1"),
                 supportsLive = true,
                 supportsAudioTrackSelection = true,
                 supportsSubtitleTrackSelection = true,
@@ -56,6 +58,7 @@ class BackendSelectionTest {
                     audioCodec = "dts",
                     subtitleFormat = "ass",
                     videoTrackSelection = true,
+                    hardwareAcceleration = true,
                 ),
             ),
         )

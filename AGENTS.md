@@ -2,6 +2,7 @@
 
 - This repository owns Air's backend-neutral Kotlin Multiplatform playback contract. Compose controls and application playback policy do not belong in this module.
 - Keep platform types from Media3, AVFoundation/AVKit, mpv, VLC, GStreamer, and browser APIs out of `commonMain` public signatures.
+- The Android default is `AndroidMedia3BackendFactory`; keep its surface owner in `androidMain`, preserve per-source headers and external subtitles, and run `testReleaseUnitTest` for adapter mapping changes.
 - State is level-triggered `StateFlow`; one-off completion/error/session events use `Flow`. Commands are ordinary functions unless they must await opening or backend work.
 - Every backend callback carries the `PlaybackSessionId` supplied to `open`; never accept an unscoped late event from a replaced or stopped source.
 - Live, seekable-live, and on-demand timelines are distinct. A plain live timeline must never expose a seek bar or accept seek commands.

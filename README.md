@@ -24,6 +24,36 @@ track selection, buffering, lifecycle, typed failures, and redacted sources.
 stream stays on the lightweight platform engine while unsupported MKV/codec/
 track combinations can move to an explicitly installed fallback.
 
+## Android / Android TV
+
+`AndroidMedia3BackendFactory` is the first real adapter. It uses Media3 1.11.0
+with HLS and DASH modules, runtime `MediaCodec`/DRM probes, source request
+headers, external subtitles, independent audio/text/video track overrides,
+plain-live versus DVR timelines, and typed fallback errors. Media3 classes stay
+inside `androidMain`.
+
+```kotlin
+val factory = AndroidMedia3BackendFactory(context)
+val player = factory.createAndroidPlayer()
+
+AndroidView(
+    factory = { SurfaceView(it).also(player::attach) },
+    modifier = Modifier.fillMaxSize(),
+)
+
+player.open(
+    PlaybackSource(
+        uri = streamUrl,
+        mimeType = "application/x-mpegURL",
+        headers = streamHeaders,
+    ),
+)
+```
+
+The application owns the Compose controls and the `SurfaceView`; call
+`detachSurface()` when removing the surface and `close()` when the player is no
+longer needed. A plain live timeline never exposes a seek bar.
+
 ```bash
-./gradlew jvmTest jsNodeTest wasmJsNodeTest
+./gradlew jvmTest jsNodeTest wasmJsNodeTest testReleaseUnitTest
 ```

@@ -32,6 +32,16 @@ kotlin {
         commonMain.dependencies {
             api(libs.kotlinx.coroutines.core)
         }
+        androidMain.dependencies {
+            implementation(libs.kotlinx.coroutines.android)
+            implementation(libs.media3.common)
+            implementation(libs.media3.exoplayer)
+            implementation(libs.media3.exoplayer.dash)
+            implementation(libs.media3.exoplayer.hls)
+        }
+        androidUnitTest.dependencies {
+            implementation(kotlin("test"))
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)

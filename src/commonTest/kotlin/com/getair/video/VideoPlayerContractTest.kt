@@ -1,6 +1,7 @@
 package com.getair.video
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
@@ -37,5 +38,21 @@ class VideoPlayerContractTest {
         assertFalse("provider.example" in source)
         assertFalse("Authorization" in source)
         assertFalse("secret" in source)
+    }
+
+    @Test
+    fun externalSubtitleSourceNeverLeaksItsUrl() {
+        val subtitle = ExternalSubtitleSource(
+            id = "english",
+            uri = "https://secret.invalid/subtitles/token/file.ass",
+            mimeType = "text/x-ssa",
+            language = "eng",
+        )
+        val source = PlaybackSource("https://media.invalid/movie.mkv", externalSubtitles = listOf(subtitle))
+
+        assertFalse("secret.invalid" in subtitle.toString())
+        assertFalse("token" in subtitle.toString())
+        assertFalse("secret.invalid" in source.toString())
+        assertEquals(1, source.externalSubtitles.size)
     }
 }

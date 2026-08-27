@@ -8,9 +8,24 @@ class PlaybackSource(
     val mimeType: String? = null,
     val headers: Map<String, String> = emptyMap(),
     val title: String? = null,
+    val externalSubtitles: List<ExternalSubtitleSource> = emptyList(),
 ) {
     override fun toString(): String =
-        "PlaybackSource(uri=<redacted>, mimeType=$mimeType, headers=<redacted>, title=$title)"
+        "PlaybackSource(uri=<redacted>, mimeType=$mimeType, headers=<redacted>, title=$title, " +
+            "externalSubtitles=${externalSubtitles.size})"
+}
+
+data class ExternalSubtitleSource(
+    val id: String,
+    val uri: String,
+    val mimeType: String,
+    val language: String? = null,
+    val label: String? = null,
+    val isDefault: Boolean = false,
+    val isForced: Boolean = false,
+) {
+    override fun toString(): String =
+        "ExternalSubtitleSource(id=$id, uri=<redacted>, mimeType=$mimeType, language=$language, label=$label)"
 }
 
 enum class PlaybackKind { OnDemand, Live, SeekableLive }
@@ -117,6 +132,7 @@ data class PlayerCapabilities(
     val subtitleFormats: Set<String> = emptySet(),
     val adaptiveProtocols: Set<String> = emptySet(),
     val drmSchemes: Set<String> = emptySet(),
+    val hardwareAcceleratedVideoCodecs: Set<String> = emptySet(),
     val supportsAudioTrackSelection: Boolean = false,
     val supportsSubtitleTrackSelection: Boolean = false,
     val supportsVideoTrackSelection: Boolean = false,
