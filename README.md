@@ -81,6 +81,29 @@ browser networking; applications must use an authorized URL or a scoped proxy.
 Browser/system PiP is reported separately from Air's in-app PiP layout and is
 not claimed merely because the surface is movable.
 
+### Apple
+
+`AppleAvFoundationBackendFactory` uses a nonvisual `AVPlayer` and attaches it to
+an app-owned `AVPlayerLayer`. The same session and decoder survive when that
+layer moves between inline playback, an arbitrary in-app PiP rectangle, and an
+optional fullscreen layout. Air still owns controls and never invokes a forced
+fullscreen controller.
+
+The adapter maps native ready/failure/end, transport, buffering, position,
+seekable live ranges, audio selections, and embedded legible selections into
+the shared session-safe contract. It deliberately does not claim Matroska,
+external subtitle sidecars, manual video rendition selection, FairPlay setup,
+HDR, or system PiP. Those remain measured capability/fallback decisions rather
+than AVFoundation assumptions.
+
+```kotlin
+val player = AppleAvFoundationBackendFactory().createApplePlayer()
+val layer = player.createVideoLayer()
+
+// Put `layer` in any app-owned UIView/NSView layer hierarchy. Moving or resizing
+// that host view does not reopen the source.
+```
+
 ```bash
 ./gradlew jvmTest jsNodeTest wasmJsNodeTest testReleaseUnitTest
 ./scripts/test-mpv-jvm-integration.sh

@@ -61,8 +61,10 @@ Air re-derives these ideas behind its own session and capability contracts.
 
 ### Apple
 
-- The default AVFoundation route uses an `AVPlayerLayer`/UIKit interop view kept
-  behind the Compose scene, with bounds controlled by the composable.
+- The default AVFoundation route uses one nonvisual `AVPlayer` attached to an
+  app-owned `AVPlayerLayer` hosted by UIKit or AppKit behind the Compose scene.
+  Moving the host view between inline, in-app PiP, and optional fullscreen
+  layouts must reattach the layer without replacing the player item.
 - An MPV fallback, if shipped, must publish IOSurface/Metal textures into the
   same Compose scene instead of opening another window.
 

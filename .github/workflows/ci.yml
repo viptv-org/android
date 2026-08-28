@@ -70,7 +70,7 @@ jobs:
           - os: windows-latest
             tasks: mingwX64Test
           - os: macos-latest
-            tasks: macosX64Test compileKotlinIosArm64 compileKotlinIosSimulatorArm64
+            tasks: macosX64Test compileKotlinMacosArm64 compileKotlinIosArm64 compileKotlinIosSimulatorArm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7

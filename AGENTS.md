@@ -21,6 +21,7 @@ preserve or clarify a legacy contract test.
 - Sources, headers, licenses, cookies, and credential-bearing URLs must never appear in `toString`, logs, analytics, or error messages.
 - Read public player implementations for architecture and failure modes, then independently implement Air's contracts. Record exact upstream revisions in `docs/backend-strategy.md`; do not paste implementation code.
 - Browser/Wasm behavior requires `wasmJsBrowserTest` with a real headless browser. Node compilation/tests are not evidence for DOM media behavior, and `canPlayType` results remain runtime facts.
+- Apple playback uses one nonvisual `AVPlayer` plus an app-owned `AVPlayerLayer`; moving, clipping, or resizing that layer must not replace the player item. Do not use `AVPlayerViewController` as the general surface or force fullscreen. Apple CI compilation is not physical-device evidence for codecs, HDR, external displays, PiP, or power.
 - Run `./gradlew jvmTest jsNodeTest wasmJsNodeTest` for portable changes. Apple, Windows, Android-device, and physical playback validation remain separate gates.
 
 ## Legacy TypeScript reference
