@@ -51,3 +51,36 @@ https://maven.pkg.github.com/air-tv/video
 GitHub Packages requires authenticated consumption. npm publication is not
 configured here; the `@get-air/video` scope and release ownership remain in the
 separate historical TypeScript repository linked above.
+
+The existing `v0.1.x` and `v0.2.x` tags/releases belong to that legacy npm
+history and are not KMP Maven releases. A KMP version becomes available only
+after a future explicit stable release from this repository completes every
+host verification and publication job.
+
+Consumers configure the authenticated repository outside the project source:
+
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven {
+            url = uri("https://maven.pkg.github.com/air-tv/video")
+            credentials {
+                username = providers.environmentVariable("GITHUB_ACTOR").orNull
+                password = providers.environmentVariable("GITHUB_TOKEN").orNull
+            }
+        }
+    }
+}
+```
+
+Local consumers use a classic personal access token with `read:packages`.
+GitHub Actions consumers grant `packages: read` and use the workflow
+`GITHUB_TOKEN` after the package grants that repository access. Never commit a
+package token or place one in repository `gradle.properties`.
+
+## License
+
+Air Video KMP is available under either the Apache License 2.0 or the MIT
+License, at your option. Both license texts are included in published archives.

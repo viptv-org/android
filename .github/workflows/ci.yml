@@ -2,80 +2,84 @@ name: CI
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
+  push: { branches: [main] }
   pull_request:
 
-permissions:
-  contents: read
+permissions: { contents: read }
 
 jobs:
-  common:
+  linux-host:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-      - run: ./gradlew jvmTest jsNodeTest wasmJsNodeTest
-
-  browser:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: browser-actions/setup-chrome@v2.2.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with: { distribution: temurin, java-version: "17" }
+      - uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
         id: chrome
-        with:
-          install-dependencies: true
-      - run: ./gradlew wasmJsBrowserTest
-        env:
-          CHROME_BIN: ${{ steps.chrome.outputs.chrome-path }}
+        with: { install-dependencies: true }
+      - run: >-
+          ./gradlew jvmTest jsNodeTest wasmJsNodeTest wasmJsBrowserTest linuxX64Test
+          --max-workers=2
+        env: { CHROME_BIN: "${{ steps.chrome.outputs.chrome-path }}" }
+      - name: Publish Linux-owned variants to an isolated Maven repository
+        run: >-
+          ./gradlew publishKotlinMultiplatformPublicationToHostTestRepository
+          publishJvmPublicationToHostTestRepository publishJsPublicationToHostTestRepository
+          publishWasmJsPublicationToHostTestRepository publishLinuxX64PublicationToHostTestRepository
+          -PVERSION_NAME=0.0.0 -PTEMP_MAVEN_REPOSITORY="$RUNNER_TEMP/maven" --max-workers=2
+      - run: find "$RUNNER_TEMP/maven/com/getair" -type f -name '*.pom' | grep -q .
 
-  android:
+  android-host:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: android-actions/setup-android@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with: { distribution: temurin, java-version: "17" }
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
       - run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
-      - run: ./gradlew testReleaseUnitTest compileReleaseKotlinAndroid lintRelease
+      - run: ./gradlew testReleaseUnitTest compileReleaseKotlinAndroid lintRelease --max-workers=2
+      - run: >-
+          ./gradlew publishAndroidReleasePublicationToHostTestRepository
+          -PVERSION_NAME=0.0.0 -PTEMP_MAVEN_REPOSITORY="$RUNNER_TEMP/maven" --max-workers=2
+      - run: find "$RUNNER_TEMP/maven/com/getair" -type f -name '*.pom' | grep -q .
+
+  apple-host:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with: { distribution: temurin, java-version: "17" }
+      - run: >-
+          ./gradlew macosX64Test compileKotlinMacosArm64 compileKotlinIosX64
+          compileKotlinIosArm64 compileKotlinIosSimulatorArm64 --max-workers=2
+      - run: >-
+          ./gradlew publishMacosX64PublicationToHostTestRepository publishMacosArm64PublicationToHostTestRepository
+          publishIosX64PublicationToHostTestRepository publishIosArm64PublicationToHostTestRepository
+          publishIosSimulatorArm64PublicationToHostTestRepository
+          -PVERSION_NAME=0.0.0 -PTEMP_MAVEN_REPOSITORY="$RUNNER_TEMP/maven" --max-workers=2
+      - run: find "$RUNNER_TEMP/maven/com/getair" -type f -name '*.pom' | grep -q .
+
+  windows-host:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with: { distribution: temurin, java-version: "17" }
+      - run: ./gradlew mingwX64Test --max-workers=2
+        shell: bash
+      - run: >-
+          ./gradlew publishMingwX64PublicationToHostTestRepository
+          -PVERSION_NAME=0.0.0 -PTEMP_MAVEN_REPOSITORY="$RUNNER_TEMP/maven" --max-workers=2
+        shell: bash
+      - run: find "$RUNNER_TEMP/maven/com/getair" -type f -name '*.pom' | grep -q .
+        shell: bash
 
   mpv-engine:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with: { distribution: temurin, java-version: "17" }
       - run: sudo apt-get update && sudo apt-get install --yes ffmpeg libx11-dev mpv
       - run: ./scripts/build-jawt-linux.sh
       - run: ./scripts/test-mpv-jvm-integration.sh
-
-  native:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            tasks: linuxX64Test
-          - os: windows-latest
-            tasks: mingwX64Test
-          - os: macos-latest
-            tasks: macosX64Test compileKotlinMacosArm64 compileKotlinIosArm64 compileKotlinIosSimulatorArm64
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-      - run: ./gradlew ${{ matrix.tasks }}

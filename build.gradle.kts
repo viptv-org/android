@@ -1,6 +1,8 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
+import org.gradle.api.tasks.bundling.AbstractArchiveTask
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -85,6 +87,11 @@ publishing {
                     url.set("https://opensource.org/licenses/MIT")
                     distribution.set("repo")
                 }
+                license {
+                    name.set("Apache License, Version 2.0")
+                    url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                    distribution.set("repo")
+                }
             }
             scm {
                 url.set("https://github.com/air-tv/video")
@@ -100,6 +107,46 @@ publishing {
             credentials {
                 username = providers.environmentVariable("GITHUB_ACTOR").orNull
                 password = providers.environmentVariable("GITHUB_TOKEN").orNull
+            }
+        }
+        providers.gradleProperty("TEMP_MAVEN_REPOSITORY").orNull?.let { temporaryRepository ->
+            maven {
+                name = "HostTest"
+                url = uri(temporaryRepository)
+            }
+        }
+    }
+}
+
+tasks.withType<AbstractArchiveTask>().configureEach {
+    from(rootProject.file("LICENSE-MIT")) {
+        into("META-INF")
+        rename { "LICENSE-MIT" }
+    }
+    from(rootProject.file("LICENSE-APACHE")) {
+        into("META-INF")
+        rename { "LICENSE-APACHE" }
+    }
+}
+
+tasks.withType<PublishToMavenRepository>().configureEach {
+    if (name.endsWith("ToGitHubPackagesRepository")) {
+        val releaseVersionProvider = providers.gradleProperty("VERSION_NAME")
+        val tagProvider = providers.environmentVariable("GITHUB_REF_NAME")
+        val refTypeProvider = providers.environmentVariable("GITHUB_REF_TYPE")
+        val eventProvider = providers.environmentVariable("GITHUB_EVENT_NAME")
+        val actionsProvider = providers.environmentVariable("GITHUB_ACTIONS")
+        doFirst {
+            val releaseVersion = releaseVersionProvider.orNull.orEmpty()
+            val stableVersion = Regex("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$")
+            require(actionsProvider.orNull == "true" && eventProvider.orNull == "release") {
+                "GitHub Packages publishing is restricted to the release workflow"
+            }
+            require(stableVersion.matches(releaseVersion)) {
+                "GitHub Packages requires a stable MAJOR.MINOR.PATCH VERSION_NAME"
+            }
+            require(refTypeProvider.orNull == "tag" && tagProvider.orNull == "v$releaseVersion") {
+                "GitHub Packages VERSION_NAME must exactly match the vMAJOR.MINOR.PATCH tag"
             }
         }
     }

@@ -9,6 +9,7 @@ artifacts and root Gradle metadata for one release share the exact same version.
 
 Stable releases use immutable `vMAJOR.MINOR.PATCH` GitHub tags and publish only
 to `air-tv/video` GitHub Packages. Published versions are never overwritten.
-The historical `@get-air/video` npm package is versioned independently in
+The historical `v0.1.x`/`v0.2.x` tags and `@get-air/video` npm package are
+legacy TypeScript releases, not KMP Maven versions. The npm package is versioned independently in
 [`get-air/video`](https://github.com/get-air/video); its legacy tags do not name
 KMP Maven releases in this repository.
