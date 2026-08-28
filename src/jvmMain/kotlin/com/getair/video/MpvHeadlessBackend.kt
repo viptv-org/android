@@ -242,7 +242,7 @@ internal class MpvSessionBackend(
                 target?.nativeId ?: mpvString("no"),
             ),
         )
-        return id?.let(TrackSelectionResult::Selected) ?: TrackSelectionResult.Disabled
+        return TrackSelectionResult.Requested(id)
     }
 
     override fun stop() {

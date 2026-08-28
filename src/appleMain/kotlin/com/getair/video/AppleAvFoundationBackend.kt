@@ -254,11 +254,33 @@ internal class AppleAvFoundationBackend(
             val group = trackTargets.values.firstOrNull { it.type == type }?.group
                 ?: return TrackSelectionResult.NotSupported
             if (!group.allowsEmptySelection) return TrackSelectionResult.NotSupported
-            runOnMain { item.selectMediaOption(null, group) }
-            return TrackSelectionResult.Disabled
+            runOnMain {
+                item.selectMediaOption(null, group)
+                publishTracks(item)
+            }
+            return TrackSelectionResult.Requested(null)
         }
-        runOnMain { item.selectMediaOption(target.option, target.group) }
-        return TrackSelectionResult.Selected(id)
+        runOnMain {
+            item.selectMediaOption(target.option, target.group)
+            publishTracks(item)
+        }
+        return TrackSelectionResult.Requested(id)
+    }
+
+    private fun publishTracks(item: AVPlayerItem) {
+        val active = sessionId ?: return
+        val tracks = snapshotTracks(item)
+        eventFlow.tryEmit(
+            BackendEvent.TracksChanged(
+                active,
+                tracks.audio,
+                tracks.subtitles,
+                emptyList(),
+                tracks.selectedAudio,
+                tracks.selectedSubtitle,
+                null,
+            ),
+        )
     }
 
     override fun stop() {
@@ -357,11 +379,11 @@ internal class AppleAvFoundationBackend(
         return AppleTrackSnapshot(
             audio = audio,
             subtitles = subtitles,
-            selectedAudio = audioGroup?.defaultOption?.let { default ->
-                targets.entries.firstOrNull { it.value.option == default }?.key
+            selectedAudio = audioGroup?.let(item::selectedMediaOptionInMediaSelectionGroup)?.let { selected ->
+                targets.entries.firstOrNull { it.value.option == selected }?.key
             },
-            selectedSubtitle = subtitleGroup?.defaultOption?.let { default ->
-                targets.entries.firstOrNull { it.value.option == default }?.key
+            selectedSubtitle = subtitleGroup?.let(item::selectedMediaOptionInMediaSelectionGroup)?.let { selected ->
+                targets.entries.firstOrNull { it.value.option == selected }?.key
             },
         )
     }

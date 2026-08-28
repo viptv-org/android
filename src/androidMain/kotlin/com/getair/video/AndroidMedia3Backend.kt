@@ -213,7 +213,7 @@ internal class AndroidMedia3Backend(
             }
             player.trackSelectionParameters = builder.build()
         }
-        return id?.let(TrackSelectionResult::Selected) ?: TrackSelectionResult.Disabled
+        return TrackSelectionResult.Requested(id)
     }
 
     override fun stop() {

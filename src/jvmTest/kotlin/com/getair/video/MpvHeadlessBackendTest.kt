@@ -49,8 +49,8 @@ class MpvHeadlessBackendTest {
         assertEquals(2, player.subtitleTracks.value.size)
         assertEquals(1, player.videoTracks.value.size)
         assertTrue(player.seekTo(70_000))
-        assertIs<TrackSelectionResult.Selected>(player.selectAudioTrack(player.audioTracks.value.last().id))
-        assertIs<TrackSelectionResult.Selected>(player.selectSubtitleTrack(player.subtitleTracks.value.last().id))
+        assertIs<TrackSelectionResult.Requested>(player.selectAudioTrack(player.audioTracks.value.last().id))
+        assertIs<TrackSelectionResult.Requested>(player.selectSubtitleTrack(player.subtitleTracks.value.last().id))
 
         withTimeout(2_000) {
             while (client.commands.none { it.commandName() == "seek" }) delay(10)
@@ -88,10 +88,10 @@ class MpvHeadlessBackendTest {
             assertTrue(player.subtitleTracks.value.count(SubtitleTrack::external) >= 3)
             assertTrue(player.videoTracks.value.isNotEmpty())
             player.audioTracks.value.forEach {
-                assertIs<TrackSelectionResult.Selected>(player.selectAudioTrack(it.id))
+                assertIs<TrackSelectionResult.Requested>(player.selectAudioTrack(it.id))
             }
             player.subtitleTracks.value.forEach {
-                assertIs<TrackSelectionResult.Selected>(player.selectSubtitleTrack(it.id))
+                assertIs<TrackSelectionResult.Requested>(player.selectSubtitleTrack(it.id))
             }
 
             listOf(

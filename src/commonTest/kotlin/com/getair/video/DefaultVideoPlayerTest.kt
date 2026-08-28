@@ -119,6 +119,38 @@ class DefaultVideoPlayerTest {
         player.close()
     }
 
+    @Test
+    fun asynchronousTrackRequestWaitsForNativeConfirmation() = runTest {
+        val backend = FakeBackend(
+            opened = OpenedMedia(
+                timeline = PlaybackTimeline(PlaybackKind.OnDemand, 10_000),
+                audioTracks = listOf(AudioTrack("a1", "English"), AudioTrack("a2", "Spanish")),
+                selectedAudioTrackId = "a1",
+            ),
+            requestedSelections = true,
+        )
+        val player = DefaultVideoPlayer(backend, StandardTestDispatcher(testScheduler))
+        player.open(PlaybackSource("https://example.invalid/movie.mkv"))
+
+        assertEquals(TrackSelectionResult.Requested("a2"), player.selectAudioTrack("a2"))
+        assertEquals("a1", player.state.value.selectedAudioTrackId)
+
+        backend.eventsFlow.emit(
+            BackendEvent.TracksChanged(
+                checkNotNull(backend.lastSessionId),
+                audio = listOf(AudioTrack("a1", "English"), AudioTrack("a2", "Spanish")),
+                subtitles = emptyList(),
+                video = emptyList(),
+                selectedAudioTrackId = "a2",
+                selectedSubtitleTrackId = null,
+                selectedVideoTrackId = null,
+            ),
+        )
+        testScheduler.runCurrent()
+        assertEquals("a2", player.state.value.selectedAudioTrackId)
+        player.close()
+    }
+
     private class FakeBackend(
         private val opened: OpenedMedia,
         override val capabilities: PlayerCapabilities = PlayerCapabilities(
@@ -126,6 +158,7 @@ class DefaultVideoPlayerTest {
             supportsSubtitleTrackSelection = true,
             supportsVideoTrackSelection = true,
         ),
+        private val requestedSelections: Boolean = false,
     ) : VideoBackend {
         val eventsFlow = MutableSharedFlow<BackendEvent>(extraBufferCapacity = 8)
         override val events: Flow<BackendEvent> = eventsFlow
@@ -150,6 +183,7 @@ class DefaultVideoPlayerTest {
         override fun stop() = Unit
         override fun close() = Unit
         private fun selection(id: String?): TrackSelectionResult =
-            id?.let(TrackSelectionResult::Selected) ?: TrackSelectionResult.Disabled
+            if (requestedSelections) TrackSelectionResult.Requested(id)
+            else id?.let(TrackSelectionResult::Selected) ?: TrackSelectionResult.Disabled
     }
 }

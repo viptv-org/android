@@ -124,6 +124,8 @@ data class VideoTrack(
 
 sealed interface TrackSelectionResult {
     data class Selected(val trackId: String) : TrackSelectionResult
+    /** Backend accepted an asynchronous selection; state changes only after native confirmation. */
+    data class Requested(val trackId: String?) : TrackSelectionResult
     data class NotFound(val trackId: String) : TrackSelectionResult
     data object Disabled : TrackSelectionResult
     data object NotSupported : TrackSelectionResult

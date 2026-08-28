@@ -242,7 +242,10 @@ class DefaultVideoPlayer(
             when (result) {
                 is TrackSelectionResult.Selected -> update(result.trackId)
                 TrackSelectionResult.Disabled -> update(null)
-                is TrackSelectionResult.NotFound, TrackSelectionResult.NotSupported -> Unit
+                is TrackSelectionResult.Requested,
+                is TrackSelectionResult.NotFound,
+                TrackSelectionResult.NotSupported,
+                -> Unit
             }
         }
     }
