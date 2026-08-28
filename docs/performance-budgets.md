@@ -37,6 +37,14 @@ frame is confirmed presented—not merely when metadata or tracks are parsed.
   recreate the player session.
 - A live reconnect uses bounded exponential backoff, never grows an unbounded
   queue, and restores the surface without exposing a seek bar for plain live.
+- Under the resilient live profile, a fixture that delays individual HLS
+  segments by two seconds produces zero rebuffer events after the safety margin
+  is established. Report startup-to-protection time separately from first frame.
+- Live offset and buffered-ahead duration are sampled independently. The
+  approximately 10-second resilient target is accepted only when buffered-ahead
+  telemetry confirms the cushion; latency alone is insufficient.
+- Channel change to first presented frame is p50 ≤ 750 ms and p95 ≤ 1,500 ms
+  on a LAN MPEG-TS fixture, without waiting to fill the complete resilient target.
 
 ## Memory and copies
 

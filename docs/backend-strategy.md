@@ -78,6 +78,26 @@ rules, typed track selection, capability matching, fallback decisions, and UI.
 Adapters must not implement app controls, persistence, navigation, or their own
 parallel public state model.
 
+## Live buffering policy
+
+Air exposes intent, never backend tuning constants, through three live profiles:
+`LowLatency`, `Balanced`, and `Resilient`. Resilient targets an approximately
+10-second safety margin where the manifest and engine allow it. The common state
+must report live-edge offset and buffered-ahead duration separately because
+being ten seconds behind live does not prove that ten seconds of media is ready.
+
+Adapters must use their native live path. Android maps intent to Media3
+`MediaItem.LiveConfiguration` and `DefaultLoadControl`, while still honoring HLS
+`EXT-X-START`, `PART-HOLD-BACK`, and `HOLD-BACK` when the user has not overridden
+latency. MPV uses bounded demux/cache controls, Apple uses AVPlayer's native
+forward-buffer and stalling policy, and web uses native/MSE buffering. No Air
+adapter owns a second HLS downloader, segment concatenator, or unbounded packet
+queue.
+
+A profile change must not recreate the app-facing player or surface. If a
+backend cannot safely apply it to an active session, it reports that limitation
+and applies the preference on the next open.
+
 ## Acceptance gates
 
 An adapter is not production-supported until it passes:
@@ -86,6 +106,10 @@ An adapter is not production-supported until it passes:
 - two embedded audio tracks and independent audio selection;
 - embedded SRT/ASS plus external SRT/VTT/ASS;
 - MPEG-TS and HLS event/live playback;
+- independent live-offset and buffered-ahead telemetry for low-latency,
+  balanced, and resilient profiles;
+- a jitter fixture with two-second segment delays, repeated playlist refresh,
+  discontinuities, bounded reconnect, and behind-live-window recovery;
 - repeated open/stop/open and surface detach/reattach without stale events;
 - hardware-decode/render evidence, startup latency, dropped frames, memory, CPU,
   and thermal checks on real target hardware;
