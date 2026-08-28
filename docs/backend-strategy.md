@@ -13,10 +13,31 @@ the public common API.
 | iOS / tvOS | AVFoundation | optional MPV experiment outside the default artifact | Best power, thermal, PiP, and system integration. Unsupported MKV/audio/subtitle combinations must fail explicitly or use a separately validated remux/MPV route. |
 | Browser / Wasm | native video + MSE adapter | Shaka-style adaptive adapter | Browser codec/container support is authoritative. MKV is not promised; HLS/DASH can use MSE where the browser supports it. |
 
-Implemented now: the Android/Android TV Media3 adapter, common capability
-router, and the JVM MPV session/track/live engine with a null-output corpus
-gate. The MPV embedded surface and hardware-render path, Apple, and browser
-adapters remain gated work.
+Implemented now: Android/Android TV Media3, Apple AVFoundation, Browser/Wasm,
+the common capability router, and the JVM MPV session/track/live engine with a
+null-output corpus gate. The JAWT surface remains an internal proof only.
+
+### Desktop fork base — 2026-08-28
+
+Air will use `open-ani/mediamp` revision `4aae5fa` as the fork base for the
+bundled desktop MPV runtime and Compose/Skia surface, while retaining Air's
+smaller `com.getair.video` contract as the only app-facing API. This is a source
+fork with retained history/license, not copied fragments or a second public
+player model.
+
+The choice followed a live Linux gate, not repository metadata. The pinned
+runtime built FFmpeg 8.0.1, dav1d 1.5.4 and mpv 0.41.0, created a Skiko-shared
+GLX producer context and triple-buffered OpenGL ring, and rendered Air's H.264,
+HEVC and AV1 Matroska fixtures through the production Compose surface. H.264
+also proved two audio tracks, embedded SRT/ASS, pause/play/seek/EOF/replay and
+native frame capture. Detailed evidence and unresolved fork work are in
+[`mediamp-evaluation-2026-08-28.md`](mediamp-evaluation-2026-08-28.md).
+
+This selects a base, not unconditional support. Linux frame-preview tests skip
+the platform upstream and hang when naively enabled without a live Skia/GLX
+environment; credential-bearing media URIs need Air redaction; video-rendition
+and live-window capability reporting still need Air adapters; and AMD/Intel use
+`vaapi-copy`, so their decode-to-GL path is not yet end-to-end zero-copy.
 
 The router probes installed adapters lazily in application priority order, so
 an optional native fallback is not loaded when the lightweight platform engine
@@ -32,7 +53,7 @@ and a provenance note in the commit.
 
 | Project | Revision | License/use | What Air keeps |
 | --- | --- | --- | --- |
-| [open-ani/mediamp](https://github.com/open-ani/mediamp) | `4aae5fa2956b5c0530704e0cd218aa75502584c6` | Apache-2.0 | Orthogonal lifecycle/play-intent/buffering state; Media3, MPV, AVKit, browser modules; explicit surface providers; session-aware backend events. |
+| [open-ani/mediamp](https://github.com/open-ani/mediamp) | `4aae5fa2956b5c0530704e0cd218aa75502584c6` | Apache-2.0; selected desktop fork base | Orthogonal lifecycle/play-intent/buffering state; bundled FFmpeg/mpv runtime; GLX/D3D/Metal surface ring; explicit surface providers; session-aware events. Air keeps its own public contract. |
 | [kdroidFilter/ComposeMediaPlayer](https://github.com/kdroidFilter/ComposeMediaPlayer) | `67ae1dce6ae4924de19bd3b0b96d66c4758dc921` | MIT | Small common control surface, native surfaces, Media3/AVPlayer/Media Foundation/GStreamer seams, external subtitle UX. |
 | [Chaintech ComposeMultiplatformMediaPlayer](https://github.com/Chaintech-Network/ComposeMultiplatformMediaPlayer) | `6ba2905779bddeedc56c251ab87d97264de3af92` | Apache-2.0 | Shaka/MSE adaptive-web lessons, HLS quality/audio/caption selection, PiP behavior. Its required system VLC desktop runtime is rejected. |
 | [SuvioMedia/KMediaPlayer](https://github.com/SuvioMedia/KMediaPlayer) | `343a965fed4cf4b57e514f58e895d6e5967e472b` | Proprietary/source-visible | Architecture observation only: strict capability evidence, optional extensions, and transactional fallback. No implementation code may be copied or depended on. |

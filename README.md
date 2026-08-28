@@ -64,9 +64,12 @@ The JAWT/`wid` experiment proves native rendering but is intentionally not the
 production surface because heavyweight child windows cannot guarantee Compose
 overlay z-order.
 
-The production desktop design is a bounded triple-buffered GPU texture stream
-from libmpv into the normal Compose/Skia scene, with CPU readback only as an
-explicit degraded fallback.
+The selected desktop fork base is `open-ani/mediamp` at `4aae5fa`. Its bundled
+Linux runtime and production Compose GLX texture ring built and rendered Air's
+H.264, HEVC and AV1 Matroska fixtures on the local RX 7900 XT. Air keeps this
+repository's smaller backend-neutral API in front of that fork. See
+[`docs/mediamp-evaluation-2026-08-28.md`](docs/mediamp-evaluation-2026-08-28.md)
+for the evidence and the Linux preview/redaction/VAAPI-copy gaps that remain.
 
 ### Browser / Wasm
 
