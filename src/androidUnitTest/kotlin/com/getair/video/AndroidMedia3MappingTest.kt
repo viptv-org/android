@@ -12,6 +12,12 @@ class AndroidMedia3MappingTest {
         val live = media3Timeline(isLive = true, isSeekable = false, durationMillis = null)
         val dvr = media3Timeline(isLive = true, isSeekable = true, durationMillis = 90_000)
         val vod = media3Timeline(isLive = false, isSeekable = true, durationMillis = 120_000)
+        val forcedPlainLive = media3Timeline(
+            isLive = true,
+            isSeekable = true,
+            durationMillis = 90_000,
+            kindHint = PlaybackKind.Live,
+        )
 
         assertEquals(PlaybackKind.Live, live.kind)
         assertFalse(live.showSeekBar)
@@ -20,6 +26,7 @@ class AndroidMedia3MappingTest {
         assertEquals(90_000, dvr.seekableRange?.endMillis)
         assertEquals(PlaybackKind.OnDemand, vod.kind)
         assertTrue(vod.showSeekBar)
+        assertFalse(forcedPlainLive.showSeekBar)
     }
 
     @Test

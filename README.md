@@ -54,6 +54,20 @@ The application owns the Compose controls and the `SurfaceView`; call
 `detachSurface()` when removing the surface and `close()` when the player is no
 longer needed. A plain live timeline never exposes a seek bar.
 
+## Desktop MPV checkpoint
+
+The JVM MPV JSON-IPC session engine is implemented and exercised headlessly
+against the generated corpus through `scripts/test-mpv-jvm-integration.sh`. It
+opens H.264, HEVC, and AV1 Matroska, MPEG-TS, HLS event/live, discovers and
+switches embedded tracks, attaches external SRT/VTT/ASS subtitles, preserves
+source headers without logging them, and honors explicit live/DVR hints.
+
+This is deliberately not exported as the production desktop factory yet. It
+uses null audio/video outputs to validate session semantics. Desktop playback
+will be advertised only after the native embedded surface and hardware-render
+path uses the same engine and passes the rendered corpus gate.
+
 ```bash
 ./gradlew jvmTest jsNodeTest wasmJsNodeTest testReleaseUnitTest
+./scripts/test-mpv-jvm-integration.sh
 ```

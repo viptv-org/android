@@ -9,10 +9,11 @@ class PlaybackSource(
     val headers: Map<String, String> = emptyMap(),
     val title: String? = null,
     val externalSubtitles: List<ExternalSubtitleSource> = emptyList(),
+    val kindHint: PlaybackKind? = null,
 ) {
     override fun toString(): String =
         "PlaybackSource(uri=<redacted>, mimeType=$mimeType, headers=<redacted>, title=$title, " +
-            "externalSubtitles=${externalSubtitles.size})"
+            "externalSubtitles=${externalSubtitles.size}, kindHint=$kindHint)"
 }
 
 data class ExternalSubtitleSource(

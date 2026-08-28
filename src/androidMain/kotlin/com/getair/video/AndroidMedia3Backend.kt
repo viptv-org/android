@@ -95,6 +95,7 @@ internal class AndroidMedia3Backend(
     @Volatile private var released = false
     @Volatile private var trackTargets: Map<String, TrackTarget> = emptyMap()
     @Volatile private var externalSubtitleIds: Set<String> = emptySet()
+    @Volatile private var kindHint: PlaybackKind? = null
     private val listener = createListener()
 
     override val events: Flow<BackendEvent> = eventsFlow
@@ -123,6 +124,7 @@ internal class AndroidMedia3Backend(
         playWhenReady: Boolean,
     ): OpenedMedia {
         this.sessionId = sessionId
+        kindHint = source.kindHint
         externalSubtitleIds = source.externalSubtitles.mapTo(mutableSetOf(), ExternalSubtitleSource::id)
         opening = true
         return try {
@@ -213,6 +215,7 @@ internal class AndroidMedia3Backend(
 
     override fun stop() {
         sessionId = null
+        kindHint = null
         trackTargets = emptyMap()
         runOnPlayerThread {
             player.stop()
@@ -233,6 +236,7 @@ internal class AndroidMedia3Backend(
         if (released) return
         released = true
         sessionId = null
+        kindHint = null
         scope.cancel()
         runOnPlayerThread(allowAfterRelease = true) { player.release() }
     }
@@ -304,7 +308,7 @@ internal class AndroidMedia3Backend(
         }
         val window = player.currentTimeline.getWindow(player.currentMediaItemIndex, Timeline.Window())
         val duration = window.durationMs.takeUnless { it == C.TIME_UNSET || it < 0 }
-        return media3Timeline(window.isLive, window.isSeekable, duration)
+        return media3Timeline(window.isLive, window.isSeekable, duration, kindHint)
     }
 
     private fun snapshotTracks(tracks: Tracks): TrackSnapshot {
@@ -461,7 +465,18 @@ internal fun media3Timeline(
     isLive: Boolean,
     isSeekable: Boolean,
     durationMillis: Long?,
+    kindHint: PlaybackKind? = null,
 ): PlaybackTimeline = when {
+    kindHint == PlaybackKind.Live -> PlaybackTimeline(PlaybackKind.Live, liveEdgeMillis = durationMillis)
+    kindHint == PlaybackKind.SeekableLive -> PlaybackTimeline(
+        kind = PlaybackKind.SeekableLive,
+        seekableRange = durationMillis?.let { SeekableRange(0, it) },
+        liveEdgeMillis = durationMillis,
+    )
+    kindHint == PlaybackKind.OnDemand -> PlaybackTimeline(
+        PlaybackKind.OnDemand,
+        durationMillis = durationMillis ?: 0,
+    )
     isLive && isSeekable -> PlaybackTimeline(
         kind = PlaybackKind.SeekableLive,
         seekableRange = durationMillis?.let { SeekableRange(0, it) },

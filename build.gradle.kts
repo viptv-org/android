@@ -42,6 +42,9 @@ kotlin {
         androidUnitTest.dependencies {
             implementation(kotlin("test"))
         }
+        jvmMain.dependencies {
+            implementation(libs.kotlinx.serialization.json)
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
