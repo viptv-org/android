@@ -41,5 +41,5 @@ preserve or clarify a legacy contract test.
 
 - Before release work, read `.agents/skills/air-package-publishing/SKILL.md` completely.
 - KMP artifacts publish to GitHub Packages through release workflows.
-- The legacy npm package may publish only through GitHub Actions trusted publishing with provenance.
+- The legacy npm package may publish only from the restored `get-air/video` repository. This Kotlin-owned `air-tv/video` repository must never publish `@get-air/video` to npm.
 - Never add npm, Maven, GitHub, signing, or device credentials to files or workflows.

@@ -1,5 +1,6 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.gradle.api.publish.maven.MavenPublication
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -73,10 +74,29 @@ android {
 }
 
 publishing {
+    publications.withType<MavenPublication>().configureEach {
+        pom {
+            name.set("Air Video KMP")
+            description.set("Backend-neutral Kotlin Multiplatform playback contracts and platform adapters for Air.")
+            url.set("https://github.com/air-tv/video")
+            licenses {
+                license {
+                    name.set("MIT License")
+                    url.set("https://opensource.org/licenses/MIT")
+                    distribution.set("repo")
+                }
+            }
+            scm {
+                url.set("https://github.com/air-tv/video")
+                connection.set("scm:git:https://github.com/air-tv/video.git")
+                developerConnection.set("scm:git:ssh://git@github.com/air-tv/video.git")
+            }
+        }
+    }
     repositories {
         maven {
             name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/get-air/video")
+            url = uri("https://maven.pkg.github.com/air-tv/video")
             credentials {
                 username = providers.environmentVariable("GITHUB_ACTOR").orNull
                 password = providers.environmentVariable("GITHUB_TOKEN").orNull

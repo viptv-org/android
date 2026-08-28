@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   linux:
-    if: github.repository == 'get-air/video' && github.event.release.prerelease == false
+    if: github.repository == 'air-tv/video' && github.event.release.prerelease == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -36,7 +36,7 @@ jobs:
             -PVERSION_NAME="$VERSION"
 
   apple:
-    if: github.repository == 'get-air/video' && github.event.release.prerelease == false
+    if: github.repository == 'air-tv/video' && github.event.release.prerelease == false
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
@@ -59,7 +59,7 @@ jobs:
             -PVERSION_NAME="$VERSION"
 
   windows:
-    if: github.repository == 'get-air/video' && github.event.release.prerelease == false
+    if: github.repository == 'air-tv/video' && github.event.release.prerelease == false
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7

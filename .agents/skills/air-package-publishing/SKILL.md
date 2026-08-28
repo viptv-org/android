@@ -1,19 +1,21 @@
 ---
 name: air-package-publishing
 description: >-
-  Prepares, publishes, and verifies @get-air/video releases with its browser
-  and UHD gates.
+  Documents the legacy @get-air/video release boundary while this repository
+  publishes only Kotlin Multiplatform Maven artifacts.
 version: 1.1.0
 ---
 
-# Publishing `@get-air/video`
+# Publishing boundary for `@get-air/video`
 
 Use this skill for version preparation, release workflow changes, GitHub
 Releases, npm publication, provenance verification, or credential cleanup.
 
 ## Release boundary
 
-- This repository independently publishes only `@get-air/video`.
+- The restored `get-air/video` repository independently publishes `@get-air/video`.
+- This `air-tv/video` repository must never publish the npm package; its release workflow is KMP Maven-only.
+- The npm gates below are historical guidance for work performed in `get-air/video`. Stop if this skill is invoked from an `air-tv/video` checkout; never recreate an npm publishing workflow here.
 - Follow `VERSIONING.md`. Do not bump it merely to match a platform adapter.
 - Publish core before an adapter that needs a new core API or compatibility
   floor.
