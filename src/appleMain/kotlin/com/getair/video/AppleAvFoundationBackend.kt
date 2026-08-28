@@ -96,7 +96,7 @@ class AppleAvFoundationVideoPlayer internal constructor(
     private val backend: AppleAvFoundationBackend,
 ) : VideoPlayer by DefaultVideoPlayer(backend, Dispatchers.Main) {
     fun createVideoLayer(
-        videoGravity: String = AVLayerVideoGravityResizeAspect,
+        videoGravity: String? = AVLayerVideoGravityResizeAspect,
     ): AVPlayerLayer = AVPlayerLayer().also { layer ->
         layer.videoGravity = videoGravity
         backend.attach(layer)
@@ -482,7 +482,11 @@ private fun PlaybackSource.toApplePlayerItem(): AVPlayerItem {
     val url = URLWithString(uri) ?: throw PlaybackFailure(
         PlaybackError(PlaybackErrorCode.Source, "AVFoundation source URL is invalid", false),
     )
-    val options = if (headers.isEmpty()) null else mapOf(APPLE_HTTP_HEADERS_KEY to headers.toMap())
+    val options: Map<Any?, *>? = if (headers.isEmpty()) {
+        null
+    } else {
+        mapOf<Any?, Any?>(APPLE_HTTP_HEADERS_KEY to headers.toMap())
+    }
     return AVPlayerItem(AVURLAsset(url, options))
 }
 
@@ -528,8 +532,8 @@ private fun seekableRange(item: AVPlayerItem): SeekableRange? {
     for (rangeValue in item.seekableTimeRanges) {
         val range = (rangeValue as? platform.Foundation.NSValue)?.CMTimeRangeValue ?: continue
         range.useContents {
-            val start = cmTimeToMillisOrNull(start) ?: return@useContents
-            val duration = cmTimeToMillisOrNull(duration) ?: return@useContents
+            val start = start.toFiniteMillisOrNull() ?: return@useContents
+            val duration = duration.toFiniteMillisOrNull() ?: return@useContents
             startMillis = minOf(startMillis ?: start, start)
             endMillis = maxOf(endMillis ?: start + duration, start + duration)
         }
@@ -544,8 +548,8 @@ private fun bufferedPositionMillis(item: AVPlayerItem): Long? {
     for (rangeValue in item.loadedTimeRanges) {
         val range = (rangeValue as? platform.Foundation.NSValue)?.CMTimeRangeValue ?: continue
         range.useContents {
-            val start = cmTimeToMillisOrNull(start) ?: return@useContents
-            val duration = cmTimeToMillisOrNull(duration) ?: return@useContents
+            val start = start.toFiniteMillisOrNull() ?: return@useContents
+            val duration = duration.toFiniteMillisOrNull() ?: return@useContents
             furthestEnd = maxOf(furthestEnd ?: 0, start + duration)
         }
     }
@@ -556,6 +560,11 @@ private fun cmTimeToMillisOrNull(time: CValue<CMTime>): Long? {
     val seconds = CMTimeGetSeconds(time)
     if (seconds.isNaN() || seconds.isInfinite() || seconds < 0) return null
     return (seconds * 1_000).roundToLong()
+}
+
+private fun CMTime.toFiniteMillisOrNull(): Long? {
+    if (timescale == 0 || value < 0) return null
+    return value * 1_000L / timescale
 }
 
 private fun NSError?.toAirPlaybackError(): PlaybackError = when {

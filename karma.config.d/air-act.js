@@ -1,4 +1,4 @@
-config.set(process.env.ACT === "true"
+config.set(process.env.CI === "true" || process.env.ACT === "true"
   ? {
       browsers: ["AirActChromeHeadless"],
       customLaunchers: {
