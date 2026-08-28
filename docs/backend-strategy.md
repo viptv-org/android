@@ -38,9 +38,10 @@ artifact now implements Air's API, maps confirmed audio/subtitle/video tracks,
 and converts mpv seekability plus demux-cache ranges into plain-live versus DVR
 timelines. It emits Kotlin 2.1 metadata and passed an independent Kotlin 2.1
 consumer compile. Linux frame-preview tests still cannot treat headless Xvfb as
-a live Skia/GLX environment; native mpv logs need a complete credential audit;
-GitHub Packages must aggregate host-built runtimes; and AMD/Intel use
-`vaapi-copy`, so their decode-to-GL path is not yet end-to-end zero-copy.
+a live Skia/GLX environment. Native mpv logs now redact URLs, sensitive headers,
+bearer tokens, and media paths before bounded delivery. GitHub Packages must
+still aggregate host-built runtimes; and AMD/Intel use `vaapi-copy`, so their
+decode-to-GL path is not yet end-to-end zero-copy.
 
 The router probes installed adapters lazily in application priority order, so
 an optional native fallback is not loaded when the lightweight platform engine
