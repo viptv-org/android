@@ -68,9 +68,23 @@ The production desktop design is a bounded triple-buffered GPU texture stream
 from libmpv into the normal Compose/Skia scene, with CPU readback only as an
 explicit degraded fallback.
 
+### Browser / Wasm
+
+`BrowserVideoBackendFactory` owns or accepts one native `HTMLVideoElement`.
+The element can move anywhere behind the Compose scene without reopening the
+session. The backend maps browser play/pause/buffering/position/seek/end/error
+events into Air's session-tagged contract, preserves live/DVR hints, installs
+external WebVTT tracks, and derives codec/container support from runtime
+`canPlayType` results. Sources requiring private request headers fail before
+browser networking; applications must use an authorized URL or a scoped proxy.
+
+Browser/system PiP is reported separately from Air's in-app PiP layout and is
+not claimed merely because the surface is movable.
+
 ```bash
 ./gradlew jvmTest jsNodeTest wasmJsNodeTest testReleaseUnitTest
 ./scripts/test-mpv-jvm-integration.sh
+CHROME_BIN=/path/to/chrome ./gradlew wasmJsBrowserTest
 ```
 
 ## Legacy TypeScript/React reference

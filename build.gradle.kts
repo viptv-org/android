@@ -42,6 +42,9 @@ kotlin {
         androidUnitTest.dependencies {
             implementation(kotlin("test"))
         }
+        wasmJsMain.dependencies {
+            implementation(libs.kotlinx.browser)
+        }
         jvmMain.dependencies {
             implementation(libs.kotlinx.serialization.json)
         }

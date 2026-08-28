@@ -20,6 +20,7 @@ preserve or clarify a legacy contract test.
 - Capabilities are runtime backend/device facts, not README promises. Unsupported containers/codecs/tracks fail with typed errors and a useful fallback recommendation.
 - Sources, headers, licenses, cookies, and credential-bearing URLs must never appear in `toString`, logs, analytics, or error messages.
 - Read public player implementations for architecture and failure modes, then independently implement Air's contracts. Record exact upstream revisions in `docs/backend-strategy.md`; do not paste implementation code.
+- Browser/Wasm behavior requires `wasmJsBrowserTest` with a real headless browser. Node compilation/tests are not evidence for DOM media behavior, and `canPlayType` results remain runtime facts.
 - Run `./gradlew jvmTest jsNodeTest wasmJsNodeTest` for portable changes. Apple, Windows, Android-device, and physical playback validation remain separate gates.
 
 ## Legacy TypeScript reference
