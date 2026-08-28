@@ -53,6 +53,7 @@ import platform.AVFoundation.replaceCurrentItemWithPlayerItem
 import platform.AVFoundation.seekToTime
 import platform.AVFoundation.seekableTimeRanges
 import platform.AVFoundation.selectMediaOption
+import platform.AVFoundation.selectedMediaOptionInMediaSelectionGroup
 import platform.AVFoundation.timeControlStatus
 import platform.CoreMedia.CMTime
 import platform.CoreMedia.CMTimeGetSeconds
@@ -379,10 +380,10 @@ internal class AppleAvFoundationBackend(
         return AppleTrackSnapshot(
             audio = audio,
             subtitles = subtitles,
-            selectedAudio = audioGroup?.let(item::selectedMediaOptionInMediaSelectionGroup)?.let { selected ->
+            selectedAudio = audioGroup?.let { item.selectedMediaOptionInMediaSelectionGroup(it) }?.let { selected ->
                 targets.entries.firstOrNull { it.value.option == selected }?.key
             },
-            selectedSubtitle = subtitleGroup?.let(item::selectedMediaOptionInMediaSelectionGroup)?.let { selected ->
+            selectedSubtitle = subtitleGroup?.let { item.selectedMediaOptionInMediaSelectionGroup(it) }?.let { selected ->
                 targets.entries.firstOrNull { it.value.option == selected }?.key
             },
         )
