@@ -88,6 +88,37 @@ class DefaultVideoPlayerTest {
         player.close()
     }
 
+    @Test
+    fun backendTrackRefreshUpdatesNativeSelectionsAtomically() = runTest {
+        val backend = FakeBackend(
+            OpenedMedia(
+                timeline = PlaybackTimeline(PlaybackKind.OnDemand, 10_000),
+                audioTracks = listOf(AudioTrack("a1", "English")),
+                selectedAudioTrackId = "a1",
+            ),
+        )
+        val player = DefaultVideoPlayer(backend, StandardTestDispatcher(testScheduler))
+        player.open(PlaybackSource("https://example.invalid/movie.mkv"))
+
+        backend.eventsFlow.emit(
+            BackendEvent.TracksChanged(
+                sessionId = checkNotNull(backend.lastSessionId),
+                audio = listOf(AudioTrack("a1", "English"), AudioTrack("a2", "Spanish")),
+                subtitles = listOf(SubtitleTrack("s1", "English")),
+                video = listOf(VideoTrack("v1", "1080p")),
+                selectedAudioTrackId = "a2",
+                selectedSubtitleTrackId = "s1",
+                selectedVideoTrackId = "v1",
+            ),
+        )
+        testScheduler.runCurrent()
+
+        assertEquals("a2", player.state.value.selectedAudioTrackId)
+        assertEquals("s1", player.state.value.selectedSubtitleTrackId)
+        assertEquals("v1", player.state.value.selectedVideoTrackId)
+        player.close()
+    }
+
     private class FakeBackend(
         private val opened: OpenedMedia,
         override val capabilities: PlayerCapabilities = PlayerCapabilities(

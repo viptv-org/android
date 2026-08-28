@@ -28,6 +28,9 @@ data class OpenedMedia(
     val selectedAudioTrackId: String? = null,
     val selectedSubtitleTrackId: String? = null,
     val selectedVideoTrackId: String? = null,
+    val playWhenReady: Boolean? = null,
+    val isPlaying: Boolean = false,
+    val isBuffering: Boolean = false,
 )
 
 @JvmInline
@@ -59,6 +62,9 @@ sealed interface BackendEvent {
         val audio: List<AudioTrack>,
         val subtitles: List<SubtitleTrack>,
         val video: List<VideoTrack>,
+        val selectedAudioTrackId: String?,
+        val selectedSubtitleTrackId: String?,
+        val selectedVideoTrackId: String?,
     ) : BackendEvent
     data class SeekFinished(
         override val sessionId: PlaybackSessionId,
@@ -134,9 +140,9 @@ class DefaultVideoPlayer(
                 _videoTracks.value = opened.videoTracks
                 _state.value = PlaybackState(
                     status = PlaybackStatus.Ready,
-                    playWhenReady = playWhenReady,
-                    isPlaying = false,
-                    isBuffering = false,
+                    playWhenReady = opened.playWhenReady ?: playWhenReady,
+                    isPlaying = opened.isPlaying,
+                    isBuffering = opened.isBuffering,
                     timeline = opened.timeline,
                     selectedAudioTrackId = opened.selectedAudioTrackId,
                     selectedSubtitleTrackId = opened.selectedSubtitleTrackId,
@@ -261,6 +267,13 @@ class DefaultVideoPlayer(
                 _audioTracks.value = event.audio
                 _subtitleTracks.value = event.subtitles
                 _videoTracks.value = event.video
+                _state.update {
+                    it.copy(
+                        selectedAudioTrackId = event.selectedAudioTrackId,
+                        selectedSubtitleTrackId = event.selectedSubtitleTrackId,
+                        selectedVideoTrackId = event.selectedVideoTrackId,
+                    )
+                }
             }
             is BackendEvent.SeekFinished -> {
                 _state.update { it.copy(positionMillis = event.positionMillis.coerceAtLeast(0)) }

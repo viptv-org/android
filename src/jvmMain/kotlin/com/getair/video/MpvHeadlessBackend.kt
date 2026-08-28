@@ -186,7 +186,17 @@ internal class MpvSessionBackend(
             "track-list" -> {
                 val tracks = trackSnapshot(data)
                 targets = tracks.targets
-                eventFlow.tryEmit(BackendEvent.TracksChanged(active, tracks.audio, tracks.subtitles, tracks.video))
+                eventFlow.tryEmit(
+                    BackendEvent.TracksChanged(
+                        active,
+                        tracks.audio,
+                        tracks.subtitles,
+                        tracks.video,
+                        tracks.selectedAudio,
+                        tracks.selectedSubtitle,
+                        tracks.selectedVideo,
+                    ),
+                )
             }
         }
     }

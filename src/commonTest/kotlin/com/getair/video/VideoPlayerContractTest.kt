@@ -55,4 +55,19 @@ class VideoPlayerContractTest {
         assertFalse("secret.invalid" in source.toString())
         assertEquals(1, source.externalSubtitles.size)
     }
+
+    @Test
+    fun sourceCopiesCredentialHeadersAndSubtitleListAtTheBoundary() {
+        val headers = mutableMapOf("Authorization" to "first")
+        val subtitles = mutableListOf(
+            ExternalSubtitleSource("en", "https://subtitle.invalid/en.vtt", "text/vtt"),
+        )
+        val source = PlaybackSource("https://media.invalid/movie.mkv", headers = headers, externalSubtitles = subtitles)
+
+        headers["Authorization"] = "mutated"
+        subtitles.clear()
+
+        assertEquals("first", source.headers["Authorization"])
+        assertEquals(1, source.externalSubtitles.size)
+    }
 }

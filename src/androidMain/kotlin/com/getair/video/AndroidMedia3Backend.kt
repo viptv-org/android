@@ -284,7 +284,17 @@ internal class AndroidMedia3Backend(
         override fun onTracksChanged(tracks: Tracks) {
             val active = sessionId ?: return
             val snapshot = snapshotTracks(tracks)
-            eventsFlow.tryEmit(BackendEvent.TracksChanged(active, snapshot.audio, snapshot.subtitles, snapshot.video))
+            eventsFlow.tryEmit(
+                BackendEvent.TracksChanged(
+                    active,
+                    snapshot.audio,
+                    snapshot.subtitles,
+                    snapshot.video,
+                    snapshot.selectedAudio,
+                    snapshot.selectedSubtitle,
+                    snapshot.selectedVideo,
+                ),
+            )
         }
 
         override fun onPositionDiscontinuity(

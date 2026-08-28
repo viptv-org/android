@@ -6,11 +6,14 @@ import kotlinx.coroutines.flow.StateFlow
 class PlaybackSource(
     val uri: String,
     val mimeType: String? = null,
-    val headers: Map<String, String> = emptyMap(),
+    headers: Map<String, String> = emptyMap(),
     val title: String? = null,
-    val externalSubtitles: List<ExternalSubtitleSource> = emptyList(),
+    externalSubtitles: List<ExternalSubtitleSource> = emptyList(),
     val kindHint: PlaybackKind? = null,
 ) {
+    val headers: Map<String, String> = headers.toMap()
+    val externalSubtitles: List<ExternalSubtitleSource> = externalSubtitles.toList()
+
     override fun toString(): String =
         "PlaybackSource(uri=<redacted>, mimeType=$mimeType, headers=<redacted>, title=$title, " +
             "externalSubtitles=${externalSubtitles.size}, kindHint=$kindHint)"
