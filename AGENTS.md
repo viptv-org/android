@@ -16,6 +16,8 @@ preserve or clarify a legacy contract test.
 - State is level-triggered `StateFlow`; one-off completion/error/session events use `Flow`. Commands are ordinary functions unless they must await opening or backend work.
 - Every backend callback carries the `PlaybackSessionId` supplied to `open`; never accept an unscoped late event from a replaced or stopped source.
 - Live, seekable-live, and on-demand timelines are distinct. A plain live timeline must never expose a seek bar or accept seek commands.
+- Live policy is intent, not a buffer claim. Keep target live offset and measured buffered-ahead duration independent; Android's ten-second Resilient offset is not proven protection until a documented native LoadControl mapping passes `corpus/live_hls_server.py` on target hardware.
+- HLS/DASH segment retry and playlist refresh remain native backend responsibilities. Never add an Air-owned segment downloader/queue. Use the deterministic impairment harness for delay, jitter, one-shot faults, and discontinuity gates.
 - Model audio, subtitle, and video tracks independently. Selection must return a typed result rather than silently succeeding.
 - Capabilities are runtime backend/device facts, not README promises. Unsupported containers/codecs/tracks fail with typed errors and a useful fallback recommendation.
 - Sources, headers, licenses, cookies, and credential-bearing URLs must never appear in `toString`, logs, analytics, or error messages.
