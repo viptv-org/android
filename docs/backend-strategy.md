@@ -80,7 +80,7 @@ parallel public state model.
 
 ## Live buffering policy
 
-Air exposes intent, never backend tuning constants, through three live profiles:
+Air's common contract will expose intent, never backend tuning constants, through three live profiles:
 `LowLatency`, `Balanced`, and `Resilient`. Resilient targets an approximately
 10-second safety margin where the manifest and engine allow it. The common state
 must report live-edge offset and buffered-ahead duration separately because
