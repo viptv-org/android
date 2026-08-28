@@ -1,6 +1,14 @@
 # Air video repository guidance
 
-- This repository owns Air's backend-neutral Kotlin Multiplatform playback contract. Compose controls and application playback policy do not belong in this module.
+This repository is migrating the existing `@get-air/video` TypeScript/React
+package into Air's backend-neutral Kotlin Multiplatform player. Keep both
+implementations independently testable while the TypeScript fixtures remain the
+behavioral oracle. New product behavior belongs in Kotlin unless it is needed to
+preserve or clarify a legacy contract test.
+
+## Kotlin Multiplatform player
+
+- Compose controls and application playback policy do not belong in the core player module.
 - Keep platform types from Media3, AVFoundation/AVKit, mpv, VLC, GStreamer, and browser APIs out of `commonMain` public signatures.
 - The Android default is `AndroidMedia3BackendFactory`; keep its surface owner in `androidMain`, preserve per-source headers and external subtitles, and run `testReleaseUnitTest` for adapter mapping changes.
 - `MpvSessionBackend` and the JAWT/`wid` surface are conformance harnesses, not the production desktop surface. Keep them internal and never claim composited desktop playback from their result; run the MPV scripts after event/track/surface changes.
@@ -11,6 +19,22 @@
 - Model audio, subtitle, and video tracks independently. Selection must return a typed result rather than silently succeeding.
 - Capabilities are runtime backend/device facts, not README promises. Unsupported containers/codecs/tracks fail with typed errors and a useful fallback recommendation.
 - Sources, headers, licenses, cookies, and credential-bearing URLs must never appear in `toString`, logs, analytics, or error messages.
-- Backends may adapt permissively licensed code from ComposeMediaPlayer (MIT) and mediamp (Apache-2.0) with required notices. Do not copy or depend on proprietary KMediaPlayer additions.
-- Record the exact upstream revision and provenance for adapted code. Architecture observations alone do not justify copying source; `docs/backend-strategy.md` is the current research ledger.
-- Run `./gradlew jvmTest jsNodeTest wasmJsNodeTest` for portable contract changes. Apple, Windows, Android-device, and physical playback validation remain separate gates.
+- Read public player implementations for architecture and failure modes, then independently implement Air's contracts. Record exact upstream revisions in `docs/backend-strategy.md`; do not paste implementation code.
+- Run `./gradlew jvmTest jsNodeTest wasmJsNodeTest` for portable changes. Apple, Windows, Android-device, and physical playback validation remain separate gates.
+
+## Legacy TypeScript reference
+
+- The product name is **Air**; `@get-air` is the npm scope.
+- Before changing or debugging Effect code, read `.agents/skills/effect-best-practices/SKILL.md` completely.
+- The legacy package is DOM/TV-first and owns HTML, Tizen AVPlay, webOS/Vizio behavior, React controls, and its Promise/Effect façades.
+- Promise and Effect surfaces must continue delegating to one implementation while parity fixtures are used by the migration.
+- Preserve typed adapter errors, cancellation, live/DVR bounds, explicit fallback ordering, and TV focus behavior.
+- Do not add new native/Tauri engines to the legacy JS package; native playback is owned by the KMP platform adapters.
+- Install with the frozen npm lockfile and run the focused checks in `CONTRIBUTING.md` when legacy source changes.
+
+## Releases
+
+- Before release work, read `.agents/skills/air-package-publishing/SKILL.md` completely.
+- KMP artifacts publish to GitHub Packages through release workflows.
+- The legacy npm package may publish only through GitHub Actions trusted publishing with provenance.
+- Never add npm, Maven, GitHub, signing, or device credentials to files or workflows.

@@ -1,46 +1,40 @@
 # Air Video
 
-Air-owned Kotlin Multiplatform playback contracts for Android, JVM desktop,
-iOS/macOS, Windows, Linux, JavaScript, and Wasm. The library deliberately does
-not expose backend objects. Applications own controls and policy; backend
-adapters own decoding, rendering, and runtime capability probes.
+Air's video repository is migrating the existing `@get-air/video`
+TypeScript/React controller into an Air-owned Kotlin Multiplatform player for
+Android, JVM desktop, iOS/macOS, Windows, Linux, JavaScript, and Wasm. The
+legacy implementation and fixtures remain in this history as the behavioral
+oracle until KMP parity is proven.
 
-The implementation research covers mediamp, ComposeMediaPlayer,
-ComposeMultiplatformMediaPlayer, and KMediaPlayer. Air reimplements useful
-permissively licensed ideas behind its own API; KMediaPlayer is proprietary and
-is architecture observation only. The exact revisions, engine policy, legal
-boundary, and acceptance gates are documented in
-[`docs/backend-strategy.md`](docs/backend-strategy.md).
-The movable, overlay-capable surface design for inline playback, in-app PiP,
-and optional app-owned fullscreen is documented in
+The KMP API deliberately exposes no backend objects. Applications own controls,
+focus, in-app picture-in-picture layout, optional fullscreen layout, and
+playback policy. Replaceable adapters own decoding, rendering, runtime
+capability probes, and platform surface attachment.
+
+The exact upstream research revisions and engine gates are documented in
+[`docs/backend-strategy.md`](docs/backend-strategy.md). The movable,
+overlay-capable surface design is in
 [`docs/surface-architecture.md`](docs/surface-architecture.md).
 
-`corpus/generate.sh` creates copyright-free fixtures, and
-`benchmark/run-mpv-linux.sh` records the initial Linux MPV engine baseline in an
-ignored local report. Wrapper/API mapping and hardware-rendering measurements
-remain separate gates.
+## Kotlin Multiplatform status
 
-`DefaultVideoPlayer` is the shared state machine. Backends report level-triggered
-facts through `VideoBackend`; the common boundary enforces live seek rejection,
-track selection, buffering, lifecycle, typed failures, and redacted sources.
-`VideoBackendRouter` adds strict runtime capability selection so an ordinary
-stream stays on the lightweight platform engine while unsupported MKV/codec/
-track combinations can move to an explicitly installed fallback.
+`DefaultVideoPlayer` is the shared session-safe state machine. It enforces live
+seek rejection, independent audio/subtitle/video selection, buffering,
+lifecycle, typed failures, stale-event rejection, and redacted sources.
+`VideoBackendRouter` selects adapters from measured runtime capabilities.
 
-## Android / Android TV
+### Android / Android TV
 
-`AndroidMedia3BackendFactory` is the first real adapter. It uses Media3 1.11.0
-with HLS and DASH modules, runtime `MediaCodec`/DRM probes, source request
-headers, external subtitles, independent audio/text/video track overrides,
-plain-live versus DVR timelines, and typed fallback errors. Media3 classes stay
-inside `androidMain`.
+`AndroidMedia3BackendFactory` uses Media3 1.11.0 with HLS and DASH, runtime
+`MediaCodec`/DRM probes, request headers, external subtitles, independent track
+overrides, plain-live/DVR timelines, and typed MPV fallback errors. Media3 types
+remain in `androidMain`.
 
 ```kotlin
-val factory = AndroidMedia3BackendFactory(context)
-val player = factory.createAndroidPlayer()
+val player = AndroidMedia3BackendFactory(context).createAndroidPlayer()
 
 AndroidView(
-    factory = { SurfaceView(it).also(player::attach) },
+    factory = { TextureView(it).also(player::attach) },
     modifier = Modifier.fillMaxSize(),
 )
 
@@ -49,30 +43,62 @@ player.open(
         uri = streamUrl,
         mimeType = "application/x-mpegURL",
         headers = streamHeaders,
+        kindHint = PlaybackKind.Live,
     ),
 )
 ```
 
-The application owns the Compose controls and surface. Use `SurfaceView` for a
-stable lowest-overhead full-size path or `TextureView` when the same session must
-move, resize, clip, or sit under Compose overlays for in-app PiP. Call
-`detachSurface()` when removing it and `close()` when the player is no longer
-needed. A plain live timeline never exposes a seek bar.
+Use `SurfaceView` for the lowest-overhead stable full-size path or
+`TextureView` when one session must move, resize, clip, or sit beneath Compose
+overlays. Fullscreen and in-app PiP are app layouts, never forced backend modes.
+A plain live timeline never exposes a seek bar.
 
-## Desktop MPV checkpoint
+### Desktop MPV checkpoints
 
-The JVM MPV JSON-IPC session engine is implemented and exercised headlessly
-against the generated corpus through `scripts/test-mpv-jvm-integration.sh`. It
-opens H.264, HEVC, and AV1 Matroska, MPEG-TS, HLS event/live, discovers and
-switches embedded tracks, attaches external SRT/VTT/ASS subtitles, preserves
-source headers without logging them, and honors explicit live/DVR hints.
+The internal JVM MPV JSON-IPC engine passes the generated H.264/HEVC/AV1
+Matroska, MPEG-TS, HLS event/live, multitrack, and external SRT/VTT/ASS corpus.
+The JAWT/`wid` experiment proves native rendering but is intentionally not the
+production surface because heavyweight child windows cannot guarantee Compose
+overlay z-order.
 
-This is deliberately not exported as the production desktop factory yet. It
-uses null audio/video outputs to validate session semantics. Desktop playback
-will be advertised only after the native embedded surface and hardware-render
-path uses the same engine and passes the rendered corpus gate.
+The production desktop design is a bounded triple-buffered GPU texture stream
+from libmpv into the normal Compose/Skia scene, with CPU readback only as an
+explicit degraded fallback.
 
 ```bash
 ./gradlew jvmTest jsNodeTest wasmJsNodeTest testReleaseUnitTest
 ./scripts/test-mpv-jvm-integration.sh
 ```
+
+## Legacy TypeScript/React reference
+
+The existing `@get-air/video` package remains buildable during migration. It
+owns explicit HTML, Tizen AVPlay, webOS/Vizio, Promise/Effect, and React/TV
+controller behavior. It does not automatically select client decoders or
+transcoders.
+
+```ts
+import { createVideoClient } from '@get-air/video'
+
+const client = createVideoClient({ adapters })
+const player = await client.attach(video, {
+  source,
+  backend: ['html', 'tauri', 'transcode'],
+})
+```
+
+Legacy backends report live state and moving DVR bounds through `player.media`.
+Non-seekable live media rejects seeking; React/TV controls expose a Go Live
+action only for seekable live windows.
+
+```bash
+npm ci
+npm run ci
+```
+
+[Legacy API](docs/api.md) · [Legacy platforms](docs/platforms.md) ·
+[Versioning](VERSIONING.md) · [Contributing](CONTRIBUTING.md)
+
+KMP releases publish Maven artifacts to GitHub Packages. Legacy npm releases
+use GitHub Actions trusted publishing with provenance. No local publishing token
+belongs in this repository.

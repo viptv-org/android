@@ -1,9 +1,13 @@
 /.gradle/
 /.kotlin/
 /build/
-/local.properties
+local.properties
 /.env
 /.air-tv/
 node_modules/
+dist-js/
+*.tgz
+qualification/fixtures/
+qualification/artifacts/
 /corpus/output/
 /benchmark/output/

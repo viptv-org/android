@@ -1,4 +1,4 @@
-name: Publish to GitHub Packages
+name: Publish Kotlin Multiplatform to GitHub Packages
 
 on:
   release:
