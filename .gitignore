@@ -10,4 +10,6 @@ dist-js/
 qualification/fixtures/
 qualification/artifacts/
 /corpus/output/
+/corpus/**/__pycache__/
+/corpus/**/*.py[cod]
 /benchmark/output/

@@ -15,7 +15,7 @@ air_video_input=(
 air_audio_one=(-f lavfi -i "sine=frequency=440:sample_rate=48000:duration=4")
 air_audio_two=(-f lavfi -i "sine=frequency=880:sample_rate=48000:duration=4")
 
-ffmpeg -hide_banner -loglevel error -y -threads 4 \
+ffmpeg -hide_banner -loglevel error -y \
   "${air_video_input[@]}" \
   "${air_audio_one[@]}" \
   "${air_audio_two[@]}" \
@@ -52,10 +52,15 @@ ffmpeg -hide_banner -loglevel error -y \
   -map 0:v:0 -map 0:a:0 -c copy -f mpegts \
   "$air_output_dir/live.ts"
 
-ffmpeg -hide_banner -loglevel error -y \
-  -i "$air_output_dir/h264-multitrack.mkv" \
-  -map 0:v:0 -map 0:a:0 -c copy \
+ffmpeg -hide_banner -loglevel error -y -threads 4 \
+  -f lavfi -i "testsrc2=size=640x360:rate=24:duration=18" \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=18" \
+  -map 0:v:0 -map 1:a:0 \
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p -threads:v 4 \
+  -g 24 -keyint_min 24 -sc_threshold 0 \
+  -c:a aac -b:a 96k \
   -f hls -hls_time 1 -hls_playlist_type event \
+  -hls_flags independent_segments \
   -hls_segment_filename "$air_hls_dir/segment-%03d.ts" \
   "$air_hls_dir/event.m3u8"
 

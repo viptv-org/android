@@ -40,4 +40,10 @@ test -s "$air_output_dir/external-en.srt"
 test -s "$air_output_dir/external-en.vtt"
 test -s "$air_output_dir/external-es.ass"
 
+air_hls_segment_count=$(grep -Ec '^[^#[:space:]]' "$air_output_dir/hls/event.m3u8")
+if [[ "$air_hls_segment_count" -lt 14 ]]; then
+  echo "Corpus verification failed for the resilient live-window fixture." >&2
+  exit 1
+fi
+
 echo "Air playback corpus verified."

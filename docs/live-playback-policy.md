@@ -38,9 +38,17 @@ discontinuities, and successful behind-live-window recoveries.
   the backend because Xtream/Stalker URL refresh and connection limits belong
   above the decoder and must be coordinated per source.
 
-The acceptance gate remains the jitter corpus: after the resilient margin is
-established, a two-second delayed segment must not cause a rebuffer. That is a
-measured release result on target hardware, not a promise made by the preset.
+The acceptance gate uses `corpus/live_hls_server.py`: after the resilient margin
+is established, a selected segment is delayed by two seconds with deterministic
+jitter. The player must return the exact segment bytes, remain in its live
+window, and show no increase in the rebuffer counter. The server also supports
+one-shot HTTP failure/disconnect and manifest discontinuity scenarios without
+adding an application downloader or segment queue. See `corpus/README.md` for
+the exact desktop and Android setup.
+
+The harness self-tests its own timing, bytes, bounds, redacted logs, and clean
+shutdown. A no-rebuffer outcome is still a measured release result on target
+hardware, not a promise made by the preset or a Python test.
 
 ## Evidence
 
