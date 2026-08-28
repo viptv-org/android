@@ -3,6 +3,7 @@ package com.getair.video
 import androidx.media3.common.PlaybackException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -61,6 +62,77 @@ class AndroidMedia3MappingTest {
             10_000,
             media3LiveConfiguration(LivePlaybackPolicy.Resilient)?.targetOffsetMs,
         )
+    }
+
+    @Test
+    fun resilientPolicyUsesDocumentedBoundedMedia3StreamingThresholds() {
+        val tuning = media3LivePolicyTuning(
+            LivePlaybackPolicy.Resilient,
+            AndroidMedia3ResilientBufferConfig(),
+        )
+
+        assertEquals(Media3BufferMode.Resilient, tuning.bufferMode)
+        assertEquals(10_000, tuning.targetLiveOffsetMillis)
+        assertEquals(10_000, tuning.minimumBufferMillis)
+        assertEquals(15_000, tuning.maximumBufferMillis)
+        assertEquals(1_000, tuning.bufferForPlaybackMillis)
+        assertEquals(5_000, tuning.bufferForPlaybackAfterRebufferMillis)
+        assertEquals(64 * 1024 * 1024, tuning.bufferMemoryThresholdBytes)
+        assertTrue(tuning.prioritizeTimeOverSizeThresholds)
+        assertTrue(buildMedia3LoadControl(tuning) != null)
+    }
+
+    @Test
+    fun lowLatencyAndBalancedKeepMedia3DefaultLoadControl() {
+        val config = AndroidMedia3ResilientBufferConfig()
+        val lowLatency = media3LivePolicyTuning(LivePlaybackPolicy.LowLatency, config)
+        val balanced = media3LivePolicyTuning(LivePlaybackPolicy.Balanced, config)
+
+        assertEquals(Media3BufferMode.NativeDefault, lowLatency.bufferMode)
+        assertEquals(Media3BufferMode.NativeDefault, balanced.bufferMode)
+        assertEquals(null, buildMedia3LoadControl(lowLatency))
+        assertEquals(null, buildMedia3LoadControl(balanced))
+        assertEquals(3_000, lowLatency.targetLiveOffsetMillis)
+        assertEquals(null, balanced.targetLiveOffsetMillis)
+    }
+
+    @Test
+    fun resilientConfigurationFlowsToNativeTuningAndAdvancedStatistics() {
+        val config = AndroidMedia3ResilientBufferConfig(
+            targetLiveOffsetMillis = 12_000,
+            minimumBufferMillis = 8_000,
+            maximumBufferMillis = 12_000,
+            bufferForPlaybackMillis = 750,
+            bufferForPlaybackAfterRebufferMillis = 4_000,
+            bufferMemoryThresholdBytes = 24 * 1024 * 1024,
+        )
+        val tuning = media3LivePolicyTuning(LivePlaybackPolicy.Resilient, config)
+        val statistics = tuning.statistics()
+
+        assertEquals(12_000, media3LiveConfiguration(LivePlaybackPolicy.Resilient, config)?.targetOffsetMs)
+        assertEquals(LivePlaybackPolicy.Resilient, statistics.livePolicy)
+        assertEquals(12_000, statistics.targetLiveOffsetMillis)
+        assertEquals(8_000, statistics.minimumBufferMillis)
+        assertEquals(12_000, statistics.maximumBufferMillis)
+        assertEquals(24L * 1024 * 1024, statistics.bufferMemoryThresholdBytes)
+    }
+
+    @Test
+    fun resilientConfigurationRejectsValuesMedia3WouldSilentlyCap() {
+        assertFailsWith<IllegalArgumentException> {
+            AndroidMedia3ResilientBufferConfig(
+                targetLiveOffsetMillis = 8_000,
+                minimumBufferMillis = 10_000,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AndroidMedia3ResilientBufferConfig(
+                targetLiveOffsetMillis = 10_000,
+                minimumBufferMillis = 5_000,
+                maximumBufferMillis = 10_000,
+                bufferForPlaybackAfterRebufferMillis = 6_000,
+            )
+        }
     }
 
     @Test

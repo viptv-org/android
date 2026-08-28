@@ -104,10 +104,28 @@ data class PlaybackStatistics(
     val behindLiveWindowRecoveryCount: Long = 0,
     val discontinuityCount: Long = 0,
     val playbackSpeed: Double = 1.0,
+    /** Backend-neutral intent selected for the current potentially-live source. */
+    val livePolicy: LivePlaybackPolicy? = null,
+    /** Native target offset requested from the live edge, not a measured result. */
+    val targetLiveOffsetMillis: Long? = null,
+    /** Native minimum forward buffer target, not a guarantee that it was reached. */
+    val minimumBufferMillis: Long? = null,
+    /** Native maximum forward buffer target, not a hard byte or heap limit. */
+    val maximumBufferMillis: Long? = null,
+    /** Native allocator loading threshold. This is not an absolute heap cap. */
+    val bufferMemoryThresholdBytes: Long? = null,
 ) {
     init {
         require(liveEdgeOffsetMillis == null || liveEdgeOffsetMillis >= 0)
         require(bufferedAheadMillis == null || bufferedAheadMillis >= 0)
+        require(targetLiveOffsetMillis == null || targetLiveOffsetMillis >= 0)
+        require(minimumBufferMillis == null || minimumBufferMillis >= 0)
+        require(maximumBufferMillis == null || maximumBufferMillis >= 0)
+        require(
+            minimumBufferMillis == null || maximumBufferMillis == null ||
+                maximumBufferMillis >= minimumBufferMillis,
+        )
+        require(bufferMemoryThresholdBytes == null || bufferMemoryThresholdBytes > 0)
         require(estimatedThroughputBitsPerSecond == null || estimatedThroughputBitsPerSecond >= 0)
         require(droppedVideoFrames >= 0)
         require(rebufferCount >= 0)

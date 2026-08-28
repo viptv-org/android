@@ -42,6 +42,10 @@ kotlin {
         androidUnitTest.dependencies {
             implementation(kotlin("test"))
         }
+        androidInstrumentedTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.androidx.test.runner)
+        }
         wasmJsMain.dependencies {
             implementation(libs.kotlinx.browser)
         }
@@ -62,7 +66,10 @@ kotlin {
 android {
     namespace = "com.getair.video"
     compileSdk = 36
-    defaultConfig { minSdk = 24 }
+    defaultConfig {
+        minSdk = 24
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
 }
 
 publishing {

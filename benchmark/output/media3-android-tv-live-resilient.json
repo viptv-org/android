@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-08-28",
+  "backend": "AndroidX Media3 1.11.0",
+  "device": {
+    "kind": "emulator",
+    "avd": "air-tv-api36",
+    "api": 36,
+    "abi": "x86_64",
+    "resolution": "1920x1080",
+    "graphics": "host",
+    "buildType": "debug"
+  },
+  "fixture": {
+    "server": "corpus/live_hls_server.py",
+    "transport": "adb reverse over host loopback",
+    "liveWindowSegments": 12,
+    "delayedSegment": "segment-016.ts",
+    "configuredDelayMillis": 2000,
+    "configuredJitterMillis": 250,
+    "discontinuityBeforeSegment": 16,
+    "reservoirBeforeDelayMinimumMillis": 8000
+  },
+  "configuration": {
+    "policy": "Resilient",
+    "targetLiveOffsetMillis": 10000,
+    "minimumBufferMillis": 10000,
+    "maximumBufferMillis": 15000,
+    "bufferForPlaybackMillis": 1000,
+    "bufferForPlaybackAfterRebufferMillis": 5000,
+    "bufferMemoryThresholdBytes": 67108864,
+    "prioritizeTimeOverSizeThresholds": true
+  },
+  "result": {
+    "startupMillis": 219,
+    "maximumBufferedAheadMillis": 10762,
+    "liveEdgeOffsetMillis": null,
+    "rebufferDeltaAfterReservoir": 0,
+    "droppedFrames": 0,
+    "delayedRequests": 1,
+    "playlistRequests": 12,
+    "segmentRequests": 16
+  },
+  "limitations": [
+    "One debug-build emulator run is not release-build or physical-device performance evidence.",
+    "Host-loopback transport does not model Wi-Fi, provider throughput, packet loss, or internet latency.",
+    "Media3 did not expose currentLiveOffset for this synthetic manifest, so live-edge offset is unknown.",
+    "This does not prove codec, HDR, power, thermal, or low-memory behavior on a television device."
+  ]
+}

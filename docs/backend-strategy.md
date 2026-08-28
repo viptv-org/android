@@ -98,6 +98,14 @@ A profile change must not recreate the app-facing player or surface. If a
 backend cannot safely apply it to an active session, it reports that limitation
 and applies the preference on the next open.
 
+Android's resilient preset uses Media3 1.11.0's streaming-only load-control
+setters: 10 seconds minimum, 15 seconds maximum, 1 second startup, 5 seconds
+after rebuffer, time-priority while Media3 has heap headroom, and a 64 MiB
+allocator loading threshold. Low-latency and balanced playback retain the
+native default load control. These are configured targets, not evidence that a
+particular stream reached them; advanced statistics expose the configured
+values beside measured live offset and buffered-ahead duration.
+
 ## Acceptance gates
 
 An adapter is not production-supported until it passes:

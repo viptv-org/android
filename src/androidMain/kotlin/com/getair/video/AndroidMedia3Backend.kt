@@ -49,6 +49,8 @@ import kotlin.coroutines.resumeWithException
 class AndroidMedia3BackendFactory(
     context: Context,
     private val openTimeoutMillis: Long = 20_000,
+    private val resilientBufferConfig: AndroidMedia3ResilientBufferConfig =
+        AndroidMedia3ResilientBufferConfig(),
 ) : VideoBackendFactory {
     private val applicationContext = context.applicationContext
     @Volatile private var probedCapabilities: PlayerCapabilities? = null
@@ -71,6 +73,7 @@ class AndroidMedia3BackendFactory(
                 applicationContext,
                 openTimeoutMillis,
                 probedCapabilities ?: probeMedia3Capabilities(),
+                resilientBufferConfig,
             ),
         )
     }
@@ -88,9 +91,13 @@ internal class AndroidMedia3Backend(
     private val context: Context,
     private val openTimeoutMillis: Long,
     override val capabilities: PlayerCapabilities,
+    private val resilientBufferConfig: AndroidMedia3ResilientBufferConfig,
 ) : VideoBackend {
-    private val player = ExoPlayer.Builder(context).build()
-    private val handler = Handler(player.applicationLooper)
+    private lateinit var player: ExoPlayer
+    private lateinit var handler: Handler
+    private lateinit var listener: Player.Listener
+    private lateinit var analyticsListener: AnalyticsListener
+    private var bufferMode = Media3BufferMode.NativeDefault
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val eventsFlow = MutableSharedFlow<BackendEvent>(extraBufferCapacity = 64)
     @Volatile private var sessionId: PlaybackSessionId? = null
@@ -110,14 +117,15 @@ internal class AndroidMedia3Backend(
     private var behindLiveWindowRecoveryCount = 0L
     private var discontinuityCount = 0L
     private var videoOutput: AndroidVideoOutput? = null
-    private val listener = createListener()
-    private val analyticsListener = createAnalyticsListener()
+    private var activeLiveTuning = media3LivePolicyTuning(
+        LivePlaybackPolicy.Balanced,
+        resilientBufferConfig,
+    )
 
     override val events: Flow<BackendEvent> = eventsFlow
 
     init {
-        player.addListener(listener)
-        player.addAnalyticsListener(analyticsListener)
+        replacePlayer(Media3BufferMode.NativeDefault)
         scope.launch {
             while (true) {
                 delay(500)
@@ -140,6 +148,21 @@ internal class AndroidMedia3Backend(
         source: PlaybackSource,
         playWhenReady: Boolean,
     ): OpenedMedia {
+        this.sessionId = null
+        val policy = if (source.kindHint == PlaybackKind.OnDemand) {
+            LivePlaybackPolicy.Balanced
+        } else {
+            source.options.livePolicy
+        }
+        val tuning = media3LivePolicyTuning(policy, resilientBufferConfig)
+        withContext(Dispatchers.Main.immediate) {
+            if (bufferMode == tuning.bufferMode) {
+                player.stop()
+            } else {
+                replacePlayer(tuning.bufferMode)
+            }
+        }
+        activeLiveTuning = tuning
         this.sessionId = sessionId
         kindHint = source.kindHint
         resetRuntimeMetrics()
@@ -168,43 +191,48 @@ internal class AndroidMedia3Backend(
 
     private suspend fun openOnMain(source: PlaybackSource, playWhenReady: Boolean): OpenedMedia =
         suspendCancellableCoroutine { continuation ->
+            val openingPlayer = player
             val openListener = object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState != Player.STATE_READY || !continuation.isActive) return
-                    player.removeListener(this)
+                    if (openingPlayer !== player || playbackState != Player.STATE_READY ||
+                        !continuation.isActive
+                    ) {
+                        return
+                    }
+                    openingPlayer.removeListener(this)
                     continuation.resume(snapshotOpenedMedia())
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
-                    if (!continuation.isActive) return
+                    if (openingPlayer !== player || !continuation.isActive) return
                     if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW &&
                         recoverBehindLiveWindow()
                     ) {
                         return
                     }
-                    player.removeListener(this)
+                    openingPlayer.removeListener(this)
                     continuation.resumeWithException(PlaybackFailure(error.toAirError()))
                 }
             }
             continuation.invokeOnCancellation {
                 runOnPlayerThread {
-                    player.removeListener(openListener)
-                    player.stop()
+                    openingPlayer.removeListener(openListener)
+                    openingPlayer.stop()
                 }
             }
-            player.addListener(openListener)
+            openingPlayer.addListener(openListener)
             try {
                 val httpFactory = DefaultHttpDataSource.Factory()
                     .setAllowCrossProtocolRedirects(false)
                     .setDefaultRequestProperties(source.headers)
                 val mediaSource = DefaultMediaSourceFactory(context)
                     .setDataSourceFactory(DefaultDataSource.Factory(context, httpFactory))
-                    .createMediaSource(source.toMediaItem())
-                player.setMediaSource(mediaSource)
-                player.playWhenReady = playWhenReady
-                player.prepare()
+                    .createMediaSource(source.toMediaItem(resilientBufferConfig))
+                openingPlayer.setMediaSource(mediaSource)
+                openingPlayer.playWhenReady = playWhenReady
+                openingPlayer.prepare()
             } catch (_: Exception) {
-                player.removeListener(openListener)
+                openingPlayer.removeListener(openListener)
                 continuation.resumeWithException(
                     PlaybackFailure(PlaybackError(PlaybackErrorCode.Source, "Media3 source is invalid", false)),
                 )
@@ -284,11 +312,19 @@ internal class AndroidMedia3Backend(
         }
     }
 
-    private fun createListener(): Player.Listener = object : Player.Listener {
-        override fun onIsPlayingChanged(isPlaying: Boolean) = emitPlaybackChanged()
-        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) = emitPlaybackChanged()
+    private fun createListener(callbackPlayer: ExoPlayer): Player.Listener = object : Player.Listener {
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (callbackPlayer !== player || released) return
+            emitPlaybackChanged()
+        }
+
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            if (callbackPlayer !== player || released) return
+            emitPlaybackChanged()
+        }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
+            if (callbackPlayer !== player || released) return
             val active = sessionId ?: return
             if (playbackState == Player.STATE_BUFFERING &&
                 lastPlaybackState == Player.STATE_READY &&
@@ -314,11 +350,13 @@ internal class AndroidMedia3Backend(
         }
 
         override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+            if (callbackPlayer !== player || released) return
             val active = sessionId ?: return
             eventsFlow.tryEmit(BackendEvent.TimelineChanged(active, snapshotTimeline()))
         }
 
         override fun onTracksChanged(tracks: Tracks) {
+            if (callbackPlayer !== player || released) return
             val active = sessionId ?: return
             val snapshot = snapshotTracks(tracks)
             eventsFlow.tryEmit(
@@ -339,6 +377,7 @@ internal class AndroidMedia3Backend(
             newPosition: Player.PositionInfo,
             reason: Int,
         ) {
+            if (callbackPlayer !== player || released) return
             val active = sessionId ?: return
             if (reason == Player.DISCONTINUITY_REASON_SEEK) {
                 if (manualSeekPending) {
@@ -352,6 +391,7 @@ internal class AndroidMedia3Backend(
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            if (callbackPlayer !== player || released) return
             if (opening) return
             if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW &&
                 recoverBehindLiveWindow()
@@ -362,13 +402,14 @@ internal class AndroidMedia3Backend(
         }
     }
 
-    private fun createAnalyticsListener(): AnalyticsListener = object : AnalyticsListener {
+    private fun createAnalyticsListener(callbackPlayer: ExoPlayer): AnalyticsListener = object : AnalyticsListener {
         override fun onBandwidthEstimate(
             eventTime: AnalyticsListener.EventTime,
             totalLoadTimeMs: Int,
             totalBytesLoaded: Long,
             bitrateEstimate: Long,
         ) {
+            if (callbackPlayer !== player || released) return
             estimatedThroughputBitsPerSecond = bitrateEstimate.takeIf { it >= 0 }
         }
 
@@ -377,6 +418,7 @@ internal class AndroidMedia3Backend(
             droppedFrames: Int,
             elapsedMs: Long,
         ) {
+            if (callbackPlayer !== player || released) return
             this@AndroidMedia3Backend.droppedVideoFrames += droppedFrames.coerceAtLeast(0).toLong()
         }
     }
@@ -435,9 +477,15 @@ internal class AndroidMedia3Backend(
 
     private fun snapshotStatistics(): PlaybackStatistics {
         val liveOffset = player.currentLiveOffset.takeUnless { it == C.TIME_UNSET || it < 0 }
+        val configured = activeLiveTuning
         return PlaybackStatistics(
             liveEdgeOffsetMillis = liveOffset,
             bufferedAheadMillis = player.totalBufferedDuration.coerceAtLeast(0),
+            livePolicy = configured.policy,
+            targetLiveOffsetMillis = configured.targetLiveOffsetMillis?.toLong(),
+            minimumBufferMillis = configured.minimumBufferMillis?.toLong(),
+            maximumBufferMillis = configured.maximumBufferMillis?.toLong(),
+            bufferMemoryThresholdBytes = configured.bufferMemoryThresholdBytes?.toLong(),
             estimatedThroughputBitsPerSecond = estimatedThroughputBitsPerSecond,
             droppedVideoFrames = droppedVideoFrames,
             rebufferCount = rebufferCount,
@@ -492,22 +540,71 @@ internal class AndroidMedia3Backend(
         return TrackSnapshot(audio, subtitles, video, selectedAudio, selectedSubtitle, selectedVideo)
     }
 
-    private fun runOnPlayerThread(allowAfterRelease: Boolean = false, block: () -> Unit) {
-        if (released && !allowAfterRelease) return
-        if (Looper.myLooper() == player.applicationLooper) {
-            block()
-        } else {
-            handler.post { if (!released || allowAfterRelease) block() }
+    private fun replacePlayer(mode: Media3BufferMode) {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        val retainedOutput = videoOutput
+        if (::player.isInitialized) {
+            val previous = player
+            previous.removeListener(listener)
+            previous.removeAnalyticsListener(analyticsListener)
+            clearVideoOutput(previous, clearReference = false)
+            previous.release()
+        }
+        val tuning = when (mode) {
+            Media3BufferMode.NativeDefault -> media3LivePolicyTuning(
+                LivePlaybackPolicy.Balanced,
+                resilientBufferConfig,
+            )
+            Media3BufferMode.Resilient -> media3LivePolicyTuning(
+                LivePlaybackPolicy.Resilient,
+                resilientBufferConfig,
+            )
+        }
+        player = ExoPlayer.Builder(context).apply {
+            buildMedia3LoadControl(tuning)?.let(::setLoadControl)
+        }.build()
+        handler = Handler(player.applicationLooper)
+        listener = createListener(player)
+        analyticsListener = createAnalyticsListener(player)
+        player.addListener(listener)
+        player.addAnalyticsListener(analyticsListener)
+        bufferMode = mode
+        retainedOutput?.let { output ->
+            attachVideoOutput(player, output)
+            videoOutput = output
         }
     }
 
-    private fun clearVideoOutput() {
+    private fun runOnPlayerThread(allowAfterRelease: Boolean = false, block: () -> Unit) {
+        if (released && !allowAfterRelease) return
+        val targetPlayer = player
+        val targetHandler = handler
+        if (Looper.myLooper() == targetPlayer.applicationLooper) {
+            block()
+        } else {
+            targetHandler.post {
+                if ((!released || allowAfterRelease) && player === targetPlayer) block()
+            }
+        }
+    }
+
+    private fun attachVideoOutput(target: ExoPlayer, output: AndroidVideoOutput) {
+        when (output) {
+            is AndroidVideoOutput.Surface -> target.setVideoSurfaceView(output.view)
+            is AndroidVideoOutput.Texture -> target.setVideoTextureView(output.view)
+        }
+    }
+
+    private fun clearVideoOutput(
+        target: ExoPlayer = player,
+        clearReference: Boolean = true,
+    ) {
         when (val output = videoOutput) {
-            is AndroidVideoOutput.Surface -> player.clearVideoSurfaceView(output.view)
-            is AndroidVideoOutput.Texture -> player.clearVideoTextureView(output.view)
+            is AndroidVideoOutput.Surface -> target.clearVideoSurfaceView(output.view)
+            is AndroidVideoOutput.Texture -> target.clearVideoTextureView(output.view)
             null -> Unit
         }
-        videoOutput = null
+        if (clearReference) videoOutput = null
     }
 }
 
@@ -566,7 +663,9 @@ internal fun media3VideoTrackLabel(label: String?, height: Int, codec: String?, 
 
 private fun Format.trackLabel(type: String, index: Int): String = label ?: language ?: "$type ${index + 1}"
 
-private fun PlaybackSource.toMediaItem(): MediaItem {
+private fun PlaybackSource.toMediaItem(
+    resilientBufferConfig: AndroidMedia3ResilientBufferConfig,
+): MediaItem {
     val subtitles = externalSubtitles.map { subtitle ->
         var selectionFlags = 0
         if (subtitle.isDefault) selectionFlags = selectionFlags or C.SELECTION_FLAG_DEFAULT
@@ -585,22 +684,21 @@ private fun PlaybackSource.toMediaItem(): MediaItem {
         .setMediaMetadata(MediaMetadata.Builder().setTitle(title).build())
         .setSubtitleConfigurations(subtitles)
         .apply {
-            media3LiveConfiguration(options.livePolicy)?.let(::setLiveConfiguration)
+            if (kindHint != PlaybackKind.OnDemand) {
+                media3LiveConfiguration(options.livePolicy, resilientBufferConfig)?.let(::setLiveConfiguration)
+            }
         }
         .build()
 }
 
 /** Balanced deliberately leaves manifest/Media3 defaults untouched. Target offset is not a promise
  * about buffered-ahead media; [PlaybackStatistics.bufferedAheadMillis] reports that separately. */
-internal fun media3LiveConfiguration(policy: LivePlaybackPolicy): MediaItem.LiveConfiguration? = when (policy) {
-    LivePlaybackPolicy.LowLatency -> MediaItem.LiveConfiguration.Builder()
-        .setTargetOffsetMs(3_000)
-        .build()
-    LivePlaybackPolicy.Balanced -> null
-    LivePlaybackPolicy.Resilient -> MediaItem.LiveConfiguration.Builder()
-        .setTargetOffsetMs(10_000)
-        .build()
-}
+internal fun media3LiveConfiguration(
+    policy: LivePlaybackPolicy,
+    resilientBufferConfig: AndroidMedia3ResilientBufferConfig = AndroidMedia3ResilientBufferConfig(),
+): MediaItem.LiveConfiguration? = media3LivePolicyTuning(policy, resilientBufferConfig)
+    .targetLiveOffsetMillis
+    ?.let { MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(it.toLong()).build() }
 
 internal fun shouldRecoverMedia3BehindLiveWindow(
     errorCode: Int,
