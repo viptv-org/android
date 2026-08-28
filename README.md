@@ -15,6 +15,9 @@ The exact upstream research revisions and engine gates are documented in
 [`docs/backend-strategy.md`](docs/backend-strategy.md). The movable,
 overlay-capable surface design is in
 [`docs/surface-architecture.md`](docs/surface-architecture.md).
+Release performance gates are defined in
+[`docs/performance-budgets.md`](docs/performance-budgets.md); they are budgets,
+not claims based on wrapper documentation.
 
 ## Kotlin Multiplatform status
 
