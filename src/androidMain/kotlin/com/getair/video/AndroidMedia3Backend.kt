@@ -25,6 +25,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -98,13 +99,25 @@ internal class AndroidMedia3Backend(
     @Volatile private var trackTargets: Map<String, TrackTarget> = emptyMap()
     @Volatile private var externalSubtitleIds: Set<String> = emptySet()
     @Volatile private var kindHint: PlaybackKind? = null
+    private var lastPlaybackState = Player.STATE_IDLE
+    private var hasReachedReady = false
+    private var recoveringBehindLiveWindow = false
+    private var manualSeekPending = false
+    private var manualSeekInProgress = false
+    private var estimatedThroughputBitsPerSecond: Long? = null
+    private var droppedVideoFrames = 0L
+    private var rebufferCount = 0L
+    private var behindLiveWindowRecoveryCount = 0L
+    private var discontinuityCount = 0L
     private var videoOutput: AndroidVideoOutput? = null
     private val listener = createListener()
+    private val analyticsListener = createAnalyticsListener()
 
     override val events: Flow<BackendEvent> = eventsFlow
 
     init {
         player.addListener(listener)
+        player.addAnalyticsListener(analyticsListener)
         scope.launch {
             while (true) {
                 delay(500)
@@ -117,6 +130,7 @@ internal class AndroidMedia3Backend(
                         player.bufferedPosition.takeIf { it >= 0 },
                     ),
                 )
+                eventsFlow.tryEmit(BackendEvent.StatisticsChanged(active, snapshotStatistics()))
             }
         }
     }
@@ -128,6 +142,7 @@ internal class AndroidMedia3Backend(
     ): OpenedMedia {
         this.sessionId = sessionId
         kindHint = source.kindHint
+        resetRuntimeMetrics()
         externalSubtitleIds = source.externalSubtitles.mapTo(mutableSetOf(), ExternalSubtitleSource::id)
         opening = true
         return try {
@@ -162,6 +177,11 @@ internal class AndroidMedia3Backend(
 
                 override fun onPlayerError(error: PlaybackException) {
                     if (!continuation.isActive) return
+                    if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW &&
+                        recoverBehindLiveWindow()
+                    ) {
+                        return
+                    }
                     player.removeListener(this)
                     continuation.resumeWithException(PlaybackFailure(error.toAirError()))
                 }
@@ -194,7 +214,11 @@ internal class AndroidMedia3Backend(
 
     override fun play() = runOnPlayerThread { player.play() }
     override fun pause() = runOnPlayerThread { player.pause() }
-    override fun seekTo(positionMillis: Long) = runOnPlayerThread { player.seekTo(positionMillis) }
+    override fun seekTo(positionMillis: Long) = runOnPlayerThread {
+        manualSeekPending = true
+        manualSeekInProgress = true
+        player.seekTo(positionMillis)
+    }
 
     override fun selectAudioTrack(id: String?): TrackSelectionResult = selectTrack(C.TRACK_TYPE_AUDIO, id)
     override fun selectSubtitleTrack(id: String?): TrackSelectionResult = selectTrack(C.TRACK_TYPE_TEXT, id)
@@ -266,6 +290,19 @@ internal class AndroidMedia3Backend(
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             val active = sessionId ?: return
+            if (playbackState == Player.STATE_BUFFERING &&
+                lastPlaybackState == Player.STATE_READY &&
+                player.playWhenReady &&
+                !manualSeekInProgress
+            ) {
+                rebufferCount += 1
+            }
+            if (playbackState == Player.STATE_READY) {
+                hasReachedReady = true
+                recoveringBehindLiveWindow = false
+                manualSeekInProgress = false
+            }
+            lastPlaybackState = playbackState
             eventsFlow.tryEmit(
                 BackendEvent.BufferingChanged(
                     active,
@@ -302,14 +339,78 @@ internal class AndroidMedia3Backend(
             newPosition: Player.PositionInfo,
             reason: Int,
         ) {
-            if (reason != Player.DISCONTINUITY_REASON_SEEK) return
-            sessionId?.let { eventsFlow.tryEmit(BackendEvent.SeekFinished(it, newPosition.positionMs)) }
+            val active = sessionId ?: return
+            if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                if (manualSeekPending) {
+                    manualSeekPending = false
+                    eventsFlow.tryEmit(BackendEvent.SeekFinished(active, newPosition.positionMs))
+                }
+            } else if (hasReachedReady) {
+                discontinuityCount += 1
+                eventsFlow.tryEmit(BackendEvent.StatisticsChanged(active, snapshotStatistics()))
+            }
         }
 
         override fun onPlayerError(error: PlaybackException) {
             if (opening) return
+            if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW &&
+                recoverBehindLiveWindow()
+            ) {
+                return
+            }
             sessionId?.let { eventsFlow.tryEmit(BackendEvent.Failed(it, error.toAirError())) }
         }
+    }
+
+    private fun createAnalyticsListener(): AnalyticsListener = object : AnalyticsListener {
+        override fun onBandwidthEstimate(
+            eventTime: AnalyticsListener.EventTime,
+            totalLoadTimeMs: Int,
+            totalBytesLoaded: Long,
+            bitrateEstimate: Long,
+        ) {
+            estimatedThroughputBitsPerSecond = bitrateEstimate.takeIf { it >= 0 }
+        }
+
+        override fun onDroppedVideoFrames(
+            eventTime: AnalyticsListener.EventTime,
+            droppedFrames: Int,
+            elapsedMs: Long,
+        ) {
+            this@AndroidMedia3Backend.droppedVideoFrames += droppedFrames.coerceAtLeast(0).toLong()
+        }
+    }
+
+    private fun recoverBehindLiveWindow(): Boolean {
+        if (!shouldRecoverMedia3BehindLiveWindow(
+                errorCode = PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW,
+                kindHint = kindHint,
+                recoveryInProgress = recoveringBehindLiveWindow,
+            )
+        ) {
+            return false
+        }
+        recoveringBehindLiveWindow = true
+        behindLiveWindowRecoveryCount += 1
+        manualSeekPending = false
+        manualSeekInProgress = false
+        player.seekToDefaultPosition()
+        player.prepare()
+        sessionId?.let { eventsFlow.tryEmit(BackendEvent.StatisticsChanged(it, snapshotStatistics())) }
+        return true
+    }
+
+    private fun resetRuntimeMetrics() {
+        lastPlaybackState = Player.STATE_IDLE
+        hasReachedReady = false
+        recoveringBehindLiveWindow = false
+        manualSeekPending = false
+        manualSeekInProgress = false
+        estimatedThroughputBitsPerSecond = null
+        droppedVideoFrames = 0
+        rebufferCount = 0
+        behindLiveWindowRecoveryCount = 0
+        discontinuityCount = 0
     }
 
     private fun emitPlaybackChanged() {
@@ -328,6 +429,21 @@ internal class AndroidMedia3Backend(
             selectedAudioTrackId = tracks.selectedAudio,
             selectedSubtitleTrackId = tracks.selectedSubtitle,
             selectedVideoTrackId = tracks.selectedVideo,
+            statistics = snapshotStatistics(),
+        )
+    }
+
+    private fun snapshotStatistics(): PlaybackStatistics {
+        val liveOffset = player.currentLiveOffset.takeUnless { it == C.TIME_UNSET || it < 0 }
+        return PlaybackStatistics(
+            liveEdgeOffsetMillis = liveOffset,
+            bufferedAheadMillis = player.totalBufferedDuration.coerceAtLeast(0),
+            estimatedThroughputBitsPerSecond = estimatedThroughputBitsPerSecond,
+            droppedVideoFrames = droppedVideoFrames,
+            rebufferCount = rebufferCount,
+            behindLiveWindowRecoveryCount = behindLiveWindowRecoveryCount,
+            discontinuityCount = discontinuityCount,
+            playbackSpeed = player.playbackParameters.speed.toDouble(),
         )
     }
 
@@ -468,8 +584,31 @@ private fun PlaybackSource.toMediaItem(): MediaItem {
         .setMimeType(mimeType)
         .setMediaMetadata(MediaMetadata.Builder().setTitle(title).build())
         .setSubtitleConfigurations(subtitles)
+        .apply {
+            media3LiveConfiguration(options.livePolicy)?.let(::setLiveConfiguration)
+        }
         .build()
 }
+
+/** Balanced deliberately leaves manifest/Media3 defaults untouched. Target offset is not a promise
+ * about buffered-ahead media; [PlaybackStatistics.bufferedAheadMillis] reports that separately. */
+internal fun media3LiveConfiguration(policy: LivePlaybackPolicy): MediaItem.LiveConfiguration? = when (policy) {
+    LivePlaybackPolicy.LowLatency -> MediaItem.LiveConfiguration.Builder()
+        .setTargetOffsetMs(3_000)
+        .build()
+    LivePlaybackPolicy.Balanced -> null
+    LivePlaybackPolicy.Resilient -> MediaItem.LiveConfiguration.Builder()
+        .setTargetOffsetMs(10_000)
+        .build()
+}
+
+internal fun shouldRecoverMedia3BehindLiveWindow(
+    errorCode: Int,
+    kindHint: PlaybackKind?,
+    recoveryInProgress: Boolean,
+): Boolean = errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW &&
+    kindHint != PlaybackKind.OnDemand &&
+    !recoveryInProgress
 
 private fun PlaybackException.toAirError(): PlaybackError = media3ErrorCodeToAir(errorCode)
 
@@ -499,6 +638,11 @@ internal fun media3ErrorCodeToAir(errorCode: Int): PlaybackError = when (errorCo
     PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> PlaybackError(
         PlaybackErrorCode.Network,
         "Media3 could not load the media",
+        recoverable = true,
+    )
+    PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW -> PlaybackError(
+        PlaybackErrorCode.Network,
+        "Media3 fell behind the live window",
         recoverable = true,
     )
     PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
@@ -577,6 +721,7 @@ private fun probeMedia3Capabilities(): PlayerCapabilities {
         supportsMovableSurface = true,
         supportsSurfaceReattachment = true,
         supportsCompositedOverlays = true,
+        supportedLivePolicies = LivePlaybackPolicy.entries.toSet(),
         hardwareAcceleration = if (hardwareVideoCodecs.isNotEmpty()) {
             HardwareAcceleration.DecodeAndRender
         } else {

@@ -31,6 +31,7 @@ data class OpenedMedia(
     val playWhenReady: Boolean? = null,
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
+    val statistics: PlaybackStatistics = PlaybackStatistics(),
 )
 
 @JvmInline
@@ -65,6 +66,10 @@ sealed interface BackendEvent {
         val selectedAudioTrackId: String?,
         val selectedSubtitleTrackId: String?,
         val selectedVideoTrackId: String?,
+    ) : BackendEvent
+    data class StatisticsChanged(
+        override val sessionId: PlaybackSessionId,
+        val statistics: PlaybackStatistics,
     ) : BackendEvent
     data class SeekFinished(
         override val sessionId: PlaybackSessionId,
@@ -108,6 +113,7 @@ class DefaultVideoPlayer(
     private val _audioTracks = MutableStateFlow<List<AudioTrack>>(emptyList())
     private val _subtitleTracks = MutableStateFlow<List<SubtitleTrack>>(emptyList())
     private val _videoTracks = MutableStateFlow<List<VideoTrack>>(emptyList())
+    private val _statistics = MutableStateFlow(PlaybackStatistics())
     private var released = false
     private var nextSessionValue = 0L
     private var activeSessionId: PlaybackSessionId? = null
@@ -118,6 +124,7 @@ class DefaultVideoPlayer(
     override val audioTracks: StateFlow<List<AudioTrack>> = _audioTracks.asStateFlow()
     override val subtitleTracks: StateFlow<List<SubtitleTrack>> = _subtitleTracks.asStateFlow()
     override val videoTracks: StateFlow<List<VideoTrack>> = _videoTracks.asStateFlow()
+    override val statistics: StateFlow<PlaybackStatistics> = _statistics.asStateFlow()
 
     init {
         scope.launch { backend.events.collect(::applyBackendEvent) }
@@ -133,11 +140,13 @@ class DefaultVideoPlayer(
                 playWhenReady = playWhenReady,
                 isBuffering = true,
             )
+            _statistics.value = PlaybackStatistics()
             try {
                 val opened = backend.open(sessionId, source, playWhenReady)
                 _audioTracks.value = opened.audioTracks
                 _subtitleTracks.value = opened.subtitleTracks
                 _videoTracks.value = opened.videoTracks
+                _statistics.value = opened.statistics
                 _state.value = PlaybackState(
                     status = PlaybackStatus.Ready,
                     playWhenReady = opened.playWhenReady ?: playWhenReady,
@@ -278,6 +287,7 @@ class DefaultVideoPlayer(
                     )
                 }
             }
+            is BackendEvent.StatisticsChanged -> _statistics.value = event.statistics
             is BackendEvent.SeekFinished -> {
                 _state.update { it.copy(positionMillis = event.positionMillis.coerceAtLeast(0)) }
                 _events.tryEmit(PlaybackEvent.SeekCompleted(event.positionMillis))
@@ -297,6 +307,7 @@ class DefaultVideoPlayer(
         _audioTracks.value = emptyList()
         _subtitleTracks.value = emptyList()
         _videoTracks.value = emptyList()
+        _statistics.value = PlaybackStatistics()
         _state.value = PlaybackState(status = status)
     }
 

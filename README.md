@@ -26,6 +26,12 @@ seek rejection, independent audio/subtitle/video selection, buffering,
 lifecycle, typed failures, stale-event rejection, and redacted sources.
 `VideoBackendRouter` selects adapters from measured runtime capabilities.
 
+Live opens accept `LowLatency`, `Balanced`, or `Resilient` policy through
+`PlaybackOptions`. The resilient Android policy requests a native 10-second
+live-edge margin; `player.statistics` reports actual live offset and buffered
+ahead media separately. Details and recovery boundaries are documented in
+[`docs/live-playback-policy.md`](docs/live-playback-policy.md).
+
 ### Android / Android TV
 
 `AndroidMedia3BackendFactory` uses Media3 1.11.0 with HLS and DASH, runtime
@@ -47,6 +53,7 @@ player.open(
         mimeType = "application/x-mpegURL",
         headers = streamHeaders,
         kindHint = PlaybackKind.Live,
+        options = PlaybackOptions(livePolicy = LivePlaybackPolicy.Resilient),
     ),
 )
 ```

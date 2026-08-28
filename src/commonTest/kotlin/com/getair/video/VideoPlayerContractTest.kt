@@ -70,4 +70,30 @@ class VideoPlayerContractTest {
         assertEquals("first", source.headers["Authorization"])
         assertEquals(1, source.externalSubtitles.size)
     }
+
+    @Test
+    fun livePolicyDefaultsToBalancedAndResilientIsExplicit() {
+        assertEquals(
+            LivePlaybackPolicy.Balanced,
+            PlaybackSource("https://media.invalid/live.m3u8").options.livePolicy,
+        )
+        assertEquals(
+            LivePlaybackPolicy.Resilient,
+            PlaybackSource(
+                "https://media.invalid/live.m3u8",
+                options = PlaybackOptions(LivePlaybackPolicy.Resilient),
+            ).options.livePolicy,
+        )
+    }
+
+    @Test
+    fun liveOffsetAndBufferedAheadRemainIndependentFacts() {
+        val stats = PlaybackStatistics(
+            liveEdgeOffsetMillis = 10_000,
+            bufferedAheadMillis = 2_000,
+        )
+
+        assertEquals(10_000, stats.liveEdgeOffsetMillis)
+        assertEquals(2_000, stats.bufferedAheadMillis)
+    }
 }

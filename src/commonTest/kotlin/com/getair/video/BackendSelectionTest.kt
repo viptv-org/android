@@ -113,6 +113,7 @@ class BackendSelectionTest {
             override val audioTracks = kotlinx.coroutines.flow.MutableStateFlow(emptyList<AudioTrack>())
             override val subtitleTracks = kotlinx.coroutines.flow.MutableStateFlow(emptyList<SubtitleTrack>())
             override val videoTracks = kotlinx.coroutines.flow.MutableStateFlow(emptyList<VideoTrack>())
+            override val statistics = kotlinx.coroutines.flow.MutableStateFlow(PlaybackStatistics())
             override suspend fun open(source: PlaybackSource, playWhenReady: Boolean) = Unit
             override fun play() = Unit
             override fun pause() = Unit

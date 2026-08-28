@@ -10,14 +10,25 @@ class PlaybackSource(
     val title: String? = null,
     externalSubtitles: List<ExternalSubtitleSource> = emptyList(),
     val kindHint: PlaybackKind? = null,
+    val options: PlaybackOptions = PlaybackOptions(),
 ) {
     val headers: Map<String, String> = headers.toMap()
     val externalSubtitles: List<ExternalSubtitleSource> = externalSubtitles.toList()
 
     override fun toString(): String =
         "PlaybackSource(uri=<redacted>, mimeType=$mimeType, headers=<redacted>, title=$title, " +
-            "externalSubtitles=${externalSubtitles.size}, kindHint=$kindHint)"
+            "externalSubtitles=${externalSubtitles.size}, kindHint=$kindHint, options=$options)"
 }
+
+/**
+ * Live intent only. Backends translate this through their native live controls, and measured
+ * [PlaybackStatistics] remain authoritative because a manifest or engine may constrain the result.
+ */
+enum class LivePlaybackPolicy { LowLatency, Balanced, Resilient }
+
+data class PlaybackOptions(
+    val livePolicy: LivePlaybackPolicy = LivePlaybackPolicy.Balanced,
+)
 
 data class ExternalSubtitleSource(
     val id: String,
@@ -79,6 +90,32 @@ data class PlaybackState(
     val selectedVideoTrackId: String? = null,
     val error: PlaybackError? = null,
 )
+
+/**
+ * Low-frequency diagnostic facts kept outside [PlaybackState] so stats sampling cannot invalidate
+ * controls or browsing UI. Live-edge offset and buffered-ahead media are deliberately independent.
+ */
+data class PlaybackStatistics(
+    val liveEdgeOffsetMillis: Long? = null,
+    val bufferedAheadMillis: Long? = null,
+    val estimatedThroughputBitsPerSecond: Long? = null,
+    val droppedVideoFrames: Long = 0,
+    val rebufferCount: Long = 0,
+    val behindLiveWindowRecoveryCount: Long = 0,
+    val discontinuityCount: Long = 0,
+    val playbackSpeed: Double = 1.0,
+) {
+    init {
+        require(liveEdgeOffsetMillis == null || liveEdgeOffsetMillis >= 0)
+        require(bufferedAheadMillis == null || bufferedAheadMillis >= 0)
+        require(estimatedThroughputBitsPerSecond == null || estimatedThroughputBitsPerSecond >= 0)
+        require(droppedVideoFrames >= 0)
+        require(rebufferCount >= 0)
+        require(behindLiveWindowRecoveryCount >= 0)
+        require(discontinuityCount >= 0)
+        require(playbackSpeed > 0 && playbackSpeed.isFinite())
+    }
+}
 
 enum class TrackType { Audio, Subtitle, Video }
 
@@ -152,6 +189,7 @@ data class PlayerCapabilities(
     val supportsMovableSurface: Boolean = false,
     val supportsSurfaceReattachment: Boolean = false,
     val supportsCompositedOverlays: Boolean = false,
+    val supportedLivePolicies: Set<LivePlaybackPolicy> = emptySet(),
     val hardwareAcceleration: HardwareAcceleration = HardwareAcceleration.Unknown,
 )
 
@@ -179,6 +217,7 @@ interface VideoPlayer : AutoCloseable {
     val audioTracks: StateFlow<List<AudioTrack>>
     val subtitleTracks: StateFlow<List<SubtitleTrack>>
     val videoTracks: StateFlow<List<VideoTrack>>
+    val statistics: StateFlow<PlaybackStatistics>
 
     suspend fun open(source: PlaybackSource, playWhenReady: Boolean = true)
     fun play()

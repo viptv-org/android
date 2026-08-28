@@ -151,6 +151,42 @@ class DefaultVideoPlayerTest {
         player.close()
     }
 
+    @Test
+    fun runtimeStatisticsAreSessionScopedAndResetOnStop() = runTest {
+        val backend = FakeBackend(OpenedMedia(PlaybackTimeline(PlaybackKind.Live)))
+        val player = DefaultVideoPlayer(backend, StandardTestDispatcher(testScheduler))
+        player.open(PlaybackSource("https://example.invalid/first.m3u8"))
+        val firstSession = checkNotNull(backend.lastSessionId)
+        player.open(PlaybackSource("https://example.invalid/second.m3u8"))
+        val secondSession = checkNotNull(backend.lastSessionId)
+
+        backend.eventsFlow.emit(
+            BackendEvent.StatisticsChanged(
+                firstSession,
+                PlaybackStatistics(liveEdgeOffsetMillis = 99_000, bufferedAheadMillis = 99_000),
+            ),
+        )
+        backend.eventsFlow.emit(
+            BackendEvent.StatisticsChanged(
+                secondSession,
+                PlaybackStatistics(
+                    liveEdgeOffsetMillis = 10_000,
+                    bufferedAheadMillis = 7_500,
+                    rebufferCount = 1,
+                ),
+            ),
+        )
+        testScheduler.runCurrent()
+
+        assertEquals(10_000, player.statistics.value.liveEdgeOffsetMillis)
+        assertEquals(7_500, player.statistics.value.bufferedAheadMillis)
+        assertEquals(1, player.statistics.value.rebufferCount)
+
+        player.stop()
+        assertEquals(PlaybackStatistics(), player.statistics.value)
+        player.close()
+    }
+
     private class FakeBackend(
         private val opened: OpenedMedia,
         override val capabilities: PlayerCapabilities = PlayerCapabilities(

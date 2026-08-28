@@ -49,4 +49,60 @@ class AndroidMedia3MappingTest {
         assertEquals("av1", media3VideoTrackLabel("", 0, "av1", 0))
         assertEquals("Video 2", media3VideoTrackLabel(null, 0, null, 1))
     }
+
+    @Test
+    fun livePoliciesPreserveDefaultsOrRequestNativeTargetOffsets() {
+        assertEquals(null, media3LiveConfiguration(LivePlaybackPolicy.Balanced))
+        assertEquals(
+            3_000,
+            media3LiveConfiguration(LivePlaybackPolicy.LowLatency)?.targetOffsetMs,
+        )
+        assertEquals(
+            10_000,
+            media3LiveConfiguration(LivePlaybackPolicy.Resilient)?.targetOffsetMs,
+        )
+    }
+
+    @Test
+    fun behindLiveWindowRecoveryIsLiveOnlyAndBoundedPerAttempt() {
+        assertTrue(
+            shouldRecoverMedia3BehindLiveWindow(
+                PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW,
+                PlaybackKind.Live,
+                recoveryInProgress = false,
+            ),
+        )
+        assertTrue(
+            shouldRecoverMedia3BehindLiveWindow(
+                PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW,
+                kindHint = null,
+                recoveryInProgress = false,
+            ),
+        )
+        assertFalse(
+            shouldRecoverMedia3BehindLiveWindow(
+                PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW,
+                PlaybackKind.OnDemand,
+                recoveryInProgress = false,
+            ),
+        )
+        assertFalse(
+            shouldRecoverMedia3BehindLiveWindow(
+                PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW,
+                PlaybackKind.Live,
+                recoveryInProgress = true,
+            ),
+        )
+        assertFalse(
+            shouldRecoverMedia3BehindLiveWindow(
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+                PlaybackKind.Live,
+                recoveryInProgress = false,
+            ),
+        )
+        assertEquals(
+            PlaybackErrorCode.Network,
+            media3ErrorCodeToAir(PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW).code,
+        )
+    }
 }
