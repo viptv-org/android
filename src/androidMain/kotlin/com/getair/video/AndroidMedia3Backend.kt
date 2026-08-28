@@ -432,7 +432,7 @@ private fun Format.toSubtitleTrack(id: String, index: Int, externalIds: Set<Stri
 
 private fun Format.toVideoTrack(id: String, index: Int) = VideoTrack(
     id = id,
-    label = trackLabel("Video", index),
+    label = media3VideoTrackLabel(label, height, codecs, index),
     language = language,
     isDefault = selectionFlags and C.SELECTION_FLAG_DEFAULT != 0,
     isForced = selectionFlags and C.SELECTION_FLAG_FORCED != 0,
@@ -441,6 +441,12 @@ private fun Format.toVideoTrack(id: String, index: Int) = VideoTrack(
     bitrate = bitrate.takeIf { it > 0 }?.toLong(),
     codec = codecs ?: sampleMimeType,
 )
+
+internal fun media3VideoTrackLabel(label: String?, height: Int, codec: String?, index: Int): String =
+    label?.takeIf(String::isNotBlank)
+        ?: height.takeIf { it > 0 }?.let { "${it}p" }
+        ?: codec
+        ?: "Video ${index + 1}"
 
 private fun Format.trackLabel(type: String, index: Int): String = label ?: language ?: "$type ${index + 1}"
 

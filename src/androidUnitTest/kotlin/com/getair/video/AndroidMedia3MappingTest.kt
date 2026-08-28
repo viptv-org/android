@@ -41,4 +41,12 @@ class AndroidMedia3MappingTest {
         assertEquals("mpv", codec.suggestedBackend)
         assertEquals(PlaybackErrorCode.Network, network.code)
     }
+
+    @Test
+    fun videoRenditionLabelPrefersAUsefulNameThenResolution() {
+        assertEquals("Director encode", media3VideoTrackLabel("Director encode", 1080, "hevc", 0))
+        assertEquals("720p", media3VideoTrackLabel(null, 720, "h264", 0))
+        assertEquals("av1", media3VideoTrackLabel("", 0, "av1", 0))
+        assertEquals("Video 2", media3VideoTrackLabel(null, 0, null, 1))
+    }
 }
