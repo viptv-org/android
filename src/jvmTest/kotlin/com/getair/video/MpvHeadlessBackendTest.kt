@@ -31,7 +31,7 @@ class MpvHeadlessBackendTest {
     fun mapsTracksTimelineAndSelectionThroughTheAirContract() = runBlocking {
         val client = FakeMpvClient()
         val player = DefaultVideoPlayer(
-            MpvHeadlessBackend(clientFactory = { client }),
+            MpvSessionBackend(clientFactory = { client }),
             Dispatchers.IO,
         )
         player.open(
@@ -64,7 +64,7 @@ class MpvHeadlessBackendTest {
     @Test
     fun providerLiveHintAlwaysSuppressesSeeking() = runBlocking {
         val client = FakeMpvClient()
-        val player = DefaultVideoPlayer(MpvHeadlessBackend({ client }), Dispatchers.IO)
+        val player = DefaultVideoPlayer(MpvSessionBackend({ client }), Dispatchers.IO)
         player.open(
             PlaybackSource("https://media.invalid/live.m3u8", kindHint = PlaybackKind.Live),
             playWhenReady = false,

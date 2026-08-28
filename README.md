@@ -11,6 +11,9 @@ permissively licensed ideas behind its own API; KMediaPlayer is proprietary and
 is architecture observation only. The exact revisions, engine policy, legal
 boundary, and acceptance gates are documented in
 [`docs/backend-strategy.md`](docs/backend-strategy.md).
+The movable, overlay-capable surface design for inline playback, in-app PiP,
+and optional app-owned fullscreen is documented in
+[`docs/surface-architecture.md`](docs/surface-architecture.md).
 
 `corpus/generate.sh` creates copyright-free fixtures, and
 `benchmark/run-mpv-linux.sh` records the initial Linux MPV engine baseline in an
@@ -50,9 +53,11 @@ player.open(
 )
 ```
 
-The application owns the Compose controls and the `SurfaceView`; call
-`detachSurface()` when removing the surface and `close()` when the player is no
-longer needed. A plain live timeline never exposes a seek bar.
+The application owns the Compose controls and surface. Use `SurfaceView` for a
+stable lowest-overhead full-size path or `TextureView` when the same session must
+move, resize, clip, or sit under Compose overlays for in-app PiP. Call
+`detachSurface()` when removing it and `close()` when the player is no longer
+needed. A plain live timeline never exposes a seek bar.
 
 ## Desktop MPV checkpoint
 

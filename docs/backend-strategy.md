@@ -68,3 +68,23 @@ An adapter is not production-supported until it passes:
 
 Codec/container support remains a runtime probe result, not a compile-time
 promise.
+
+## Surface and presentation contract
+
+Presentation is owned by the app, never the decoder backend. One live player
+session must remain usable while its surface is laid out inline, moved and
+resized as in-app picture-in-picture, or placed in an optional fullscreen app
+layout. A backend must never force fullscreen or create a second playback
+window. Controls and arbitrary Compose content must be compositable above the
+video in every mode.
+
+The production capability gate therefore requires `supportsMovableSurface`,
+`supportsSurfaceReattachment`, and `supportsCompositedOverlays`. Android Media3
+offers both the lowest-overhead `SurfaceView` path and a `TextureView` path for
+movable/transformable in-app PiP. Desktop MPV must publish a Compose-drawable
+frame/texture surface; the JAWT `wid` child-window proof is intentionally
+internal because heavyweight native children cannot guarantee Compose overlay
+z-order. Apple and Web adapters must use their interop-behind-Compose paths.
+
+Fullscreen, inline, and in-app PiP are UI layout states, not commands on
+`VideoPlayer`.

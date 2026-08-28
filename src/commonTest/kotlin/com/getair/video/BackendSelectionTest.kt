@@ -23,6 +23,9 @@ class BackendSelectionTest {
                 supportsAudioTrackSelection = true,
                 supportsSubtitleTrackSelection = true,
                 hardwareAcceleration = HardwareAcceleration.DecodeAndRender,
+                supportsMovableSurface = true,
+                supportsSurfaceReattachment = true,
+                supportsCompositedOverlays = true,
             ),
         )
         val fallback = FakeFactory(
@@ -40,6 +43,9 @@ class BackendSelectionTest {
                 supportsVideoTrackSelection = true,
                 supportsExternalSubtitles = true,
                 hardwareAcceleration = HardwareAcceleration.DecodeAndRender,
+                supportsMovableSurface = true,
+                supportsSurfaceReattachment = true,
+                supportsCompositedOverlays = true,
             ),
         )
         val router = VideoBackendRouter(listOf(platform, fallback))
@@ -59,6 +65,8 @@ class BackendSelectionTest {
                     subtitleFormat = "ass",
                     videoTrackSelection = true,
                     hardwareAcceleration = true,
+                    movableSurface = true,
+                    compositedOverlays = true,
                 ),
             ),
         )

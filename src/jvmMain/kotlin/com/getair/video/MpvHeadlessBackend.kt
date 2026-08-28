@@ -40,12 +40,12 @@ internal class MpvHeadlessBackendFactory(
     }
 
     override fun create(): VideoPlayer = DefaultVideoPlayer(
-        MpvHeadlessBackend(clientFactory = { MpvIpcConnection.start(options) }),
+        MpvSessionBackend(clientFactory = { MpvIpcConnection.start(options) }),
         Dispatchers.IO,
     )
 }
 
-internal class MpvHeadlessBackend(
+internal class MpvSessionBackend(
     private val clientFactory: suspend () -> MpvCommandClient,
     private val openTimeoutMillis: Long = 20_000,
 ) : VideoBackend {
@@ -249,6 +249,11 @@ internal class MpvHeadlessBackend(
         scope.launch { runCatching { client?.command(command) } }
     }
 
+    internal suspend fun diagnosticProperty(name: String): JsonElement? {
+        require(name in MPV_DIAGNOSTIC_PROPERTIES) { "Unsupported MPV diagnostic property" }
+        return client?.command(strings("get_property", name))
+    }
+
     override fun close() {
         if (released) return
         released = true
@@ -374,7 +379,7 @@ private fun Map<String, JsonElement?>.secondsMillis(name: String): Long? {
     return (seconds * 1_000).toLong()
 }
 
-private fun strings(vararg values: String): List<JsonElement> = values.map(::mpvString)
+internal fun strings(vararg values: String): List<JsonElement> = values.map(::mpvString)
 
 private val OBSERVED_PROPERTIES = listOf(
     "pause",
@@ -386,7 +391,9 @@ private val OBSERVED_PROPERTIES = listOf(
     "track-list",
 )
 
-private val MPV_BASELINE_CAPABILITIES = PlayerCapabilities(
+private val MPV_DIAGNOSTIC_PROPERTIES = setOf("vo-configured", "video-out-params", "hwdec-current")
+
+internal val MPV_BASELINE_CAPABILITIES = PlayerCapabilities(
     containers = setOf("mkv", "matroska", "mpegts", "ts", "hls"),
     videoCodecs = setOf("h264", "hevc", "av1"),
     audioCodecs = setOf("aac"),

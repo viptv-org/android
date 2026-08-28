@@ -41,6 +41,7 @@ jobs:
           distribution: temurin
           java-version: "17"
       - run: sudo apt-get update && sudo apt-get install --yes ffmpeg mpv
+      - run: ./scripts/build-jawt-linux.sh
       - run: ./scripts/test-mpv-jvm-integration.sh
 
   native:

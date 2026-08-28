@@ -19,6 +19,9 @@ data class PlaybackRequirements(
     val externalSubtitles: Boolean = false,
     val hdr: Boolean = false,
     val hardwareAcceleration: Boolean = false,
+    val movableSurface: Boolean = false,
+    val surfaceReattachment: Boolean = false,
+    val compositedOverlays: Boolean = false,
 )
 
 enum class BackendRejection {
@@ -37,6 +40,9 @@ enum class BackendRejection {
     ExternalSubtitles,
     Hdr,
     HardwareAcceleration,
+    MovableSurface,
+    SurfaceReattachment,
+    CompositedOverlays,
 }
 
 data class BackendCandidate(
@@ -144,6 +150,13 @@ private fun PlayerCapabilities.rejections(requirements: PlaybackRequirements): S
         }
     ) {
         add(BackendRejection.HardwareAcceleration)
+    }
+    if (requirements.movableSurface && !supportsMovableSurface) add(BackendRejection.MovableSurface)
+    if (requirements.surfaceReattachment && !supportsSurfaceReattachment) {
+        add(BackendRejection.SurfaceReattachment)
+    }
+    if (requirements.compositedOverlays && !supportsCompositedOverlays) {
+        add(BackendRejection.CompositedOverlays)
     }
 }
 

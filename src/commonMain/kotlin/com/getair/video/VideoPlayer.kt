@@ -144,6 +144,9 @@ data class PlayerCapabilities(
     val supportsPictureInPicture: Boolean = false,
     val supportsHdr: Boolean = false,
     val supportsAudioPassthrough: Boolean = false,
+    val supportsMovableSurface: Boolean = false,
+    val supportsSurfaceReattachment: Boolean = false,
+    val supportsCompositedOverlays: Boolean = false,
     val hardwareAcceleration: HardwareAcceleration = HardwareAcceleration.Unknown,
 )
 

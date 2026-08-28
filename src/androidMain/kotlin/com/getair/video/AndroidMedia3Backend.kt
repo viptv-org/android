@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.SurfaceView
+import android.view.TextureView
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
@@ -78,6 +79,7 @@ class AndroidMedia3VideoPlayer internal constructor(
     private val backend: AndroidMedia3Backend,
 ) : VideoPlayer by DefaultVideoPlayer(backend, Dispatchers.Main.immediate) {
     fun attach(surfaceView: SurfaceView) = backend.attach(surfaceView)
+    fun attach(textureView: TextureView) = backend.attach(textureView)
     fun detachSurface() = backend.detachSurface()
 }
 
@@ -96,6 +98,7 @@ internal class AndroidMedia3Backend(
     @Volatile private var trackTargets: Map<String, TrackTarget> = emptyMap()
     @Volatile private var externalSubtitleIds: Set<String> = emptySet()
     @Volatile private var kindHint: PlaybackKind? = null
+    private var videoOutput: AndroidVideoOutput? = null
     private val listener = createListener()
 
     override val events: Flow<BackendEvent> = eventsFlow
@@ -225,11 +228,24 @@ internal class AndroidMedia3Backend(
 
     fun attach(surfaceView: SurfaceView) {
         if (released) return
-        runOnPlayerThread { player.setVideoSurfaceView(surfaceView) }
+        runOnPlayerThread {
+            clearVideoOutput()
+            player.setVideoSurfaceView(surfaceView)
+            videoOutput = AndroidVideoOutput.Surface(surfaceView)
+        }
+    }
+
+    fun attach(textureView: TextureView) {
+        if (released) return
+        runOnPlayerThread {
+            clearVideoOutput()
+            player.setVideoTextureView(textureView)
+            videoOutput = AndroidVideoOutput.Texture(textureView)
+        }
     }
 
     fun detachSurface() {
-        runOnPlayerThread { player.setVideoSurfaceView(null) }
+        runOnPlayerThread { clearVideoOutput() }
     }
 
     override fun close() {
@@ -238,7 +254,10 @@ internal class AndroidMedia3Backend(
         sessionId = null
         kindHint = null
         scope.cancel()
-        runOnPlayerThread(allowAfterRelease = true) { player.release() }
+        runOnPlayerThread(allowAfterRelease = true) {
+            clearVideoOutput()
+            player.release()
+        }
     }
 
     private fun createListener(): Player.Listener = object : Player.Listener {
@@ -355,6 +374,20 @@ internal class AndroidMedia3Backend(
             handler.post { if (!released || allowAfterRelease) block() }
         }
     }
+
+    private fun clearVideoOutput() {
+        when (val output = videoOutput) {
+            is AndroidVideoOutput.Surface -> player.clearVideoSurfaceView(output.view)
+            is AndroidVideoOutput.Texture -> player.clearVideoTextureView(output.view)
+            null -> Unit
+        }
+        videoOutput = null
+    }
+}
+
+private sealed interface AndroidVideoOutput {
+    data class Surface(val view: SurfaceView) : AndroidVideoOutput
+    data class Texture(val view: TextureView) : AndroidVideoOutput
 }
 
 private data class TrackTarget(val type: Int, val group: TrackGroup, val trackIndex: Int)
@@ -525,6 +558,9 @@ private fun probeMedia3Capabilities(): PlayerCapabilities {
         supportsPictureInPicture = Build.VERSION.SDK_INT >= 26,
         supportsHdr = false,
         supportsAudioPassthrough = false,
+        supportsMovableSurface = true,
+        supportsSurfaceReattachment = true,
+        supportsCompositedOverlays = true,
         hardwareAcceleration = if (hardwareVideoCodecs.isNotEmpty()) {
             HardwareAcceleration.DecodeAndRender
         } else {
