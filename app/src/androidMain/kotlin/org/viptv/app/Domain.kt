@@ -20,6 +20,13 @@ data class Media(
     val queueStatus: String? = null,
     /** When a cached next replaces the row, management still addresses this prior episode. */
     val previousEpisode: Media? = null,
+    val backdrop: String? = null,
+    val thumbnail: String? = null,
+    val year: String? = null,
+    val runtime: String? = null,
+    val genres: List<String> = emptyList(),
+    val credits: String? = null,
+    val watched: Boolean = false,
 )
 
 data class Source(

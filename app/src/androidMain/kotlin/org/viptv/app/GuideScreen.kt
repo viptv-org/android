@@ -1,36 +1,17 @@
 package org.viptv.app
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
-import androidx.activity.compose.BackHandler
 import android.view.KeyEvent
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
@@ -40,6 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlin.math.min
 
@@ -48,180 +30,146 @@ private val GuideSurface = Color(0xFF202224)
 private val GuideMuted = Color(0xFFA6A8AA)
 private const val GuideWindowMillis = 7_200_000L
 private const val GuideWidth = 804f
-private const val GuideFiltersPerPage = 4
 
-/** Canonical five-row, two-hour EPG. Controller owns paging/cache/window state. */
+/** One remote focus owner mirrors EpgGrid's row, time-anchor and filter cursor. */
 @Composable
 internal fun GuideScreen(state: AppState, initialChannel: LiveChannel?, controller: AppController) {
     val model = state.guideUi
-    // `channels` is the server-selected 40-channel page. Never filter or page
-    // it again in Compose: doing so loses server categories and cursor state.
-    val pageChannels = model.channels.ifEmpty { state.liveChannels }
-    val schedules = model.schedulesByChannelId.ifEmpty {
-        initialChannel?.let { mapOf(it.id to state.guide) }.orEmpty()
-    }
-    val selectedId = model.selectedChannelId ?: initialChannel?.id
-    val now = System.currentTimeMillis()
-    val selectedIndex = pageChannels.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
-    val firstRow = max(0, selectedIndex - 4)
-    val visible = pageChannels.drop(firstRow).take(5)
-    val window = model.windowStartMillis.takeIf { it > 0 } ?: floorGuideWindow(System.currentTimeMillis())
-    val followsNow = model.followsNow
-    var detail by remember { mutableStateOf<Pair<LiveChannel, GuideProgramme>?>(null) }
-    var detailOrigin by remember { mutableStateOf<GuideDetailOrigin?>(null) }
+    val channels = model.channels.ifEmpty { state.liveChannels }
+    val schedules = model.schedulesByChannelId.ifEmpty { initialChannel?.let { mapOf(it.id to state.guide) }.orEmpty() }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var anchor by remember { mutableLongStateOf(now) }
+    var menuFocus by remember { mutableStateOf(false) }
+    var menuIndex by remember { mutableIntStateOf(1) }
+    var detail by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
-    var filterPage by remember { mutableIntStateOf(0) }
-    val filterItems = buildList {
+    var endOfPage by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
+    val railFocus = LocalRokuRailFocus.current
+    val followsNow by rememberUpdatedState(model.followsNow)
+    val row = channels.indexOfFirst { it.id == model.selectedChannelId }.coerceAtLeast(0)
+    val channel = channels.getOrNull(row)
+    val window = model.windowStartMillis.takeIf { it > 0 } ?: floorGuideWindow(now)
+    val cells = guideCells(schedules[channel?.id].orEmpty(), window)
+    val selectedCell = cells.indexOfFirst { anchor >= it.programme.startMillis && anchor < it.programme.endMillis }.let { if (it < 0) 0 else it }
+    val programme = cells.getOrNull(selectedCell)?.programme
+    val filters = buildList {
         add(GuideFilterItem.Search)
         add(GuideFilterItem.Value("all", "All US channels", LiveChannelFilter.AllUs))
         add(GuideFilterItem.Value("mine", "My channels", LiveChannelFilter.MyChannels))
         add(GuideFilterItem.Value("recent", "Recent", LiveChannelFilter.Recent))
-        model.categories.forEach { category ->
-            add(GuideFilterItem.Value("category:${category.id}", category.name, LiveChannelFilter.Category(category.id)))
+        model.categories.forEach { add(GuideFilterItem.Value("category:${it.id}", it.name, LiveChannelFilter.Category(it.id))) }
+    }
+    fun applyFilter() {
+        when (val item = filters[menuIndex.coerceIn(0, filters.lastIndex)]) {
+            GuideFilterItem.Search -> searchOpen = true
+            is GuideFilterItem.Value -> { menuFocus = false; if (!item.matches(model.channelFilter)) controller.setGuideFilter(item.filter) }
         }
     }
-    val filterFocus = remember(filterItems.map { it.key }) { filterItems.associate { it.key to FocusRequester() } }
-    val initialFocus = filterFocus.getValue(GuideFilterItem.Search.key)
-    val filterPageCount = max(1, (filterItems.size + GuideFiltersPerPage - 1) / GuideFiltersPerPage)
-    val shownFilters = filterItems.drop(filterPage * GuideFiltersPerPage).take(GuideFiltersPerPage)
-    val visibleCellKeys = visible.flatMap { channel ->
-        guideCells(schedules[channel.id].orEmpty(), window).mapIndexed { index, cell ->
-            guideCellKey(channel, cell.programme, index)
+    fun activate() {
+        if (menuFocus) applyFilter()
+        else if (channel == null) controller.retryGuidePage()
+        else if (programme != null && programme.startMillis <= now) controller.watchGuideChannel(channel)
+        else detail = true
+    }
+    LaunchedEffect(Unit) { focus.requestFocus(); while (true) { delay(30_000); now = System.currentTimeMillis(); if (followsNow) controller.followGuideNow() } }
+    LaunchedEffect(model.followsNow, model.windowStartMillis) { if (model.followsNow) anchor = System.currentTimeMillis() }
+    LaunchedEffect(model.channelOffset) { if (endOfPage) { channels.lastOrNull()?.let(controller::selectGuideChannel); endOfPage = false } }
+    LaunchedEffect(searchOpen) { if (!searchOpen) focus.requestFocus() }
+    BackHandler(detail) { detail = false }
+    Box(Modifier.fillMaxSize().background(GuideCanvas).onPreviewKeyEvent { event ->
+        val key = event.nativeKeyEvent
+        if (searchOpen) return@onPreviewKeyEvent false
+        if (key.keyCode == KeyEvent.KEYCODE_BACK) {
+            if (detail) { if (key.action == KeyEvent.ACTION_UP) detail = false; return@onPreviewKeyEvent true }
+            return@onPreviewKeyEvent false
         }
-    }
-    val cellFocus = remember(visibleCellKeys) { visibleCellKeys.associateWith { FocusRequester() } }
-
-    fun closeDetail() {
-        detail = null
-    }
-
-    LaunchedEffect(initialChannel?.id, model.channelFilter) { initialFocus.requestFocus() }
-    LaunchedEffect(filterItems.size) { filterPage = filterPage.coerceIn(0, filterPageCount - 1) }
-    LaunchedEffect(filterPage, shownFilters.firstOrNull()?.key) {
-        shownFilters.firstOrNull()?.let { filterFocus.getValue(it.key).requestFocus() }
-    }
-    LaunchedEffect(searchOpen) {
-        if (!searchOpen) filterFocus.getValue(GuideFilterItem.Search.key).requestFocus()
-    }
-    LaunchedEffect(detail == null, cellFocus) {
-        if (detail != null) return@LaunchedEffect
-        val origin = detailOrigin ?: return@LaunchedEffect
-        detailOrigin = null
-        (cellFocus[origin.cellKey] ?: cellFocus.entries.firstOrNull { it.key.startsWith("${origin.channelId}:") }?.value ?: initialFocus).requestFocus()
-    }
-
-    Box(Modifier.fillMaxSize().background(GuideCanvas)) {
-        Text("Live TV", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(104.dp, 98.dp))
-        shownFilters.forEachIndexed { index, item ->
-            GuideButton(
-                item.label,
-                Modifier.offset(104.dp, (166 + index * 52).dp).width(184.dp).height(42.dp).focusRequester(filterFocus.getValue(item.key)),
-                selected = item.matches(model.channelFilter),
-            ) {
-                when (item) {
-                    GuideFilterItem.Search -> searchOpen = true
-                    is GuideFilterItem.Value -> controller.setGuideFilter(item.filter)
+        if (key.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent true
+        if (detail) {
+            if (key.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || key.keyCode == KeyEvent.KEYCODE_ENTER) channel?.let(controller::watchGuideChannel)
+            return@onPreviewKeyEvent true
+        }
+        when (key.keyCode) {
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> activate()
+            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { controller.followGuideNow(); anchor = now; menuFocus = false }
+            KeyEvent.KEYCODE_MEDIA_REWIND -> { controller.shiftGuideWindow(-1); anchor = max(floorGuideWindow(now), window - 3_600_000) }
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { controller.shiftGuideWindow(1); anchor = window + 3_600_000 }
+            KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> channel?.let(controller::watchGuideChannel)
+            KeyEvent.KEYCODE_INFO, KeyEvent.KEYCODE_MENU -> if (channel != null) detail = true
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
+                val direction = if (key.keyCode == KeyEvent.KEYCODE_DPAD_UP) -1 else 1
+                if (menuFocus) menuIndex = (menuIndex + direction).coerceIn(0, filters.lastIndex)
+                else {
+                    val next = row + direction
+                    if (next in channels.indices) controller.selectGuideChannel(channels[next])
+                    else if ((direction < 0 && model.channelOffset > 0) || (direction > 0 && model.channelOffset + channels.size < model.channelTotal)) {
+                        endOfPage = direction < 0; controller.changeGuidePage(direction)
+                    }
+                }
+            }
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                val left = key.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                if (menuFocus) { if (left) railFocus.requestFocus() else applyFilter() }
+                else if (channel == null) { if (left) menuFocus = true }
+                else {
+                    val next = selectedCell + if (left) -1 else 1
+                    if (next in cells.indices) { anchor = cells[next].programme.startMillis; controller.shiftGuideWindow(0) }
+                    else if (left && window <= floorGuideWindow(now)) menuFocus = true
+                    else { controller.shiftGuideWindow(if (left) -1 else 1); anchor = if (left) window - 1 else window + GuideWindowMillis }
+                }
+            }
+            else -> return@onPreviewKeyEvent false
+        }
+        true
+    }.focusRequester(focus).focusable()) {
+        Text("Live TV", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(112.dp, 34.dp).width(220.dp))
+        Box(Modifier.offset(112.dp,149.dp).size(1124.dp,1.dp).background(Color(0xFF303234)))
+        repeat(4) { i -> Text(guideTime(window + i * 1_800_000L), color = Color.White, fontSize = 19.sp, modifier = Modifier.offset((432 + i * 201).dp,116.dp).width(197.dp)) }
+        val firstMenu = max(0, menuIndex - 7)
+        filters.drop(firstMenu).take(8).forEachIndexed { slot, item ->
+            val selected = slot + firstMenu == menuIndex
+            Box(Modifier.offset(104.dp,(163 + slot * 48).dp).size(184.dp,42.dp).background(if (selected && menuFocus) Color(0xFFF5F5F5) else Color.Transparent).clickable { menuIndex = slot + firstMenu; applyFilter() }, contentAlignment = Alignment.CenterStart) {
+                Text(item.label, color = if (selected && menuFocus) GuideCanvas else if (selected) Color.White else GuideMuted, fontSize = 19.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp).width(172.dp))
+            }
+        }
+        val first = max(0,row - 4)
+        channels.drop(first).take(5).forEachIndexed { slot, item ->
+            val y = 166 + slot * 91
+            Box(Modifier.offset(300.dp,y.dp).size(128.dp,87.dp).background(if (slot + first == row && !menuFocus) Color(0xFF303234) else GuideSurface))
+            var logoFailed by remember(item.id, item.logo) { mutableStateOf(false) }
+            if (!item.logo.isNullOrBlank() && !logoFailed) AsyncImage(item.logo, item.name, contentScale = ContentScale.Fit, onError = { logoFailed = true }, modifier = Modifier.offset(308.dp,(y+7).dp).size(112.dp,73.dp))
+            else Text(item.name,color=Color.White,fontSize=16.sp,maxLines=3,textAlign=TextAlign.Center,modifier=Modifier.offset(308.dp,(y+16).dp).size(112.dp,60.dp))
+            val rowCells = guideCells(schedules[item.id].orEmpty(),window)
+            rowCells.forEach { cell ->
+                val p = cell.programme
+                val x = 432 + (cell.left * GuideWidth).toInt()
+                val width = max(1,(cell.width * GuideWidth).toInt()-3)
+                val selected = slot + first == row && anchor >= p.startMillis && anchor < p.endMillis && !menuFocus
+                Box(Modifier.offset(x.dp,y.dp).size(width.dp,87.dp).background(if(selected) Color(0xFFF5F5F5) else GuideSurface).clickable { controller.selectGuideChannel(item); anchor=p.startMillis; menuFocus=false; if(p.startMillis<=now) controller.watchGuideChannel(item) else detail=true }) {
+                    if(selected) Box(Modifier.size(3.dp,87.dp).background(Color.White))
+                    if(width>49) {
+                        val missing = p.title == "No schedule available"
+                        val hint = if(missing) { if(item.id in model.loadingChannelIds) "LOADING GUIDE…" else "LIVE CHANNEL" } else if(p.startMillis<=now && p.endMillis>now) "${(p.endMillis-now+59_999)/60_000} MIN LEFT" else guideTime(p.startMillis)
+                        Text(hint,color=if(selected) Color(0xFF414548) else GuideMuted,fontSize=15.sp,maxLines=1,modifier=Modifier.offset(12.dp,10.dp).width((width-22).dp))
+                        Text(p.title,color=if(selected) GuideCanvas else Color(0xFFF5F5F5),fontSize=20.sp,maxLines=2,overflow=TextOverflow.Ellipsis,modifier=Modifier.offset(12.dp,38.dp).size((width-22).dp,48.dp))
+                    }
                 }
             }
         }
-        GuideButton("Now", Modifier.offset(104.dp, 442.dp).width(184.dp).height(42.dp), selected = followsNow) { controller.followGuideNow() }
-        GuideButton("Earlier hour", Modifier.offset(104.dp, 494.dp).width(184.dp).height(42.dp)) { controller.shiftGuideWindow(-1) }
-        GuideButton("Later hour", Modifier.offset(104.dp, 546.dp).width(184.dp).height(42.dp)) { controller.shiftGuideWindow(1) }
-        if (filterPage > 0) GuideButton("Prev", Modifier.offset(104.dp, 598.dp).width(88.dp).height(42.dp)) { filterPage-- }
-        if (filterPage + 1 < filterPageCount) GuideButton("More", Modifier.offset(200.dp, 598.dp).width(88.dp).height(42.dp)) { filterPage++ }
-        if (model.channelOffset > 0) GuideButton("Previous", Modifier.offset(104.dp, 650.dp).width(88.dp).height(42.dp)) { controller.changeGuidePage(-1) }
-        if (model.channelOffset + pageChannels.size < model.channelTotal) GuideButton("Next", Modifier.offset(200.dp, 650.dp).width(88.dp).height(42.dp)) { controller.changeGuidePage(1) }
-
-        repeat(4) { index ->
-            val hour = window + index * 1_800_000L
-            Text(guideTime(hour), color = GuideMuted, fontSize = 16.sp, textAlign = TextAlign.Center, modifier = Modifier.offset((432 + 201 * index).dp, 138.dp).width(197.dp))
+        if(now in window until window+GuideWindowMillis) Box(Modifier.offset((432+((now-window)*804/GuideWindowMillis).toInt()).dp,150.dp).size(2.dp,470.dp).background(Color(0x80FFFFFF)))
+        Text(if(channels.isEmpty()) "${model.channelTotal} channels" else "${model.channelOffset+row+1} / ${model.channelTotal}",color=GuideMuted,fontSize=18.sp,modifier=Modifier.offset(300.dp,639.dp).width(124.dp))
+        Text(if(programme?.title=="No schedule available") channel?.name.orEmpty() else programme?.title.orEmpty(),color=Color.White,fontSize=26.sp,maxLines=1,modifier=Modifier.offset(432.dp,635.dp).size(804.dp,38.dp))
+        Text("OK  Watch / Details     *  Details     Replay  Now     Back  Sidebar",color=GuideMuted,fontSize=18.sp,modifier=Modifier.offset(112.dp,682.dp).width(1124.dp))
+        if(channels.isEmpty()) Text(if(state.loading) "Loading channels…" else state.message ?: if(model.channelFilter is LiveChannelFilter.Search) "No matching US channels or current programmes. Try a channel name, section, or another title." else "No channels here yet. Choose another filter.",color=Color.White,fontSize=26.sp,modifier=Modifier.offset(450.dp,292.dp).size(770.dp,130.dp))
+        if(detail && channel!=null && programme!=null) {
+            Box(Modifier.fillMaxSize().background(Color(0xC7000000)))
+            Box(Modifier.offset(224.dp,195.dp).size(1012.dp,360.dp).background(Color(0xFF242628)))
+            Text("${channel.name}  ·  ${programme.title}",color=Color.White,fontSize=26.sp,fontWeight=FontWeight.Bold,maxLines=2,modifier=Modifier.offset(254.dp,219.dp).size(952.dp,64.dp))
+            val body=if(programme.title=="No schedule available") "Schedule unavailable. You can still watch this channel live." else "${if(programme.startMillis>now) "UPCOMING  ·  " else ""}${guideTime(programme.startMillis)}  ·  ${programme.description ?: "No programme description available."}"
+            Text(body,color=Color.White,fontSize=20.sp,maxLines=6,modifier=Modifier.offset(254.dp,297.dp).size(952.dp,174.dp))
+            Text("OK  Watch this channel live     Back  Return to guide",color=Color.White,fontSize=20.sp,fontWeight=FontWeight.Bold,modifier=Modifier.offset(254.dp,499.dp).width(952.dp))
         }
-        visible.forEachIndexed { row, channel ->
-            val y = 166 + row * 91
-            GuideChannelCell(channel, selected = channel.id == selectedId, modifier = Modifier.offset(308.dp, (y + 7).dp))
-            val schedule = schedules[channel.id] ?: emptyList()
-            GuideProgrammeRow(
-                channel = channel,
-                programmes = schedule,
-                windowStart = window,
-                y = y,
-                selected = channel.id == selectedId,
-                onFocus = { controller.selectGuideChannel(channel) },
-                focusFor = { programme, index -> cellFocus.getValue(guideCellKey(channel, programme, index)) },
-                onActivate = { programme, index ->
-                    if (programme.startMillis <= now && programme.endMillis > now) controller.watchGuideChannel(channel)
-                    else {
-                        detailOrigin = GuideDetailOrigin(guideCellKey(channel, programme, index), channel.id)
-                        detail = channel to programme
-                    }
-                },
-                onWatch = { controller.watchGuideChannel(channel) },
-            )
-        }
-        if (pageChannels.isEmpty() && !state.loading) {
-            val empty = state.message ?: when (model.channelFilter) {
-                is LiveChannelFilter.Search -> "No matching US channels or current programmes. Try a channel name, section, or another title."
-                else -> "No channels are available for this filter."
-            }
-            Text(empty, color = GuideMuted, fontSize = 20.sp, textAlign = TextAlign.Center, modifier = Modifier.offset(360.dp, 350.dp).width(760.dp))
-            GuideButton("Try again", Modifier.offset(642.dp, 414.dp).width(196.dp).height(48.dp)) { controller.retryGuidePage() }
-        }
-        if (now in window until window + GuideWindowMillis) {
-            val x = 432 + ((now - window).toFloat() / GuideWindowMillis * GuideWidth).toInt()
-            Box(Modifier.offset(x.dp, 150.dp).width(2.dp).height(470.dp).background(Color(0x66FFFFFF)))
-        }
-        Text("${if (followsNow) "Following now" else "Time shifted"} · ${visible.size} channels${model.searchScope?.let { " · $it" }.orEmpty()}", color = GuideMuted, fontSize = 15.sp, modifier = Modifier.offset(432.dp, 650.dp).width(804.dp), textAlign = TextAlign.Center)
-        detail?.let { (channel, programme) ->
-            GuideDetail(channel, programme, onWatch = { controller.watchGuideChannel(channel) }, onClose = ::closeDetail)
-        }
-        if (searchOpen) GuideSearchEntry(
-            initial = (model.channelFilter as? LiveChannelFilter.Search)?.query.orEmpty(),
-            onSubmit = { query -> controller.setGuideSearch(query); searchOpen = false },
-            onClose = { searchOpen = false },
-        )
-    }
-}
-
-@Composable
-private fun GuideChannelCell(channel: LiveChannel, selected: Boolean, modifier: Modifier) = Box(
-    modifier.width(112.dp).height(73.dp).background(if (selected) Color(0xFF303234) else GuideSurface, RoundedCornerShape(6.dp)),
-    contentAlignment = Alignment.Center,
-) {
-    if (!channel.logo.isNullOrBlank()) AsyncImage(model = channel.logo, contentDescription = channel.name, contentScale = ContentScale.Fit, modifier = Modifier.size(96.dp))
-    else Text(channel.name, color = Color.White, fontSize = 14.sp, textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(96.dp))
-}
-
-@Composable
-private fun GuideProgrammeRow(channel: LiveChannel, programmes: List<GuideProgramme>, windowStart: Long, y: Int, selected: Boolean, onFocus: () -> Unit, focusFor: (GuideProgramme, Int) -> FocusRequester, onActivate: (GuideProgramme, Int) -> Unit, onWatch: () -> Unit) {
-    val cells = guideCells(programmes, windowStart)
-    cells.forEachIndexed { index, cell ->
-        val x = 432 + (cell.left * GuideWidth).toInt()
-        val width = max(1, (cell.width * GuideWidth).toInt() - 3)
-        GuideCell(
-            programme = cell.programme,
-            selected = selected,
-            modifier = Modifier.offset(x.dp, y.dp).width(width.dp).height(87.dp).focusRequester(focusFor(cell.programme, index)),
-            onFocus = onFocus,
-            onActivate = { onActivate(cell.programme, index) },
-            onWatch = onWatch,
-        )
-    }
-}
-
-@Composable
-private fun GuideCell(programme: GuideProgramme, selected: Boolean, modifier: Modifier, onFocus: () -> Unit, onActivate: () -> Unit, onWatch: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Box(
-        modifier.clip(RoundedCornerShape(6.dp)).background(if (focused) Color(0xFFF5F5F5) else GuideSurface)
-            .then(if (focused) Modifier.border(3.dp, Color.White, RoundedCornerShape(6.dp)) else Modifier)
-            .onFocusChanged { focused = it.hasFocus; if (it.hasFocus) onFocus() }
-            .onPreviewKeyEvent { event ->
-                if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN && event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MEDIA_PLAY) { onWatch(); true } else false
-            }
-            .clickable(onClick = onActivate)
-            .padding(10.dp),
-    ) {
-        Text(programme.title, color = if (focused) GuideCanvas else Color.White, fontSize = 16.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if(searchOpen) GuideSearchEntry((model.channelFilter as? LiveChannelFilter.Search)?.query.orEmpty(), { controller.setGuideSearch(it.trim()); searchOpen=false }, { searchOpen=false })
     }
 }
 
@@ -254,118 +202,22 @@ private fun guideCells(programmes: List<GuideProgramme>, start: Long): List<Guid
     for (programme in sorted) {
         if (bounded.size >= 32) break
         if (programme.startMillis > cursor) bounded += guideCell(GuideProgramme("No schedule available", cursor, min(programme.startMillis, end)), start)
-        bounded += guideCell(programme.copy(startMillis = max(programme.startMillis, start), endMillis = min(programme.endMillis, end)), start)
+        bounded += guideCell(programme, start)
         cursor = max(cursor, programme.endMillis)
     }
     if (cursor < end && bounded.size < 32) bounded += guideCell(GuideProgramme("No schedule available", cursor, end), start)
     return bounded
 }
-private fun guideCell(programme: GuideProgramme, start: Long) = GuideCellModel(programme, (programme.startMillis - start).toFloat() / GuideWindowMillis, (programme.endMillis - programme.startMillis).toFloat() / GuideWindowMillis)
-private fun floorGuideWindow(now: Long) = now / GuideWindowMillis * GuideWindowMillis
+private fun guideCell(programme: GuideProgramme, start: Long): GuideCellModel {
+    val left = max(programme.startMillis, start)
+    val right = min(programme.endMillis, start + GuideWindowMillis)
+    return GuideCellModel(programme, (left - start).toFloat() / GuideWindowMillis, (right - left).toFloat() / GuideWindowMillis)
+}
+private fun floorGuideWindow(now: Long) = now / 1_800_000L * 1_800_000L
 private fun guideTime(millis: Long): String = java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).format(java.util.Date(millis))
 
-@Composable
-private fun GuideButton(label: String, modifier: Modifier, selected: Boolean = false, onActivate: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Box(modifier.background(if (focused) Color.White else if (selected) Color(0xFF303234) else Color.Transparent, RoundedCornerShape(21.dp)).onFocusChanged { focused = it.hasFocus }.clickable(onClick = onActivate), contentAlignment = Alignment.Center) {
-        Text(label, color = if (focused) GuideCanvas else Color.White, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
 
-/** A separate, capped Guide text entry. Submitting delegates trim/filter policy to the controller. */
 @Composable
 private fun GuideSearchEntry(initial: String, onSubmit: (String) -> Unit, onClose: () -> Unit) {
-    var query by remember(initial) { mutableStateOf(initial.take(128)) }
-    val firstKey = remember { FocusRequester() }
-    val keys = remember { ("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789").map(Char::toString) + listOf("Space", "Delete", "Clear") }
-    fun edit(next: String) { query = next.take(128) }
-
-    BackHandler(onBack = onClose)
-    Box(
-        Modifier.fillMaxSize().background(Color(0xDC080909)).onPreviewKeyEvent { event ->
-            val native = event.nativeKeyEvent
-            if (native.keyCode == KeyEvent.KEYCODE_BACK) false
-            else if (native.action != KeyEvent.ACTION_DOWN) true
-            else when {
-                native.keyCode == KeyEvent.KEYCODE_DEL -> { edit(query.dropLast(1)); true }
-                native.unicodeChar in 32..126 -> { edit(query + native.unicodeChar.toChar()); true }
-                else -> false
-            }
-        },
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            Modifier.width(720.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF191B1D)).padding(32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text("Search Live TV", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-            Text("Search US channels, sections, or a programme title.", color = GuideMuted, fontSize = 17.sp)
-            Box(Modifier.width(656.dp).height(44.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF303234)), contentAlignment = Alignment.CenterStart) {
-                Text(query.ifBlank { "Enter a channel or programme" }, color = if (query.isBlank()) GuideMuted else Color.White, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 16.dp))
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                keys.chunked(7).forEachIndexed { row, entries ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        entries.forEachIndexed { column, key ->
-                            val index = row * 7 + column
-                            GuideButton(key, Modifier.width(if (key.length > 1) 116.dp else 72.dp).height(38.dp).then(if (index == 0) Modifier.focusRequester(firstKey) else Modifier)) {
-                                edit(
-                                    when (key) {
-                                        "Space" -> query + " "
-                                        "Delete" -> query.dropLast(1)
-                                        "Clear" -> ""
-                                        else -> query + key
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                GuideButton("Search", Modifier.width(180.dp).height(48.dp), onActivate = { onSubmit(query) })
-                GuideButton("Cancel", Modifier.width(180.dp).height(48.dp), onActivate = onClose)
-            }
-        }
-    }
-    LaunchedEffect(Unit) { firstKey.requestFocus() }
-}
-
-@Composable
-private fun GuideDetail(channel: LiveChannel, programme: GuideProgramme, onWatch: () -> Unit, onClose: () -> Unit) {
-    val watchFocus = remember { FocusRequester() }
-    LaunchedEffect(programme.startMillis, channel.id) { watchFocus.requestFocus() }
-    BackHandler(onBack = onClose)
-    // A guide detail is deliberately a modal remote state: OK/Play watches the
-    // channel and Back returns to the exact programme cell. Directional and
-    // other player keys must not leak into the guide below it.
-    Box(
-        Modifier.fillMaxSize().background(Color(0xDC080909)).onPreviewKeyEvent { event ->
-            val key = event.nativeKeyEvent
-            when {
-                key.keyCode == KeyEvent.KEYCODE_BACK -> false
-                key.action == KeyEvent.ACTION_DOWN && key.keyCode in setOf(
-                    KeyEvent.KEYCODE_DPAD_CENTER,
-                    KeyEvent.KEYCODE_ENTER,
-                    KeyEvent.KEYCODE_NUMPAD_ENTER,
-                    KeyEvent.KEYCODE_MEDIA_PLAY,
-                ) -> {
-                    onWatch()
-                    true
-                }
-                else -> true
-            }
-        },
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(Modifier.width(880.dp).background(Color(0xFF191B1D), RoundedCornerShape(12.dp)).padding(44.dp)) {
-            androidx.compose.foundation.layout.Column {
-                Text(programme.title, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                Text(channel.name, color = GuideMuted, fontSize = 18.sp, modifier = Modifier.padding(top = 12.dp))
-                Text(programme.description ?: "This programme has not started yet.", color = Color(0xFFD5D6D7), fontSize = 19.sp, modifier = Modifier.padding(top = 20.dp))
-                GuideButton("Watch channel", Modifier.padding(top = 30.dp).width(220.dp).height(52.dp).focusRequester(watchFocus), onActivate = onWatch)
-                GuideButton("Close", Modifier.padding(top = 12.dp).width(220.dp).height(52.dp), onActivate = onClose)
-            }
-        }
-    }
+    RokuTextEntry("Search Live TV", "Use your remote or a connected keyboard.", initial = initial, maxLength = 128, onDone = { onSubmit(it.trim()) }, onCancel = onClose)
 }

@@ -1,0 +1,37 @@
+VIPTV Roku player adaptation
+
+This client includes code derived from Jellyfin Roku contributors:
+https://github.com/jellyfin/jellyfin-roku
+Pinned revision: 37ecffd9a589cadaf97771be1b0423e36309182f
+Upstream package: 3.2.4, license GPL-2.0; root LICENSE: GPL version 2.
+Original contributors retain their copyrights.
+
+Adapted files: source/JellyfinCaptionPolicy.brs, used by components/MainScene.brs.
+Upstream origins: components/video/VideoPlayerView.bs onSubtitleChange
+(lines 643-665), components/manager/ViewCreator.bs caption selection
+(lines 315-338). Modifications: extracted refresh decision and caption-mode /
+native TrackName ordering; removed Jellyfin queue, API, enum and task dependencies;
+added unambiguous native TrackName matching and VIPTV session integration.
+All VIPTV adaptations are marked in their source. No upstream branding/assets.
+This combined Roku client is distributed under GPL version 2; see the complete
+license in JELLYFIN-LICENSE.txt. No warranty.
+
+The owner maintains the repository privately. Binary recipients must receive
+complete corresponding Roku client source (not merely these snippets), this
+notice, full license, and build instructions, including necessary modifications
+and dependencies. Recipients retain all GPLv2 rights, including redistribution;
+private hosting does not add a license restriction. Deployment credentials are
+not required to rebuild the standard client and are provisioned separately.
+Do not accidentally expose credentials when preparing a source distribution.
+
+Build from source: install Node.js and BrighterScript 0.73.1, then from the Roku
+source directory run:
+npx --yes --package brighterscript@0.73.1 bsc --project bsconfig.json
+This validates using the configuration accompanying the source. Then, using a NEW output path, package this plain BrightScript
+client with: zip -r viptv-client.zip manifest source components images data
+The DSH Roku toolchain alternatively supports roku_check project=roku and
+roku_build project=roku with a new ZIP output. Package manifest, source/,
+components/, images/ and data/; exclude tests/ and artifacts/. Include this notice
+and license in every binary package. Never package the fictional graphite-demo
+fixture. Optional private connection configuration is deployment-only and must
+be provisioned separately by its owner.

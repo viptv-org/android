@@ -147,6 +147,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }.onFailure(::fail)
     }
     fun setProfilePage(page: Int) { _state.value = _state.value.copy(profilePage = page.coerceIn(0, ((_state.value.profiles.size - 1).coerceAtLeast(0)) / 5)) }
+    fun openProfileManagement() { _state.value = _state.value.copy(managingProfiles = true); navigate(Destination.Profile) }
     fun toggleProfileManagement() { _state.value = _state.value.copy(managingProfiles = !_state.value.managingProfiles) }
     fun navigate(destination: Destination) = scope.launch {
         if (destination != Destination.Home) cancelPendingQueueContinuation()
@@ -326,6 +327,12 @@ class AppController(context: Context, private val origin: String = "https://vipt
             // responses may omit. Metadata may enrich it, never erase it.
             val detail = metadata.copy(
                 poster = metadata.poster ?: media.poster,
+                backdrop = metadata.backdrop ?: media.backdrop,
+                thumbnail = metadata.thumbnail ?: media.thumbnail,
+                year = metadata.year ?: media.year,
+                runtime = metadata.runtime ?: media.runtime,
+                genres = metadata.genres.ifEmpty { media.genres },
+                credits = metadata.credits ?: media.credits,
                 description = metadata.description ?: media.description,
                 positionMillis = metadata.positionMillis.takeIf { it > 0 } ?: media.positionMillis,
                 durationMillis = metadata.durationMillis ?: media.durationMillis,

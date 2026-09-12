@@ -648,8 +648,21 @@ private suspend fun <T> attempt(request: suspend () -> T): SearchAttempt<T> = tr
 }
 private fun LiveChannel.asMedia() = Media(id, "live", name, poster = logo)
 
+private fun JSONObject.displayString(vararg keys: String): String? = keys.firstNotNullOfOrNull { key ->
+    opt(key)?.takeUnless { it == JSONObject.NULL }?.let { value ->
+        if (value is JSONArray) (0 until value.length()).map { value.optString(it) }.filter(String::isNotBlank).joinToString(", ") else value.toString()
+    }?.takeIf { it.isNotBlank() && it != "null" }
+}
 private fun JSONObject.media(): Media {
-    val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), optString("poster").ifBlank { null }, optString("description").ifBlank { null }, millis(optDouble("position", 0.0)), optDouble("duration", 0.0).takeIf { it > 0 }?.let(::millis), optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null }, episodeTitle = optString("episode_title", optString("episodeTitle")).ifBlank { null }, queueStatus = optString("queue_status").ifBlank { null })
+    val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), displayString("poster"), displayString("description"), millis(optDouble("position", 0.0)), optDouble("duration", 0.0).takeIf { it > 0 }?.let(::millis), optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null }, episodeTitle = optString("episode_title", optString("episodeTitle")).ifBlank { null }, queueStatus = optString("queue_status").ifBlank { null },
+        backdrop = displayString("backdrop", "background"),
+        thumbnail = displayString("thumbnail", "landscape", "image"),
+        year = displayString("year", "releaseInfo"),
+        runtime = displayString("runtime"),
+        genres = (optJSONArray("genres") ?: JSONArray()).let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf { value -> value.isNotBlank() && value != "null" } } },
+        credits = displayString("credits") ?: listOfNotNull(displayString("director")?.let { "Director: $it" }, displayString("cast")?.let { "Cast: $it" }).joinToString("  ·  ").ifBlank { null },
+        watched = optBoolean("watched") || optString("watch_state") == "watched",
+    )
     val previous = optJSONObject("previous_episode")?.media()
     val videos = optJSONArray("videos") ?: optJSONArray("episodes") ?: return base.copy(previousEpisode = previous)
     return base.copy(previousEpisode = previous, episodes = (0 until videos.length()).mapNotNull { index -> videos.optJSONObject(index)?.media()?.let { episode ->
