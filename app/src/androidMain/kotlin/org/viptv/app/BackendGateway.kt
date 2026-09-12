@@ -716,7 +716,7 @@ private fun JSONObject.timestampMillis(vararg keys: String): Long? {
     return null
 }
 private fun JSONObject.media(): Media {
-    val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), displayString("poster"), displayString("description"), millis(optDouble("position", 0.0)), optDouble("duration", 0.0).takeIf { it > 0 }?.let(::millis), optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null }, episodeTitle = optString("episode_title", optString("episodeTitle")).ifBlank { null }, queueStatus = optString("queue_status").ifBlank { null },
+    val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), displayString("poster"), displayString("description"), millis(optDouble("position", 0.0)), optDouble("duration", 0.0).takeIf { it > 0 }?.let(::millis), optString("series_id").ifBlank { null }, optInt("season").takeIf { has("season") && !isNull("season") && it >= 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null }, episodeTitle = optString("episode_title", optString("episodeTitle")).ifBlank { null }, queueStatus = optString("queue_status").ifBlank { null },
         backdrop = displayString("backdrop", "background"),
         thumbnail = displayString("thumbnail", "landscape", "image"),
         year = displayString("year", "releaseInfo"),
