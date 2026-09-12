@@ -8,6 +8,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import kotlin.math.roundToLong
 
 interface BackendGateway {
     suspend fun startDevicePairing(deviceName: String): DeviceCode
@@ -19,7 +20,13 @@ interface BackendGateway {
     suspend fun discover(type: String = "movie", search: String? = null): List<Media>
     suspend fun metadata(media: Media): Media
     suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit = {}): List<Source>
-    suspend fun playback(source: Source, positionMillis: Long): PlaybackLaunch
+    suspend fun playback(
+        source: Source,
+        positionMillis: Long,
+        audioTrackIndex: Int? = null,
+        subtitleTrackIndex: Int? = null,
+        subtitlesOff: Boolean = false,
+    ): PlaybackLaunch
     suspend fun heartbeat(playbackId: String)
     suspend fun stopPlayback(playbackId: String)
     suspend fun updateProgress(profileId: String, media: Media, positionMillis: Long)
@@ -43,12 +50,39 @@ interface BackendGateway {
     suspend fun logout()
 }
 
-data class PlaybackLaunch(val sessionId: String, val url: String, val headers: Map<String, String> = emptyMap())
+/** Complete server-owned delivery facts. The controller decides the UX; it never guesses from a URL. */
+data class PlaybackLaunch(
+    val sessionId: String,
+    val url: String,
+    val headers: Map<String, String> = emptyMap(),
+    val format: String = "hls",
+    val mode: String = "direct",
+    val videoMode: String = "copy",
+    val audioMode: String = "copy",
+    val positionMillis: Long = 0,
+    val durationMillis: Long? = null,
+    val live: Boolean = false,
+    val audioTracks: List<PlaybackTrack> = emptyList(),
+    val subtitleTracks: List<PlaybackTrack> = emptyList(),
+    val subtitlesSupported: Boolean = false,
+)
+
+/** Input-stream track facts: index is server/ffprobe input index, never output order. */
+data class PlaybackTrack(
+    val inputIndex: Int,
+    val codec: String? = null,
+    val language: String? = null,
+    val languageStatus: String = "unknown",
+    val title: String = "",
+    val selected: Boolean = false,
+    val supported: Boolean = false,
+    val selectable: Boolean = false,
+)
 
 /** HTTP adapter for the documented Rust /api contract. It owns credentials and never logs them. */
 class VipTvHttpGateway(private val origin: String, private var accessToken: String? = null) : BackendGateway {
     override suspend fun startDevicePairing(deviceName: String): DeviceCode = json("POST", "/auth/device/code", JSONObject().put("device_name", deviceName)).let {
-        DeviceCode(it.getString("device_code"), it.getString("user_code"), it.getString("verification_uri"), it.optString("qr_uri").ifBlank { null }, it.optLong("interval", 5))
+        DeviceCode(it.getString("device_code"), it.getString("user_code"), it.getString("verification_uri"), it.optString("verification_uri_complete").ifBlank { null }, it.optString("qr_uri").ifBlank { null }, it.optLong("interval", 5))
     }
     override suspend fun exchangeDeviceCode(code: String): DeviceSession? = try {
         session(json("POST", "/auth/device/token", JSONObject().put("device_code", code)))
@@ -73,13 +107,18 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         val id = job.getString("id")
         var after = 0
         val accumulated = LinkedHashMap<String, Source>()
-        repeat(20) {
+        // Match Roku's three-minute discovery budget: late providers may still
+        // contribute sources, but cancellation remains cooperative between polls.
+        repeat(120) {
             val poll = json("GET", "/streams/${enc(id)}?after=$after")
             val events = poll.optJSONArray("events") ?: JSONArray()
             for (i in 0 until events.length()) {
                 val event = events.getJSONObject(i); after = maxOf(after, event.optInt("seq", after))
-                val stream = event.optJSONObject("source") ?: event.optJSONObject("stream") ?: continue
-                stream.source().also { source -> if (source.id.isNotBlank()) accumulated.putIfAbsent(source.id, source) }
+                val streams = event.optJSONArray("streams") ?: JSONArray()
+                for (index in 0 until streams.length()) {
+                    val stream = streams.optJSONObject(index) ?: continue
+                    stream.source().also { source -> if (source.id.isNotBlank()) accumulated.putIfAbsent(source.id, source) }
+                }
             }
             onUpdate(accumulated.values.toList())
             if (poll.optBoolean("done")) return accumulated.values.toList()
@@ -87,15 +126,42 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         }
         return accumulated.values.toList()
     }
-    override suspend fun playback(source: Source, positionMillis: Long): PlaybackLaunch {
+    override suspend fun playback(
+        source: Source,
+        positionMillis: Long,
+        audioTrackIndex: Int?,
+        subtitleTrackIndex: Int?,
+        subtitlesOff: Boolean,
+    ): PlaybackLaunch {
         val capabilities = JSONObject().put("max_width", 1920).put("max_height", 1080).put("h264", true).put("aac", true).put("direct_play", true)
-        val root = json("POST", "/playback", JSONObject().put("stream_id", source.id).put("position", positionMillis).put("capabilities", capabilities))
-        return PlaybackLaunch(root.getString("id"), root.optString("url"), root.optJSONObject("headers")?.headers() ?: emptyMap())
+        val body = JSONObject()
+            .put("stream_id", source.id)
+            .put("position", seconds(positionMillis))
+            .put("capabilities", capabilities)
+            .putOpt("audio_track_index", audioTrackIndex)
+            .putOpt("subtitle_track_index", subtitleTrackIndex)
+            .put("subtitles_off", subtitlesOff)
+        val root = json("POST", "/playback", body)
+        return PlaybackLaunch(
+            sessionId = root.getString("id"),
+            url = capabilityUrl(root.getString("url")),
+            headers = root.optJSONObject("headers")?.headers() ?: emptyMap(),
+            format = root.optString("format", "hls"),
+            mode = root.optString("mode", "direct"),
+            videoMode = root.optString("video_mode", "copy"),
+            audioMode = root.optString("audio_mode", "copy"),
+            positionMillis = millis(root.optDouble("position", 0.0)),
+            durationMillis = root.optDouble("duration", 0.0).takeIf { it > 0 }?.let(::millis),
+            live = root.optBoolean("live"),
+            audioTracks = root.array("audio_tracks").mapNotNull { it.optJSONObject()?.track() },
+            subtitleTracks = root.array("subtitle_tracks").mapNotNull { it.optJSONObject()?.track() },
+            subtitlesSupported = root.optBoolean("subtitles_supported"),
+        )
     }
     override suspend fun heartbeat(playbackId: String) { json("POST", "/playback/${enc(playbackId)}/heartbeat", JSONObject()) }
     override suspend fun stopPlayback(playbackId: String) { json("DELETE", "/playback/${enc(playbackId)}") }
     override suspend fun updateProgress(profileId: String, media: Media, positionMillis: Long) {
-        json("PUT", "/profiles/${enc(profileId)}/progress", JSONObject().put("id", media.id).put("type", media.type).put("name", media.name).put("position", positionMillis).put("duration", media.durationMillis ?: 0))
+        json("PUT", "/profiles/${enc(profileId)}/progress", media.body().put("position", seconds(positionMillis)))
     }
     override suspend fun nextEpisode(profileId: String, media: Media): NextResult {
         val result = json("POST", "/profiles/${enc(profileId)}/continue/next", media.body())
@@ -139,11 +205,20 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         JSONObject(text)
     }
     private fun enc(value: String) = URLEncoder.encode(value, "UTF-8")
+    /** Playback URLs are server capabilities. Reject an unexpected external URL before Media3 sees it. */
+    private fun capabilityUrl(value: String): String {
+        val base = URL(origin.trimEnd('/') + "/")
+        val resolved = URL(base, value)
+        require(resolved.protocol == base.protocol && resolved.host == base.host && resolved.port == base.port && resolved.path.startsWith("/media/")) {
+            "Invalid playback capability URL"
+        }
+        return resolved.toString()
+    }
 }
 class GatewayError(val status: Int, override val message: String) : IllegalStateException(message)
 private fun JSONObject.profile() = Profile(get("id").toString(), getString("name"), optString("avatar_url").ifBlank { null }, optBoolean("kids"), optBoolean("is_primary"), optString("avatar_style", "critters"), optString("avatar_seed").ifBlank { null })
 private fun JSONObject.media(): Media {
-    val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), optString("poster").ifBlank { null }, optString("description").ifBlank { null }, optLong("position", 0), optLong("duration").takeIf { it > 0 }, optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null })
+    val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), optString("poster").ifBlank { null }, optString("description").ifBlank { null }, millis(optDouble("position", 0.0)), optDouble("duration", 0.0).takeIf { it > 0 }?.let(::millis), optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null })
     val videos = optJSONArray("videos") ?: optJSONArray("episodes") ?: return base
     return base.copy(episodes = (0 until videos.length()).mapNotNull { index -> videos.optJSONObject(index)?.media()?.let { episode ->
         episode.copy(
@@ -153,13 +228,16 @@ private fun JSONObject.media(): Media {
     } })
 }
 private fun JSONObject.mediaArray(vararg keys: String): List<Media> { val a = keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray(); return (0 until a.length()).mapNotNull { a.optJSONObject(it)?.media() } }
-private fun JSONObject.source() = Source(optString("id", optString("stream_id")), optString("provider", optString("source", "Source")), optString("name", optString("provider", optString("source", "Source"))), optString("description", optString("filename")), optJSONObject("headers")?.headers() ?: emptyMap(), optString("source_addon_id").ifBlank { null })
+private fun JSONObject.source() = Source(optString("id", optString("stream_id")), optString("provider", optString("source", "Source")), optString("name", optString("provider", optString("source", "Source"))), optString("description", optString("filename")), optJSONObject("headers")?.headers() ?: emptyMap(), optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null })
+private fun JSONObject.track() = PlaybackTrack(optInt("input_index"), optString("codec").ifBlank { null }, optString("language").ifBlank { null }, optString("language_status", "unknown"), optString("title"), optBoolean("selected"), optBoolean("supported"), optBoolean("selectable"))
 private fun JSONObject.headers(): Map<String, String> = keys().asSequence().associateWith { get(it).toString() }
 private fun JSONObject.array(vararg keys: String): List<Any?> = (keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray()).let { array -> (0 until array.length()).map { index -> array.opt(index) } }
 private fun Any?.optJSONObject(): JSONObject? = this as? JSONObject
 private fun JSONObject.channel() = LiveChannel(get("id").toString(), optString("name", optString("title")), optString("logo").ifBlank { null }, optString("category").ifBlank { null })
 private fun JSONObject.programme() = GuideProgramme(optString("title", "No schedule available"), optLong("start", optLong("start_time")) * 1000, optLong("end", optLong("end_time")) * 1000, optString("description").ifBlank { null })
 private fun JSONObject.addon() = Addon(get("id").toString(), optString("name"), optString("manifest_url"), optBoolean("enabled", true))
-private fun Media.body() = JSONObject().put("id", id).put("type", type).put("name", name).putOpt("poster", poster).putOpt("series_id", seriesId).putOpt("season", season).putOpt("episode", episode).putOpt("source_addon_id", sourceAddonId).putOpt("duration", durationMillis)
+private fun Media.body() = JSONObject().put("id", id).put("type", type).put("name", name).putOpt("poster", poster).putOpt("series_id", seriesId).putOpt("season", season).putOpt("episode", episode).putOpt("source_addon_id", sourceAddonId).putOpt("source_fingerprint", sourceFingerprint).putOpt("duration", durationMillis?.let(::seconds))
 private fun PlaybackPreferences.body() = JSONObject().put("audio_language", audioLanguage).put("subtitle_language", subtitleLanguage).put("subtitles_enabled", subtitlesEnabled).put("subtitle_size", subtitleSize).put("subtitle_style", subtitleStyle).put("quality", quality).put("autoplay", autoplay)
 private fun JSONObject.preferences() = PlaybackPreferences(optString("audio_language", "en"), optString("subtitle_language", "en"), optBoolean("subtitles_enabled"), optString("subtitle_size", "normal"), optString("subtitle_style", "system"), optString("quality", "auto"), optBoolean("autoplay", true))
+private fun millis(seconds: Double): Long = (seconds * 1_000).roundToLong()
+private fun seconds(millis: Long): Double = millis / 1_000.0
