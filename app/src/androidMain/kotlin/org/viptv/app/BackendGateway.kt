@@ -425,7 +425,11 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
             SearchResults(sections, partialFailure)
         }
     }
-    override suspend fun metadata(media: Media): Media = json("GET", "/meta/${enc(media.type)}/${enc(media.id)}").optJSONObject("meta")?.media() ?: media
+    override suspend fun metadata(media: Media): Media {
+        val type = if (media.type == "episode") "series" else media.type
+        val id = if (type == "series") media.seriesId ?: media.id else media.id
+        return json("GET", "/meta/${enc(type)}/${enc(id)}").optJSONObject("meta")?.media() ?: media
+    }
     override suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit): List<Source> {
         val job = json("POST", "/streams", JSONObject().put("id", media.id).put("type", media.type).put("name", media.name).putOpt("series_id", media.seriesId).putOpt("season", media.season).putOpt("episode", media.episode))
         val id = job.getString("id")
@@ -695,6 +699,19 @@ private fun JSONObject.displayString(vararg keys: String): String? = keys.firstN
         if (value is JSONArray) (0 until value.length()).map { value.optString(it) }.filter(String::isNotBlank).joinToString(", ") else value.toString()
     }?.takeIf { it.isNotBlank() && it != "null" }
 }
+private fun JSONObject.timestampMillis(vararg keys: String): Long? {
+    val value = displayString(*keys) ?: return null
+    value.toDoubleOrNull()?.let { return if (it < 1_000_000_000_000) (it * 1000).toLong() else it.toLong() }
+    for (pattern in listOf("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", "yyyy-MM-dd'T'HH:mm:ssXXX", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd")) {
+        try {
+            return java.text.SimpleDateFormat(pattern, java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+                isLenient = false
+            }.parse(value)?.time
+        } catch (_: java.text.ParseException) { }
+    }
+    return null
+}
 private fun JSONObject.media(): Media {
     val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), displayString("poster"), displayString("description"), millis(optDouble("position", 0.0)), optDouble("duration", 0.0).takeIf { it > 0 }?.let(::millis), optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null }, episodeTitle = optString("episode_title", optString("episodeTitle")).ifBlank { null }, queueStatus = optString("queue_status").ifBlank { null },
         backdrop = displayString("backdrop", "background"),
@@ -705,6 +722,8 @@ private fun JSONObject.media(): Media {
         credits = displayString("credits") ?: listOfNotNull(displayString("director")?.let { "Director: $it" }, displayString("cast")?.let { "Cast: $it" }).joinToString("  ·  ").ifBlank { null },
         imdbRating = displayString("imdbRating", "imdb_rating", "rating"),
         posterShape = displayString("posterShape", "poster_shape"),
+        updatedAtMillis = timestampMillis("updated_at", "updatedAt"),
+        releasedAtMillis = timestampMillis("released", "released_at", "releaseDate"),
         watched = optBoolean("watched") || optString("watch_state") == "watched",
     )
     val previous = optJSONObject("previous_episode")?.media()

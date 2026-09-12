@@ -143,7 +143,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
         guideBrowseGeneration++
         guideGeneration++
         update(loading = true); runCatching { gateway.selectProfile(profile.id); gateway.home(profile.id) }.onSuccess { shelves ->
-            _state.value = _state.value.copy(route = Route.Browse(Destination.Home), selectedProfile = profile, shelves = shelves, loading = false)
+            _state.value = _state.value.copy(route = Route.Browse(Destination.Home), selectedProfile = profile, shelves = shelves, homeFocus = HomeFocusSnapshot(), loading = false)
         }.onFailure(::fail)
     }
     fun setProfilePage(page: Int) { _state.value = _state.value.copy(profilePage = page.coerceIn(0, ((_state.value.profiles.size - 1).coerceAtLeast(0)) / 5)) }
@@ -327,6 +327,9 @@ class AppController(context: Context, private val origin: String = "https://vipt
             // responses may omit. Metadata may enrich it, never erase it.
             val detail = metadata.copy(
                 poster = metadata.poster ?: media.poster,
+                season = media.season ?: metadata.season,
+                episode = media.episode ?: metadata.episode,
+                seriesId = media.seriesId ?: metadata.seriesId,
                 backdrop = metadata.backdrop ?: media.backdrop,
                 thumbnail = metadata.thumbnail ?: media.thumbnail,
                 year = metadata.year ?: media.year,

@@ -29,6 +29,8 @@ data class Media(
     val watched: Boolean = false,
     val imdbRating: String? = null,
     val posterShape: String? = null,
+    val updatedAtMillis: Long? = null,
+    val releasedAtMillis: Long? = null,
 )
 
 data class Source(

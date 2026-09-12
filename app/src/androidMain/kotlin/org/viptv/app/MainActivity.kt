@@ -126,9 +126,10 @@ class MainActivity : ComponentActivity() {
                 .background(if(focused) RokuWhite else androidx.compose.ui.graphics.Color.Transparent),
         ) {
             if (destination==Destination.Profile) {
-                Box(Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(RokuSurface),contentAlignment=Alignment.Center) {
-                    Text(state.selectedProfile?.name?.take(1)?.uppercase().orEmpty(),color=RokuWhite,fontSize=18.sp)
-                    state.selectedProfile?.avatarUrl?.let { AsyncImage(it,"Profile",Modifier.fillMaxSize(),contentScale=ContentScale.Crop) }
+                var avatarReady by remember(state.selectedProfile?.avatarUrl) {mutableStateOf(false)}
+                Box(Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(if(avatarReady) androidx.compose.ui.graphics.Color.Transparent else RokuSurface),contentAlignment=Alignment.Center) {
+                    if(!avatarReady) Text(state.selectedProfile?.name?.take(1)?.uppercase().orEmpty(),color=RokuWhite,fontSize=18.sp)
+                    state.selectedProfile?.avatarUrl?.let { AsyncImage(it,"Profile",Modifier.fillMaxSize(),onSuccess={avatarReady=true},onError={avatarReady=false},contentScale=ContentScale.Fit) }
                 }
             } else AsyncImage(rokuAsset(names[index]),destination.label,Modifier.size(30.dp),colorFilter=ColorFilter.tint(if(focused)RokuCanvas else RokuMuted))
         }

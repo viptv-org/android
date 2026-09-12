@@ -33,7 +33,7 @@ import coil.compose.AsyncImage
 
 @Composable
 internal fun DetailsScreen(media:Media,controller:AppController) {
-    if(media.type=="series"&&media.episode==null) RokuSeriesDetails(media,controller) else RokuMovieDetails(media,controller)
+    if(media.type=="series") RokuSeriesDetails(media,controller) else RokuMovieDetails(media,controller)
 }
 
 @Composable
@@ -61,25 +61,56 @@ private fun RokuMovieDetails(media:Media,controller:AppController) {
 @Composable
 private fun RokuSeriesDetails(media:Media,controller:AppController) {
     val seasons=media.episodes.mapNotNull {it.season}.distinct().sorted().ifEmpty {listOf(1)}
-    var season by rememberSaveable(media.id) {mutableIntStateOf(media.season?:seasons.first())}
+    // MainScene.episodeProgress chooses newest progress across the whole series.
+    // A completed episode advances only to an already released, unwatched episode.
+    val entryEpisode = remember(media.id, media.season, media.episode, media.episodes) {
+        val ordered = media.episodes.sortedWith(compareBy<Media> { it.season ?: Int.MAX_VALUE }.thenBy { it.episode ?: Int.MAX_VALUE })
+        fun watched(item: Media): Boolean = item.watched ||
+            (item.durationMillis?.let { it > 0 && item.positionMillis.toDouble() / it >= .95 } == true)
+        val latest = ordered.filter { (it.updatedAtMillis ?: 0) > 0 }.maxByOrNull { it.updatedAtMillis ?: 0 }
+        when {
+            latest != null && watched(latest) -> ordered.drop(ordered.indexOf(latest) + 1).firstOrNull {
+                !watched(it) && it.season != 0 && (it.releasedAtMillis == null || it.releasedAtMillis <= System.currentTimeMillis())
+            } ?: latest
+            latest != null -> latest
+            else -> ordered.firstOrNull { it.season == media.season && it.episode == media.episode && media.episode != null }
+        }
+    }
+    var season by rememberSaveable(media.id) {mutableIntStateOf(entryEpisode?.season ?: media.season ?: seasons.first())}
+    var focusIntent by remember(media.id) {mutableStateOf("initial")}
+    var pickedSeason by remember {mutableStateOf(false)}
     var picker by remember {mutableStateOf(false)}
     var info by remember {mutableStateOf(false)}
     val rail=LocalRokuRailFocus.current
     val episodes=media.episodes.filter {(it.season?:1)==season}.sortedBy {it.episode}
     val episodeFocus=remember(episodes) {episodes.map {FocusRequester()}}
-    val first=episodeFocus.firstOrNull()?:remember {FocusRequester()}
     val grid=rememberLazyGridState()
     val scope=rememberCoroutineScope()
     val infoFocus=remember {FocusRequester()}
+    val infoControlFocus=remember {FocusRequester()}
     val seasonFocus=remember {FocusRequester()}
-    LaunchedEffect(media.id,season) {if(episodes.isNotEmpty())first.requestFocus()else seasonFocus.requestFocus()}
+    LaunchedEffect(focusIntent,season,picker,info) {
+        if(picker || info || focusIntent.isEmpty()) return@LaunchedEffect
+        when(focusIntent) {
+            "season" -> seasonFocus.requestFocus()
+            "info" -> infoControlFocus.requestFocus()
+            else -> if(episodes.isEmpty()) seasonFocus.requestFocus() else {
+                val target = if(focusIntent == "initial") episodes.indexOfFirst {it.id == entryEpisode?.id}.coerceAtLeast(0) else 0
+                grid.scrollToItem(target / 4 * 4)
+                withFrameNanos {}
+                episodeFocus[target].requestFocus()
+            }
+        }
+        focusIntent = ""
+    }
+    fun closeInfo() {info=false;focusIntent="info"}
     Box(Modifier.fillMaxSize().background(RokuCanvas)) {
         RokuLabel(media.name,112,74,900,36,bold=true,marquee=true)
         RokuLabel(rokuFacts(media),112,132,900,18,color=RokuMuted)
         Row(Modifier.offset(112.dp,188.dp),horizontalArrangement=Arrangement.spacedBy(24.dp)) {
-            TvButton("${if(season==0)"Specials"else"Season $season"}  ▾",{picker=true},Modifier.size(256.dp,48.dp).focusRequester(seasonFocus))
+            TvButton("${if(season==0)"Specials"else"Season $season"}  ▾",{pickedSeason=false;picker=true},Modifier.size(256.dp,48.dp).focusRequester(seasonFocus))
             TvButton("My List",{controller.toggleMyList(media)},Modifier.size(256.dp,48.dp))
-            TvButton("More info",{info=true},Modifier.size(256.dp,48.dp))
+            TvButton("More info",{info=true},Modifier.size(256.dp,48.dp).focusRequester(infoControlFocus))
         }
         RokuLabel("${episodes.size} episodes",976,198,220,22,bold=true,align=androidx.compose.ui.text.style.TextAlign.End)
         if(episodes.isEmpty()) RokuLabel("No episodes available",250,360,780,24,align=androidx.compose.ui.text.style.TextAlign.Center)
@@ -99,13 +130,13 @@ private fun RokuSeriesDetails(media:Media,controller:AppController) {
                 })
             }
         }
-        if(picker) RokuChoiceSheet("Choose season",seasons.map {value->(if(value==0)"Specials"else"Season $value") to {season=value}}, {picker=false;scope.launch {withFrameNanos {};seasonFocus.requestFocus()}})
+        if(picker) RokuChoiceSheet("Choose season",seasons.map {value->(if(value==0)"Specials"else"Season $value") to {season=value;pickedSeason=true}}, {picker=false;focusIntent=if(pickedSeason)"episodes"else"season"})
         if(info) {
-            BackHandler {info=false}
+            BackHandler {closeInfo()}
             Box(Modifier.fillMaxSize().background(Color(0xF8101112))) {
                 RokuLabel(media.name,100,72,1060,44,bold=true)
                 RokuLabel(listOfNotNull(media.description,media.credits).joinToString("\n\n"),100,158,1060,23,lines=14)
-                TvButton("Back",{info=false},Modifier.offset(100.dp,650.dp).size(180.dp,48.dp).focusRequester(infoFocus))
+                TvButton("Back",{closeInfo()},Modifier.offset(100.dp,650.dp).size(180.dp,48.dp).focusRequester(infoFocus))
                 LaunchedEffect(Unit){infoFocus.requestFocus()}
             }
         }

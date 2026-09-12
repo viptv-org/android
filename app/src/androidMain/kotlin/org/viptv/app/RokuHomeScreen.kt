@@ -183,11 +183,13 @@ internal fun RokuLabel(text:String,x:Int,y:Int,width:Int,size:Int,lines:Int=1,bo
 @Composable
 internal fun RokuArtworkCard(media:Media,modifier:Modifier=Modifier,onActivate:()->Unit,onHold:(()->Unit)?=null,height:Int=200) {
     var focused by remember {mutableStateOf(false)}
+    val artwork=if(media.type=="live")media.poster else media.backdrop?.takeUnless {it==media.poster}?:media.thumbnail?:media.poster.takeIf {media.posterShape=="landscape"}
+    var artworkReady by remember(artwork) {mutableStateOf(false)}
     Holdable(onActivate,onHold,modifier.width(256.dp).height(height.dp).onFocusChanged {focused=it.hasFocus}) {
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.width(256.dp).height(144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)),contentAlignment=Alignment.Center) {
-                Text(media.name,color=RokuMuted,fontSize=19.sp,maxLines=3,textAlign=TextAlign.Center,modifier=Modifier.padding(12.dp))
-                AsyncImage(if(media.type=="live")media.poster else media.backdrop?.takeUnless {it==media.poster}?:media.thumbnail?:media.poster.takeIf {media.posterShape=="landscape"},null,contentScale=if(media.type=="live")ContentScale.Fit else ContentScale.Crop,modifier=if(media.type=="live")Modifier.size(176.dp,100.dp)else Modifier.fillMaxSize())
+                if(!artworkReady) Text(media.name,color=RokuMuted,fontSize=19.sp,maxLines=3,textAlign=TextAlign.Center,modifier=Modifier.padding(12.dp))
+                AsyncImage(artwork,null,onSuccess={artworkReady=true},onError={artworkReady=false},contentScale=if(media.type=="live")ContentScale.Fit else ContentScale.Crop,modifier=if(media.type=="live")Modifier.size(176.dp,100.dp)else Modifier.fillMaxSize())
                 val duration=media.durationMillis
                 if(duration!=null&&duration>0&&media.positionMillis>0) {
                     Box(Modifier.offset(8.dp,134.dp).align(Alignment.TopStart).size(240.dp,6.dp).background(Color(0xFF4A4C4E)))
@@ -209,7 +211,7 @@ internal fun RokuChoiceSheet(title:String,choices:List<Pair<String,()->Unit>>,on
     Box(Modifier.fillMaxSize().background(Color(0xDC080909)),contentAlignment=Alignment.Center) {
         Box(Modifier.width(880.dp).height((146+choices.size.coerceAtMost(7)*62).dp).background(Color(0xFF191B1D),RoundedCornerShape(12.dp))) {
             RokuLabel(title,44,32,792,32,bold=true)
-            LazyColumn(Modifier.offset(44.dp,104.dp).width(792.dp).height((choices.size.coerceAtMost(7)*62).dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+            LazyColumn(Modifier.offset(44.dp,94.dp).width(792.dp).height((choices.size.coerceAtMost(7)*62).dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 itemsIndexed(choices) {index,choice ->TvButton(choice.first,{choice.second();onClose()},Modifier.width(792.dp).height(52.dp).then(if(index==0)Modifier.focusRequester(first)else Modifier))}
             }
         }
