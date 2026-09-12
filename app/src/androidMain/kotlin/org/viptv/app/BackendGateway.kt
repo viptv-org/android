@@ -520,7 +520,15 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
     override suspend fun liveCategories(): List<LiveCategory> = json("GET", "/live/categories?view=us")
         .array("categories")
         .mapNotNull { it.optJSONObject()?.liveCategory() }
-    override suspend fun guide(channelId: String): List<GuideProgramme> = json("GET", "/guide/${enc(channelId)}").array("programmes", "programs", "items").mapNotNull { it.optJSONObject()?.programme() }
+    override suspend fun guide(channelId: String): List<GuideProgramme> {
+        val response = json("GET", "/guide/${enc(channelId)}")
+        val labels = response.array("timeline").mapNotNull { value -> value.optJSONObject()?.let { tick ->
+            tick.displayString("display_time")?.let { (tick.optLong("start") * 1000) to it }
+        } }.toMap()
+        return response.array("programmes", "programs", "items").mapNotNull { it.optJSONObject()?.programme()?.copy(
+            timezone = response.displayString("timezone"), timelineLabels = labels,
+        ) }
+    }
     override suspend fun preferences(profileId: String): PlaybackPreferences = json("GET", "/profiles/${enc(profileId)}/preferences").preferences()
     override suspend fun savePreferences(profileId: String, preferences: PlaybackPreferences) {
         json("PUT", "/profiles/${enc(profileId)}/preferences", preferences.body())
@@ -716,13 +724,13 @@ private fun JSONObject.timestampMillis(vararg keys: String): Long? {
     return null
 }
 private fun JSONObject.media(): Media {
-    val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), displayString("poster"), displayString("description"), millis(optDouble("position", 0.0)), optDouble("duration", 0.0).takeIf { it > 0 }?.let(::millis), optString("series_id").ifBlank { null }, optInt("season").takeIf { has("season") && !isNull("season") && it >= 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null }, episodeTitle = optString("episode_title", optString("episodeTitle")).ifBlank { null }, queueStatus = optString("queue_status").ifBlank { null },
+    val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), displayString("poster"), displayString("description", "overview"), millis(optDouble("position", 0.0)), optDouble("duration", 0.0).takeIf { it > 0 }?.let(::millis), optString("series_id").ifBlank { null }, optInt("season").takeIf { has("season") && !isNull("season") && it >= 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null }, episodeTitle = optString("episode_title", optString("episodeTitle")).ifBlank { null }, queueStatus = optString("queue_status").ifBlank { null },
         backdrop = displayString("backdrop", "background"),
         thumbnail = displayString("thumbnail", "landscape", "image"),
         year = displayString("year", "releaseInfo"),
         runtime = displayString("runtime"),
         genres = (optJSONArray("genres") ?: JSONArray()).let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf { value -> value.isNotBlank() && value != "null" } } },
-        credits = displayString("credits") ?: listOfNotNull(displayString("director")?.let { "Director: $it" }, displayString("cast")?.let { "Cast: $it" }).joinToString("  ·  ").ifBlank { null },
+        credits = displayString("credits") ?: listOfNotNull(displayString("director")?.let { "Directed by $it" }, displayString("cast")?.split(", ")?.take(4)?.joinToString(", ")?.let { "Starring $it" }).joinToString("\n").ifBlank { null },
         imdbRating = displayString("imdbRating", "imdb_rating", "rating"),
         posterShape = displayString("posterShape", "poster_shape"),
         updatedAtMillis = timestampMillis("updated_at", "updatedAt"),
@@ -735,6 +743,8 @@ private fun JSONObject.media(): Media {
         episode.copy(
             type = videos.optJSONObject(index)?.optString("type").orEmpty().ifBlank { base.type },
             seriesId = episode.seriesId ?: base.id,
+            name = base.name,
+            episodeTitle = episode.episodeTitle ?: episode.name.takeIf { it.isNotBlank() && it != base.name },
         )
     } })
 }
@@ -769,7 +779,7 @@ private fun JSONObject.liveCategory(): LiveCategory? {
     if (id.isBlank() || name.isBlank()) return null
     return LiveCategory(id, name, optInt("count").coerceAtLeast(0))
 }
-private fun JSONObject.programme() = GuideProgramme(optString("title", "No schedule available"), optLong("start", optLong("start_time")) * 1000, optLong("end", optLong("end_time")) * 1000, optString("description").ifBlank { null })
+private fun JSONObject.programme() = GuideProgramme(optString("title", "No schedule available"), optLong("start", optLong("start_time")) * 1000, optLong("end", optLong("end_time")) * 1000, optString("description").ifBlank { null }, displayTime = displayString("display_time"))
 private fun JSONObject.addon() = Addon(get("id").toString(), optString("name"), optString("manifest_url"), optBoolean("enabled", true))
 private fun Media.body() = JSONObject().put("id", id).put("type", type).put("name", name).putOpt("poster", poster).putOpt("series_id", seriesId).putOpt("season", season).putOpt("episode", episode).putOpt("source_addon_id", sourceAddonId).putOpt("source_fingerprint", sourceFingerprint).putOpt("duration", durationMillis?.let(::seconds))
 private fun PlaybackPreferences.body() = JSONObject().put("audio_language", audioLanguage).put("subtitle_language", subtitleLanguage).put("subtitles_enabled", subtitlesEnabled).put("subtitle_size", subtitleSize).put("subtitle_style", subtitleStyle).put("quality", quality).put("autoplay", autoplay)

@@ -471,7 +471,11 @@ data class PlaybackTrackChoices(
     val subtitles: List<PlaybackTrack> = emptyList(),
     val subtitlesSupported: Boolean = false,
 )
-data class GuideProgramme(val title: String, val startMillis: Long, val endMillis: Long, val description: String? = null)
+data class GuideProgramme(
+    val title: String, val startMillis: Long, val endMillis: Long, val description: String? = null,
+    val displayTime: String? = null, val timezone: String? = null,
+    val timelineLabels: Map<Long, String> = emptyMap(),
+)
 data class LiveChannel(val id: String, val name: String, val logo: String? = null, val category: String? = null)
 
 /**

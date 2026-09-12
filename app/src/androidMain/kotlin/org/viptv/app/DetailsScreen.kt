@@ -6,6 +6,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -26,6 +29,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,20 +47,27 @@ private fun RokuMovieDetails(media:Media,controller:AppController) {
     val first=remember {FocusRequester()}
     val density=LocalDensity.current
     var synopsisHeight by remember(media.id) {mutableIntStateOf(0)}
+    var info by remember(media.id) {mutableStateOf(false)}
+    val infoControl=remember {FocusRequester()}
+    val scope=rememberCoroutineScope()
+    val state by controller.state.collectAsState()
+    val saved=state.favorites.any {it.type==media.type&&it.id==media.id}
+    fun closeInfo() {info=false;scope.launch {withFrameNanos {};infoControl.requestFocus()}}
     LaunchedEffect(media.id) {first.requestFocus()}
     Box(Modifier.fillMaxSize().background(RokuCanvas)) {
-        RokuBackdrop(media.backdrop,620)
-        Box(Modifier.fillMaxWidth().height(620.dp).background(RokuCanvas.copy(alpha=.4f)))
-        if(!media.poster.isNullOrBlank()) AsyncImage(media.poster,null,contentScale=ContentScale.Fit,modifier=Modifier.offset(112.dp,126.dp).size(236.dp,354.dp))
+        RokuDetailAtmosphere(media.backdrop)
+        if(!media.poster.isNullOrBlank()) RokuRemoteImage(media.poster,236,354,large=true,contentScale=ContentScale.Fit,modifier=Modifier.offset(112.dp,126.dp).size(236.dp,354.dp))
         RokuLabel(media.name,380,126,804,46,bold=true,marquee=true)
-        RokuLabel(rokuFacts(media),380,198,706,18,lines=2,color=RokuMuted)
-        if(!media.description.isNullOrBlank()) Text(media.description.orEmpty(),color=Color(0xFFD5D6D7),fontSize=23.sp,maxLines=4,overflow=TextOverflow.Ellipsis,onTextLayout={synopsisHeight=with(density){it.size.height.toDp().value.toInt()}},modifier=Modifier.offset(380.dp,276.dp).width(804.dp).heightIn(max=128.dp))
+        RokuLabel(rokuFacts(media),380,198,706,22,lines=2,color=RokuMuted)
+        if(!media.description.isNullOrBlank()) Text(media.description.orEmpty(),color=Color(0xFFD5D6D7),fontSize=23.sp,lineHeight=33.sp,style=TextStyle(platformStyle=PlatformTextStyle(includeFontPadding=false),lineHeightStyle=LineHeightStyle(LineHeightStyle.Alignment.Top,LineHeightStyle.Trim.Both)),maxLines=4,overflow=TextOverflow.Ellipsis,onTextLayout={synopsisHeight=with(density){it.size.height.toDp().value.toInt()}},modifier=Modifier.offset(380.dp,276.dp).width(804.dp).heightIn(max=128.dp))
         Row(Modifier.offset(380.dp,(276+synopsisHeight+28).dp),horizontalArrangement=Arrangement.spacedBy(16.dp)) {
-            TvButton(if(media.positionMillis>0)"Resume" else "Play",{controller.chooseSources(media,media.positionMillis>0)},Modifier.size(192.dp,56.dp).focusRequester(first))
-            TvButton("Choose source",{controller.chooseSources(media)},Modifier.size(192.dp,56.dp))
-            TvButton("My List",{controller.toggleMyList(media)},Modifier.size(192.dp,56.dp))
+            TvButton(if(media.positionMillis>0)"Resume at ${detailResumeTime(media.positionMillis)}"else"Choose source",{controller.chooseSources(media,media.positionMillis>0)},Modifier.size(192.dp,56.dp).focusRequester(first),onHold=if(media.positionMillis>0){{controller.chooseSources(media)}}else null)
+            if(media.positionMillis>0)TvButton("Choose source",{controller.chooseSources(media)},Modifier.size(192.dp,56.dp))
+            TvButton(if(saved)"Remove from My List"else"+ My List",{controller.toggleMyList(media)},Modifier.size(192.dp,56.dp))
+            TvButton("More info",{info=true},Modifier.size(192.dp,56.dp).focusRequester(infoControl))
         }
-        RokuLabel(media.credits.orEmpty(),380,276+synopsisHeight+108,804,19,lines=3,color=RokuMuted)
+        Text(media.credits.orEmpty(),fontSize=22.sp,lineHeight=32.sp,color=RokuMuted,maxLines=3,overflow=TextOverflow.Ellipsis,modifier=Modifier.offset(380.dp,(276+synopsisHeight+108).dp).size(804.dp,104.dp))
+        if(info)RokuFullDetails(media,::closeInfo)
     }
 }
 
@@ -81,12 +94,13 @@ private fun RokuSeriesDetails(media:Media,controller:AppController) {
     var pickedSeason by remember {mutableStateOf(false)}
     var picker by remember {mutableStateOf(false)}
     var info by remember {mutableStateOf(false)}
+    val state by controller.state.collectAsState()
+    val saved=state.favorites.any {it.type==media.type&&it.id==media.id}
     val rail=LocalRokuRailFocus.current
     val episodes=media.episodes.filter {(it.season?:1)==season}.sortedBy {it.episode}
     val episodeFocus=remember(episodes) {episodes.map {FocusRequester()}}
     val grid=rememberLazyGridState()
     val scope=rememberCoroutineScope()
-    val infoFocus=remember {FocusRequester()}
     val infoControlFocus=remember {FocusRequester()}
     val seasonFocus=remember {FocusRequester()}
     LaunchedEffect(focusIntent,season,picker,info) {
@@ -105,11 +119,12 @@ private fun RokuSeriesDetails(media:Media,controller:AppController) {
     }
     fun closeInfo() {info=false;focusIntent="info"}
     Box(Modifier.fillMaxSize().background(RokuCanvas)) {
+        RokuDetailAtmosphere(media.backdrop)
         RokuLabel(media.name,112,74,900,36,bold=true,marquee=true)
-        RokuLabel(rokuFacts(media),112,132,900,18,color=RokuMuted)
+        RokuLabel(rokuFacts(media),112,132,900,22,color=RokuMuted)
         Row(Modifier.offset(112.dp,188.dp),horizontalArrangement=Arrangement.spacedBy(24.dp)) {
             TvButton("${if(season==0)"Specials"else"Season $season"}  ▾",{pickedSeason=false;picker=true},Modifier.size(256.dp,48.dp).focusRequester(seasonFocus))
-            TvButton("My List",{controller.toggleMyList(media)},Modifier.size(256.dp,48.dp))
+            TvButton(if(saved)"Remove from My List"else"+ My List",{controller.toggleMyList(media)},Modifier.size(256.dp,48.dp))
             TvButton("More info",{info=true},Modifier.size(256.dp,48.dp).focusRequester(infoControlFocus))
         }
         RokuLabel("${episodes.size} episodes",976,198,220,22,bold=true,align=androidx.compose.ui.text.style.TextAlign.End)
@@ -131,33 +146,65 @@ private fun RokuSeriesDetails(media:Media,controller:AppController) {
             }
         }
         if(picker) RokuChoiceSheet("Choose season",seasons.map {value->(if(value==0)"Specials"else"Season $value") to {season=value;pickedSeason=true}}, {picker=false;focusIntent=if(pickedSeason)"episodes"else"season"})
-        if(info) {
-            BackHandler {closeInfo()}
-            Box(Modifier.fillMaxSize().background(Color(0xF8101112))) {
-                RokuLabel(media.name,100,72,1060,44,bold=true)
-                RokuLabel(listOfNotNull(media.description,media.credits).joinToString("\n\n"),100,158,1060,23,lines=14)
-                TvButton("Back",{closeInfo()},Modifier.offset(100.dp,650.dp).size(180.dp,48.dp).focusRequester(infoFocus))
-                LaunchedEffect(Unit){infoFocus.requestFocus()}
-            }
-        }
+        if(info)RokuFullDetails(media,::closeInfo)
     }
 }
 
 @Composable
 private fun RokuEpisode(episode:Media,controller:AppController,modifier:Modifier) {
     var focused by remember {mutableStateOf(false)}
-    Holdable({controller.chooseSources(episode)},{controller.requestDialog(DialogKind.EpisodeManage,episode.episodeTitle?:episode.name,media=episode)},modifier.size(256.dp,330.dp).onFocusChanged {focused=it.hasFocus}.then(if(focused)Modifier.border(2.dp,RokuWhite,RoundedCornerShape(8.dp))else Modifier)) {
+    var artworkReady by remember(episode.thumbnail) {mutableStateOf(false)}
+    Holdable({controller.chooseSources(episode)},{controller.requestDialog(DialogKind.EpisodeManage,episode.episodeTitle?:episode.name,media=episode)},modifier.size(256.dp,330.dp).onFocusChanged {focused=it.hasFocus}) {
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.size(256.dp,144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)),contentAlignment=Alignment.Center) {
-                Text(episode.episodeTitle?:episode.name,color=RokuMuted,fontSize=19.sp,maxLines=3,modifier=Modifier.padding(12.dp))
-                AsyncImage(episode.thumbnail?:episode.backdrop?:episode.poster,null,contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize())
+                if(!artworkReady) {
+                    AsyncImage(rokuAsset("viptv-mark.png"),null,modifier=Modifier.offset(112.dp,35.dp).align(Alignment.TopStart).size(32.dp))
+                    RokuLabel("Preview unavailable",12,84,232,19,color=RokuMuted,align=androidx.compose.ui.text.style.TextAlign.Center)
+                }
+                RokuRemoteImage(episode.thumbnail,256,144,onReady={artworkReady=true},onFailure={artworkReady=false},contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize())
                 if(episode.watched) Box(Modifier.offset(160.dp,10.dp).align(Alignment.TopStart).size(86.dp,26.dp).background(RokuWhite,RoundedCornerShape(13.dp)),contentAlignment=Alignment.Center) {Text("WATCHED",color=RokuCanvas,fontSize=14.sp)}
                 val duration=episode.durationMillis
                 if(!episode.watched&&duration!=null&&duration>0&&episode.positionMillis>0) Box(Modifier.offset(8.dp,134.dp).align(Alignment.TopStart).size((240f*episode.positionMillis/duration).coerceIn(0f,240f).dp,4.dp).background(RokuWhite))
             }
-            RokuLabel("EPISODE ${episode.episode?:""}",0,158,256,14,color=RokuMuted)
+            if(focused)AsyncImage(rokuAsset("ui-card-focus.png"),null,contentScale=ContentScale.FillBounds,modifier=Modifier.size(256.dp,144.dp))
+            RokuLabel("EPISODE ${episode.episode?:""}",0,158,256,22,color=RokuMuted)
             RokuLabel(episode.episodeTitle?:episode.name,0,190,256,22,bold=true,marquee=focused)
-            RokuLabel(episode.description.orEmpty(),0,226,256,19,lines=4,color=if(focused)Color(0xFFC5C6C7)else RokuMuted)
+            Text(episode.description.orEmpty(),fontSize=19.sp,lineHeight=28.sp,maxLines=4,overflow=TextOverflow.Ellipsis,color=if(focused)Color(0xFFC5C6C7)else RokuMuted,modifier=Modifier.offset(0.dp,226.dp).size(256.dp,94.dp))
         }
+    }
+}
+
+
+private fun detailResumeTime(millis:Long):String {
+    val seconds=millis/1000
+    return if(seconds>=3600) "${seconds/3600}:${((seconds/60)%60).toString().padStart(2,'0')}:${(seconds%60).toString().padStart(2,'0')}" else "${seconds/60}:${(seconds%60).toString().padStart(2,'0')}"
+}
+
+@Composable
+private fun RokuDetailAtmosphere(backdrop:String?) {
+    if(!backdrop.isNullOrBlank())Box(Modifier.size(1280.dp,620.dp)) {
+        RokuRemoteImage(backdrop,1280,720,large=true,contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize())
+        Box(Modifier.fillMaxSize().background(RokuCanvas.copy(alpha=.52f)))
+        AsyncImage(rokuAsset("ui-hero-left.png"),null,contentScale=ContentScale.FillBounds,modifier=Modifier.fillMaxSize())
+        AsyncImage(rokuAsset("ui-hero-bottom.png"),null,contentScale=ContentScale.FillBounds,modifier=Modifier.fillMaxSize())
+    }
+}
+
+@Composable
+private fun RokuFullDetails(media:Media,onClose:()->Unit) {
+    val focus=remember {FocusRequester()}
+    val scroll=rememberScrollState()
+    val scope=rememberCoroutineScope()
+    BackHandler(onBack=onClose)
+    LaunchedEffect(Unit){focus.requestFocus()}
+    Box(Modifier.fillMaxSize().background(Color(0xF8101112))) {
+        RokuLabel(media.name,100,72,1060,44,bold=true)
+        Text(listOf(rokuFacts(media),media.description.orEmpty(),media.credits.orEmpty()).filter {it.isNotBlank()}.joinToString("\n\n"),color=RokuWhite,fontSize=23.sp,lineHeight=32.sp,modifier=Modifier.offset(100.dp,158.dp).size(1060.dp,460.dp).focusRequester(focus).onPreviewKeyEvent {
+            val key=it.nativeKeyEvent
+            if(key.action==KeyEvent.ACTION_DOWN&&key.keyCode in listOf(KeyEvent.KEYCODE_DPAD_DOWN,KeyEvent.KEYCODE_DPAD_UP)) {
+                scope.launch {scroll.animateScrollTo((scroll.value+if(key.keyCode==KeyEvent.KEYCODE_DPAD_DOWN)160 else -160).coerceIn(0,scroll.maxValue))};true
+            }else false
+        }.focusable().verticalScroll(scroll))
+        RokuLabel("Back to close",100,650,1060,19,color=RokuMuted)
     }
 }

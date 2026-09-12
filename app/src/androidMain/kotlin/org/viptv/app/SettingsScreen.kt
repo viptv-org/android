@@ -43,38 +43,44 @@ import java.net.URI
     Box(modifier.fillMaxSize().background(Color(0xFF101112))) {
         when(page) {
             "Addons" -> RokuAddons(addons,onInstallAddon,onToggleAddon,onRemoveAddon,{page="Settings"})
-            "About VIPTV" -> {
-                SettingsRows("About VIPTV",listOf("Back" to {page="Settings"}),"Version $version  ·  Media service: ${if(serverAbout?.mediaServiceAvailable==true) "Available" else "Unavailable"}")
-            }
             "Playback preferences" -> SettingsRows(page,listOf(
-                "Autoplay next episode: ${if(preferences.autoplay) "On" else "Off"}" to {choices("Autoplay next episode",listOf("On" to "on","Off" to "off")) {onSavePreferences(preferences.copy(autoplay=it=="on"))}},
-                "Start with subtitles: ${if(preferences.subtitlesEnabled) "On" else "Off"}" to {choices("Start with subtitles",listOf("On" to "on","Off" to "off")) {onSavePreferences(preferences.copy(subtitlesEnabled=it=="on"))}},
-                "Preferred audio: ${languageName(preferences.audioLanguage)}" to {choices("Preferred audio",languages) {onSavePreferences(preferences.copy(audioLanguage=it))}},
-                "Preferred subtitles: ${languageName(preferences.subtitleLanguage)}" to {choices("Preferred subtitles",languages) {onSavePreferences(preferences.copy(subtitleLanguage=it))}},
-                "Subtitle size: ${preferences.subtitleSize}" to {choices("Subtitle size",listOf("Small" to "small","System default" to "normal","Large" to "large")) {onSavePreferences(preferences.copy(subtitleSize=it))}},
-                "Subtitle appearance: ${preferences.subtitleStyle}" to {choices("Subtitle appearance",listOf("System default" to "system","Text with shadow" to "shadow","White text on black" to "opaque")) {onSavePreferences(preferences.copy(subtitleStyle=it))}},
-                "Maximum quality: ${preferences.quality}" to {choices("Maximum quality",listOf("Auto" to "auto","1080p" to "1080p","720p" to "720p","480p" to "480p")) {onSavePreferences(preferences.copy(quality=it))}},
-            ),"Applies to your next playback. Manual track choices take priority.",modalOpen=choice!=null)
+                "Preferred audio" to {choices("Preferred audio",languages) {onSavePreferences(preferences.copy(audioLanguage=it))}},
+                "Preferred subtitles" to {choices("Preferred subtitles",languages) {onSavePreferences(preferences.copy(subtitleLanguage=it))}},
+                "Start with subtitles" to {choices("Start with subtitles",listOf("On" to "on","Off" to "off")) {onSavePreferences(preferences.copy(subtitlesEnabled=it=="on"))}},
+                "Subtitle size" to {choices("Subtitle size",listOf("Small" to "small","System default" to "normal","Large" to "large")) {onSavePreferences(preferences.copy(subtitleSize=it))}},
+                "Subtitle appearance" to {choices("Subtitle appearance",listOf("System default" to "system","Text with shadow" to "shadow","White text on black" to "opaque")) {onSavePreferences(preferences.copy(subtitleStyle=it))}},
+                "Maximum quality" to {choices("Maximum quality",listOf("Auto" to "auto","1080p" to "1080p","720p" to "720p","480p" to "480p")) {onSavePreferences(preferences.copy(quality=it))}},
+            ),"Applies to your next playback. Manual track choices take priority.",modalOpen=choice!=null, descriptions=listOf(
+                languageName(preferences.audioLanguage),languageName(preferences.subtitleLanguage),if(preferences.subtitlesEnabled) "On" else "Off",
+                when(preferences.subtitleSize){"small"->"Small";"large"->"Large";else->"System default"},
+                when(preferences.subtitleStyle){"shadow"->"Text with shadow";"opaque"->"White text on black";else->"System default"},
+                if(preferences.quality=="auto") "Auto" else preferences.quality,
+            ))
             else -> SettingsRows("Settings",listOf(
                 "Switch profile" to onOpenProfiles,
                 "Playback preferences" to {page="Playback preferences"},
                 "Manage profiles" to onManageProfiles,
-                "About VIPTV" to {page="About VIPTV"},
+                "About VIPTV" to {},
                 "Addons" to {page="Addons"},
                 "Sign out" to onSignOut,
-            ))
+            ),descriptions=listOf("Choose who's watching.","Audio, subtitles and quality for this profile.","Add, rename, choose avatars or delete profiles.","Version $version\nhttps://viptv.syek.tech","Manage addons shared by your account.","Sign out of VIPTV on this TV."))
         }
         choice?.let { (title,options)->RokuChoiceDialog(title,options,{choice=null}) }
     }
 }
 
-@Composable private fun SettingsRows(title:String,rows:List<Pair<String,()->Unit>>,caption:String="",modalOpen:Boolean=false) {
+@Composable private fun SettingsRows(title:String,rows:List<Pair<String,()->Unit>>,caption:String="",modalOpen:Boolean=false,descriptions:List<String> = emptyList()) {
     val focuses=remember(title,rows.size) {List(rows.size) {FocusRequester()}}
     var focusedIndex by remember(title) {mutableIntStateOf(0)}
     LaunchedEffect(title,modalOpen) {if(!modalOpen && rows.isNotEmpty()) focuses[focusedIndex.coerceIn(rows.indices)].requestFocus()}
-    Text(title,Modifier.offset(100.dp,54.dp).size(1096.dp,64.dp),color=Color(0xFFF5F5F5),fontSize=44.sp,fontWeight=FontWeight.Bold)
+    Text(title,Modifier.offset(100.dp,54.dp).size(1096.dp,64.dp),color=Color(0xFFF5F5F5),fontSize=42.sp,fontWeight=FontWeight.Bold)
     if(caption.isNotBlank()) Text(caption,Modifier.offset(100.dp,126.dp).width(1096.dp),color=Color(0xFFA6A8AA),fontSize=19.sp)
-    LazyColumn(Modifier.offset(100.dp,184.dp).size(536.dp,476.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+    val listY=if(caption.isBlank()) 144 else 176
+    rows.getOrNull(focusedIndex)?.let { row ->
+        Text(row.first,Modifier.offset(778.dp,(listY+8).dp).width(424.dp),color=Color(0xFFF5F5F5),fontSize=28.sp,fontWeight=FontWeight.Bold)
+        Text(descriptions.getOrNull(focusedIndex).orEmpty(),Modifier.offset(778.dp,(listY+52).dp).size(424.dp,208.dp),color=Color(0xFFC5C6C7),fontSize=22.sp,maxLines=7)
+    }
+    LazyColumn(Modifier.offset(100.dp,listY.dp).size(536.dp,476.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         itemsIndexed(rows) {index,row->TvButton(row.first,row.second,Modifier.size(536.dp,56.dp).focusRequester(focuses[index]),onFocused={focusedIndex=index})}
     }
 }
@@ -82,23 +88,23 @@ import java.net.URI
 @Composable internal fun RokuAddons(addons:List<Addon>,onInstall:(String)->Unit,onToggle:(Addon)->Unit,onRemove:(Addon)->Unit,onBack:()->Unit) {
     var installing by remember {mutableStateOf(false)}
     var error by remember {mutableStateOf<String?>(null)}
-    var draft by remember {mutableStateOf("")}
+    var draft by remember {mutableStateOf("https://")}
     var selected by remember {mutableStateOf<Addon?>(null)}
     var removal by remember {mutableStateOf<Addon?>(null)}
     Box(Modifier.fillMaxSize().background(Color(0xFF101112))) {
-        SettingsRows("Addons",listOf("Install add-on" to {installing=true})+addons.map {addon->"${addon.name} · ${if(addon.enabled) "Enabled" else "Disabled"}" to {selected=addon}},"Shared by all profiles and devices on your account.",modalOpen=installing||selected!=null||removal!=null)
-        if(installing) RokuTextEntry("Install add-on",error ?: "Enter the HTTPS add-on manifest URL.",draft,onDone={value->
+        SettingsRows("Addons",listOf("Install addon" to {installing=true})+addons.map {addon->addon.name to {selected=addon}},"Shared by all profiles and devices on your account.",modalOpen=installing||selected!=null||removal!=null,descriptions=listOf("Enter a Stremio manifest URL.")+addons.map {if(it.enabled) "Enabled" else "Disabled"})
+        if(installing) RokuTextEntry("Install addon manifest URL",error ?: "Enter the HTTPS add-on manifest URL.",draft,onDone={value->
             draft=value
             if(runCatching {URI(value.trim()).let {it.scheme.equals("https",true)&&!it.host.isNullOrBlank()}}.getOrDefault(false)) {
                 onInstall(value.trim());draft="";error=null;installing=false
             } else error="Enter an HTTPS manifest URL."
         },onCancel={installing=false;error=null})
-        selected?.let {addon->RokuChoiceDialog(addon.name,listOf(
+        selected?.let {addon->RokuChoiceDialog("Manage ${addon.name}",listOf(
             (if(addon.enabled) "Disable" else "Enable") to {selected=null;onToggle(addon)},
-            "Remove add-on" to {selected=null;removal=addon},
+            "Remove addon" to {selected=null;removal=addon},
             "Cancel" to {selected=null},
         ),{selected=null})}
-        removal?.let {addon->RokuChoiceDialog("Remove ${addon.name}?",listOf("Cancel" to {removal=null},"Remove add-on" to {removal=null;onRemove(addon)}),{removal=null})}
+        removal?.let {addon->RokuChoiceDialog("Remove ${addon.name}?",listOf("Cancel" to {removal=null},"Remove" to {removal=null;onRemove(addon)}),{removal=null})}
     }
     BackHandler(enabled=!installing&&selected==null&&removal==null,onBack=onBack)
 }

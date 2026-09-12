@@ -10,6 +10,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -102,12 +103,12 @@ private val AccountSurface = Color(0xFF202224)
         val canAdd = state.profiles.size < 12
         Row(Modifier.offset(if(canAdd) 392.dp else 520.dp,530.dp),horizontalArrangement=Arrangement.spacedBy(16.dp)) {
             if(canAdd) TvButton("Add profile",{controller.editProfile()},Modifier.size(240.dp,56.dp).then(if(shown.isEmpty()) Modifier.focusRequester(first) else Modifier))
-            TvButton(if(state.managingProfiles) "Done" else "Manage",controller::toggleProfileManagement,Modifier.size(240.dp,56.dp))
+            TvButton(if(state.managingProfiles) "Done" else "Manage profiles",controller::toggleProfileManagement,Modifier.size(240.dp,56.dp))
         }
         if(state.profiles.size>5) {
-            if(state.profilePage>0) TvButton("Previous",{controller.setProfilePage(state.profilePage-1)},Modifier.offset(440.dp,612.dp).size(180.dp,40.dp))
-            if((state.profilePage+1)*5<state.profiles.size) TvButton("Next",{controller.setProfilePage(state.profilePage+1)},Modifier.offset(636.dp,612.dp).size(180.dp,40.dp))
-            AccountText("Page ${state.profilePage+1} of ${(state.profiles.size+4)/5}",860,615,280,19,true)
+            TvButton("Previous",{controller.setProfilePage(state.profilePage-1)},Modifier.offset(452.dp,612.dp).size(180.dp,40.dp))
+            TvButton("Next",{controller.setProfilePage(state.profilePage+1)},Modifier.offset(648.dp,612.dp).size(180.dp,40.dp))
+            AccountText("${state.profilePage+1} / ${(state.profiles.size+4)/5}",860,615,280,19,true)
         }
     }
 }
@@ -148,36 +149,44 @@ private data class AvatarCategory(val style:String,val name:String,val entries:L
     var returnToAvatar by remember { mutableStateOf(false) }
     LaunchedEffect(editingName,choosingAvatar) { if(!editingName && !choosingAvatar) { if(returnToAvatar) avatarFocus.requestFocus() else first.requestFocus() } }
     Box(Modifier.fillMaxSize().background(AccountCanvas)) {
-        AccountMark(); AccountText(if(profile==null) "Add a profile" else "Edit profile",256,148,900,44)
-        AccountText("Choose a name and avatar for this viewer.",256,222,900,22,true)
-        AccountAvatar(name,if(avatarChanged || profile==null) currentAvatar?.uri else profile.avatarUrl,Modifier.offset(256.dp,302.dp).size(176.dp))
-        TvButton("Change avatar",{returnToAvatar=true;choosingAvatar=true},Modifier.offset(256.dp,486.dp).size(176.dp,48.dp).focusRequester(avatarFocus))
-        AccountText("Profile name",464,292,560,22,true)
-        TvButton(name.ifBlank { "Enter name" },{returnToAvatar=false;editingName=true},Modifier.offset(464.dp,338.dp).size(560.dp,64.dp).focusRequester(first))
-        AccountText("This name appears on the profile chooser.",464,420,560,19,true)
+        AccountMark(); AccountText(if(profile==null) "Add a profile" else "Edit profile",256,148,850,42)
+        AccountText("A space for their favorites, shows, and discoveries.",256,222,900,22,true)
+        var avatarFocused by remember {mutableStateOf(false)}
+        Holdable({returnToAvatar=true;choosingAvatar=true},null,Modifier.offset(256.dp,302.dp).size(176.dp).focusRequester(avatarFocus).onFocusChanged {avatarFocused=it.hasFocus}.border(if(avatarFocused) 3.dp else 0.dp,if(avatarFocused) AccountWhite else Color.Transparent,RoundedCornerShape(12.dp)).padding(4.dp)) {
+            AccountAvatar(name,if(avatarChanged || profile==null) currentAvatar?.uri else profile.avatarUrl,Modifier.fillMaxSize())
+        }
+        AccountText("Change avatar",256,486,176,22,true,centered=true)
+        AccountText("PROFILE NAME",464,292,560,22,true)
+        TvButton(name.ifBlank { "Enter a name" },{returnToAvatar=false;editingName=true},Modifier.offset(464.dp,338.dp).size(560.dp,64.dp).focusRequester(first))
+        AccountText("Select to type with your remote or a connected keyboard.",464,420,560,19,true)
         state.message?.let { AccountText(it,464,484,560,19,lines=3) }
         Row(Modifier.offset(256.dp,574.dp),horizontalArrangement=Arrangement.spacedBy(16.dp)) {
-            TvButton(if(profile==null) "Continue" else "Save",{controller.saveProfile(profile,name,style,choice)},Modifier.size(240.dp,56.dp))
+            TvButton(if(profile==null) "Create profile" else "Save",{controller.saveProfile(profile,name,style,choice)},Modifier.size(240.dp,56.dp))
             TvButton("Cancel",controller::back,Modifier.size(240.dp,56.dp))
             if(profile!=null && !profile.primary) TvButton("Delete profile",{controller.requestDeleteProfile(profile)},Modifier.size(240.dp,56.dp))
         }
-        if(editingName) RokuTextEntry("Profile name","Enter a name for this viewer.",name,onDone={name=it.take(64);editingName=false},onCancel={editingName=false})
+        if(editingName) RokuTextEntry("Name this profile","Enter a name for this viewer.",name,maxLength=80,onDone={name=it.take(80);editingName=false},onCancel={editingName=false})
         if(choosingAvatar) AvatarPicker(catalog,style,choice,{s,c->style=s;choice=c;avatarChanged=true;choosingAvatar=false},{choosingAvatar=false})
     }
 }
 
 @Composable private fun AvatarPicker(catalog:List<AvatarCategory>,style:String,choice:Int,onChoose:(String,Int)->Unit,onCancel:()->Unit) {
     var selectedStyle by remember { mutableStateOf(style) }
-    var page by remember(selectedStyle) { mutableIntStateOf(if(selectedStyle==style) (choice-1)/18 else 0) }
+    var page by remember(selectedStyle) { mutableIntStateOf(0) }
     val category=catalog.firstOrNull { it.style==selectedStyle } ?: catalog.firstOrNull()
     var focusedName by remember { mutableStateOf("") }
     val first=remember(page,selectedStyle) { FocusRequester() }
-    LaunchedEffect(page,selectedStyle) { if(category?.entries?.isNotEmpty()==true) first.requestFocus() }
+    val initialCategory=catalog.indexOfFirst {it.style==style}.coerceAtLeast(0)
+    val categoriesState=rememberLazyListState(initialFirstVisibleItemIndex=initialCategory)
+    val categoryFocus=remember {FocusRequester()}
+    var requestGrid by remember {mutableStateOf(false)}
+    LaunchedEffect(Unit) {if(catalog.isNotEmpty()) categoryFocus.requestFocus()}
+    LaunchedEffect(page,selectedStyle,requestGrid) { if(requestGrid && category?.entries?.isNotEmpty()==true) {first.requestFocus();requestGrid=false} }
     BackHandler(onBack=onCancel)
     Box(Modifier.fillMaxSize().background(AccountCanvas)) {
-        AccountText("Choose an avatar",96,112,size=44);AccountText("Choose an avatar, then return to finish the profile.",96,178,size=22,muted=true)
-        LazyColumn(Modifier.offset(96.dp,238.dp).size(216.dp,408.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            itemsIndexed(catalog) { _, item -> TvButton(item.name,{selectedStyle=item.style},Modifier.size(216.dp,44.dp)) }
+        AccountText("Find your favorite",96,112,size=42);AccountText("${catalog.sumOf {it.entries.size}} avatars. Pick a world, then pick your character.",96,178,size=22,muted=true)
+        LazyColumn(Modifier.offset(96.dp,238.dp).size(216.dp,408.dp),state=categoriesState,verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            itemsIndexed(catalog) { index, item -> TvButton(item.name,{selectedStyle=item.style;requestGrid=true},Modifier.size(216.dp,44.dp).then(if(index==initialCategory) Modifier.focusRequester(categoryFocus) else Modifier),onFocused={selectedStyle=item.style}) }
         }
         category?.entries?.drop(page*18)?.take(18)?.forEachIndexed { index,item ->
             var focused by remember(item.uri) { mutableStateOf(false) }
@@ -188,10 +197,12 @@ private data class AvatarCategory(val style:String,val name:String,val entries:L
                 AccountAvatar(item.name,item.uri,Modifier.fillMaxSize())
             }
         }
-        if(page>0) TvButton("Previous",{page--},Modifier.offset(360.dp,662.dp).size(180.dp,40.dp))
-        AccountText(focusedName,556,664,250,18)
-        AccountText("Page ${page+1} of ${((category?.entries?.size ?: 0)+17)/18}",812,664,210,18,true)
-        if((page+1)*18<(category?.entries?.size ?: 0)) TvButton("Next",{page++},Modifier.offset(1032.dp,662.dp).size(180.dp,40.dp))
+        val pageCount=((category?.entries?.size ?: 0)+17)/18
+        if(pageCount>1) {
+            TvButton("Previous",{page=(page+pageCount-1)%pageCount;requestGrid=true},Modifier.offset(360.dp,662.dp).size(180.dp,40.dp))
+            TvButton("Next",{page=(page+1)%pageCount;requestGrid=true},Modifier.offset(552.dp,662.dp).size(180.dp,40.dp))
+        } else AccountText(focusedName,360,664,440,18)
+        Text("${category?.name.orEmpty()}  ·  ${page+1} / $pageCount",Modifier.offset(812.dp,664.dp).width(372.dp),color=AccountMuted,fontSize=18.sp,textAlign=TextAlign.End)
     }
 }
 

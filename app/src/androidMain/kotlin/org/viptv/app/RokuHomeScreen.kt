@@ -141,8 +141,8 @@ internal fun RokuBackdrop(uri:String?,height:Int=720) {
     val context=LocalContext.current
     Box(Modifier.width(1280.dp).height(height.dp).clip(androidx.compose.ui.graphics.RectangleShape)) {
         if(!uri.isNullOrBlank()) {
-            AsyncImage(ImageRequest.Builder(context).data(uri).size(1280,720).build(),null,onSuccess={sharpReady=true},contentScale=ContentScale.Crop,modifier=Modifier.width(1280.dp).height(720.dp))
-            if(!sharpReady) AsyncImage(ImageRequest.Builder(context).data(uri).size(256,144).build(),null,contentScale=ContentScale.Crop,modifier=Modifier.width(1280.dp).height(720.dp))
+            RokuRemoteImage(uri,1280,720,large=true,onReady={sharpReady=true},contentScale=ContentScale.Crop,modifier=Modifier.width(1280.dp).height(720.dp))
+            if(!sharpReady) RokuRemoteImage(uri,256,144,contentScale=ContentScale.Crop,modifier=Modifier.width(1280.dp).height(720.dp))
             AsyncImage("file:///android_asset/roku/images/ui-hero-left.png",null,contentScale=ContentScale.FillBounds,modifier=Modifier.fillMaxSize())
             AsyncImage("file:///android_asset/roku/images/ui-hero-bottom.png",null,contentScale=ContentScale.FillBounds,modifier=Modifier.fillMaxSize())
         }
@@ -199,7 +199,7 @@ internal fun RokuArtworkCard(media:Media,modifier:Modifier=Modifier,onActivate:(
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.width(256.dp).height(144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)),contentAlignment=Alignment.Center) {
                 if(!artworkReady) Text(media.name,color=RokuMuted,fontSize=19.sp,maxLines=3,textAlign=TextAlign.Center,modifier=Modifier.padding(12.dp))
-                AsyncImage(artwork,null,onSuccess={artworkReady=true},onError={artworkReady=false},contentScale=if(media.type=="live")ContentScale.Fit else ContentScale.Crop,modifier=if(media.type=="live")Modifier.size(176.dp,100.dp)else Modifier.fillMaxSize())
+                RokuRemoteImage(artwork,if(media.type=="live")176 else 256,if(media.type=="live")100 else 144,logo=media.type=="live",onReady={artworkReady=true},onFailure={artworkReady=false},contentScale=if(media.type=="live")ContentScale.Fit else ContentScale.Crop,modifier=if(media.type=="live")Modifier.size(176.dp,100.dp)else Modifier.fillMaxSize())
                 val duration=media.durationMillis
                 if(duration!=null&&duration>0&&media.positionMillis>0) {
                     Box(Modifier.offset(8.dp,134.dp).align(Alignment.TopStart).size(240.dp,6.dp).background(Color(0xFF4A4C4E)))
@@ -226,4 +226,38 @@ internal fun RokuChoiceSheet(title:String,choices:List<Pair<String,()->Unit>>,on
             }
         }
     }
+}
+
+
+/** Exact ImagePolicy.brs allowlist: only public, credential-free artwork is resized. */
+private fun rokuPublicArtwork(original:String?,width:Int,height:Int,large:Boolean,logo:Boolean):String? {
+    if(original.isNullOrBlank())return original
+    var uri=original
+    if(uri.startsWith("https://wsrv.nl/?")) {
+        val encoded=uri.substringAfter('?').split('&').firstOrNull {it.startsWith("url=")}?.substringAfter('=')
+        if(encoded!=null) {
+            if(Regex("%(?![0-9a-fA-F]{2})").containsMatchIn(encoded))return original
+            uri=try {java.net.URLDecoder.decode(encoded,"UTF-8")}catch(_:IllegalArgumentException){return original}
+        }
+    }
+    val safe=Regex("^https://(image\\.tmdb\\.org|artworks\\.thetvdb\\.com|episodes\\.metahub\\.space|images\\.metahub\\.space|live\\.metahub\\.space|assets\\.fanart\\.tv|i\\.imgur\\.com)/[^?#@]+$")
+    if(!safe.matches(uri))return original
+    val tmdb=Regex("^https://image\\.tmdb\\.org/t/p/(w[0-9]+|original)/")
+    if(tmdb.containsMatchIn(uri))uri=tmdb.replace(uri,"https://image.tmdb.org/t/p/${if(width>1280)"original"else if(width>500)"w1280"else"w500"}/")
+    return "https://wsrv.nl/?url=${android.net.Uri.encode(uri)}&w=$width&h=$height&fit=${if(logo)"inside"else"cover"}&output=${if(logo)"png"else"jpg"}&q=${if(large)95 else 85}&we"
+}
+
+@Composable
+internal fun RokuRemoteImage(uri:String?,width:Int,height:Int,modifier:Modifier=Modifier,large:Boolean=false,logo:Boolean=false,contentScale:ContentScale=ContentScale.Crop,onReady:()->Unit={},onFailure:()->Unit={}) {
+    val context=LocalContext.current
+    val scale=if(context.resources.displayMetrics.widthPixels>=1920)1.5f else 1f
+    val pixelWidth=(width*scale).toInt()
+    val pixelHeight=(height*scale).toInt()
+    val proxy=remember(uri,pixelWidth,pixelHeight,large,logo){rokuPublicArtwork(uri,pixelWidth,pixelHeight,large,logo)}
+    var retryOriginal by remember(uri,proxy){mutableStateOf(false)}
+    val model=if(retryOriginal)uri else proxy
+    AsyncImage(ImageRequest.Builder(context).data(model).size(pixelWidth,pixelHeight).build(),null,
+        contentScale=contentScale,modifier=modifier,onSuccess={onReady()},onError={
+            if(!retryOriginal&&proxy!=uri)retryOriginal=true else onFailure()
+        })
 }

@@ -36,6 +36,7 @@ private const val GuideWidth = 804f
 @Composable
 internal fun GuideScreen(state: AppState, initialChannel: LiveChannel?, controller: AppController) {
     val model = state.guideUi
+    val timelineLabels = model.schedulesByChannelId.values.asSequence().flatten().firstOrNull { it.timelineLabels.isNotEmpty() }?.timelineLabels.orEmpty()
     val channels = model.channels.ifEmpty { state.liveChannels }
     val schedules = model.schedulesByChannelId.ifEmpty { initialChannel?.let { mapOf(it.id to state.guide) }.orEmpty() }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -127,7 +128,7 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel?, controll
     }.focusRequester(focus).onFocusChanged { guideOwnsFocus = it.hasFocus }.focusable()) {
         Text("Live TV", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(112.dp, 34.dp).width(220.dp))
         Box(Modifier.offset(112.dp,149.dp).size(1124.dp,1.dp).background(Color(0xFF303234)))
-        repeat(4) { i -> Text(guideTime(window + i * 1_800_000L), color = Color.White, fontSize = 19.sp, modifier = Modifier.offset((432 + i * 201).dp,116.dp).width(197.dp)) }
+        repeat(4) { i -> Text(timelineLabels[window + i * 1_800_000L] ?: guideTime(window + i * 1_800_000L), color = Color.White, fontSize = 19.sp, modifier = Modifier.offset((432 + i * 201).dp,116.dp).width(197.dp)) }
         val firstMenu = max(0, menuIndex - 7)
         filters.drop(firstMenu).take(8).forEachIndexed { slot, item ->
             val selected = slot + firstMenu == menuIndex
@@ -152,7 +153,7 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel?, controll
                     if(selected) Box(Modifier.size(3.dp,87.dp).background(Color.White))
                     if(width>49) {
                         val missing = p.title == "No schedule available"
-                        val hint = if(missing) { if(item.id in model.loadingChannelIds) "LOADING GUIDE…" else "LIVE CHANNEL" } else if(p.startMillis<=now && p.endMillis>now) "${(p.endMillis-now+59_999)/60_000} MIN LEFT" else guideTime(p.startMillis)
+                        val hint = if(missing) { if(item.id in model.loadingChannelIds) "LOADING GUIDE…" else "LIVE CHANNEL" } else if(p.startMillis<=now && p.endMillis>now) "${(p.endMillis-now+59_999)/60_000} MIN LEFT" else p.displayTime ?: guideTime(p.startMillis)
                         Text(hint,color=if(selected) Color(0xFF414548) else GuideMuted,fontSize=15.sp,maxLines=1,modifier=Modifier.offset(12.dp,10.dp).width((width-22).dp))
                         Text(p.title,color=if(selected) GuideCanvas else Color(0xFFF5F5F5),fontSize=20.sp,maxLines=2,overflow=TextOverflow.Ellipsis,modifier=Modifier.offset(12.dp,38.dp).size((width-22).dp,48.dp))
                     }
@@ -168,7 +169,7 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel?, controll
             Box(Modifier.fillMaxSize().background(Color(0xC7000000)))
             Box(Modifier.offset(224.dp,195.dp).size(1012.dp,360.dp).background(Color(0xFF242628)))
             Text("${channel.name}  ·  ${programme.title}",color=Color.White,fontSize=26.sp,fontWeight=FontWeight.Bold,maxLines=2,modifier=Modifier.offset(254.dp,219.dp).size(952.dp,64.dp))
-            val body=if(programme.title=="No schedule available") "Schedule unavailable. You can still watch this channel live." else "${if(programme.startMillis>now) "UPCOMING  ·  " else ""}${guideTime(programme.startMillis)}  ·  ${programme.description ?: "No programme description available."}"
+            val body=if(programme.title=="No schedule available") "Schedule unavailable. You can still watch this channel live." else "${if(programme.startMillis>now) "UPCOMING  ·  " else ""}${programme.displayTime ?: guideTime(programme.startMillis)}  ·  ${programme.description ?: "No programme description available."}"
             Text(body,color=Color.White,fontSize=20.sp,maxLines=6,modifier=Modifier.offset(254.dp,297.dp).size(952.dp,174.dp))
             Text("OK  Watch this channel live     Back  Return to guide",color=Color.White,fontSize=20.sp,fontWeight=FontWeight.Bold,modifier=Modifier.offset(254.dp,499.dp).width(952.dp))
         }
