@@ -8,3 +8,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "viptv-android"
+include(":app")
