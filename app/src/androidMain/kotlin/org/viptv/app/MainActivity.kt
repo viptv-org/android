@@ -127,10 +127,10 @@ class MainActivity : ComponentActivity() {
         ) {
             if (destination==Destination.Profile) {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(RokuSurface),contentAlignment=Alignment.Center) {
-                    Text(state.selectedProfile?.name?.take(2)?.uppercase().orEmpty(),color=RokuWhite,fontSize=18.sp)
+                    Text(state.selectedProfile?.name?.take(1)?.uppercase().orEmpty(),color=RokuWhite,fontSize=18.sp)
                     state.selectedProfile?.avatarUrl?.let { AsyncImage(it,"Profile",Modifier.fillMaxSize(),contentScale=ContentScale.Crop) }
                 }
-            } else AsyncImage(rokuAsset(names[index]),destination.label,Modifier.size(30.dp),colorFilter=ColorFilter.tint(if(focused)RokuCanvas else RokuWhite))
+            } else AsyncImage(rokuAsset(names[index]),destination.label,Modifier.size(30.dp),colorFilter=ColorFilter.tint(if(focused)RokuCanvas else RokuMuted))
         }
     }
 }

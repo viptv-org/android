@@ -314,13 +314,37 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         val live = async { optionalFeed { channels("/live?view=us&offset=0&limit=12&search=") } }
         val saved = async { optionalFeed { json("GET", "/profiles/${enc(profileId)}/favorites/page?limit=13&exclude_live=true").mediaArray("items", "rows", "metas") } }
         val favoriteChannels = async { optionalFeed { channels("/live?view=us&collection=favorites&limit=24") } }
+        val movieItems = movies.await()
+        val seriesItems = series.await()
+        val known = (movieItems + seriesItems).associateBy { it.type + "\u0000" + it.id }
+        val hydrationSlots = Semaphore(3)
+        suspend fun enrich(items: List<Media>): List<Media> = coroutineScope {
+            items.map { item -> async {
+                hydrationSlots.withPermit {
+                    val lookup = item.copy(id = item.seriesId ?: item.id, type = if (item.type == "episode") "series" else item.type)
+                    val rich = known[lookup.type + "\u0000" + lookup.id] ?: try { metadata(lookup) }
+                        catch (cancelled: CancellationException) { throw cancelled }
+                        catch (_: Exception) { item }
+                    item.copy(
+                        name = item.name.ifBlank { rich.name }, poster = rich.poster ?: item.poster,
+                        backdrop = rich.backdrop ?: item.backdrop, thumbnail = rich.thumbnail ?: item.thumbnail,
+                        description = rich.description ?: item.description, year = rich.year ?: item.year,
+                        runtime = rich.runtime ?: item.runtime, imdbRating = rich.imdbRating ?: item.imdbRating,
+                        genres = rich.genres.ifEmpty { item.genres }, credits = rich.credits ?: item.credits,
+                        episodes = rich.episodes.ifEmpty { item.episodes },
+                    )
+                }
+            } }.awaitAll()
+        }
+        val richQueue = async { enrich(queue.await()) }
+        val richSaved = async { enrich(saved.await()) }
         listOf(
-            HomeShelf("Continue Watching", queue.await(), isQueueShelf = true),
+            HomeShelf("Continue Watching", richQueue.await(), isQueueShelf = true),
             HomeShelf("Recently Watched Live TV", recent.await()),
-            HomeShelf("Trending Movies", movies.await()),
-            HomeShelf("Popular Series", series.await()),
+            HomeShelf("Trending Movies", movieItems),
+            HomeShelf("Popular Series", seriesItems),
             HomeShelf("Live Now", live.await()),
-            HomeShelf("My List", saved.await()),
+            HomeShelf("My List", richSaved.await()),
             HomeShelf("Favorite Channels", favoriteChannels.await()),
         ).filter { it.items.isNotEmpty() }
     }

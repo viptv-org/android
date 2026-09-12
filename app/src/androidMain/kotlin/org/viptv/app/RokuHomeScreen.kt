@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -43,7 +44,6 @@ internal fun RokuHomeScreen(state: AppState, controller: AppController) {
     var column by remember { mutableIntStateOf(shelves.getOrNull(row)?.items?.indexOfFirst { HomeFocusPolicy.mediaKey(it) == saved.mediaKey }?.coerceAtLeast(0) ?: 0) }
     val hero = shelves.getOrNull(row)?.items?.getOrNull(column) ?: shelves.firstOrNull()?.items?.firstOrNull()
     val expanded = row == 0
-    val list = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val heroFocus = remember { FocusRequester() }
     var heroFocused by remember { mutableStateOf(false) }
@@ -66,7 +66,6 @@ internal fun RokuHomeScreen(state: AppState, controller: AppController) {
         if (hero != null && HomeFocusPolicy.mayRestore(snapshot, controller.state.value.homeFocus.inputEpoch)) {
             if ((snapshot.surface == HomeFocusSurface.Hero || snapshot.mediaKey == null)&&expanded) {heroFocus.requestFocus();restoredRequest=snapshot.restoreRequest}
             else {
-                list.scrollToItem(row)
                 horizontal.getOrNull(row)?.scrollToItem(column)
                 withFrameNanos {}
                 if(HomeFocusPolicy.mayRestore(snapshot,controller.state.value.homeFocus.inputEpoch)) {requesters.getOrNull(row)?.getOrNull(column)?.requestFocus();restoredRequest=snapshot.restoreRequest}
@@ -94,24 +93,34 @@ internal fun RokuHomeScreen(state: AppState, controller: AppController) {
         }
         if(shelves.isEmpty()) {
             RokuLabel(if(state.loading) "Loading…" else "Nothing here yet",250,304,780,32,bold=true,align=TextAlign.Center)
-        } else LazyColumn(state=list,modifier=Modifier.offset(92.dp,if(expanded)466.dp else 100.dp).width(1188.dp).height(if(expanded)254.dp else 620.dp).clip(androidx.compose.ui.graphics.RectangleShape),userScrollEnabled=false,verticalArrangement=Arrangement.spacedBy(14.dp)) {
-            itemsIndexed(shelves) { shelfIndex,shelf ->
-                Column(Modifier.padding(start=8.dp,top=8.dp)) {
+        } else Box(Modifier.offset(92.dp,if(expanded)466.dp else 100.dp).width(1188.dp).height(if(expanded)254.dp else 620.dp).clip(androidx.compose.ui.graphics.RectangleShape)) {
+            // The reference window is positioned by logical shelf, never by a scroll
+            // container. Focus bring-into-view cannot displace this vertical canvas.
+            shelves.forEachIndexed { shelfIndex,shelf ->
+                key(shelf.title) {
+                Column(Modifier.offset(8.dp,((shelfIndex-row)*254+8).dp).width(1180.dp).height(240.dp)) {
                     Text(shelf.title.uppercase(),color=RokuWhite,fontSize=18.sp,fontWeight=FontWeight.Bold,modifier=Modifier.height(32.dp))
                     LazyRow(state=horizontal[shelfIndex],horizontalArrangement=Arrangement.spacedBy(24.dp),modifier=Modifier.height(200.dp)) {
                         itemsIndexed(shelf.items) { cardIndex,media ->
-                            RokuArtworkCard(media,Modifier.focusRequester(requesters[shelfIndex][cardIndex]).onFocusChanged { if(it.hasFocus) {row=shelfIndex;column=cardIndex;controller.recordHomeFocus(shelfIndex,shelf.title,media);scope.launch { list.scrollToItem(shelfIndex) }} }.onPreviewKeyEvent {
+                            RokuArtworkCard(media,Modifier.focusRequester(requesters[shelfIndex][cardIndex]).focusProperties {canFocus=shelfIndex in row..(row+1)}.onFocusChanged { if(it.hasFocus) {row=shelfIndex;column=cardIndex;controller.recordHomeFocus(shelfIndex,shelf.title,media)} }.onPreviewKeyEvent {
                                 val event=it.nativeKeyEvent
                                 if(event.action==KeyEvent.ACTION_DOWN && event.keyCode==KeyEvent.KEYCODE_DPAD_LEFT && cardIndex==0) {railFocus.requestFocus();true} else if(event.action==KeyEvent.ACTION_DOWN && event.keyCode in listOf(KeyEvent.KEYCODE_DPAD_UP,KeyEvent.KEYCODE_DPAD_DOWN)) {
                                     val target=shelfIndex+if(event.keyCode==KeyEvent.KEYCODE_DPAD_UP)-1 else 1
                                     if(target<0) {heroFocus.requestFocus();true} else if(target<shelves.size) {
                                         row=target;column=cardIndex.coerceAtMost(shelves[target].items.lastIndex)
-                                        scope.launch {list.scrollToItem(target);horizontal[target].scrollToItem(column);withFrameNanos {};requesters[target][column].requestFocus()};true
+                                        val targetColumn=column
+                                        val inputEpoch=controller.state.value.homeFocus.inputEpoch
+                                        scope.launch {
+                                            horizontal[target].scrollToItem(targetColumn)
+                                            withFrameNanos {}
+                                            if(controller.state.value.homeFocus.inputEpoch==inputEpoch) requesters[target][targetColumn].requestFocus()
+                                        };true
                                     } else true
                                 } else false
                             },onActivate={activate(media,shelf.isQueueShelf)},onHold=if(shelf.isQueueShelf){{controller.requestQueueManage(media)}}else null)
                         }
                     }
+                }
                 }
             }
         }
