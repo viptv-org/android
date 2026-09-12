@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
@@ -41,12 +42,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { VipTvApp() } }
 }
 
-@Composable private fun VipTvApp() {
+@Composable private fun VipTvApp() = BoxWithConstraints(Modifier.fillMaxSize().background(Canvas)) {
     val context = LocalContext.current
     val controller = remember { AppController(context.applicationContext) }
     val state by controller.state.collectAsStateWithLifecycle()
     DisposableEffect(Unit) { onDispose(controller::close) }
-    Box(Modifier.fillMaxSize().background(Canvas).onPreviewKeyEvent { event ->
+    // Every TV viewport renders the same 1280×720 design frame with one uniform scale.
+    val scale = minOf(maxWidth.value / 1280f, maxHeight.value / 720f)
+    Box(Modifier.width(1280.dp).height(720.dp).align(Alignment.Center).graphicsLayer { scaleX = scale; scaleY = scale }.onPreviewKeyEvent { event ->
         if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK && event.nativeKeyEvent.action == KeyEvent.ACTION_UP) { controller.back(); true } else false
     }) {
         when (val route = state.route) {

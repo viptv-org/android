@@ -10,7 +10,7 @@ The application and the design repository own screens, focus, remote-button hand
 
 ## Media behavior
 
-- Android API 24+; Android TV is a first-class target.
+- Android API 24+; Android TV is a first-class target. Compose renders all TV screens in a 1280×720 logical frame, uniformly scaled to the device viewport.
 - Preserve request headers and external subtitle sources.
 - Model audio, subtitle, and video tracks independently.
 - A non-seekable live stream never offers seeking. A DVR stream exposes only its current seekable range. On-demand media exposes its duration and seekability.
