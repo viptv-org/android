@@ -58,6 +58,8 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private var guideGeneration = 0L
     private var discoverGeneration = 0L
     private var managedRecoveryKey: String? = null
+    /** Suppresses duplicate Media3 failure events while the one permitted same-source recovery is awaiting the server. */
+    private var managedRecoveryInFlightKey: String? = null
     private val playbackPrepareMutex = Mutex()
     private var playbackGeneration = 0L
     private val guideScheduleCache = mutableMapOf<String, GuideScheduleCache>()
@@ -462,6 +464,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                     playerChromeVisible = true,
                     playbackTracks = PlaybackTrackChoices(launch.audioTracks, launch.subtitleTracks, launch.subtitlesSupported),
                     playbackDeliveryMode = launch.mode,
+                    dialog = null,
                     loading = false,
                 )
                 continuationRestore = null
@@ -478,32 +481,84 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
     }
     private fun onPlayerEvent(event: PlaybackEvent) {
-        if (event !is PlaybackEvent.Failed) return
-        val route = _state.value.route as? Route.Player ?: return
+        if (event !is PlaybackEvent.Failed || _state.value.dialog?.kind == DialogKind.PlaybackRecovery) return
+        val active = _state.value.route as? Route.Player ?: return
+        val route = active.copy(media = snapshotPlaybackMedia(active))
         val key = "${route.media.type}:${route.media.id}:${route.source.id}"
+        if (managedRecoveryInFlightKey == key) return
         if (!ManagedRecoveryPolicy.shouldAttempt(
                 serverManaged = SeekCommitPolicy.usesManagedReplacement(_state.value.playbackDeliveryMode),
                 networkFailure = event.error.code == PlaybackErrorCode.Network,
                 alreadyAttempted = managedRecoveryKey == key,
             )
-        ) return
-        val titlePosition = absolutePositionMillis()
+        ) {
+            showPlaybackRecovery(route)
+            return
+        }
         val playWhenReady = player.state.value.playWhenReady
         val requestGeneration = playbackGeneration
         managedRecoveryKey = key
+        managedRecoveryInFlightKey = key
         scope.launch {
-            if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
-            _state.value = _state.value.copy(message = "Reconnecting at your previous position…", loading = false)
-            val restored = prepareAndStart(
-                route.media.copy(positionMillis = titlePosition),
-                route.source,
-                explicitResume = false,
-                playWhenReady = playWhenReady,
-                resetTrackChoices = false,
-                expectedGeneration = requestGeneration,
-            )
-            if (!restored) _state.value = _state.value.copy(message = "Playback could not recover. Choose a source to try again.", loading = false)
+            try {
+                if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
+                _state.value = _state.value.copy(message = "Reconnecting at your previous position…", loading = false)
+                val restored = prepareAndStart(
+                    route.media,
+                    route.source,
+                    explicitResume = false,
+                    playWhenReady = playWhenReady,
+                    resetTrackChoices = false,
+                    expectedGeneration = requestGeneration,
+                )
+                if (restored) managedRecoveryKey = null
+                else if (PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) showPlaybackRecovery(route)
+            } finally {
+                if (managedRecoveryInFlightKey == key) managedRecoveryInFlightKey = null
+            }
         }
+    }
+
+    private fun snapshotPlaybackMedia(route: Route.Player): Media =
+        PlaybackRecoveryPolicy.snapshot(route.media, absolutePositionMillis(), titleDurationMillis())
+
+    /** Runtime failure has no automatic source fallback: users retain exact retry, source choice, or Back. */
+    private fun showPlaybackRecovery(route: Route.Player) {
+        _state.value = _state.value.copy(
+            route = route,
+            dialog = DialogState(
+                kind = DialogKind.PlaybackRecovery,
+                title = "Playback unavailable",
+                media = route.media,
+                source = route.source,
+            ),
+            playerChromeVisible = true,
+            loading = false,
+            message = null,
+        )
+    }
+
+    fun retryPlaybackRecovery() {
+        val dialog = _state.value.dialog?.takeIf { it.kind == DialogKind.PlaybackRecovery } ?: return
+        val media = dialog.media ?: return
+        val source = dialog.source ?: return
+        _state.value = _state.value.copy(dialog = null, message = null)
+        start(media, source, explicitResume = false)
+    }
+
+    fun chooseAnotherSourceForRecovery() {
+        val dialog = _state.value.dialog?.takeIf { it.kind == DialogKind.PlaybackRecovery } ?: return
+        val media = dialog.media ?: return
+        stopPlayback(media)
+        _state.value = _state.value.copy(dialog = null, message = null)
+        chooseSources(media, resume = false)
+    }
+
+    fun backFromPlaybackRecovery() {
+        val dialog = _state.value.dialog?.takeIf { it.kind == DialogKind.PlaybackRecovery } ?: return
+        val route = _state.value.route as? Route.Player ?: return
+        val media = dialog.media ?: snapshotPlaybackMedia(route)
+        exitPlayer(route, media)
     }
 
     /** Controlled continuation is the only non-Resume automatic source path. */
@@ -577,12 +632,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private fun invalidatePlaybackPreparation() { playbackGeneration++ }
 
     fun back() { handleBack() }
-    fun consumesBack(): Boolean = when (_state.value.route) {
-        is Route.Player, is Route.Sources, is Route.Details, Route.Search, Route.Settings, Route.Addons, is Route.ProfileEditor, is Route.Guide -> true
-        is Route.Profiles -> _state.value.managingProfiles || _state.value.selectedProfile != null
-        is Route.Browse -> (_state.value.route as Route.Browse).destination != Destination.Home
-        Route.Pairing -> false
-    } || _state.value.dialog != null || _state.value.pinPrompt != null || _state.value.seekPreview != null
+    fun consumesBack(state: AppState = _state.value): Boolean = BackAvailabilityPolicy.consumes(state)
     /** Returns false only when Android should handle app exit at a root gate/page. */
     fun handleBack(): Boolean {
         if (continuationRestore != null && ((_state.value.route is Route.Player && nextEpisodeJob?.isActive == true) || _state.value.route is Route.Sources)) {
@@ -592,22 +642,17 @@ class AppController(context: Context, private val origin: String = "https://vipt
             return true
         }
         when (BackPolicy.decide(_state.value.dialog != null, _state.value.pinPrompt != null, _state.value.seekPreview != null, _state.value.playerChromeVisible, _state.value.route is Route.Player)) {
-            BackDisposition.DismissDialog -> { dismissDialog(); return true }
+            BackDisposition.DismissDialog -> {
+                if (_state.value.dialog?.kind == DialogKind.PlaybackRecovery) backFromPlaybackRecovery() else dismissDialog()
+                return true
+            }
             BackDisposition.CancelPin -> { cancelPin(); return true }
             BackDisposition.CancelSeek -> { _state.value = _state.value.copy(seekPreview = null); return true }
             BackDisposition.HidePlayerChrome -> { _state.value = _state.value.copy(playerChromeVisible = false); return true }
             BackDisposition.ExitPlayer, BackDisposition.Navigate -> Unit
         }
         when (val route = _state.value.route) {
-            is Route.Player -> {
-                stopPlayback(route.media)
-                _state.value = _state.value.copy(
-                    route = when (route.returnDestination) {
-                        PlaybackReturn.Details -> Route.Details(route.media)
-                        PlaybackReturn.Sources -> Route.Sources(route.media)
-                    },
-                )
-            }
+            is Route.Player -> exitPlayer(route, snapshotPlaybackMedia(route))
             is Route.Sources -> { invalidatePlaybackPreparation(); sourceDiscovery?.cancel(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
             is Route.Profiles -> if (_state.value.managingProfiles) _state.value = _state.value.copy(managingProfiles = false) else if (_state.value.selectedProfile != null) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null) else return false
             is Route.Details -> {
@@ -627,6 +672,15 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
         return true
     }
+    private fun exitPlayer(route: Route.Player, media: Media) {
+        stopPlayback(media)
+        _state.value = _state.value.copy(
+            route = PlaybackRecoveryPolicy.returnRoute(route.returnDestination, media),
+            dialog = null,
+            message = null,
+        )
+    }
+
     /** The Media3 adapter exposes session-relative HLS time; map it once to title time. */
     fun absolutePositionMillis(): Long {
         val candidate = PlaybackTimelinePolicy.absolutePositionMillis(player.state.value.positionMillis, playbackTitleOffsetMillis)
@@ -667,7 +721,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                     expectedGeneration = requestGeneration,
                 )
                 if (!resumed && PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) {
-                    _state.value = _state.value.copy(message = "Could not resume at your paused position. Choose a source to try again.", loading = false)
+                    showPlaybackRecovery(route.copy(media = route.media.copy(positionMillis = checkNotNull(anchor))))
                 }
             }
         } else {
@@ -709,14 +763,16 @@ class AppController(context: Context, private val origin: String = "https://vipt
         _state.value = _state.value.copy(seekPreview = null)
         scope.launch {
             if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
-            prepareAndStart(
-                route.media.copy(positionMillis = target),
-                route.source,
+            val requestedRoute = route.copy(media = route.media.copy(positionMillis = target))
+            val replaced = prepareAndStart(
+                requestedRoute.media,
+                requestedRoute.source,
                 explicitResume = false,
                 playWhenReady = wasPlaying,
                 resetTrackChoices = false,
                 expectedGeneration = requestGeneration,
             )
+            if (!replaced && PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) showPlaybackRecovery(requestedRoute)
         }
     }
     fun cancelSeek() { _state.value = _state.value.copy(seekPreview = null) }
@@ -758,7 +814,10 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 resetTrackChoices = false,
                 expectedGeneration = requestGeneration,
             )
-            if (!replaced && PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) rollback()
+            if (!replaced && PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) {
+                rollback()
+                showPlaybackRecovery(route.copy(media = route.media.copy(positionMillis = position)))
+            }
         }
     }
     /** Any player input restores controls and restarts the seven-second visibility timer. */

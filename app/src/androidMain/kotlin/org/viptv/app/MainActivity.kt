@@ -74,7 +74,8 @@ class MainActivity : ComponentActivity() {
     val controller = remember { AppController(context.applicationContext) }
     val state by controller.state.collectAsStateWithLifecycle()
     DisposableEffect(Unit) { onDispose(controller::close) }
-    BackHandler(enabled = controller.consumesBack()) { controller.handleBack() }
+    // `state` is collected above, so this registration updates when a route changes.
+    BackHandler(enabled = controller.consumesBack(state)) { controller.handleBack() }
     // Scale density, rather than a rendered layer, so the logical frame measures to the viewport.
     // This keeps both coordinates and focus hit targets in the 1280×720 design space.
     val scale = minOf(maxWidth.value / 1280f, maxHeight.value / 720f)
@@ -377,11 +378,13 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
         },
         color = Muted,
         fontSize = 16.sp,
-        modifier = Modifier.offset(384.dp, 178.dp).width(480.dp),
-        textAlign = TextAlign.Center,
+        modifier = Modifier.offset(100.dp, 178.dp).width(176.dp),
+        textAlign = TextAlign.Start,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
     )
-    Text("Hold a source for details", color = Muted, fontSize = 16.sp, textAlign = TextAlign.End, modifier = Modifier.offset(804.dp, 178.dp).width(350.dp))
-    if (providers.isNotEmpty()) LazyRow(Modifier.offset(100.dp, 166.dp).width(688.dp).height(48.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Text("Hold a source for details", color = Muted, fontSize = 16.sp, textAlign = TextAlign.End, modifier = Modifier.offset(836.dp, 178.dp).width(360.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    if (providers.isNotEmpty()) LazyRow(Modifier.offset(292.dp, 166.dp).width(520.dp).height(48.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         item { TvButton("All providers", { provider = null; requestFirstSourceFocus = true }, selected = provider == null, modifier = Modifier.width(170.dp).height(48.dp)) }
         items(providers, key = { it }) { item ->
             TvButton(item, { provider = item; requestFirstSourceFocus = true }, selected = provider == item, modifier = Modifier.width(170.dp).height(48.dp))
@@ -414,16 +417,16 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
     Holdable(
         onActivate = { controller.start(media, source) },
         onHold = { controller.requestDialog(DialogKind.SourceDetails, SourceDisplayPolicy.title(source), source = source) },
-        modifier = Modifier.width(1096.dp).height(216.dp)
+        modifier = Modifier.width(1096.dp).height(144.dp)
             .then(if (focusRequester == null) Modifier else Modifier.focusRequester(focusRequester))
             .onFocusChanged { focused = it.hasFocus }
             .background(if (focused) White else Surface, RoundedCornerShape(12.dp)),
     ) {
-        Column(Modifier.fillMaxSize().padding(start = 20.dp, top = 10.dp, end = 20.dp)) {
+        Column(Modifier.fillMaxSize().padding(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 10.dp)) {
             Text(SourceDisplayPolicy.title(source), color = foreground, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(SourceDisplayPolicy.body(source), color = secondary, fontSize = 20.sp, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp).height(142.dp))
+            Text(SourceDisplayPolicy.body(source), color = secondary, fontSize = 18.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp).height(58.dp))
             val facts = listOfNotNull(source.quality, source.audio, source.provider.takeIf { it.isNotBlank() }).joinToString("  •  ")
-            if (facts.isNotBlank()) Text(facts, color = secondary, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+            if (facts.isNotBlank()) Text(facts, color = secondary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
         }
     }
 }
@@ -546,6 +549,14 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
                     Text(listOfNotNull(source.quality, source.audio, source.provider.takeIf { it.isNotBlank() }).joinToString("  •  "), color = Muted, modifier = Modifier.padding(top = 12.dp))
                 }
                 TvButton("Back", controller::dismissDialog, Modifier.padding(top = 24.dp).focusRequester(firstAction))
+            }
+            DialogKind.PlaybackRecovery -> {
+                Text("Retry the same source at your saved position, choose a different source, or return.", color = Muted, fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 16.dp).width(500.dp))
+                Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TvButton("Retry", controller::retryPlaybackRecovery, Modifier.width(170.dp).height(56.dp).focusRequester(firstAction))
+                    TvButton("Choose source", controller::chooseAnotherSourceForRecovery, Modifier.width(190.dp).height(56.dp))
+                    TvButton("Back", controller::backFromPlaybackRecovery, Modifier.width(130.dp).height(56.dp))
+                }
             }
             else -> TvButton("Done", controller::dismissDialog, Modifier.padding(top = 24.dp).focusRequester(firstAction))
         }

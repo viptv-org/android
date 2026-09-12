@@ -165,6 +165,16 @@ object BackPolicy {
     }
 }
 
+/** Back registration is derived from observed UI state so Compose re-registers it as routes change. */
+object BackAvailabilityPolicy {
+    fun consumes(state: AppState): Boolean = when (state.route) {
+        is Route.Player, is Route.Sources, is Route.Details, Route.Search, Route.Settings, Route.Addons, is Route.ProfileEditor, is Route.Guide -> true
+        is Route.Profiles -> state.managingProfiles || state.selectedProfile != null
+        is Route.Browse -> state.route.destination != Destination.Home
+        Route.Pairing -> false
+    } || state.dialog != null || state.pinPrompt != null || state.seekPreview != null
+}
+
 object SeekPolicy {
     /** A preview never commits a request and clamps to known VOD duration or DVR window. */
     fun target(currentMillis: Long, deltaMillis: Long, durationMillis: Long?, rangeStart: Long? = null, rangeEnd: Long? = null): Long? {
@@ -368,7 +378,19 @@ object GuidePolicy {
     fun shiftedWindow(windowStartMillis: Long, hours: Int, nowMillis: Long): Long =
         (windowStartMillis + hours * 60 * 60 * 1_000L).coerceIn(nowWindow(nowMillis), nowWindow(nowMillis) + MAX_AHEAD_MILLIS)
 }
-enum class DialogKind { QueueManage, MyListManage, EpisodeManage, SourceDetails, LiveManage, DeleteProfile, SignOut, NextUnavailable }
+/** Playback failures retain a title coordinate so every recovery action is explicit and deterministic. */
+object PlaybackRecoveryPolicy {
+    fun snapshot(media: Media, positionMillis: Long, durationMillis: Long?): Media = media.copy(
+        positionMillis = positionMillis.coerceAtLeast(0),
+        durationMillis = durationMillis ?: media.durationMillis,
+    )
+    fun returnRoute(returnDestination: PlaybackReturn, media: Media): Route = when (returnDestination) {
+        PlaybackReturn.Details -> Route.Details(media)
+        PlaybackReturn.Sources -> Route.Sources(media)
+    }
+}
+
+enum class DialogKind { QueueManage, MyListManage, EpisodeManage, SourceDetails, LiveManage, DeleteProfile, SignOut, NextUnavailable, PlaybackRecovery }
 data class DialogState(val kind: DialogKind, val title: String, val media: Media? = null, val source: Source? = null, val profile: Profile? = null)
 data class PinPrompt(val title: String)
 data class SeekPreview(val targetMillis: Long)

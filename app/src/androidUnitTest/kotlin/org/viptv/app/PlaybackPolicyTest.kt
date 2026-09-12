@@ -236,3 +236,22 @@ class DetailReturnPolicyTest {
         assertEquals(Destination.Home, DetailReturnPolicy.destination(null))
     }
 }
+
+class BackAvailabilityPolicyTest {
+    @Test fun `sources and player own Back while Home leaves the Android root alone`() {
+        assertTrue(BackAvailabilityPolicy.consumes(AppState(route = Route.Sources(Media("movie", "movie")))))
+        assertTrue(BackAvailabilityPolicy.consumes(AppState(route = Route.Player(Media("movie", "movie"), Source("stream", "Provider")))))
+        assertFalse(BackAvailabilityPolicy.consumes(AppState(route = Route.Browse(Destination.Home))))
+    }
+}
+
+class PlaybackRecoveryPolicyTest {
+    @Test fun `recovery preserves the current title coordinate for retry source choice and Back`() {
+        val playing = Media("movie", "movie", positionMillis = 10_000, durationMillis = 120_000)
+        val snapshot = PlaybackRecoveryPolicy.snapshot(playing, positionMillis = 78_500, durationMillis = 120_000)
+        assertEquals(78_500, snapshot.positionMillis)
+        assertEquals(120_000, snapshot.durationMillis)
+        assertEquals(Route.Sources(snapshot), PlaybackRecoveryPolicy.returnRoute(PlaybackReturn.Sources, snapshot))
+        assertEquals(Route.Details(snapshot), PlaybackRecoveryPolicy.returnRoute(PlaybackReturn.Details, snapshot))
+    }
+}
