@@ -22,6 +22,8 @@ class AppController(context: Context, private val origin: String = "https://vipt
     val state: StateFlow<AppState> = _state.asStateFlow()
     val player: AndroidMedia3VideoPlayer = AndroidMedia3BackendFactory(context).createAndroidPlayer()
     private var pairingPoll: Job? = null
+    private var nextEpisodeJob: Job? = null
+    private var playerChromeJob: Job? = null
     private var afterParentUnlock: (suspend () -> Unit)? = null
 
     init { restore() }
@@ -66,6 +68,8 @@ class AppController(context: Context, private val origin: String = "https://vipt
             _state.value = _state.value.copy(route = Route.Browse(Destination.Home), selectedProfile = profile, shelves = shelves, loading = false)
         }.onFailure(::fail)
     }
+    fun setProfilePage(page: Int) { _state.value = _state.value.copy(profilePage = page.coerceIn(0, ((_state.value.profiles.size - 1).coerceAtLeast(0)) / 5)) }
+    fun toggleProfileManagement() { _state.value = _state.value.copy(managingProfiles = !_state.value.managingProfiles) }
     fun navigate(destination: Destination) = scope.launch {
         if (destination == Destination.Profile) { _state.value = _state.value.copy(route = Route.Profiles); return@launch }
         if (destination == Destination.Settings) { openSettings(); return@launch }
@@ -79,7 +83,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun chooseSources(media: Media, resume: Boolean = false) = scope.launch {
         update(loading = true)
         runCatching { gateway.sources(media) }.onSuccess { discovered ->
-            val savedId = store.getString("source.${media.type}.${media.id}", null)
+            val savedId = _state.value.selectedProfile?.let { profile -> store.getString(sourceKey(profile.id, media), null) }
             val exact = if (resume) discovered.firstOrNull { it.id == savedId } else null
             if (exact != null) start(media, exact) else {
                 _state.value = _state.value.copy(
@@ -93,20 +97,54 @@ class AppController(context: Context, private val origin: String = "https://vipt
         update(loading = true); runCatching { gateway.playback(source, media.positionMillis) }.onSuccess { launch ->
             if (launch.url.isBlank()) { update(loading = false, message = "The selected source could not be prepared."); return@onSuccess }
             player.open(PlaybackSource(launch.url, headers = launch.headers, title = media.name, kindHint = if (media.type == "live") PlaybackKind.Live else PlaybackKind.OnDemand))
-            store.edit().putString("source.${media.type}.${media.id}", source.id).apply()
-            _state.value = _state.value.copy(route = Route.Player(media, source), loading = false)
+            _state.value.selectedProfile?.let { profile -> store.edit().putString(sourceKey(profile.id, media), source.id).apply() }
+            _state.value = _state.value.copy(route = Route.Player(media, source), playerChromeVisible = true, loading = false)
+            schedulePlayerChromeDismissal()
         }.onFailure(::fail)
+    }
+    /** Controlled continuation is the only non-Resume automatic source path. */
+    fun nextEpisode(outgoing: Media) {
+        nextEpisodeJob?.cancel()
+        nextEpisodeJob = scope.launch {
+            _state.value = _state.value.copy(message = "LOADING", loading = false)
+            runCatching { gateway.nextEpisode(requireProfile(), outgoing) }.onSuccess { result ->
+                when (result.status) {
+                    "next" -> {
+                        val next = result.item ?: run { _state.value = _state.value.copy(message = "Episode information is unavailable. Open the series to choose an episode."); return@onSuccess }
+                        val candidates = gateway.sources(next)
+                        val selected = next.sourceAddonId?.let { addon -> candidates.firstOrNull { it.addonId == addon } }
+                        if (selected == null) {
+                            _state.value = _state.value.copy(route = Route.Sources(next), sources = candidates, message = "Choose a source for the next episode.")
+                        } else start(next, selected)
+                    }
+                    "caught_up" -> _state.value = _state.value.copy(message = "You're caught up. No next episode is listed yet.")
+                    "upcoming" -> _state.value = _state.value.copy(message = "The next episode hasn't been released yet.")
+                    else -> _state.value = _state.value.copy(message = "Episode information is unavailable. Open the series to choose an episode.")
+                }
+            }.onFailure { error -> _state.value = _state.value.copy(message = error.message ?: "Could not prepare the next episode.") }
+        }
     }
     fun back() {
         when (val route = _state.value.route) {
-            is Route.Player -> { player.stop(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
+            is Route.Player -> {
+                if (nextEpisodeJob?.isActive == true) { nextEpisodeJob?.cancel(); player.play(); _state.value = _state.value.copy(message = null) }
+                else if (_state.value.playerChromeVisible) _state.value = _state.value.copy(playerChromeVisible = false)
+                else { player.stop(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
+            }
             is Route.Sources -> _state.value = _state.value.copy(route = Route.Details(route.media))
-            is Route.Details, is Route.Profiles, is Route.Search, is Route.Settings, is Route.Addons, is Route.ProfileEditor, is Route.Guide -> _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
+            is Route.Profiles -> if (_state.value.managingProfiles) _state.value = _state.value.copy(managingProfiles = false) else _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
+            is Route.Details, is Route.Search, is Route.Settings, is Route.Addons, is Route.ProfileEditor, is Route.Guide -> _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
             is Route.Browse -> if (route.destination != Destination.Home) _state.value = _state.value.copy(route = Route.Browse(Destination.Home))
             Route.Pairing -> Unit
         }
     }
     fun saveProgress(media: Media) = scope.launch { _state.value.selectedProfile?.let { gateway.updateProgress(it.id, media, player.state.value.positionMillis) } }
+    /** Any player input restores controls and restarts the seven-second visibility timer. */
+    fun showPlayerChrome() {
+        if (_state.value.route !is Route.Player) return
+        _state.value = _state.value.copy(playerChromeVisible = true)
+        schedulePlayerChromeDismissal()
+    }
     fun search(query: String) = scope.launch { update(loading = true, message = null); runCatching { gateway.discover(search = query) }.onSuccess { _state.value = _state.value.copy(searchResults = it, loading = false) }.onFailure(::fail) }
     fun openMyList() = scope.launch { update(loading = true); runCatching { gateway.favorites(requireProfile()) }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.MyList), favorites = it, catalog = it, loading = false) }.onFailure(::fail) }
     fun openQueue() = scope.launch { update(loading = true); runCatching { gateway.queue(requireProfile()) }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.Home), queue = it, loading = false) }.onFailure(::fail) }
@@ -129,8 +167,16 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun submitPin(pin: String) = scope.launch { if (!pin.matches(Regex("\\d{4,8}"))) { update(message = "Enter a 4–8 digit parent PIN."); return@launch }; runCatching { gateway.unlockParent(pin) }.onSuccess { _state.value = _state.value.copy(pinPrompt = null, message = null); afterParentUnlock?.also { pending -> afterParentUnlock = null; pending() } }.onFailure { error -> _state.value = _state.value.copy(message = error.message ?: "Incorrect PIN. Try again.") } }
     fun cancelPin() { afterParentUnlock = null; _state.value = _state.value.copy(pinPrompt = null) }
     fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { gateway.logout(); store.edit().clear().apply(); player.stop(); _state.value = AppState(route = Route.Pairing); beginPairing() } }
-    fun close() { pairingPoll?.cancel(); player.close() }
+    fun close() { pairingPoll?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); player.close() }
     private fun requireProfile() = checkNotNull(_state.value.selectedProfile).id
+    private fun sourceKey(profileId: String, media: Media) = ResumeIdentity.storageKey(profileId, media)
+    private fun schedulePlayerChromeDismissal() {
+        playerChromeJob?.cancel()
+        playerChromeJob = scope.launch {
+            delay(7_000)
+            if (_state.value.route is Route.Player) _state.value = _state.value.copy(playerChromeVisible = false)
+        }
+    }
     private fun persist(session: DeviceSession) { store.edit().putString("access", session.accessToken).putString("refresh", session.refreshToken).apply() }
     private suspend fun guarded(pinTitle: String, action: suspend () -> Unit) {
         try { action() } catch (error: GatewayError) {

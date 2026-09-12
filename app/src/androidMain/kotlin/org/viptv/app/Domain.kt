@@ -11,6 +11,7 @@ data class Media(
     val seriesId: String? = null,
     val season: Int? = null,
     val episode: Int? = null,
+    val sourceAddonId: String? = null,
 )
 
 data class Source(
@@ -18,6 +19,7 @@ data class Source(
     val provider: String,
     val description: String = "",
     val headers: Map<String, String> = emptyMap(),
+    val addonId: String? = null,
 )
 
 sealed interface PlaybackIntent {
@@ -40,6 +42,37 @@ object PlaybackPolicy {
         nextAvailable: Boolean,
     ): Boolean = media.type == "series" && durationMillis != null && playing && !seeking && nextAvailable &&
         positionMillis >= durationMillis - 10_000
+}
+
+object ResumeIdentity {
+    fun storageKey(profileId: String, media: Media): String = "source.$profileId.${media.type}.${media.id}"
+}
+
+/** Product-only transition policy; the backend remains the authority on the actual next source. */
+sealed interface ContinuationDecision {
+    data object PrepareNext : ContinuationDecision
+    data object KeepOutgoing : ContinuationDecision
+    data object ShowCaughtUp : ContinuationDecision
+    data object ShowUpcoming : ContinuationDecision
+}
+
+object ContinuationPolicy {
+    fun decide(
+        media: Media,
+        positionMillis: Long,
+        durationMillis: Long?,
+        playing: Boolean,
+        seeking: Boolean,
+        nextStatus: String?,
+    ): ContinuationDecision {
+        if (!PlaybackPolicy.canAutoNext(media, positionMillis, durationMillis, playing, seeking, true)) return ContinuationDecision.KeepOutgoing
+        return when (nextStatus) {
+            "next" -> ContinuationDecision.PrepareNext
+            "caught_up" -> ContinuationDecision.ShowCaughtUp
+            "upcoming" -> ContinuationDecision.ShowUpcoming
+            else -> ContinuationDecision.KeepOutgoing
+        }
+    }
 }
 
 enum class RemoteAction { Activate, Hold }
@@ -78,6 +111,7 @@ data class Profile(
 data class DeviceCode(val code: String, val userCode: String, val verificationUri: String, val qrUri: String?, val intervalSeconds: Long)
 data class DeviceSession(val accessToken: String, val refreshToken: String, val profileId: String?)
 data class HomeShelf(val title: String, val items: List<Media>)
+data class NextResult(val status: String, val item: Media? = null)
 data class Addon(val id: String, val name: String, val manifestUrl: String, val enabled: Boolean)
 data class PlaybackPreferences(
     val audioLanguage: String = "en", val subtitleLanguage: String = "en", val subtitlesEnabled: Boolean = false,
@@ -93,6 +127,8 @@ data class AppState(
     val route: Route = Route.Pairing,
     val profiles: List<Profile> = emptyList(),
     val selectedProfile: Profile? = null,
+    val profilePage: Int = 0,
+    val managingProfiles: Boolean = false,
     val shelves: List<HomeShelf> = emptyList(),
     val catalog: List<Media> = emptyList(),
     val sources: List<Source> = emptyList(),
@@ -106,6 +142,8 @@ data class AppState(
     val dialog: DialogState? = null,
     val pinPrompt: PinPrompt? = null,
     val deviceCode: DeviceCode? = null,
+    /** Player controls begin visible and dismiss after seven seconds of inactivity. */
+    val playerChromeVisible: Boolean = true,
     val loading: Boolean = false,
     val message: String? = null,
 )

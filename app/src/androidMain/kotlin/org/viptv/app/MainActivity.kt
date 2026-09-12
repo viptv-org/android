@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -22,7 +23,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,7 +55,7 @@ class MainActivity : ComponentActivity() {
             is Route.Browse -> Browse(state, route.destination, controller)
             is Route.Details -> Details(route.media, controller)
             is Route.Sources -> SourcePicker(route.media, state.sources, controller)
-            is Route.Player -> Player(route.media, controller)
+            is Route.Player -> Player(route.media, state.playerChromeVisible, controller)
             Route.Search -> SearchScreen(state, controller)
             Route.Settings -> SettingsScreen(state, controller)
             Route.Addons -> AddonsScreen(state, controller)
@@ -66,7 +70,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable private fun Pairing(state: AppState, controller: AppController) = Column(Modifier.fillMaxSize().padding(54.dp), verticalArrangement = Arrangement.Center) {
-    Text("V", color = White, fontWeight = FontWeight.Black, fontSize = 42.sp)
+    Image(painterResource(R.drawable.viptv_mark), contentDescription = "VIPTV", modifier = Modifier.width(42.dp).height(36.dp))
     Spacer(Modifier.height(68.dp)); Text("Sign in to VIPTV", color = White, fontSize = 44.sp, fontWeight = FontWeight.Bold)
     Text("Visit this address, then enter the code shown below.", color = Muted, fontSize = 24.sp, modifier = Modifier.padding(top = 28.dp))
     Text(state.deviceCode?.verificationUri ?: "Preparing secure pairing…", color = White, fontSize = 22.sp, modifier = Modifier.padding(top = 30.dp))
@@ -75,9 +79,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable private fun ProfileChooser(state: AppState, controller: AppController) = Column(Modifier.fillMaxSize().padding(100.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-    Text("Who's watching?", color = White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
-    Spacer(Modifier.height(62.dp)); Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) { state.profiles.take(5).forEach { profile -> TvButton(profile.name, { controller.chooseProfile(profile) }, Modifier.size(178.dp, 210.dp)) } }
-    Row(Modifier.padding(top = 36.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Add profile", { controller.editProfile() }); TvButton("Manage", { state.selectedProfile?.let(controller::editProfile) }) }
+    Text(if (state.managingProfiles) "Manage profiles" else "Who's watching?", color = White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(62.dp)); Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) { state.profiles.drop(state.profilePage * 5).take(5).forEach { profile -> TvButton(profile.name, { if (state.managingProfiles) controller.editProfile(profile) else controller.chooseProfile(profile) }, Modifier.size(178.dp, 210.dp)) } }
+    Row(Modifier.padding(top = 36.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Add profile", { controller.editProfile() }); TvButton(if (state.managingProfiles) "Done" else "Manage", controller::toggleProfileManagement) }
+    if (state.profiles.size > 5) Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Previous", { controller.setProfilePage(state.profilePage - 1) }); Text("Page ${state.profilePage + 1} of ${(state.profiles.size + 4) / 5}", color = Muted, modifier = Modifier.padding(top = 18.dp)); TvButton("Next", { controller.setProfilePage(state.profilePage + 1) }) }
 }
 
 @Composable private fun Browse(state: AppState, destination: Destination, controller: AppController) = Row(Modifier.fillMaxSize()) {
@@ -132,19 +137,25 @@ class MainActivity : ComponentActivity() {
     sources.forEach { source -> TvButton(source.provider + "\n" + source.description, { controller.start(media, source) }, Modifier.fillMaxWidth().height(116.dp).padding(top = 16.dp), multiline = true) }
 }
 
-@Composable private fun Player(media: Media, controller: AppController) = Box(Modifier.fillMaxSize().background(Color.Black)) {
+@Composable private fun Player(media: Media, chromeVisible: Boolean, controller: AppController) = Box(
+    Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent { event ->
+        if (event.nativeKeyEvent.action == KeyEvent.ACTION_UP && event.nativeKeyEvent.keyCode != KeyEvent.KEYCODE_BACK) controller.showPlayerChrome()
+        false
+    },
+) {
     val playback by controller.player.state.collectAsState()
     val audioTracks by controller.player.audioTracks.collectAsState()
     val subtitleTracks by controller.player.subtitleTracks.collectAsState()
     AndroidView(factory = { SurfaceView(it).also(controller.player::attach) }, modifier = Modifier.fillMaxSize())
-    Column(Modifier.align(Alignment.BottomStart).padding(64.dp)) {
+    if (chromeVisible) Column(Modifier.align(Alignment.BottomStart).padding(64.dp)) {
         Text(media.name, color = White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
         Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (playback.timeline?.canSeek == true) TvButton("↶ 10", { controller.player.seekTo(max(0, playback.positionMillis - 10_000)) })
-            TvButton(if (playback.isPlaying) "Pause" else "Play", { if (playback.isPlaying) controller.player.pause() else controller.player.play() })
-            if (playback.timeline?.canSeek == true) TvButton("10 ↷", { controller.player.seekTo(playback.positionMillis + 10_000) })
-            if (audioTracks.isNotEmpty()) TvButton("Audio", { val next = audioTracks.firstOrNull { it.id != playback.selectedAudioTrackId } ?: audioTracks.first(); controller.player.selectAudioTrack(next.id) })
-            if (subtitleTracks.isNotEmpty()) TvButton("Captions", { val next = subtitleTracks.firstOrNull { it.id != playback.selectedSubtitleTrackId }; controller.player.selectSubtitleTrack(next?.id) })
+            if (playback.timeline?.canSeek == true) TvButton("↶ 10", { controller.showPlayerChrome(); controller.player.seekTo(max(0, playback.positionMillis - 10_000)) })
+            TvButton(if (playback.isPlaying) "Pause" else "Play", { controller.showPlayerChrome(); if (playback.isPlaying) controller.player.pause() else controller.player.play() })
+            if (playback.timeline?.canSeek == true) TvButton("10 ↷", { controller.showPlayerChrome(); controller.player.seekTo(playback.positionMillis + 10_000) })
+            if (audioTracks.isNotEmpty()) TvButton("Audio", { controller.showPlayerChrome(); val next = audioTracks.firstOrNull { it.id != playback.selectedAudioTrackId } ?: audioTracks.first(); controller.player.selectAudioTrack(next.id) })
+            if (subtitleTracks.isNotEmpty()) TvButton("Captions", { controller.showPlayerChrome(); val next = subtitleTracks.firstOrNull { it.id != playback.selectedSubtitleTrackId }; controller.player.selectSubtitleTrack(next?.id) })
+            if (media.type == "series") TvButton("Next episode", { controller.nextEpisode(media) })
             TvButton("Exit", { controller.saveProgress(media); controller.back() })
         }
     }
@@ -200,7 +211,7 @@ class MainActivity : ComponentActivity() {
     var pin by remember { mutableStateOf("") }
     Column(modifier.background(Surface, RoundedCornerShape(12.dp)).padding(32.dp).width(500.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(prompt.title, color = White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        TextField(value = pin, onValueChange = { pin = it.filter(Char::isDigit).take(8) }, label = { Text("PIN") }, modifier = Modifier.padding(top = 20.dp))
+        TextField(value = pin, onValueChange = { pin = it.filter(Char::isDigit).take(8) }, label = { Text("PIN") }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.NumberPassword), modifier = Modifier.padding(top = 20.dp))
         Text("PIN is never stored.", color = Muted, modifier = Modifier.padding(top = 10.dp))
         Row(Modifier.padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Unlock", { controller.submitPin(pin) }); TvButton("Cancel", controller::cancelPin) }
     }

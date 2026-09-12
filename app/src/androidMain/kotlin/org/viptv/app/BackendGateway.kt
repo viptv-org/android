@@ -1,6 +1,7 @@
 package org.viptv.app
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -20,6 +21,7 @@ interface BackendGateway {
     suspend fun sources(media: Media): List<Source>
     suspend fun playback(source: Source, positionMillis: Long): PlaybackLaunch
     suspend fun updateProgress(profileId: String, media: Media, positionMillis: Long)
+    suspend fun nextEpisode(profileId: String, media: Media): NextResult
     suspend fun favorites(profileId: String): List<Media>
     suspend fun toggleFavorite(profileId: String, media: Media): Boolean
     suspend fun queue(profileId: String): List<Media>
@@ -68,26 +70,31 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         val job = json("POST", "/streams", JSONObject().put("id", media.id).put("type", media.type).put("name", media.name).putOpt("series_id", media.seriesId).putOpt("season", media.season).putOpt("episode", media.episode))
         val id = job.getString("id")
         var after = 0
+        val accumulated = LinkedHashMap<String, Source>()
         repeat(20) {
             val poll = json("GET", "/streams/${enc(id)}?after=$after")
             val events = poll.optJSONArray("events") ?: JSONArray()
-            val sources = mutableListOf<Source>()
             for (i in 0 until events.length()) {
                 val event = events.getJSONObject(i); after = maxOf(after, event.optInt("seq", after))
                 val stream = event.optJSONObject("source") ?: event.optJSONObject("stream") ?: continue
-                sources += stream.source()
+                stream.source().also { source -> if (source.id.isNotBlank()) accumulated.putIfAbsent(source.id, source) }
             }
-            if (sources.isNotEmpty() || poll.optBoolean("done")) return sources.distinctBy(Source::id)
-            Thread.sleep(250)
+            if (poll.optBoolean("done")) return accumulated.values.toList()
+            delay(1_500)
         }
-        return emptyList()
+        return accumulated.values.toList()
     }
     override suspend fun playback(source: Source, positionMillis: Long): PlaybackLaunch {
-        val root = json("POST", "/playback", JSONObject().put("stream_id", source.id).put("position", positionMillis).put("capabilities", JSONObject().put("platform", "android-tv").put("direct", true)))
+        val capabilities = JSONObject().put("max_width", 1920).put("max_height", 1080).put("h264", true).put("aac", true).put("direct_play", true)
+        val root = json("POST", "/playback", JSONObject().put("stream_id", source.id).put("position", positionMillis).put("capabilities", capabilities))
         return PlaybackLaunch(root.getString("id"), root.optString("url"), root.optJSONObject("headers")?.headers() ?: emptyMap())
     }
     override suspend fun updateProgress(profileId: String, media: Media, positionMillis: Long) {
         json("PUT", "/profiles/${enc(profileId)}/progress", JSONObject().put("id", media.id).put("type", media.type).put("name", media.name).put("position", positionMillis).put("duration", media.durationMillis ?: 0))
+    }
+    override suspend fun nextEpisode(profileId: String, media: Media): NextResult {
+        val result = json("POST", "/profiles/${enc(profileId)}/continue/next", media.body())
+        return NextResult(result.optString("status"), result.optJSONObject("item")?.media())
     }
     override suspend fun favorites(profileId: String): List<Media> = json("GET", "/profiles/${enc(profileId)}/favorites/page?limit=40").mediaArray("items")
     override suspend fun toggleFavorite(profileId: String, media: Media): Boolean = json("POST", "/profiles/${enc(profileId)}/favorites/toggle", media.body()).optBoolean("saved")
@@ -130,15 +137,15 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
 }
 class GatewayError(val status: Int, override val message: String) : IllegalStateException(message)
 private fun JSONObject.profile() = Profile(get("id").toString(), getString("name"), optString("avatar_url").ifBlank { null }, optBoolean("kids"), optBoolean("is_primary"), optString("avatar_style", "critters"), optString("avatar_seed").ifBlank { null })
-private fun JSONObject.media() = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), optString("poster").ifBlank { null }, optString("description").ifBlank { null }, optLong("position", 0), optLong("duration").takeIf { it > 0 }, optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 })
+private fun JSONObject.media() = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), optString("poster").ifBlank { null }, optString("description").ifBlank { null }, optLong("position", 0), optLong("duration").takeIf { it > 0 }, optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null })
 private fun JSONObject.mediaArray(vararg keys: String): List<Media> { val a = keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray(); return (0 until a.length()).mapNotNull { a.optJSONObject(it)?.media() } }
-private fun JSONObject.source() = Source(optString("id", optString("stream_id")), optString("provider", optString("source", "Source")), optString("description", optString("filename")), optJSONObject("headers")?.headers() ?: emptyMap())
+private fun JSONObject.source() = Source(optString("id", optString("stream_id")), optString("provider", optString("source", "Source")), optString("description", optString("filename")), optJSONObject("headers")?.headers() ?: emptyMap(), optString("source_addon_id").ifBlank { null })
 private fun JSONObject.headers(): Map<String, String> = keys().asSequence().associateWith { get(it).toString() }
 private fun JSONObject.array(vararg keys: String): List<Any?> = (keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray()).let { array -> (0 until array.length()).map { index -> array.opt(index) } }
 private fun Any?.optJSONObject(): JSONObject? = this as? JSONObject
 private fun JSONObject.channel() = LiveChannel(get("id").toString(), optString("name", optString("title")), optString("logo").ifBlank { null }, optString("category").ifBlank { null })
 private fun JSONObject.programme() = GuideProgramme(optString("title", "No schedule available"), optLong("start", optLong("start_time")) * 1000, optLong("end", optLong("end_time")) * 1000, optString("description").ifBlank { null })
 private fun JSONObject.addon() = Addon(get("id").toString(), optString("name"), optString("manifest_url"), optBoolean("enabled", true))
-private fun Media.body() = JSONObject().put("id", id).put("type", type).put("name", name).putOpt("poster", poster).putOpt("series_id", seriesId).putOpt("season", season).putOpt("episode", episode).putOpt("duration", durationMillis)
+private fun Media.body() = JSONObject().put("id", id).put("type", type).put("name", name).putOpt("poster", poster).putOpt("series_id", seriesId).putOpt("season", season).putOpt("episode", episode).putOpt("source_addon_id", sourceAddonId).putOpt("duration", durationMillis)
 private fun PlaybackPreferences.body() = JSONObject().put("audio_language", audioLanguage).put("subtitle_language", subtitleLanguage).put("subtitles_enabled", subtitlesEnabled).put("subtitle_size", subtitleSize).put("subtitle_style", subtitleStyle).put("quality", quality).put("autoplay", autoplay)
 private fun JSONObject.preferences() = PlaybackPreferences(optString("audio_language", "en"), optString("subtitle_language", "en"), optBoolean("subtitles_enabled"), optString("subtitle_size", "normal"), optString("subtitle_style", "system"), optString("quality", "auto"), optBoolean("autoplay", true))
