@@ -131,10 +131,20 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable private fun SourcePicker(media: Media, sources: List<Source>, controller: AppController) = Column(Modifier.fillMaxSize().padding(start = 100.dp, top = 54.dp, end = 84.dp)) {
+@Composable private fun SourcePicker(media: Media, sources: List<Source>, controller: AppController) {
+    var provider by remember(media.type, media.id) { mutableStateOf<String?>(null) }
+    val providers = sources.map(Source::provider).distinct()
+    val shown = sources.filter { provider == null || it.provider == provider }
+    Column(Modifier.fillMaxSize().padding(start = 100.dp, top = 54.dp, end = 84.dp)) {
     Text("Choose a source", color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold); Text(media.name, color = Muted, modifier = Modifier.padding(top = 8.dp))
-    if (sources.isEmpty()) Text("Finding sources…", color = Muted, modifier = Modifier.padding(top = 150.dp))
-    sources.forEach { source -> TvButton(source.provider + "\n" + source.description, { controller.start(media, source) }, Modifier.fillMaxWidth().height(116.dp).padding(top = 16.dp), multiline = true) }
+    if (providers.isNotEmpty()) LazyRow(Modifier.padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { TvButton("All providers", { provider = null }, selected = provider == null) }
+        items(providers, key = { it }) { item -> TvButton(item, { provider = item }, selected = provider == item) }
+    }
+    if (sources.isEmpty()) Text("Finding sources…\nSources appear here as they arrive.", color = Muted, modifier = Modifier.padding(top = 150.dp))
+    else if (shown.isEmpty()) Text("No sources from this provider. Choose another provider.", color = Muted, modifier = Modifier.padding(top = 80.dp))
+    shown.forEach { source -> TvButton(source.provider + "\n" + source.description, { controller.start(media, source) }, Modifier.fillMaxWidth().height(160.dp).padding(top = 16.dp), multiline = true) }
+    }
 }
 
 @Composable private fun Player(media: Media, chromeVisible: Boolean, controller: AppController) = Box(
@@ -195,7 +205,7 @@ class MainActivity : ComponentActivity() {
         Text(if (profile == null) "Add a profile" else "Edit profile", color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
         TextField(value = name, onValueChange = { name = it }, label = { Text("Profile name") }, modifier = Modifier.width(560.dp).padding(top = 28.dp))
         TvButton("Avatar: $avatarStyle", { avatarStyle = if (avatarStyle == "critters") "pixel-art" else "critters" }, Modifier.padding(top = 16.dp))
-        Row(Modifier.padding(top = 32.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Save", { controller.saveProfile(profile, name.trim(), avatarStyle, profile?.avatarSeed) }); TvButton("Cancel", controller::back); if (profile != null && !profile.primary) TvButton("Delete profile", { controller.requestDialog(DialogKind.DeleteProfile, "Delete ${profile.name}?", media = Media(profile.id, "profile", profile.name)) }) }
+        Row(Modifier.padding(top = 32.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Save", { controller.saveProfile(profile, name.trim(), avatarStyle, profile?.avatarSeed) }); TvButton("Cancel", controller::back); if (profile != null && !profile.primary) TvButton("Delete profile", { controller.requestDeleteProfile(profile) }) }
     }
 }
 
@@ -221,7 +231,7 @@ class MainActivity : ComponentActivity() {
     Text(dialog.title, color = White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
     when (dialog.kind) {
         DialogKind.SignOut -> Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Keep watching", controller::dismissDialog); TvButton("Sign out", { controller.dismissDialog(); controller.signOut() }) }
-        DialogKind.DeleteProfile -> { Text("This removes this profile's watch history, favorites and preferences. Other profiles are kept.", color = Muted, modifier = Modifier.padding(top = 16.dp)); Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Cancel", controller::dismissDialog); TvButton("Delete profile", { dialog.media?.let { controller.deleteProfile(Profile(it.id, it.name)) }; controller.dismissDialog() }) } }
+        DialogKind.DeleteProfile -> { Text("This removes this profile's watch history, favorites and preferences. Other profiles are kept.", color = Muted, modifier = Modifier.padding(top = 16.dp)); Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Cancel", controller::dismissDialog); TvButton("Delete profile", { dialog.profile?.let(controller::deleteProfile); controller.dismissDialog() }) } }
         DialogKind.QueueManage -> Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Undo", { dialog.media?.let(controller::undoQueueRemoval) }); TvButton("Done", controller::dismissDialog) }
         else -> TvButton("Done", controller::dismissDialog, Modifier.padding(top = 24.dp))
     }

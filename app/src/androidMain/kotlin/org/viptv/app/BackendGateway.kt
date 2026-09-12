@@ -18,7 +18,7 @@ interface BackendGateway {
     suspend fun home(profileId: String): List<HomeShelf>
     suspend fun discover(type: String = "movie", search: String? = null): List<Media>
     suspend fun metadata(media: Media): Media
-    suspend fun sources(media: Media): List<Source>
+    suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit = {}): List<Source>
     suspend fun playback(source: Source, positionMillis: Long): PlaybackLaunch
     suspend fun updateProgress(profileId: String, media: Media, positionMillis: Long)
     suspend fun nextEpisode(profileId: String, media: Media): NextResult
@@ -66,7 +66,7 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
     }
     override suspend fun discover(type: String, search: String?): List<Media> = json("GET", buildString { append("/discover?type="); append(enc(type)); if (!search.isNullOrBlank()) append("&search=").append(enc(search)) }).mediaArray("metas", "items", "rows")
     override suspend fun metadata(media: Media): Media = json("GET", "/meta/${enc(media.type)}/${enc(media.id)}").optJSONObject("meta")?.media() ?: media
-    override suspend fun sources(media: Media): List<Source> {
+    override suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit): List<Source> {
         val job = json("POST", "/streams", JSONObject().put("id", media.id).put("type", media.type).put("name", media.name).putOpt("series_id", media.seriesId).putOpt("season", media.season).putOpt("episode", media.episode))
         val id = job.getString("id")
         var after = 0
@@ -79,6 +79,7 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
                 val stream = event.optJSONObject("source") ?: event.optJSONObject("stream") ?: continue
                 stream.source().also { source -> if (source.id.isNotBlank()) accumulated.putIfAbsent(source.id, source) }
             }
+            onUpdate(accumulated.values.toList())
             if (poll.optBoolean("done")) return accumulated.values.toList()
             delay(1_500)
         }
@@ -139,7 +140,7 @@ class GatewayError(val status: Int, override val message: String) : IllegalState
 private fun JSONObject.profile() = Profile(get("id").toString(), getString("name"), optString("avatar_url").ifBlank { null }, optBoolean("kids"), optBoolean("is_primary"), optString("avatar_style", "critters"), optString("avatar_seed").ifBlank { null })
 private fun JSONObject.media() = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), optString("poster").ifBlank { null }, optString("description").ifBlank { null }, optLong("position", 0), optLong("duration").takeIf { it > 0 }, optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null })
 private fun JSONObject.mediaArray(vararg keys: String): List<Media> { val a = keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray(); return (0 until a.length()).mapNotNull { a.optJSONObject(it)?.media() } }
-private fun JSONObject.source() = Source(optString("id", optString("stream_id")), optString("provider", optString("source", "Source")), optString("description", optString("filename")), optJSONObject("headers")?.headers() ?: emptyMap(), optString("source_addon_id").ifBlank { null })
+private fun JSONObject.source() = Source(optString("id", optString("stream_id")), optString("provider", optString("source", "Source")), optString("name", optString("provider", optString("source", "Source"))), optString("description", optString("filename")), optJSONObject("headers")?.headers() ?: emptyMap(), optString("source_addon_id").ifBlank { null })
 private fun JSONObject.headers(): Map<String, String> = keys().asSequence().associateWith { get(it).toString() }
 private fun JSONObject.array(vararg keys: String): List<Any?> = (keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray()).let { array -> (0 until array.length()).map { index -> array.opt(index) } }
 private fun Any?.optJSONObject(): JSONObject? = this as? JSONObject

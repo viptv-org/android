@@ -6,6 +6,7 @@ import com.getair.video.AndroidMedia3VideoPlayer
 import com.getair.video.PlaybackKind
 import com.getair.video.PlaybackSource
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -22,6 +23,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     val state: StateFlow<AppState> = _state.asStateFlow()
     val player: AndroidMedia3VideoPlayer = AndroidMedia3BackendFactory(context).createAndroidPlayer()
     private var pairingPoll: Job? = null
+    private var sourceDiscovery: Job? = null
     private var nextEpisodeJob: Job? = null
     private var playerChromeJob: Job? = null
     private var afterParentUnlock: (suspend () -> Unit)? = null
@@ -80,24 +82,31 @@ class AppController(context: Context, private val origin: String = "https://vipt
         runCatching { when (destination) { Destination.Home -> gateway.home(requireProfile()); Destination.Discover, Destination.Search -> listOf(HomeShelf("Discover", gateway.discover())); Destination.MyList -> listOf(HomeShelf("My List", gateway.discover())); Destination.Live -> listOf(HomeShelf("Live TV", gateway.discover("live"))); Destination.Settings, Destination.Profile -> emptyList() } }.onSuccess { shelves -> _state.value = _state.value.copy(shelves = shelves, catalog = shelves.flatMap(HomeShelf::items), loading = false) }.onFailure(::fail)
     }
     fun open(media: Media) = scope.launch { update(loading = true); runCatching { gateway.metadata(media) }.onSuccess { _state.value = _state.value.copy(route = Route.Details(it), loading = false) }.onFailure(::fail) }
-    fun chooseSources(media: Media, resume: Boolean = false) = scope.launch {
-        update(loading = true)
-        runCatching { gateway.sources(media) }.onSuccess { discovered ->
-            val savedId = _state.value.selectedProfile?.let { profile -> store.getString(sourceKey(profile.id, media), null) }
-            val exact = if (resume) discovered.firstOrNull { it.id == savedId } else null
+    fun chooseSources(media: Media, resume: Boolean = false) {
+        sourceDiscovery?.cancel()
+        sourceDiscovery = scope.launch {
+            _state.value = _state.value.copy(route = Route.Sources(media, resume), sources = emptyList(), loading = false, message = null)
+            runCatching { gateway.sources(media) { arriving ->
+                val route = _state.value.route
+                if (route is Route.Sources && route.media.type == media.type && route.media.id == media.id) _state.value = _state.value.copy(sources = arriving)
+            } }.onSuccess { discovered ->
+            val savedIdentity = _state.value.selectedProfile?.let { profile -> store.getString(sourceKey(profile.id, media), null) }
+            val exact = if (resume) discovered.firstOrNull { ResumeIdentity.sourceIdentity(it) == savedIdentity } else null
             if (exact != null) start(media, exact) else {
                 _state.value = _state.value.copy(
                     route = Route.Sources(media, resume), sources = discovered, loading = false,
                     message = when { discovered.isEmpty() -> "No sources found. Choose another title or try again."; resume -> "Your previous source is unavailable. Choose a source."; else -> null },
                 )
             }
-        }.onFailure(::fail)
+        }.onFailure { error -> if (error !is CancellationException) fail(error) }
+        }
     }
     fun start(media: Media, source: Source) = scope.launch {
+        sourceDiscovery?.cancel()
         update(loading = true); runCatching { gateway.playback(source, media.positionMillis) }.onSuccess { launch ->
             if (launch.url.isBlank()) { update(loading = false, message = "The selected source could not be prepared."); return@onSuccess }
             player.open(PlaybackSource(launch.url, headers = launch.headers, title = media.name, kindHint = if (media.type == "live") PlaybackKind.Live else PlaybackKind.OnDemand))
-            _state.value.selectedProfile?.let { profile -> store.edit().putString(sourceKey(profile.id, media), source.id).apply() }
+            _state.value.selectedProfile?.let { profile -> store.edit().putString(sourceKey(profile.id, media), ResumeIdentity.sourceIdentity(source)).apply() }
             _state.value = _state.value.copy(route = Route.Player(media, source), playerChromeVisible = true, loading = false)
             schedulePlayerChromeDismissal()
         }.onFailure(::fail)
@@ -106,22 +115,23 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun nextEpisode(outgoing: Media) {
         nextEpisodeJob?.cancel()
         nextEpisodeJob = scope.launch {
+            player.pause()
             _state.value = _state.value.copy(message = "LOADING", loading = false)
             runCatching { gateway.nextEpisode(requireProfile(), outgoing) }.onSuccess { result ->
                 when (result.status) {
                     "next" -> {
-                        val next = result.item ?: run { _state.value = _state.value.copy(message = "Episode information is unavailable. Open the series to choose an episode."); return@onSuccess }
+                        val next = result.item ?: run { player.play(); _state.value = _state.value.copy(message = "Episode information is unavailable. Open the series to choose an episode."); return@onSuccess }
                         val candidates = gateway.sources(next)
                         val selected = next.sourceAddonId?.let { addon -> candidates.firstOrNull { it.addonId == addon } }
                         if (selected == null) {
                             _state.value = _state.value.copy(route = Route.Sources(next), sources = candidates, message = "Choose a source for the next episode.")
                         } else start(next, selected)
                     }
-                    "caught_up" -> _state.value = _state.value.copy(message = "You're caught up. No next episode is listed yet.")
-                    "upcoming" -> _state.value = _state.value.copy(message = "The next episode hasn't been released yet.")
-                    else -> _state.value = _state.value.copy(message = "Episode information is unavailable. Open the series to choose an episode.")
+                    "caught_up" -> { player.play(); _state.value = _state.value.copy(message = "You're caught up. No next episode is listed yet.") }
+                    "upcoming" -> { player.play(); _state.value = _state.value.copy(message = "The next episode hasn't been released yet.") }
+                    else -> { player.play(); _state.value = _state.value.copy(message = "Episode information is unavailable. Open the series to choose an episode.") }
                 }
-            }.onFailure { error -> _state.value = _state.value.copy(message = error.message ?: "Could not prepare the next episode.") }
+            }.onFailure { error -> if (error !is CancellationException) { player.play(); _state.value = _state.value.copy(message = error.message ?: "Could not prepare the next episode.") } }
         }
     }
     fun back() {
@@ -131,7 +141,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 else if (_state.value.playerChromeVisible) _state.value = _state.value.copy(playerChromeVisible = false)
                 else { player.stop(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
             }
-            is Route.Sources -> _state.value = _state.value.copy(route = Route.Details(route.media))
+            is Route.Sources -> { sourceDiscovery?.cancel(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
             is Route.Profiles -> if (_state.value.managingProfiles) _state.value = _state.value.copy(managingProfiles = false) else _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
             is Route.Details, is Route.Search, is Route.Settings, is Route.Addons, is Route.ProfileEditor, is Route.Guide -> _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
             is Route.Browse -> if (route.destination != Destination.Home) _state.value = _state.value.copy(route = Route.Browse(Destination.Home))
@@ -160,6 +170,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun toggleAddon(addon: Addon) = scope.launch { guarded("Enter parent PIN") { gateway.setAddonEnabled(addon, !addon.enabled); openSettings() } }
     fun removeAddon(addon: Addon) = scope.launch { guarded("Enter parent PIN") { gateway.removeAddon(addon); openSettings() } }
     fun editProfile(profile: Profile? = null) { _state.value = _state.value.copy(route = Route.ProfileEditor(profile), message = null) }
+    fun requestDeleteProfile(profile: Profile) { _state.value = _state.value.copy(dialog = DialogState(DialogKind.DeleteProfile, "Delete ${profile.name}?", profile = profile)) }
     fun saveProfile(profile: Profile?, name: String, avatarStyle: String, avatarSeed: String?) = scope.launch { guarded("Enter parent PIN to manage profiles") { val saved = if (profile == null) gateway.createProfile(name, avatarStyle, avatarSeed) else gateway.updateProfile(profile, name, avatarStyle, avatarSeed); val profiles = _state.value.profiles.filterNot { it.id == saved.id } + saved; _state.value = _state.value.copy(route = Route.Profiles, profiles = profiles, message = "Profile saved.") } }
     fun deleteProfile(profile: Profile) = scope.launch { if (profile.primary) { update(message = "The primary profile cannot be deleted."); return@launch }; guarded("Enter parent PIN to manage profiles") { gateway.deleteProfile(profile); _state.value = _state.value.copy(route = Route.Profiles, profiles = _state.value.profiles.filterNot { it.id == profile.id }, selectedProfile = _state.value.selectedProfile?.takeIf { it.id != profile.id }, message = "Profile deleted.") } }
     fun requestDialog(kind: DialogKind, title: String, media: Media? = null, source: Source? = null) { _state.value = _state.value.copy(dialog = DialogState(kind, title, media, source)) }
@@ -167,14 +178,14 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun submitPin(pin: String) = scope.launch { if (!pin.matches(Regex("\\d{4,8}"))) { update(message = "Enter a 4–8 digit parent PIN."); return@launch }; runCatching { gateway.unlockParent(pin) }.onSuccess { _state.value = _state.value.copy(pinPrompt = null, message = null); afterParentUnlock?.also { pending -> afterParentUnlock = null; pending() } }.onFailure { error -> _state.value = _state.value.copy(message = error.message ?: "Incorrect PIN. Try again.") } }
     fun cancelPin() { afterParentUnlock = null; _state.value = _state.value.copy(pinPrompt = null) }
     fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { gateway.logout(); store.edit().clear().apply(); player.stop(); _state.value = AppState(route = Route.Pairing); beginPairing() } }
-    fun close() { pairingPoll?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); player.close() }
+    fun close() { pairingPoll?.cancel(); sourceDiscovery?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); player.close() }
     private fun requireProfile() = checkNotNull(_state.value.selectedProfile).id
     private fun sourceKey(profileId: String, media: Media) = ResumeIdentity.storageKey(profileId, media)
     private fun schedulePlayerChromeDismissal() {
         playerChromeJob?.cancel()
         playerChromeJob = scope.launch {
             delay(7_000)
-            if (_state.value.route is Route.Player) _state.value = _state.value.copy(playerChromeVisible = false)
+            if (_state.value.route is Route.Player && player.state.value.isPlaying) _state.value = _state.value.copy(playerChromeVisible = false)
         }
     }
     private fun persist(session: DeviceSession) { store.edit().putString("access", session.accessToken).putString("refresh", session.refreshToken).apply() }

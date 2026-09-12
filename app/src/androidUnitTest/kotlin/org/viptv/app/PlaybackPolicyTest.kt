@@ -18,6 +18,12 @@ class PlaybackPolicyTest {
         assertFalse(ResumeIdentity.storageKey("alex", media) == ResumeIdentity.storageKey("sam", media))
     }
 
+    @Test fun `resume identity survives a new stream job id`() {
+        val stored = ResumeIdentity.sourceIdentity(Source("expired-job", "Addon", name = "1080p", addonId = "org.example.addon"))
+        val rediscovered = ResumeIdentity.sourceIdentity(Source("new-job", "Addon", name = "1080p", addonId = "org.example.addon"))
+        assertEquals(stored, rediscovered)
+    }
+
     @Test fun `next needs active unpaused series in final ten seconds`() {
         assertTrue(PlaybackPolicy.canAutoNext(Media("e", "series"), 91_000, 100_000, true, false, true))
         assertFalse(PlaybackPolicy.canAutoNext(Media("e", "series"), 91_000, 100_000, false, false, true))

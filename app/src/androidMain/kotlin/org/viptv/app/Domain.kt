@@ -17,6 +17,7 @@ data class Media(
 data class Source(
     val id: String,
     val provider: String,
+    val name: String = provider,
     val description: String = "",
     val headers: Map<String, String> = emptyMap(),
     val addonId: String? = null,
@@ -46,6 +47,8 @@ object PlaybackPolicy {
 
 object ResumeIdentity {
     fun storageKey(profileId: String, media: Media): String = "source.$profileId.${media.type}.${media.id}"
+    /** Stream job IDs expire. Resume is bound to the persisted addon and source name instead. */
+    fun sourceIdentity(source: Source): String = listOf(source.addonId.orEmpty(), source.name).joinToString("\u0000")
 }
 
 /** Product-only transition policy; the backend remains the authority on the actual next source. */
@@ -120,7 +123,7 @@ data class PlaybackPreferences(
 data class GuideProgramme(val title: String, val startMillis: Long, val endMillis: Long, val description: String? = null)
 data class LiveChannel(val id: String, val name: String, val logo: String? = null, val category: String? = null)
 enum class DialogKind { QueueManage, MyListManage, EpisodeManage, SourceDetails, LiveManage, DeleteProfile, SignOut, NextUnavailable }
-data class DialogState(val kind: DialogKind, val title: String, val media: Media? = null, val source: Source? = null)
+data class DialogState(val kind: DialogKind, val title: String, val media: Media? = null, val source: Source? = null, val profile: Profile? = null)
 data class PinPrompt(val title: String)
 
 data class AppState(

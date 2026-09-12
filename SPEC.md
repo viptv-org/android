@@ -6,7 +6,7 @@
 
 ## Product seam
 
-The application and the design repository own screens, focus, remote-button handling, overlays, next-episode policy, resume prompts, and user-visible wording. `:app` uses the Rust backend's device pairing/refresh, profile, catalog, source-discovery, playback and progress routes. It records a selected source identity locally only to enforce exact-source Resume; an unavailable remembered source opens the manual picker and never starts a substitute. The library reports end-of-media and playback facts so the application can apply shared VIPTV behavior.
+The application and the design repository own screens, focus, remote-button handling, overlays, next-episode policy, resume prompts, and user-visible wording. `:app` uses the Rust backend's device pairing/refresh, profile, catalog, source-discovery, playback and progress routes. It records a profile-scoped addon/source-name identity locally only to enforce exact-source Resume; ephemeral stream job IDs are never used for Resume. An unavailable remembered source opens the manual picker and never starts a substitute. The library reports end-of-media and playback facts so the application can apply shared VIPTV behavior.
 
 ## Media behavior
 
@@ -27,7 +27,7 @@ The Android unit suite covers the product-policy seam: exact-source Resume, fina
 
 ## Review-candidate scope and remaining validation
 
-The application now provides device pairing/token refresh, profile selection and edit/create/delete routes, parent PIN retry, Home shelves, Discover/Search, My List, queue removal/Undo, explicit source discovery, exact-identity Resume, Media3 playback, Live/Guide, preferences, addon enable/remove and sign-out. The controller maps `parent_required` errors into a masked PIN prompt, retains the attempted action in memory, and replays it only after the server grants the current session authority. PIN values are neither logged nor persisted.
+The application now provides device pairing/token refresh, profile selection and edit/create/delete routes, parent PIN retry, Home shelves, Discover/Search, My List, queue removal/Undo, explicit incremental and cancellable source discovery, exact-identity Resume, Media3 playback, Live/Guide, preferences, addon enable/remove and sign-out. The controller maps `parent_required` errors into a masked PIN prompt, retains the attempted action in memory, and replays it only after the server grants the current session authority. PIN values are neither logged nor persisted.
 
 The native app must still be checked on an Android TV before any feature-parity or media capability claim. In particular: spatial focus/rail restoration, artwork loading, full series/season/episode metadata rendering, source arrival while focused, player overlay auto-hide and first/second Back behavior, track dialogs, server-managed seek replacement, controlled Next source selection/cancellation, live guide timing, profile avatar asset grid, decoder/DRM/HDR, and physical remote/media keys. The manual-dispatch review workflow deliberately uses one Gradle worker, runs the policy suite, assembles a debug APK, and retains that APK as a 14-day review artifact. It is not automatically run by pushes and does not substitute for an Android TV test.
 
