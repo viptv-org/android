@@ -192,6 +192,29 @@ object PlaybackTimelinePolicy {
         (titlePositionMillis - titleOffsetMillis).coerceAtLeast(0)
 }
 
+/**
+ * A managed HLS playlist can slide while decode is paused.  Pause is a viewer
+ * intent on the title timeline, so its captured absolute time wins over later
+ * native window coordinates until a replacement session resumes it.
+ */
+object ManagedPausePolicy {
+    fun usesAnchor(deliveryMode: String, live: Boolean = false): Boolean =
+        !live && SeekCommitPolicy.usesManagedReplacement(deliveryMode)
+
+    fun displayPosition(anchorMillis: Long?, nativeTitlePositionMillis: Long): Long = anchorMillis ?: nativeTitlePositionMillis
+
+    fun requiresReplacementOnResume(deliveryMode: String, anchorMillis: Long?): Boolean =
+        usesAnchor(deliveryMode) && anchorMillis != null
+
+    fun anchorAfterOpen(deliveryMode: String, live: Boolean, launchPositionMillis: Long, playWhenReady: Boolean): Long? =
+        if (usesAnchor(deliveryMode, live) && !playWhenReady) launchPositionMillis else null
+}
+
+object PlayerChromePolicy {
+    fun shouldAutoHide(inPlayer: Boolean, playing: Boolean, menuOpen: Boolean, seekPreviewOpen: Boolean): Boolean =
+        inPlayer && playing && !menuOpen && !seekPreviewOpen
+}
+
 /** Behind-window recovery is a single managed reprepare, never a jump to live edge. */
 object ManagedRecoveryPolicy {
     fun shouldAttempt(serverManaged: Boolean, networkFailure: Boolean, alreadyAttempted: Boolean): Boolean =

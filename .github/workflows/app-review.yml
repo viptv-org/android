@@ -23,9 +23,20 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
       - uses: android-actions/setup-android@v3
       - name: Unit policy and debug APK
         run: ./gradlew --no-daemon --max-workers=1 :testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
+      - name: Upload unit test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-unit-results-${{ github.sha }}
+          path: |
+            build/test-results/**
+            app/build/test-results/**
+          if-no-files-found: warn
+          retention-days: 14
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:

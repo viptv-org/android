@@ -155,7 +155,7 @@ internal fun DiscoverScreen(state: AppState, controller: AppController) {
             ui.error != null -> {
                 Text(ui.error, color = DiscoverMuted, fontSize = 20.sp, textAlign = TextAlign.Center, modifier = Modifier.offset(100.dp, 304.dp).width(1096.dp))
                 DiscoverChipButton("Retry", "Retry", Modifier.offset(512.dp, 374.dp).width(256.dp).height(48.dp).focusRequester(retryFocus)) {
-                    selectedCatalog?.let(controller::setDiscoverCatalog) ?: controller.openDiscover()
+                    selectedCatalog?.let { controller.setDiscoverCatalog(it.key) } ?: controller.openDiscover()
                 }
             }
             ui.items.isEmpty() -> Text("Nothing is available for these filters.", color = DiscoverMuted, fontSize = 20.sp, textAlign = TextAlign.Center, modifier = Modifier.offset(100.dp, 350.dp).width(1096.dp))

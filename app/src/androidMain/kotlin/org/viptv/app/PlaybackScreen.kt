@@ -2,6 +2,7 @@ package org.viptv.app
 
 import android.view.KeyEvent as NativeKeyEvent
 import android.view.SurfaceView
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,9 +27,11 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.onDispose
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -123,13 +126,24 @@ internal fun PlaybackScreen(
             playback.status == PlaybackStatus.Ended,
         )
     }
-    // Chrome removal must not leave the SurfaceView as the only focused view:
-    // Android TV sends media keys to the current focus owner, not the Compose tree.
-    LaunchedEffect(chromeVisible, menu) {
+    // The controller owns the seven-second timer. Its local menu ownership
+    // prevents the timer from hiding playback context under a track dialog.
+    LaunchedEffect(menu) {
+        controller.setPlayerMenuOpen(menu != null)
         // A dialog removes its focused menu row on close. Always restore a
         // persistent overlay owner so subsequent remote/media input is not
         // delivered to the SurfaceView instead.
         if (menu == null) rootFocus.requestFocus()
+    }
+    // A route/session replacement can dispose this screen while its dialog is
+    // open. Release timer ownership in that path too.
+    DisposableEffect(controller) {
+        onDispose { controller.setPlayerMenuOpen(false) }
+    }
+    BackHandler(enabled = menu != null) {
+        // An unavailable-track notice is dismissed before its containing menu;
+        // the next Back returns focus to player chrome.
+        if (trackNotice != null) trackNotice = null else menu = null
     }
 
     Box(
@@ -154,16 +168,16 @@ internal fun PlaybackScreen(
                         NativeKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                             // Repeat events are still consumed, but never toggle again while held.
                             if (!isLive && native.repeatCount == 0) {
-                                if (playback.isPlaying) controller.player.pause() else controller.player.play()
+                                if (playback.isPlaying) controller.pausePlayback() else controller.resumePlayback()
                             }
                             true
                         }
                         NativeKeyEvent.KEYCODE_MEDIA_PLAY -> {
-                            if (!isLive && native.repeatCount == 0) controller.player.play()
+                            if (!isLive && native.repeatCount == 0) controller.resumePlayback()
                             true
                         }
                         NativeKeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                            if (!isLive && native.repeatCount == 0) controller.player.pause()
+                            if (!isLive && native.repeatCount == 0) controller.pausePlayback()
                             true
                         }
                         NativeKeyEvent.KEYCODE_MEDIA_REWIND -> if (!isLive) { preview(-60_000, code); true } else true
@@ -205,7 +219,7 @@ internal fun PlaybackScreen(
                     preview = seekPreview,
                     modifier = Modifier.offset(64.dp, 572.dp),
                     onFocused = { timelineFocused = it },
-                    onActivate = { if (playback.isPlaying) controller.player.pause() else controller.player.play() },
+                    onActivate = { if (playback.isPlaying) controller.pausePlayback() else controller.resumePlayback() },
                 )
             }
             PlayerControls(
@@ -247,8 +261,8 @@ private fun PlaybackTimeline(positionMillis: Long, durationMillis: Long?, previe
         Box(Modifier.align(Alignment.TopStart).width(1152.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(PlayerTrack))
         Box(Modifier.align(Alignment.TopStart).width((1152f * fraction.coerceIn(0f, 1f)).dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(Color.White))
         Box(Modifier.align(Alignment.TopStart).offset(x = (1152f * fraction.coerceIn(0f, 1f) - 8f).dp, y = (-5).dp).size(16.dp).clip(RoundedCornerShape(8.dp)).background(if (focused) Color.White else Color(0xFFF5F5F5)))
-        Text(formatTime(shown), color = Color(0xFFF5F5F5), fontSize = 14.sp, modifier = Modifier.offset(y = 12.dp).width(576.dp))
-        Text(formatTime(durationMillis ?: 0), color = Color(0xFFA6A8AA), fontSize = 14.sp, textAlign = TextAlign.End, modifier = Modifier.offset(x = 576.dp, y = 12.dp).width(576.dp))
+        Text(formatTime(shown), color = Color(0xFFF5F5F5), fontSize = 14.sp, modifier = Modifier.align(Alignment.TopStart).offset(y = 12.dp).width(576.dp))
+        Text(formatTime(durationMillis ?: 0), color = Color(0xFFA6A8AA), fontSize = 14.sp, textAlign = TextAlign.End, modifier = Modifier.align(Alignment.TopStart).offset(x = 576.dp, y = 12.dp).width(576.dp))
     }
 }
 
@@ -259,7 +273,7 @@ private fun PlayerControls(media: Media, isLive: Boolean, isPlaying: Boolean, ca
     Box(Modifier.fillMaxSize()) {
         if (!isLive) {
             if (canSeek) PlayerIconButton("Rewind 60 seconds", Modifier.offset(64.dp, 624.dp).size(64.dp), { onSeek(-60_000) }) { PlayerGlyph(Icons.Default.FastRewind, "Rewind 60 seconds", it) }
-            PlayerIconButton(if (isPlaying) "Pause" else "Play", Modifier.offset(144.dp, 624.dp).size(64.dp), { if (isPlaying) controller.player.pause() else controller.player.play() }) { PlayerGlyph(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (isPlaying) "Pause" else "Play", it) }
+            PlayerIconButton(if (isPlaying) "Pause" else "Play", Modifier.offset(144.dp, 624.dp).size(64.dp), { if (isPlaying) controller.pausePlayback() else controller.resumePlayback() }) { PlayerGlyph(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (isPlaying) "Pause" else "Play", it) }
             if (canSeek) PlayerIconButton("Forward 60 seconds", Modifier.offset(224.dp, 624.dp).size(64.dp), { onSeek(60_000) }) { PlayerGlyph(Icons.Default.FastForward, "Forward 60 seconds", it) }
             if (media.type == "series") PlayerIconButton("Next episode", Modifier.offset(304.dp, 624.dp).size(64.dp), { controller.nextEpisode(media) }) { PlayerGlyph(Icons.Default.SkipNext, "Next episode", it) }
         }
@@ -279,8 +293,9 @@ private fun PlayerIconButton(label: String, modifier: Modifier, onActivate: () -
     var focused by remember { mutableStateOf(false) }
     Box(
         modifier = modifier.onFocusChanged { focused = it.hasFocus; onFocused(it.hasFocus) }
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (focused) Color(0xFFF5F5F5) else Color.Transparent)
+            // The timeline thumb extends five pixels above its track. Do not clip
+            // the button bounds or the unfocused thumb becomes a half-circle.
+            .background(if (focused) Color(0xFFF5F5F5) else Color.Transparent, RoundedCornerShape(12.dp))
             .focusable()
             .clickable(onClick = onActivate),
         contentAlignment = Alignment.Center,
@@ -320,7 +335,10 @@ private fun PlayerMenuChoice(label: String, modifier: Modifier = Modifier, onAct
 
 private fun formatTime(millis: Long): String {
     val total = max(0, millis / 1_000)
-    return "%d:%02d".format(total / 60, total % 60)
+    val hours = total / 3_600
+    val minutes = (total % 3_600) / 60
+    val seconds = total % 60
+    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds) else "%d:%02d".format(minutes, seconds)
 }
 
 private fun playbackStatusLabel(status: PlaybackStatus, isPlaying: Boolean, isBuffering: Boolean, live: Boolean): String = when (status) {

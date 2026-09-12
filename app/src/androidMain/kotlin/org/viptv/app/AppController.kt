@@ -38,6 +38,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private var searchJob: Job? = null
     private var nextEpisodeJob: Job? = null
     private var playerChromeJob: Job? = null
+    private var playerMenuOpen = false
     private var heartbeatJob: Job? = null
     private var progressJob: Job? = null
     private var playbackSessionId: String? = null
@@ -45,6 +46,8 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private var playbackTitleOffsetMillis = 0L
     private var playbackTitleDurationMillis: Long? = null
     private var lastTrustedTitlePositionMillis = 0L
+    /** Absolute title time frozen by a viewer pause on rolling managed HLS. */
+    private var managedPauseAnchorMillis: Long? = null
     private var afterParentUnlock: (suspend () -> Unit)? = null
     private var selectedAudioTrackIndex: Int? = null
     private var selectedSubtitleTrackIndex: Int? = null
@@ -437,6 +440,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 playbackTitleOffsetMillis = PlaybackTimelinePolicy.titleOffsetMillis(launch.mode, launch.positionMillis)
                 playbackTitleDurationMillis = launch.durationMillis ?: media.durationMillis
                 lastTrustedTitlePositionMillis = launch.positionMillis
+                managedPauseAnchorMillis = ManagedPausePolicy.anchorAfterOpen(launch.mode, launch.live, launch.positionMillis, playWhenReady)
                 replacePlaybackSession(launch.sessionId)
                 selectedAudioTrackIndex = requestedAudio
                 selectedSubtitleTrackIndex = requestedSubtitle
@@ -626,6 +630,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     /** The Media3 adapter exposes session-relative HLS time; map it once to title time. */
     fun absolutePositionMillis(): Long {
         val candidate = PlaybackTimelinePolicy.absolutePositionMillis(player.state.value.positionMillis, playbackTitleOffsetMillis)
+        managedPauseAnchorMillis?.let { return it }
         return if (player.state.value.status == PlaybackStatus.Error && lastTrustedTitlePositionMillis > 0L) {
             lastTrustedTitlePositionMillis
         } else {
@@ -634,6 +639,42 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
     }
     fun titleDurationMillis(): Long? = playbackTitleDurationMillis ?: player.state.value.timeline?.durationMillis
+
+    /** Pause captures title time before Media3's rolling window can advance. */
+    fun pausePlayback() {
+        val route = _state.value.route as? Route.Player ?: return
+        if (ManagedPausePolicy.usesAnchor(_state.value.playbackDeliveryMode, route.media.type == "live")) {
+            managedPauseAnchorMillis = absolutePositionMillis()
+        }
+        player.pause()
+        showPlayerChrome()
+    }
+
+    /** Managed paused output resumes by preparing the original title coordinate. */
+    fun resumePlayback() {
+        val route = _state.value.route as? Route.Player ?: return
+        val anchor = managedPauseAnchorMillis
+        if (ManagedPausePolicy.requiresReplacementOnResume(_state.value.playbackDeliveryMode, anchor)) {
+            val requestGeneration = ++playbackGeneration
+            scope.launch {
+                if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
+                val resumed = prepareAndStart(
+                    route.media.copy(positionMillis = checkNotNull(anchor)),
+                    route.source,
+                    explicitResume = false,
+                    playWhenReady = true,
+                    resetTrackChoices = false,
+                    expectedGeneration = requestGeneration,
+                )
+                if (!resumed && PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) {
+                    _state.value = _state.value.copy(message = "Could not resume at your paused position. Choose a source to try again.", loading = false)
+                }
+            }
+        } else {
+            player.play()
+        }
+        showPlayerChrome()
+    }
 
     fun saveProgress(media: Media) {
         val profileId = _state.value.selectedProfile?.id
@@ -725,6 +766,16 @@ class AppController(context: Context, private val origin: String = "https://vipt
         if (_state.value.route !is Route.Player) return
         _state.value = _state.value.copy(playerChromeVisible = true)
         schedulePlayerChromeDismissal()
+    }
+    /** Local track dialogs report ownership so the seven-second timer cannot hide their context. */
+    fun setPlayerMenuOpen(open: Boolean) {
+        playerMenuOpen = open
+        if (open) {
+            playerChromeJob?.cancel()
+            if (_state.value.route is Route.Player) _state.value = _state.value.copy(playerChromeVisible = true)
+        } else {
+            schedulePlayerChromeDismissal()
+        }
     }
     /** Each edit replaces prior work; a late response cannot repopulate a cleared query. */
     fun search(query: String) {
@@ -932,7 +983,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
         playerChromeJob?.cancel()
         playerChromeJob = scope.launch {
             delay(7_000)
-            if (_state.value.route is Route.Player && player.state.value.isPlaying) _state.value = _state.value.copy(playerChromeVisible = false)
+            if (PlayerChromePolicy.shouldAutoHide(_state.value.route is Route.Player, player.state.value.isPlaying, playerMenuOpen, _state.value.seekPreview != null)) _state.value = _state.value.copy(playerChromeVisible = false)
         }
     }
     private fun replacePlaybackSession(sessionId: String) {
@@ -973,7 +1024,9 @@ class AppController(context: Context, private val origin: String = "https://vipt
         playbackTitleOffsetMillis = 0L
         playbackTitleDurationMillis = null
         lastTrustedTitlePositionMillis = 0L
+        managedPauseAnchorMillis = null
         heartbeatJob?.cancel()
+        playerMenuOpen = false
         playbackSessionId?.let { id -> scope.launch { runCatching { gateway.stopPlayback(id) } } }
         playbackSessionId = null
     }

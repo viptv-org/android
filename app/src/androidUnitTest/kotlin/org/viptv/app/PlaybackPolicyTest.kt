@@ -145,6 +145,24 @@ class ManagedRecoveryPolicyTest {
     }
 }
 
+class ManagedPausePolicyTest {
+    @Test fun `managed paused title time stays anchored while the HLS window moves`() {
+        assertTrue(ManagedPausePolicy.usesAnchor("remux"))
+        assertEquals(177_168, ManagedPausePolicy.displayPosition(177_168, 195_033))
+        assertTrue(ManagedPausePolicy.requiresReplacementOnResume("remux", 177_168))
+        assertEquals(177_168, ManagedPausePolicy.anchorAfterOpen("remux", live = false, launchPositionMillis = 177_168, playWhenReady = false))
+        assertEquals(null, ManagedPausePolicy.anchorAfterOpen("remux", live = false, launchPositionMillis = 177_168, playWhenReady = true))
+    }
+}
+
+class PlayerChromePolicyTest {
+    @Test fun `player chrome stays visible while a track menu or seek preview owns focus`() {
+        assertFalse(PlayerChromePolicy.shouldAutoHide(inPlayer = true, playing = true, menuOpen = true, seekPreviewOpen = false))
+        assertFalse(PlayerChromePolicy.shouldAutoHide(inPlayer = true, playing = true, menuOpen = false, seekPreviewOpen = true))
+        assertTrue(PlayerChromePolicy.shouldAutoHide(inPlayer = true, playing = true, menuOpen = false, seekPreviewOpen = false))
+    }
+}
+
 class HoldPressPolicyTest {
     @Test fun `focus-lost release cannot activate a newly focused control`() {
         assertTrue(HoldPressPolicy.begins(0L, repeatCount = 0))
