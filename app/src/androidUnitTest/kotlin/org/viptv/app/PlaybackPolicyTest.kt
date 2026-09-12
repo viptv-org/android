@@ -32,6 +32,11 @@ class PlaybackPolicyTest {
         assertEquals(PlaybackIntent.ChooseSource, PlaybackPolicy.forResume(null, listOf(remembered), 12_000))
     }
 
+    @Test fun `manual sources return to sources while exact resume returns detail`() {
+        assertEquals(PlaybackReturn.Sources, PlaybackReturnPolicy.afterSourceStart(resume = false))
+        assertEquals(PlaybackReturn.Details, PlaybackReturnPolicy.afterSourceStart(resume = true))
+    }
+
     @Test fun `back closes transient UI before player or route navigation`() {
         assertEquals(BackDisposition.DismissDialog, BackPolicy.decide(dialogOpen = true, pinOpen = true, seekPreviewOpen = true, playerChromeOpen = true, inPlayer = true))
         assertEquals(BackDisposition.CancelPin, BackPolicy.decide(dialogOpen = false, pinOpen = true, seekPreviewOpen = true, playerChromeOpen = true, inPlayer = true))

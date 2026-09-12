@@ -122,7 +122,10 @@ internal fun PlaybackScreen(
     // Chrome removal must not leave the SurfaceView as the only focused view:
     // Android TV sends media keys to the current focus owner, not the Compose tree.
     LaunchedEffect(chromeVisible, menu) {
-        if (!chromeVisible && menu == null) rootFocus.requestFocus()
+        // A dialog removes its focused menu row on close. Always restore a
+        // persistent overlay owner so subsequent remote/media input is not
+        // delivered to the SurfaceView instead.
+        if (menu == null) rootFocus.requestFocus()
     }
 
     Box(
@@ -254,9 +257,11 @@ private fun PlayerControls(media: Media, isLive: Boolean, isPlaying: Boolean, ca
             if (canSeek) PlayerIconButton("Forward 60 seconds", Modifier.offset(224.dp, 624.dp).size(64.dp), { onSeek(60_000) }) { PlayerGlyph(Icons.Default.FastForward, it) }
             if (media.type == "series") PlayerIconButton("Next episode", Modifier.offset(304.dp, 624.dp).size(64.dp), { controller.nextEpisode(media) }) { PlayerGlyph(Icons.Default.SkipNext, it) }
         }
-        if (audio) PlayerIconButton("Audio", Modifier.offset(if (isLive) 608.dp else 992.dp, 624.dp).size(64.dp), { onMenu(PlayerTrackMenu.Audio) }) { PlayerGlyph(Icons.Default.VolumeUp, it) }
-        if (captions) PlayerIconButton("Captions", Modifier.offset(if (isLive) 688.dp else 1072.dp, 624.dp).size(64.dp), { onMenu(PlayerTrackMenu.Subtitles) }) { PlayerGlyph(Icons.Default.ClosedCaption, it) }
-        PlayerIconButton("Exit", Modifier.offset(1152.dp, 624.dp).size(64.dp), { controller.saveProgress(media); controller.back() }) { PlayerGlyph(Icons.Default.Close, it) }
+        if (audio) PlayerIconButton("Audio", Modifier.offset(if (isLive) 544.dp else 928.dp, 624.dp).size(64.dp), { onMenu(PlayerTrackMenu.Audio) }) { PlayerGlyph(Icons.Default.VolumeUp, it) }
+        if (captions) PlayerIconButton("Captions", Modifier.offset(if (isLive) 624.dp else 1008.dp, 624.dp).size(64.dp), { onMenu(PlayerTrackMenu.Subtitles) }) { PlayerGlyph(Icons.Default.ClosedCaption, it) }
+        // Back owns final progress persistence and session stop as one ordered
+        // transition. Calling saveProgress here races a second write with stop.
+        PlayerIconButton("Exit", Modifier.offset(1088.dp, 624.dp).size(64.dp), { controller.back() }) { PlayerGlyph(Icons.Default.Close, it) }
     }
 }
 

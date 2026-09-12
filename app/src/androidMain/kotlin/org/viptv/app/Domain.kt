@@ -149,12 +149,19 @@ sealed interface Route {
     data class Browse(val destination: Destination) : Route
     data class Details(val media: Media) : Route
     data class Sources(val media: Media, val resume: Boolean = false) : Route
-    data class Player(val media: Media, val source: Source) : Route
+    data class Player(val media: Media, val source: Source, val returnDestination: PlaybackReturn = PlaybackReturn.Details) : Route
     data object Search : Route
     data object Settings : Route
     data object Addons : Route
     data class ProfileEditor(val profile: Profile? = null) : Route
     data class Guide(val channel: LiveChannel) : Route
+}
+
+enum class PlaybackReturn { Details, Sources }
+
+object PlaybackReturnPolicy {
+    /** Explicit Resume returns to title detail; an ordinary source picker remains its return surface. */
+    fun afterSourceStart(resume: Boolean): PlaybackReturn = if (resume) PlaybackReturn.Details else PlaybackReturn.Sources
 }
 
 data class Profile(

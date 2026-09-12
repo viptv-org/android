@@ -145,6 +145,11 @@ class AppController(context: Context, private val origin: String = "https://vipt
         playWhenReady: Boolean,
         resetTrackChoices: Boolean,
     ): Boolean {
+        val returnDestination = when (val current = _state.value.route) {
+            is Route.Sources -> PlaybackReturnPolicy.afterSourceStart(current.resume)
+            is Route.Player -> current.returnDestination
+            else -> PlaybackReturn.Details
+        }
         val requestedAudio = if (resetTrackChoices) null else selectedAudioTrackIndex
         val requestedSubtitle = if (resetTrackChoices) null else selectedSubtitleTrackIndex
         val requestedSubtitlesOff = if (resetTrackChoices) false else subtitlesOff
@@ -186,7 +191,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                     explicitResumeAwaitingCompletionKey = key
                 }
                 _state.value = _state.value.copy(
-                    route = Route.Player(playbackMedia, source),
+                    route = Route.Player(playbackMedia, source, returnDestination),
                     playerChromeVisible = true,
                     playbackTracks = PlaybackTrackChoices(launch.audioTracks, launch.subtitleTracks, launch.subtitlesSupported),
                     playbackDeliveryMode = launch.mode,
@@ -290,7 +295,13 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
         when (val route = _state.value.route) {
             is Route.Player -> {
-                stopPlayback(route.media); _state.value = _state.value.copy(route = Route.Details(route.media))
+                stopPlayback(route.media)
+                _state.value = _state.value.copy(
+                    route = when (route.returnDestination) {
+                        PlaybackReturn.Details -> Route.Details(route.media)
+                        PlaybackReturn.Sources -> Route.Sources(route.media)
+                    },
+                )
             }
             is Route.Sources -> { sourceDiscovery?.cancel(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
             is Route.Profiles -> if (_state.value.managingProfiles) _state.value = _state.value.copy(managingProfiles = false) else if (_state.value.selectedProfile != null) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null) else return false
@@ -300,7 +311,11 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
         return true
     }
-    fun saveProgress(media: Media) = scope.launch { persistProgress(media, player.state.value.positionMillis) }
+    fun saveProgress(media: Media) {
+        val profileId = _state.value.selectedProfile?.id
+        val position = player.state.value.positionMillis
+        scope.launch { persistProgress(profileId, media, position) }
+    }
     fun previewSeek(deltaMillis: Long) {
         val playback = player.state.value
         val timeline = playback.timeline ?: return
@@ -468,22 +483,24 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private fun startProgressPersistence(media: Media) {
         progressJob?.cancel()
         if (media.type == "live") return
+        val profileId = _state.value.selectedProfile?.id
         progressJob = scope.launch {
             while (isActive) {
                 delay(15_000)
-                persistProgress(media, player.state.value.positionMillis)
+                persistProgress(profileId, media, player.state.value.positionMillis)
             }
         }
     }
-    private suspend fun persistProgress(media: Media, positionMillis: Long) {
+    private suspend fun persistProgress(profileId: String?, media: Media, positionMillis: Long) {
         if (media.type != "live" && positionMillis > 0) {
-            _state.value.selectedProfile?.let { profile -> runCatching { gateway.updateProgress(profile.id, media, positionMillis) } }
+            profileId?.let { id -> runCatching { gateway.updateProgress(id, media, positionMillis) } }
         }
     }
     private fun stopPlayback(media: Media? = null) {
         val position = player.state.value.positionMillis
+        val profileId = _state.value.selectedProfile?.id
         progressJob?.cancel()
-        media?.let { item -> scope.launch { persistProgress(item, position) } }
+        media?.let { item -> scope.launch { persistProgress(profileId, item, position) } }
         player.stop()
         heartbeatJob?.cancel()
         playbackSessionId?.let { id -> scope.launch { runCatching { gateway.stopPlayback(id) } } }
