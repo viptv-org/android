@@ -46,6 +46,12 @@ class PlaybackPolicyTest {
         assertEquals(null, SeekPolicy.target(10_000, 200, durationMillis = 100_000))
     }
 
+    @Test fun `direct delivery commits natively while server-managed delivery replaces`() {
+        assertFalse(SeekCommitPolicy.usesManagedReplacement("direct"))
+        assertTrue(SeekCommitPolicy.usesManagedReplacement("remux"))
+        assertTrue(SeekCommitPolicy.usesManagedReplacement("transcode"))
+    }
+
     @Test fun `next needs active unpaused series in final ten seconds`() {
         assertTrue(PlaybackPolicy.canAutoNext(Media("e", "series"), 91_000, 100_000, true, false, true))
         assertFalse(PlaybackPolicy.canAutoNext(Media("e", "series"), 91_000, 100_000, false, false, true))

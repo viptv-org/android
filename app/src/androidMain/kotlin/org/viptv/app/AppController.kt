@@ -25,6 +25,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     val player: AndroidMedia3VideoPlayer = AndroidMedia3BackendFactory(context).createAndroidPlayer()
     private var pairingPoll: Job? = null
     private var sourceDiscovery: Job? = null
+    private var searchJob: Job? = null
     private var nextEpisodeJob: Job? = null
     private var playerChromeJob: Job? = null
     private var heartbeatJob: Job? = null
@@ -172,6 +173,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                     route = Route.Player(playbackMedia, source),
                     playerChromeVisible = true,
                     playbackTracks = PlaybackTrackChoices(launch.audioTracks, launch.subtitleTracks, launch.subtitlesSupported),
+                    playbackDeliveryMode = launch.mode,
                     loading = false,
                 )
                 continuationRestore = null
@@ -294,6 +296,13 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun commitSeek() {
         val target = _state.value.seekPreview?.targetMillis ?: return
         val route = _state.value.route as? Route.Player ?: return
+        if (!SeekCommitPolicy.usesManagedReplacement(_state.value.playbackDeliveryMode)) {
+            if (player.seekTo(target)) {
+                _state.value = _state.value.copy(seekPreview = null)
+                showPlayerChrome()
+            }
+            return
+        }
         val wasPlaying = player.state.value.isPlaying
         _state.value = _state.value.copy(seekPreview = null)
         scope.launch {
@@ -350,7 +359,34 @@ class AppController(context: Context, private val origin: String = "https://vipt
         _state.value = _state.value.copy(playerChromeVisible = true)
         schedulePlayerChromeDismissal()
     }
-    fun search(query: String) = scope.launch { update(loading = true, message = null); runCatching { gateway.discover(search = query) }.onSuccess { _state.value = _state.value.copy(searchResults = it, loading = false) }.onFailure(::fail) }
+    /** Each edit replaces prior work; a late response cannot repopulate a cleared query. */
+    fun search(query: String) {
+        searchJob?.cancel()
+        val normalized = query.trim()
+        _state.value = _state.value.copy(
+            searchResults = emptyList(),
+            loading = false,
+            message = if (normalized.isEmpty()) "Find your next favorite." else "Searching…",
+        )
+        if (normalized.isEmpty()) return
+        searchJob = scope.launch {
+            delay(650)
+            try {
+                val results = gateway.discover(search = normalized)
+                if (isActive) {
+                    _state.value = _state.value.copy(
+                        searchResults = results,
+                        loading = false,
+                        message = if (results.isEmpty()) "No results. Try another title." else "${results.size} results",
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                if (isActive) _state.value = _state.value.copy(loading = false, message = "Searching…  Some sources couldn't load.")
+            }
+        }
+    }
     fun openMyList() = scope.launch { update(loading = true); runCatching { gateway.favorites(requireProfile()) }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.MyList), favorites = it, catalog = it, loading = false) }.onFailure(::fail) }
     fun openQueue() = scope.launch { update(loading = true); runCatching { gateway.queue(requireProfile()) }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.Home), queue = it, loading = false) }.onFailure(::fail) }
     fun openLive() = scope.launch { update(loading = true); runCatching { gateway.live() }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.Live), liveChannels = it, loading = false) }.onFailure(::fail) }
@@ -373,7 +409,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun submitPin(pin: String) = scope.launch { if (!pin.matches(Regex("\\d{4,8}"))) { update(message = "Enter a 4–8 digit parent PIN."); return@launch }; runCatching { gateway.unlockParent(pin) }.onSuccess { _state.value = _state.value.copy(pinPrompt = null, message = null); afterParentUnlock?.also { pending -> afterParentUnlock = null; pending() } }.onFailure { error -> _state.value = _state.value.copy(message = error.message ?: "Incorrect PIN. Try again.") } }
     fun cancelPin() { afterParentUnlock = null; _state.value = _state.value.copy(pinPrompt = null) }
     fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback(); gateway.logout(); store.edit().clear().apply(); _state.value = AppState(route = Route.Pairing); beginPairing() } }
-    fun close() { pairingPoll?.cancel(); sourceDiscovery?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback(); player.close() }
+    fun close() { pairingPoll?.cancel(); sourceDiscovery?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback(); player.close() }
     private fun requireProfile() = checkNotNull(_state.value.selectedProfile).id
     private fun schedulePlayerChromeDismissal() {
         playerChromeJob?.cancel()

@@ -130,6 +130,10 @@ object SeekPolicy {
     }
 }
 
+object SeekCommitPolicy {
+    fun usesManagedReplacement(deliveryMode: String): Boolean = !deliveryMode.equals("direct", ignoreCase = true)
+}
+
 enum class Destination(val label: String) {
     Profile("Profile"), Home("Home"), Discover("Discover"), Live("Live TV"), MyList("My List"), Search("Search"), Settings("Settings")
 }
@@ -196,6 +200,8 @@ data class AppState(
     val addons: List<Addon> = emptyList(),
     val preferences: PlaybackPreferences = PlaybackPreferences(),
     val playbackTracks: PlaybackTrackChoices = PlaybackTrackChoices(),
+    /** Server delivery category; safe UI state used to choose native versus managed seek. */
+    val playbackDeliveryMode: String = "direct",
     val dialog: DialogState? = null,
     val pinPrompt: PinPrompt? = null,
     val seekPreview: SeekPreview? = null,
