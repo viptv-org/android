@@ -1,8 +1,10 @@
 package org.viptv.app
 
 import android.graphics.Bitmap
+import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -26,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -41,6 +44,7 @@ import coil.compose.AsyncImage
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import org.json.JSONObject
+import kotlinx.coroutines.launch
 
 private val AccountCanvas = Color(0xFF101112)
 private val AccountWhite = Color(0xFFF5F5F5)
@@ -193,30 +197,32 @@ private data class AvatarCategory(val style:String,val name:String,val entries:L
 
 /** A full-canvas TV keyboard also accepts ordinary platform/mobile text input. */
 @Composable internal fun RokuTextEntry(title:String,instruction:String,initial:String="",secret:Boolean=false,maxLength:Int=256,onDone:(String)->Unit,onCancel:()->Unit) {
-    var value by remember(title) { mutableStateOf(initial) }
+    val limit=if(secret) minOf(8,maxLength).coerceAtLeast(0) else maxLength.coerceAtLeast(0)
+    var value by remember(title) { mutableStateOf((if(secret) initial.filter(Char::isDigit) else initial).take(limit)) }
+    fun append(character:Char) { if(value.length<limit) value+=character }
     val first=remember { FocusRequester() }
     BackHandler(onBack=onCancel)
     LaunchedEffect(title) { first.requestFocus() }
     Box(Modifier.fillMaxSize().background(AccountCanvas)) {
         AccountMark();AccountText(title,180,112,1040,44);AccountText(instruction,180,182,1040,22,true)
-        BasicTextField(value,{value=if(secret) it.filter(Char::isDigit).take(8) else it.take(maxLength)},Modifier.offset(180.dp,242.dp).size(920.dp,48.dp),
+        BasicTextField(value,{value=(if(secret) it.filter(Char::isDigit) else it).take(limit)},Modifier.offset(180.dp,242.dp).size(920.dp,48.dp),
             textStyle=TextStyle(color=AccountWhite,fontSize=30.sp),singleLine=true,cursorBrush=SolidColor(AccountWhite),
             keyboardOptions=KeyboardOptions(keyboardType=if(secret) KeyboardType.NumberPassword else KeyboardType.Text),
             visualTransformation=if(secret) PasswordVisualTransformation() else VisualTransformation.None)
         val keys=if(secret) listOf("123","456","789","0") else listOf("abcdefghi","jklmnopqr","stuvwxyz0","123456789")
         keys.forEachIndexed { row,letters -> Row(Modifier.offset(180.dp,(300+row*62).dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            letters.forEachIndexed { column,char -> TvButton(char.toString(),{if(value.length<(if(secret) 8 else maxLength)) value+=char},Modifier.size(if(secret) 90.dp else 64.dp,52.dp).then(if(row==0&&column==0) Modifier.focusRequester(first) else Modifier)) }
+            letters.forEachIndexed { column,char -> TvButton(char.toString(),{append(char)},Modifier.size(if(secret) 90.dp else 64.dp,52.dp).then(if(row==0&&column==0) Modifier.focusRequester(first) else Modifier)) }
         } }
-        Row(Modifier.offset(820.dp,300.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.offset(860.dp,300.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             TvButton("Delete",{value=value.dropLast(1)},Modifier.size(140.dp,52.dp));TvButton("Clear",{value=""},Modifier.size(140.dp,52.dp))
         }
         if(!secret) {
-            TvButton("Space",{value+=" "},Modifier.offset(820.dp,362.dp).size(290.dp,52.dp))
-            Row(Modifier.offset(820.dp,424.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                ":/.-".forEach { char->TvButton(char.toString(),{value+=char},Modifier.size(66.dp,52.dp)) }
+            TvButton("Space",{append(' ')},Modifier.offset(860.dp,362.dp).size(290.dp,52.dp))
+            Row(Modifier.offset(860.dp,424.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                ":/.-".forEach { char->TvButton(char.toString(),{append(char)},Modifier.size(66.dp,52.dp)) }
             }
-            Row(Modifier.offset(820.dp,486.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                "?=&_".forEach { char->TvButton(char.toString(),{value+=char},Modifier.size(66.dp,52.dp)) }
+            Row(Modifier.offset(860.dp,486.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                "?=&_".forEach { char->TvButton(char.toString(),{append(char)},Modifier.size(66.dp,52.dp)) }
             }
         }
         Row(Modifier.offset(180.dp,608.dp),horizontalArrangement=Arrangement.spacedBy(16.dp)) {
@@ -235,11 +241,12 @@ private data class AvatarCategory(val style:String,val name:String,val entries:L
     val first=remember(title) { FocusRequester() }
     LaunchedEffect(title) { if(options.isNotEmpty()) first.requestFocus() }
     BackHandler(onBack=onDismiss)
-    val height=146+minOf(options.size,7)*62
+    val visibleCount=options.size.coerceIn(1,7)
+    val height=146+visibleCount*62
     Box(Modifier.fillMaxSize().background(Color(0xDC080909)),contentAlignment=Alignment.Center) {
         Box(Modifier.size(880.dp,height.dp).background(Color(0xFF191B1D),RoundedCornerShape(12.dp))) {
             Text(title,Modifier.offset(44.dp,32.dp).size(792.dp,54.dp),color=AccountWhite,fontSize=32.sp,fontWeight=FontWeight.Bold,maxLines=1,overflow=TextOverflow.Ellipsis)
-            LazyColumn(Modifier.offset(44.dp,108.dp).size(792.dp,(minOf(options.size,7)*62).dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+            LazyColumn(Modifier.offset(44.dp,94.dp).size(792.dp,(visibleCount*62-10).dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 itemsIndexed(options) { index,option -> TvButton(option.first,option.second,Modifier.size(792.dp,52.dp).then(if(index==0) Modifier.focusRequester(first) else Modifier)) }
             }
         }
@@ -256,7 +263,7 @@ private data class AvatarCategory(val style:String,val name:String,val entries:L
     val shown=sources.filter {provider==null || it.provider==provider}
     val first=remember { FocusRequester() }
     var claimed by remember(media.id,provider) { mutableStateOf(false) }
-    LaunchedEffect(shown.isNotEmpty(),provider) { if(shown.isNotEmpty() && !claimed) {first.requestFocus();claimed=true} }
+    LaunchedEffect(shown.isNotEmpty(),provider,filtering,state.dialog) { if(shown.isNotEmpty() && !claimed && !filtering && state.dialog==null) {first.requestFocus();claimed=true} }
     Box(Modifier.fillMaxSize().background(AccountCanvas)) {
         AccountText("Choose a source",100,54,size=44);AccountText(media.name,100,119,1096,22,true)
         TvButton((provider ?: "All providers")+"  ▾",{filtering=true},Modifier.offset(100.dp,166.dp).size(256.dp,48.dp).focusRequester(filterFocus))
@@ -283,7 +290,7 @@ private data class AvatarCategory(val style:String,val name:String,val entries:L
                 }
             }
         }
-        if(filtering) RokuChoiceDialog("Providers",listOf("All providers" to {provider=null;filtering=false})+sources.map {it.provider}.distinct().map { item->item to {provider=item;filtering=false} },{filtering=false;filterFocus.requestFocus()})
+        if(filtering) RokuChoiceDialog("Providers",listOf("All providers" to {provider=null;claimed=false;filtering=false})+sources.map {it.provider}.distinct().map { item->item to {provider=item;claimed=false;filtering=false} },{filtering=false;filterFocus.requestFocus()})
     }
 }
 
@@ -291,9 +298,20 @@ private data class AvatarCategory(val style:String,val name:String,val entries:L
     val dismiss={controller.dismissDialog()}
     if(dialog.kind==DialogKind.SourceDetails) {
         BackHandler(onBack=dismiss)
+        val scroll=rememberScrollState()
+        val scope=rememberCoroutineScope()
+        val bodyFocus=remember {FocusRequester()}
+        LaunchedEffect(dialog.source?.id) {bodyFocus.requestFocus()}
         Box(modifier.fillMaxSize().background(Color(0xF8101112))) {
             AccountText(dialog.title,100,72,1060,36)
-            Text(dialog.source?.let { SourceDisplayPolicy.body(it) }.orEmpty(),Modifier.offset(100.dp,158.dp).size(1060.dp,460.dp).verticalScroll(rememberScrollState()),color=AccountWhite,fontSize=22.sp)
+            Text(dialog.source?.let { SourceDisplayPolicy.body(it) }.orEmpty(),Modifier.offset(100.dp,158.dp).size(1060.dp,460.dp).verticalScroll(scroll).focusRequester(bodyFocus).onPreviewKeyEvent {event->
+                val key=event.nativeKeyEvent
+                val delta=when(key.keyCode) {KeyEvent.KEYCODE_DPAD_DOWN->160;KeyEvent.KEYCODE_DPAD_UP->-160;else->0}
+                if(delta!=0 && ((delta>0 && scroll.value<scroll.maxValue)||(delta<0 && scroll.value>0))) {
+                    if(key.action==KeyEvent.ACTION_DOWN) scope.launch {scroll.animateScrollTo((scroll.value+delta).coerceIn(0,scroll.maxValue))}
+                    true
+                } else false
+            }.focusable(),color=AccountWhite,fontSize=22.sp)
             TvButton("Back",dismiss,Modifier.offset(100.dp,650.dp).size(180.dp,48.dp))
         };return
     }

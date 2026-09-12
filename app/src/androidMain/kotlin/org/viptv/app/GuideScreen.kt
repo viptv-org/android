@@ -72,7 +72,7 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel?, controll
         else if (programme != null && programme.startMillis <= now) controller.watchGuideChannel(channel)
         else detail = true
     }
-    LaunchedEffect(Unit) { focus.requestFocus(); while (true) { delay(30_000); now = System.currentTimeMillis(); if (followsNow) controller.followGuideNow() } }
+    LaunchedEffect(Unit) { focus.requestFocus(); while (true) { delay(30_000); now = System.currentTimeMillis(); if (followsNow) { anchor = now; controller.followGuideNow() } } }
     LaunchedEffect(model.followsNow, model.windowStartMillis) { if (model.followsNow) anchor = System.currentTimeMillis() }
     LaunchedEffect(model.channelOffset) { if (endOfPage) { channels.lastOrNull()?.let(controller::selectGuideChannel); endOfPage = false } }
     LaunchedEffect(searchOpen) { if (!searchOpen) focus.requestFocus() }

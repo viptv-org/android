@@ -1,6 +1,9 @@
 package org.viptv.app
 
 import android.view.KeyEvent
+import androidx.compose.animation.core.*
+import coil.compose.AsyncImage
+import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -104,4 +107,10 @@ internal fun rokuAsset(name: String) = "file:///android_asset/roku/images/$name"
             modifier = Modifier.padding(horizontal = 18.dp),
         )
     }
+}
+
+@Composable internal fun RokuSpinner(modifier:Modifier=Modifier) {
+    val animation=rememberInfiniteTransition(label="Roku spinner")
+    val angle by animation.animateFloat(0f,360f,infiniteRepeatable(tween(1100,easing=LinearEasing)),label="rotation")
+    AsyncImage(rokuAsset("ui-spinner.png"),"Loading",modifier.rotate(angle))
 }

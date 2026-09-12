@@ -41,7 +41,7 @@ internal fun SearchScreen(state: AppState, controller: AppController) {
                     LazyRow(horizontalArrangement=Arrangement.spacedBy(20.dp)) {
                         itemsIndexed(section.items,key={_,item->item.type+":"+item.id}) { index,item ->
                             Box(Modifier.onPreviewKeyEvent { event ->
-                                if(index==0 && event.nativeKeyEvent.action==KeyEvent.ACTION_DOWN && event.nativeKeyEvent.keyCode==KeyEvent.KEYCODE_DPAD_LEFT) { fieldFocus.requestFocus(); true } else false
+                                if(event.nativeKeyEvent.keyCode in listOf(KeyEvent.KEYCODE_INFO,KeyEvent.KEYCODE_MENU) && item.type!="live") { if(event.nativeKeyEvent.action==KeyEvent.ACTION_DOWN && event.nativeKeyEvent.repeatCount==0) controller.toggleMyList(item); true } else if(index==0 && event.nativeKeyEvent.action==KeyEvent.ACTION_DOWN && event.nativeKeyEvent.keyCode==KeyEvent.KEYCODE_DPAD_LEFT) { fieldFocus.requestFocus(); true } else false
                             }) { RokuArtworkCard(item,modifier=if(sectionIndex==state.searchSections.indexOfFirst { it.items.isNotEmpty() } && index==0) Modifier.focusRequester(resultFocus) else Modifier,onActivate={controller.open(item)}) }
                         }
                     }

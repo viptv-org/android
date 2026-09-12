@@ -160,7 +160,7 @@ internal fun PlaybackScreen(media:Media,chromeVisible:Boolean,seekPreview:SeekPr
                 }
             }
         }
-        if(buffering) PlayerAsset("ui-spinner.png",Modifier.offset(610.dp,330.dp).size(60.dp))
+        if(buffering) RokuSpinner(Modifier.offset(610.dp,330.dp).size(60.dp))
         menu?.let {active ->
             PlayerTrackDialog(active,if(active==PlayerTrackMenu.Audio) serverTracks.audio else serverTracks.subtitles,active==PlayerTrackMenu.Subtitles && serverTracks.subtitlesSupported,notice,
                 onAudio={controller.selectAudioTrack(it);menu=null},onText={controller.selectSubtitleTrack(it);menu=null},onUnavailable={notice="This track is not supported on this TV."},onClose={menu=null})
@@ -189,6 +189,8 @@ private fun PlayerTrackDialog(menu:PlayerTrackMenu,tracks:List<PlaybackTrack>,ca
         if(page>0) add("Previous tracks" to {page--})
         add("Back to player" to onClose)
     }
+    val panelHeight=146+minOf(entries.size,7)*62
+    val panelTop=(720-panelHeight)/2
     LaunchedEffect(menu,page) {focus.requestFocus()}
     Box(Modifier.fillMaxSize().background(Color(0xDC080909)).onPreviewKeyEvent {event ->
         val key=event.nativeKeyEvent
@@ -200,16 +202,16 @@ private fun PlayerTrackDialog(menu:PlayerTrackMenu,tracks:List<PlaybackTrack>,ca
             KeyEvent.KEYCODE_DPAD_CENTER,KeyEvent.KEYCODE_ENTER->if(key.repeatCount==0) entries[selected.coerceAtMost(entries.lastIndex)].second()
         };true}
     }.focusRequester(focus).focusable()) {
-        Box(Modifier.offset(200.dp,60.dp).size(880.dp,600.dp).background(Color(0xFF191B1D),RoundedCornerShape(12.dp)))
-        Text(if(menu==PlayerTrackMenu.Audio) "Audio tracks" else "Subtitles",color=Color(0xFFF5F5F5),fontSize=36.sp,fontWeight=FontWeight.Bold,modifier=Modifier.offset(244.dp,98.dp).size(792.dp,54.dp))
+        Box(Modifier.offset(200.dp,panelTop.dp).size(880.dp,panelHeight.dp).background(Color(0xFF191B1D),RoundedCornerShape(12.dp)))
+        Text(if(menu==PlayerTrackMenu.Audio) "Audio tracks" else "Subtitles",color=Color(0xFFF5F5F5),fontSize=36.sp,fontWeight=FontWeight.Bold,modifier=Modifier.offset(244.dp,(panelTop+32).dp).size(792.dp,54.dp))
         val first=max(0,selected-6)
         entries.drop(first).take(7).forEachIndexed {slot,entry ->
             val active=first+slot==selected
-            Box(Modifier.offset(244.dp,(178+slot*62).dp).size(792.dp,52.dp).background(if(active) Color(0xFFF5F5F5) else Color.Transparent,RoundedCornerShape(10.dp)).clickable(onClick=entry.second),contentAlignment=Alignment.CenterStart) {
+            Box(Modifier.offset(244.dp,(panelTop+94+slot*62).dp).size(792.dp,52.dp).background(if(active) Color(0xFFF5F5F5) else Color.Transparent,RoundedCornerShape(10.dp)).clickable(onClick=entry.second),contentAlignment=Alignment.CenterStart) {
                 Text(entry.first,color=if(active) Color(0xFF101112) else Color(0xFFF5F5F5),fontSize=20.sp,maxLines=1,modifier=Modifier.padding(start=18.dp))
             }
         }
-        Text(notice ?: if(menu==PlayerTrackMenu.Audio) "Track language is informational." else "Unavailable tracks cannot display. Image subtitles are not supported.",color=Color(0xFFA6A8AA),fontSize=16.sp,modifier=Modifier.offset(244.dp,624.dp).width(792.dp))
+        Text(notice ?: when { tracks.isEmpty() -> if(menu==PlayerTrackMenu.Audio) "This stream supplies no selectable audio tracks." else "This stream supplies no selectable subtitles."; menu==PlayerTrackMenu.Audio -> "Choose any available audio track. Language labels are informational."; !canDisable -> "Subtitles are unavailable for this output. Listed tracks cannot currently be displayed."; else -> "Select a supported text track. Image subtitles cannot be displayed." },color=Color(0xFFA6A8AA),fontSize=16.sp,maxLines=2,modifier=Modifier.offset(244.dp,(panelTop+panelHeight-50).dp).size(792.dp,44.dp))
     }
 }
 

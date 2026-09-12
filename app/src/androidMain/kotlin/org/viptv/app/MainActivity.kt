@@ -76,10 +76,10 @@ class MainActivity : ComponentActivity() {
                     )
                     Route.Addons -> AddonsScreen(state, controller)
                 }
-                if (route is Route.Browse || route is Route.Details || route is Route.Sources || route == Route.Search || route == Route.Settings || route == Route.Addons) RokuRail(state,controller)
+                if (route is Route.Browse || route is Route.Guide || route is Route.Details || route is Route.Sources || route == Route.Search || route == Route.Settings || route == Route.Addons) RokuRail(state,controller)
                 if (state.loading && route !is Route.Sources && route !is Route.Player && route !is Route.Guide) {
                     Box(Modifier.fillMaxSize().background(RokuCanvas.copy(alpha=.78f))) {
-                        AsyncImage(rokuAsset("ui-spinner.png"),null,Modifier.offset(610.dp,330.dp).size(60.dp))
+                        RokuSpinner(Modifier.offset(610.dp,330.dp).size(60.dp))
                         Text("Loading",color=RokuWhite,fontSize=20.sp,textAlign=TextAlign.Center,modifier=Modifier.offset(280.dp,414.dp).width(720.dp))
                     }
                 }
@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
     val names=listOf("", "ui-nav-home.png","ui-nav-discover.png","ui-nav-tv.png","ui-nav-list.png","ui-nav-search.png","ui-nav-settings.png")
     val selectedDestination = when(val route=state.route) {
         is Route.Browse -> route.destination
+        is Route.Guide -> Destination.Live
         Route.Search -> Destination.Search
         Route.Settings, Route.Addons -> Destination.Settings
         else -> Destination.Home
