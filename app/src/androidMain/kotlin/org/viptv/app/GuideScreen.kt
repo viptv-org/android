@@ -69,9 +69,26 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel, controlle
     val window = model?.windowStartMillis ?: floorGuideWindow(System.currentTimeMillis())
     val followsNow = model?.followsNow ?: true
     var detail by remember { mutableStateOf<Pair<LiveChannel, GuideProgramme>?>(null) }
+    var detailOrigin by remember { mutableStateOf<GuideDetailOrigin?>(null) }
     val initialFocus = remember(initialChannel.id) { FocusRequester() }
+    val visibleCellKeys = visible.flatMap { channel ->
+        guideCells(schedules[channel.id].orEmpty(), window).mapIndexed { index, cell ->
+            guideCellKey(channel, cell.programme, index)
+        }
+    }
+    val cellFocus = remember(visibleCellKeys) { visibleCellKeys.associateWith { FocusRequester() } }
+
+    fun closeDetail() {
+        detail = null
+    }
+
     LaunchedEffect(initialChannel.id) { initialFocus.requestFocus() }
-    if (detail != null) BackHandler { detail = null }
+    LaunchedEffect(detail == null, cellFocus) {
+        if (detail != null) return@LaunchedEffect
+        val origin = detailOrigin ?: return@LaunchedEffect
+        detailOrigin = null
+        (cellFocus[origin.cellKey] ?: cellFocus.entries.firstOrNull { it.key.startsWith("${origin.channelId}:") }?.value ?: initialFocus).requestFocus()
+    }
 
     Box(Modifier.fillMaxSize().background(GuideCanvas)) {
         Text("Live TV", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(104.dp, 98.dp))
@@ -99,9 +116,13 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel, controlle
                 y = y,
                 selected = channel.id == selectedId,
                 onFocus = { controller.selectGuideChannel(channel) },
-                onActivate = { programme ->
+                focusFor = { programme, index -> cellFocus.getValue(guideCellKey(channel, programme, index)) },
+                onActivate = { programme, index ->
                     if (programme.startMillis <= now && programme.endMillis > now) controller.watchGuideChannel(channel)
-                    else detail = channel to programme
+                    else {
+                        detailOrigin = GuideDetailOrigin(guideCellKey(channel, programme, index), channel.id)
+                        detail = channel to programme
+                    }
                 },
                 onWatch = { controller.watchGuideChannel(channel) },
             )
@@ -112,7 +133,7 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel, controlle
         }
         Text("${if (followsNow) "Following now" else "Time shifted"} · ${visible.size} channels", color = GuideMuted, fontSize = 15.sp, modifier = Modifier.offset(432.dp, 650.dp).width(804.dp), textAlign = TextAlign.Center)
         detail?.let { (channel, programme) ->
-            GuideDetail(channel, programme, onWatch = { controller.watchGuideChannel(channel) }, onClose = { detail = null })
+            GuideDetail(channel, programme, onWatch = { controller.watchGuideChannel(channel) }, onClose = ::closeDetail)
         }
     }
 }
@@ -127,17 +148,17 @@ private fun GuideChannelCell(channel: LiveChannel, selected: Boolean, modifier: 
 }
 
 @Composable
-private fun GuideProgrammeRow(channel: LiveChannel, programmes: List<GuideProgramme>, windowStart: Long, y: Int, selected: Boolean, onFocus: () -> Unit, onActivate: (GuideProgramme) -> Unit, onWatch: () -> Unit) {
+private fun GuideProgrammeRow(channel: LiveChannel, programmes: List<GuideProgramme>, windowStart: Long, y: Int, selected: Boolean, onFocus: () -> Unit, focusFor: (GuideProgramme, Int) -> FocusRequester, onActivate: (GuideProgramme, Int) -> Unit, onWatch: () -> Unit) {
     val cells = guideCells(programmes, windowStart)
-    cells.forEach { cell ->
+    cells.forEachIndexed { index, cell ->
         val x = 432 + (cell.left * GuideWidth).toInt()
         val width = max(1, (cell.width * GuideWidth).toInt() - 3)
         GuideCell(
             programme = cell.programme,
             selected = selected,
-            modifier = Modifier.offset(x.dp, y.dp).width(width.dp).height(87.dp),
+            modifier = Modifier.offset(x.dp, y.dp).width(width.dp).height(87.dp).focusRequester(focusFor(cell.programme, index)),
             onFocus = onFocus,
-            onActivate = { onActivate(cell.programme) },
+            onActivate = { onActivate(cell.programme, index) },
             onWatch = onWatch,
         )
     }
@@ -161,6 +182,8 @@ private fun GuideCell(programme: GuideProgramme, selected: Boolean, modifier: Mo
 }
 
 private data class GuideCellModel(val programme: GuideProgramme, val left: Float, val width: Float)
+private data class GuideDetailOrigin(val cellKey: String, val channelId: String)
+private fun guideCellKey(channel: LiveChannel, programme: GuideProgramme, index: Int) = "${channel.id}:${programme.startMillis}:${programme.endMillis}:$index"
 private fun guideCells(programmes: List<GuideProgramme>, start: Long): List<GuideCellModel> {
     val end = start + GuideWindowMillis
     val sorted = programmes.filter { it.endMillis > start && it.startMillis < end }.sortedBy(GuideProgramme::startMillis)
@@ -188,16 +211,40 @@ private fun GuideButton(label: String, modifier: Modifier, selected: Boolean = f
 }
 
 @Composable
-private fun GuideDetail(channel: LiveChannel, programme: GuideProgramme, onWatch: () -> Unit, onClose: () -> Unit) = Box(Modifier.fillMaxSize().background(Color(0xDC080909)), contentAlignment = Alignment.Center) {
+private fun GuideDetail(channel: LiveChannel, programme: GuideProgramme, onWatch: () -> Unit, onClose: () -> Unit) {
     val watchFocus = remember { FocusRequester() }
     LaunchedEffect(programme.startMillis, channel.id) { watchFocus.requestFocus() }
-    Box(Modifier.width(880.dp).background(Color(0xFF191B1D), RoundedCornerShape(12.dp)).padding(44.dp)) {
-        androidx.compose.foundation.layout.Column {
-            Text(programme.title, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-            Text(channel.name, color = GuideMuted, fontSize = 18.sp, modifier = Modifier.padding(top = 12.dp))
-            Text(programme.description ?: "This programme has not started yet.", color = Color(0xFFD5D6D7), fontSize = 19.sp, modifier = Modifier.padding(top = 20.dp))
-            GuideButton("Watch channel", Modifier.padding(top = 30.dp).width(220.dp).height(52.dp).focusRequester(watchFocus), onActivate = onWatch)
-            GuideButton("Close", Modifier.padding(top = 12.dp).width(220.dp).height(52.dp), onActivate = onClose)
+    BackHandler(onBack = onClose)
+    // A guide detail is deliberately a modal remote state: OK/Play watches the
+    // channel and Back returns to the exact programme cell. Directional and
+    // other player keys must not leak into the guide below it.
+    Box(
+        Modifier.fillMaxSize().background(Color(0xDC080909)).onPreviewKeyEvent { event ->
+            val key = event.nativeKeyEvent
+            when {
+                key.keyCode == KeyEvent.KEYCODE_BACK -> false
+                key.action == KeyEvent.ACTION_DOWN && key.keyCode in setOf(
+                    KeyEvent.KEYCODE_DPAD_CENTER,
+                    KeyEvent.KEYCODE_ENTER,
+                    KeyEvent.KEYCODE_NUMPAD_ENTER,
+                    KeyEvent.KEYCODE_MEDIA_PLAY,
+                ) -> {
+                    onWatch()
+                    true
+                }
+                else -> true
+            }
+        },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.width(880.dp).background(Color(0xFF191B1D), RoundedCornerShape(12.dp)).padding(44.dp)) {
+            androidx.compose.foundation.layout.Column {
+                Text(programme.title, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                Text(channel.name, color = GuideMuted, fontSize = 18.sp, modifier = Modifier.padding(top = 12.dp))
+                Text(programme.description ?: "This programme has not started yet.", color = Color(0xFFD5D6D7), fontSize = 19.sp, modifier = Modifier.padding(top = 20.dp))
+                GuideButton("Watch channel", Modifier.padding(top = 30.dp).width(220.dp).height(52.dp).focusRequester(watchFocus), onActivate = onWatch)
+                GuideButton("Close", Modifier.padding(top = 12.dp).width(220.dp).height(52.dp), onActivate = onClose)
+            }
         }
     }
 }
