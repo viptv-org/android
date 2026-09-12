@@ -13,6 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class AppController(context: Context, private val origin: String = "https://viptv.app") {
@@ -26,6 +27,8 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private var sourceDiscovery: Job? = null
     private var nextEpisodeJob: Job? = null
     private var playerChromeJob: Job? = null
+    private var heartbeatJob: Job? = null
+    private var playbackSessionId: String? = null
     private var afterParentUnlock: (suspend () -> Unit)? = null
 
     init { restore() }
@@ -106,6 +109,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
         update(loading = true); runCatching { gateway.playback(source, media.positionMillis) }.onSuccess { launch ->
             if (launch.url.isBlank()) { update(loading = false, message = "The selected source could not be prepared."); return@onSuccess }
             player.open(PlaybackSource(launch.url, headers = launch.headers, title = media.name, kindHint = if (media.type == "live") PlaybackKind.Live else PlaybackKind.OnDemand))
+            replacePlaybackSession(launch.sessionId)
             _state.value.selectedProfile?.let { profile -> store.edit().putString(sourceKey(profile.id, media), ResumeIdentity.sourceIdentity(source)).apply() }
             _state.value = _state.value.copy(route = Route.Player(media, source), playerChromeVisible = true, loading = false)
             schedulePlayerChromeDismissal()
@@ -139,7 +143,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
             is Route.Player -> {
                 if (nextEpisodeJob?.isActive == true) { nextEpisodeJob?.cancel(); player.play(); _state.value = _state.value.copy(message = null) }
                 else if (_state.value.playerChromeVisible) _state.value = _state.value.copy(playerChromeVisible = false)
-                else { player.stop(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
+                else { stopPlayback(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
             }
             is Route.Sources -> { sourceDiscovery?.cancel(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
             is Route.Profiles -> if (_state.value.managingProfiles) _state.value = _state.value.copy(managingProfiles = false) else _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
@@ -177,8 +181,8 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun dismissDialog() { _state.value = _state.value.copy(dialog = null) }
     fun submitPin(pin: String) = scope.launch { if (!pin.matches(Regex("\\d{4,8}"))) { update(message = "Enter a 4–8 digit parent PIN."); return@launch }; runCatching { gateway.unlockParent(pin) }.onSuccess { _state.value = _state.value.copy(pinPrompt = null, message = null); afterParentUnlock?.also { pending -> afterParentUnlock = null; pending() } }.onFailure { error -> _state.value = _state.value.copy(message = error.message ?: "Incorrect PIN. Try again.") } }
     fun cancelPin() { afterParentUnlock = null; _state.value = _state.value.copy(pinPrompt = null) }
-    fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { gateway.logout(); store.edit().clear().apply(); player.stop(); _state.value = AppState(route = Route.Pairing); beginPairing() } }
-    fun close() { pairingPoll?.cancel(); sourceDiscovery?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); player.close() }
+    fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback(); gateway.logout(); store.edit().clear().apply(); _state.value = AppState(route = Route.Pairing); beginPairing() } }
+    fun close() { pairingPoll?.cancel(); sourceDiscovery?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback(); player.close() }
     private fun requireProfile() = checkNotNull(_state.value.selectedProfile).id
     private fun sourceKey(profileId: String, media: Media) = ResumeIdentity.storageKey(profileId, media)
     private fun schedulePlayerChromeDismissal() {
@@ -187,6 +191,24 @@ class AppController(context: Context, private val origin: String = "https://vipt
             delay(7_000)
             if (_state.value.route is Route.Player && player.state.value.isPlaying) _state.value = _state.value.copy(playerChromeVisible = false)
         }
+    }
+    private fun replacePlaybackSession(sessionId: String) {
+        val prior = playbackSessionId
+        heartbeatJob?.cancel()
+        playbackSessionId = sessionId
+        heartbeatJob = scope.launch {
+            while (isActive) {
+                delay(15_000)
+                runCatching { gateway.heartbeat(sessionId) }
+            }
+        }
+        if (prior != null && prior != sessionId) scope.launch { runCatching { gateway.stopPlayback(prior) } }
+    }
+    private fun stopPlayback() {
+        player.stop()
+        heartbeatJob?.cancel()
+        playbackSessionId?.let { id -> scope.launch { runCatching { gateway.stopPlayback(id) } } }
+        playbackSessionId = null
     }
     private fun persist(session: DeviceSession) { store.edit().putString("access", session.accessToken).putString("refresh", session.refreshToken).apply() }
     private suspend fun guarded(pinTitle: String, action: suspend () -> Unit) {

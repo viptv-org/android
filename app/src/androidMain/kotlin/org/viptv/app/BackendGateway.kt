@@ -20,6 +20,8 @@ interface BackendGateway {
     suspend fun metadata(media: Media): Media
     suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit = {}): List<Source>
     suspend fun playback(source: Source, positionMillis: Long): PlaybackLaunch
+    suspend fun heartbeat(playbackId: String)
+    suspend fun stopPlayback(playbackId: String)
     suspend fun updateProgress(profileId: String, media: Media, positionMillis: Long)
     suspend fun nextEpisode(profileId: String, media: Media): NextResult
     suspend fun favorites(profileId: String): List<Media>
@@ -90,6 +92,8 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         val root = json("POST", "/playback", JSONObject().put("stream_id", source.id).put("position", positionMillis).put("capabilities", capabilities))
         return PlaybackLaunch(root.getString("id"), root.optString("url"), root.optJSONObject("headers")?.headers() ?: emptyMap())
     }
+    override suspend fun heartbeat(playbackId: String) { json("POST", "/playback/${enc(playbackId)}/heartbeat", JSONObject()) }
+    override suspend fun stopPlayback(playbackId: String) { json("DELETE", "/playback/${enc(playbackId)}") }
     override suspend fun updateProgress(profileId: String, media: Media, positionMillis: Long) {
         json("PUT", "/profiles/${enc(profileId)}/progress", JSONObject().put("id", media.id).put("type", media.type).put("name", media.name).put("position", positionMillis).put("duration", media.durationMillis ?: 0))
     }
