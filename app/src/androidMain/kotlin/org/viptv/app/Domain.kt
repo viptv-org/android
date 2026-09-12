@@ -67,8 +67,13 @@ object MediaCardPolicy {
 object HomeHoldPolicy {
     /** Continue Watching is logical Home row zero and always opens Queue Manage. */
     fun opensQueueManage(continueWatchingRow: Boolean, media: Media): Boolean = continueWatchingRow && QueuePolicy.canManage(media)
-    /** Other Home hero VOD/episodes retain the explicit manual source control. */
-    fun opensSourcesFromHero(continueWatchingRow: Boolean, media: Media): Boolean = !continueWatchingRow && media.type != "live"
+    /** A series root opens its episode selector; only a resolved episode or movie opens Sources. */
+    fun opensSourcesFromHero(continueWatchingRow: Boolean, media: Media): Boolean =
+        !continueWatchingRow && (
+            media.type == "movie" ||
+                media.type == "episode" ||
+                (media.type == "series" && media.season != null && media.episode != null)
+            )
 }
 
 /**
@@ -98,10 +103,13 @@ object QueuePolicy {
     fun hasResolvedNext(media: Media): Boolean = media.queueStatus == "next" && media.previousEpisode != null
 }
 
+enum class HomeFocusSurface { Hero, Card }
+
 data class HomeFocusSnapshot(
     val shelfIndex: Int? = null,
     val shelfTitle: String? = null,
     val mediaKey: String? = null,
+    val surface: HomeFocusSurface = HomeFocusSurface.Card,
     /** Incremented when a route explicitly returns to Home and asks Compose to restore. */
     val restoreRequest: Long = 0L,
     /** A directional event invalidates a queued focus restoration immediately. */
@@ -110,8 +118,13 @@ data class HomeFocusSnapshot(
 
 object HomeFocusPolicy {
     fun mediaKey(media: Media): String = "${media.type}\u0000${media.id}"
-    fun record(current: HomeFocusSnapshot, shelfIndex: Int, shelfTitle: String, media: Media): HomeFocusSnapshot =
-        current.copy(shelfIndex = shelfIndex, shelfTitle = shelfTitle, mediaKey = mediaKey(media))
+    fun record(
+        current: HomeFocusSnapshot,
+        shelfIndex: Int,
+        shelfTitle: String,
+        media: Media,
+        surface: HomeFocusSurface = HomeFocusSurface.Card,
+    ): HomeFocusSnapshot = current.copy(shelfIndex = shelfIndex, shelfTitle = shelfTitle, mediaKey = mediaKey(media), surface = surface)
     fun afterDirectionalInput(current: HomeFocusSnapshot): HomeFocusSnapshot = current.copy(inputEpoch = current.inputEpoch + 1)
     fun requestRestore(current: HomeFocusSnapshot): HomeFocusSnapshot = current.copy(restoreRequest = current.restoreRequest + 1)
     fun mayRestore(snapshot: HomeFocusSnapshot, observedInputEpoch: Long): Boolean = snapshot.inputEpoch == observedInputEpoch
@@ -350,6 +363,26 @@ data class DeviceSession(val accessToken: String, val refreshToken: String, val 
  * Queue controls follow this flag even when the row has just become empty.
  */
 data class HomeShelf(val title: String, val items: List<Media>, val isQueueShelf: Boolean = false)
+
+data class HomeShelfFocusTarget(val shelfIndex: Int, val shelfTitle: String, val media: Media)
+
+/** Keeps a vertical remote move in the same card column, clamping only at a row edge. */
+object HomeShelfFocusPolicy {
+    fun move(shelves: List<HomeShelf>, current: HomeFocusSnapshot, delta: Int): HomeShelfFocusTarget? {
+        if (delta !in setOf(-1, 1)) return null
+        val fromShelfIndex = current.shelfIndex ?: return null
+        val fromShelf = shelves.getOrNull(fromShelfIndex) ?: return null
+        val fromMediaIndex = fromShelf.items.indexOfFirst { HomeFocusPolicy.mediaKey(it) == current.mediaKey }
+        if (fromMediaIndex < 0) return null
+        val targetShelfIndex = fromShelfIndex + delta
+        val targetShelf = shelves.getOrNull(targetShelfIndex)?.takeIf { it.items.isNotEmpty() } ?: return null
+        return HomeShelfFocusTarget(
+            shelfIndex = targetShelfIndex,
+            shelfTitle = targetShelf.title,
+            media = targetShelf.items[fromMediaIndex.coerceAtMost(targetShelf.items.lastIndex)],
+        )
+    }
+}
 data class NextResult(val status: String, val item: Media? = null)
 data class Addon(val id: String, val name: String, val manifestUrl: String, val enabled: Boolean)
 /** Deliberately minimal, account-safe facts for the informational Settings section. */

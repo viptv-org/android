@@ -243,10 +243,11 @@ private fun EpisodeDetailCard(episode: Media, controller: AppController, focusRe
     var focused by remember(episode.id) { mutableStateOf(false) }
     Holdable(
         onActivate = { controller.chooseSources(episode) },
-        onHold = null,
+        onHold = { controller.requestDialog(DialogKind.EpisodeManage, episode.episodeTitle ?: episode.name, media = episode) },
         modifier = Modifier.fillMaxWidth().height(330.dp).then(if (focusRequester == null) Modifier else Modifier.focusRequester(focusRequester))
             .onFocusChanged { focused = it.hasFocus }
             .then(if (focused) Modifier.border(2.dp, DetailWhite, RoundedCornerShape(8.dp)) else Modifier),
+        onInfo = { controller.requestDialog(DialogKind.EpisodeManage, episode.episodeTitle ?: episode.name, media = episode) },
     ) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxWidth().height(144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)), contentAlignment = Alignment.Center) {

@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.Icon
@@ -64,6 +65,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.max
 
 private val Canvas = Color(0xFF101112); private val Surface = Color(0xFF202224); private val White = Color(0xFFF5F5F5); private val Muted = Color(0xFFC5C6C7)
@@ -199,6 +201,9 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
         shelf.items.map { media -> HomeCardFocus(shelfIndex, shelf.title, shelf.isQueueShelf, media) }
     }
     val homeCardKeys = homeCards.map { it.key }
+    val homeShelfState = rememberLazyListState()
+    val homeFocusScope = rememberCoroutineScope()
+    val heroPrimaryFocus = remember { FocusRequester() }
     // Keep requesters by identity across Home refreshes. Replacing every
     // requester when a later shelf arrives can detach the focused card before
     // the viewer has moved it.
@@ -218,12 +223,31 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
         val target = homeCards.firstOrNull {
             it.shelfIndex == currentHomeFocus.shelfIndex && HomeFocusPolicy.mediaKey(it.media) == currentHomeFocus.mediaKey
         } ?: homeCards.first()
-        homeRequesters[target.key]?.requestFocus()
+        if (currentHomeFocus.surface == HomeFocusSurface.Hero) {
+            heroPrimaryFocus.requestFocus()
+        } else {
+            homeShelfState.scrollToItem(target.shelfIndex)
+            homeRequesters[target.key]?.requestFocus()
+        }
     }
     val heroCard = homeCards.firstOrNull {
         it.shelfIndex == state.homeFocus.shelfIndex && HomeFocusPolicy.mediaKey(it.media) == state.homeFocus.mediaKey
     } ?: homeCards.firstOrNull()
     val compactHomeHero = destination == Destination.Home && heroCard?.shelfTitle != state.shelves.firstOrNull()?.title
+    val moveHomeCardVertically: (Int) -> Boolean = { delta ->
+        val target = HomeShelfFocusPolicy.move(state.shelves, state.homeFocus, delta)
+        if (destination != Destination.Home || target == null) {
+            false
+        } else {
+            controller.recordHomeFocus(target.shelfIndex, target.shelfTitle, target.media)
+            homeFocusScope.launch {
+                homeShelfState.scrollToItem(target.shelfIndex)
+                homeRequesters[HomeCardFocus(target.shelfIndex, target.shelfTitle, state.shelves[target.shelfIndex].isQueueShelf, target.media).key]
+                    ?.requestFocus()
+            }
+            true
+        }
+    }
     Box(
         Modifier.fillMaxSize().onPreviewKeyEvent { event ->
             if (destination == Destination.Home && event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN && event.nativeKeyEvent.keyCode in HomeDirectionalKeys) {
@@ -233,7 +257,9 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
         },
     ) {
         val hero = heroCard?.media
-        if (destination == Destination.Home && hero != null) HomeHero(hero, controller, heroCard?.isQueueShelf == true, compactHomeHero)
+        if (destination == Destination.Home && heroCard != null) {
+            HomeHero(heroCard, controller, compactHomeHero, heroPrimaryFocus)
+        }
         Column(
             Modifier.fillMaxSize()
                 .padding(
@@ -254,18 +280,31 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
             if (destination == Destination.Live) {
                 state.liveChannels.forEach { channel -> TvButton(channel.name, { controller.openGuide(channel) }, Modifier.fillMaxWidth().height(64.dp).padding(top = 8.dp)) }
                 if (!state.loading && state.liveChannels.isEmpty()) Text("No channels are available for this filter.", color = Muted, modifier = Modifier.padding(top = 120.dp))
+            } else if (destination == Destination.Home) {
+                LazyColumn(Modifier.fillMaxSize(), state = homeShelfState) {
+                    itemsIndexed(state.shelves, key = { shelfIndex, shelf -> "$shelfIndex\u0001${shelf.title}" }) { shelfIndex, shelf ->
+                        Shelf(
+                            shelf = shelf,
+                            controller = controller,
+                            focusRequesters = homeRequesters,
+                            onCardFocused = controller::recordHomeFocus,
+                            homeSurface = true,
+                            shelfIndex = shelfIndex,
+                            queueShelf = shelf.isQueueShelf,
+                            onMoveVertical = moveHomeCardVertically,
+                            topPadding = 0.dp,
+                        )
+                    }
+                }
+                if (!state.loading && state.shelves.isEmpty()) Text("Nothing is available here yet.", color = Muted, modifier = Modifier.padding(top = 120.dp))
             } else {
-                val shelves = if (destination == Destination.Home) state.shelves else listOf(HomeShelf(destination.label, state.catalog.ifEmpty { state.shelves.flatMap(HomeShelf::items) }))
+                val shelves = listOf(HomeShelf(destination.label, state.catalog.ifEmpty { state.shelves.flatMap(HomeShelf::items) }))
                 shelves.forEachIndexed { shelfIndex, shelf ->
                     Shelf(
                         shelf = shelf,
                         controller = controller,
-                        focusRequesters = if (destination == Destination.Home) homeRequesters else emptyMap(),
-                        onCardFocused = if (destination == Destination.Home) controller::recordHomeFocus else null,
-                        homeSurface = destination == Destination.Home,
                         shelfIndex = shelfIndex,
-                        queueShelf = destination == Destination.Home && shelf.isQueueShelf,
-                        topPadding = if (destination == Destination.Home) 0.dp else 26.dp,
+                        topPadding = 26.dp,
                     )
                 }
                 if (!state.loading && shelves.isEmpty()) Text("Nothing is available here yet.", color = Muted, modifier = Modifier.padding(top = 120.dp))
@@ -299,9 +338,16 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
     MediaCardAction.PlayQueuedNext -> controller.playQueuedNext(media)
 }
 
-@Composable private fun HomeHero(media: Media, controller: AppController, resumeSurface: Boolean, compact: Boolean) = Box(
+@Composable private fun HomeHero(
+    card: HomeCardFocus,
+    controller: AppController,
+    compact: Boolean,
+    primaryFocus: FocusRequester,
+) = Box(
     Modifier.fillMaxWidth().height(if (compact) 336.dp else 450.dp).background(Canvas),
 ) {
+    val media = card.media
+    val resumeSurface = card.isQueueShelf
     val density = LocalDensity.current
     val leftGradientEnd = with(density) { 760.dp.toPx() }
     val bottomGradientStart = with(density) { 140.dp.toPx() }
@@ -371,9 +417,10 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
                 MediaCardAction.OpenDetails -> if (media.type == "live") "Watch live" else "Play"
             },
             { activateHomeCard(action, media, controller) },
-            Modifier.width(if (action == MediaCardAction.PlayQueuedNext) 236.dp else 144.dp).height(50.dp),
+            Modifier.width(if (action == MediaCardAction.PlayQueuedNext) 236.dp else 144.dp).height(50.dp).focusRequester(primaryFocus),
             onHold = homeHold,
             onInfo = homeHold,
+            onFocused = { controller.recordHomeFocus(card.shelfIndex, card.shelfTitle, media, HomeFocusSurface.Hero) },
         )
         TvButton("My List", { controller.toggleMyList(media) }, Modifier.width(144.dp).height(50.dp))
     }
@@ -414,6 +461,7 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
     homeSurface: Boolean = false,
     shelfIndex: Int = -1,
     queueShelf: Boolean = false,
+    onMoveVertical: ((Int) -> Boolean)? = null,
     topPadding: androidx.compose.ui.unit.Dp = 26.dp,
 ) = Column(Modifier.padding(top = topPadding)) {
     Text(shelf.title, color = White, fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 10.dp))
@@ -427,6 +475,7 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
                 resumeSurface = resumeSurface,
                 homeSurface = homeSurface,
                 queueCard = queueShelf,
+                onMoveVertical = onMoveVertical,
                 onFocused = { onCardFocused?.invoke(shelfIndex, shelf.title, media) },
             )
         }
@@ -440,6 +489,7 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
     resumeSurface: Boolean = false,
     homeSurface: Boolean = false,
     queueCard: Boolean = false,
+    onMoveVertical: ((Int) -> Boolean)? = null,
     onFocused: (() -> Unit)? = null,
 ) {
     val action = MediaCardPolicy.primary(resumeSurface, media)
@@ -451,6 +501,15 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
             else -> null
         },
         Modifier.width(256.dp).height(200.dp).then(if (focusRequester == null) Modifier else Modifier.focusRequester(focusRequester))
+            .onPreviewKeyEvent { event ->
+                val key = event.nativeKeyEvent
+                if (key.action != KeyEvent.ACTION_DOWN) false
+                else when (key.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP -> onMoveVertical?.invoke(-1) == true
+                    KeyEvent.KEYCODE_DPAD_DOWN -> onMoveVertical?.invoke(1) == true
+                    else -> false
+                }
+            }
             .onFocusChanged { focus ->
                 focused = focus.hasFocus
                 if (focus.hasFocus) onFocused?.invoke()
@@ -663,8 +722,8 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
     Column(modifier.background(Surface, RoundedCornerShape(12.dp)).padding(32.dp).width(620.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(dialog.title, color = White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
         when (dialog.kind) {
-            DialogKind.SignOut -> Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Keep watching", controller::dismissDialog, Modifier.focusRequester(firstAction)); TvButton("Sign out", { controller.dismissDialog(); controller.signOut() }) }
-            DialogKind.DeleteProfile -> { Text("This removes this profile's watch history, favorites and preferences. Other profiles are kept.", color = Muted, modifier = Modifier.padding(top = 16.dp)); Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Cancel", controller::dismissDialog, Modifier.focusRequester(firstAction)); TvButton("Delete profile", { dialog.profile?.let(controller::deleteProfile); controller.dismissDialog() }) } }
+            DialogKind.SignOut -> Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Keep watching", controller::dismissDialog, Modifier.width(170.dp).height(56.dp).focusRequester(firstAction)); TvButton("Sign out", { controller.dismissDialog(); controller.signOut() }) }
+            DialogKind.DeleteProfile -> { Text("This removes this profile's watch history, favorites and preferences. Other profiles are kept.", color = Muted, modifier = Modifier.padding(top = 16.dp)); Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Cancel", controller::dismissDialog, Modifier.width(170.dp).height(56.dp).focusRequester(firstAction)); TvButton("Delete profile", { dialog.profile?.let(controller::deleteProfile); controller.dismissDialog() }) } }
             DialogKind.QueueManage -> {
                 Text("Manage Continue Watching", color = Muted, fontSize = 18.sp, modifier = Modifier.padding(top = 12.dp))
                 Column(Modifier.padding(top = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -681,21 +740,27 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
                 }
             }
             DialogKind.QueueRemoved -> Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                TvButton("Undo", { dialog.media?.let(controller::undoQueueRemoval) }, Modifier.focusRequester(firstAction))
-                TvButton("Done", dismissQueueDialog)
+                TvButton("Undo", { dialog.media?.let(controller::undoQueueRemoval) }, Modifier.width(170.dp).height(56.dp).focusRequester(firstAction))
+                TvButton("Done", dismissQueueDialog, Modifier.width(170.dp).height(56.dp))
+            }
+            DialogKind.EpisodeManage -> Column(Modifier.padding(top = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                TvButton("Mark watched", { dialog.media?.let { controller.correctEpisode(it, watched = true) }; controller.dismissDialog() }, Modifier.width(300.dp).height(56.dp).focusRequester(firstAction))
+                TvButton("Mark unwatched", { dialog.media?.let { controller.correctEpisode(it, watched = false) }; controller.dismissDialog() }, Modifier.width(300.dp).height(56.dp))
+                TvButton("Watch from beginning", { dialog.media?.let { controller.dismissDialog(); controller.chooseSources(it, resume = false) } }, Modifier.width(300.dp).height(56.dp))
+                TvButton("Cancel", controller::dismissDialog, Modifier.width(300.dp).height(56.dp))
             }
             DialogKind.NextUnavailable -> Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 dialog.media?.let { media ->
-                    TvButton("Open series", { controller.dismissDialog(); controller.open(media) }, Modifier.focusRequester(firstAction))
+                    TvButton("Open series", { controller.dismissDialog(); controller.open(media) }, Modifier.width(170.dp).height(56.dp).focusRequester(firstAction))
                 }
-                TvButton("Done", controller::dismissDialog, if (dialog.media == null) Modifier.focusRequester(firstAction) else Modifier)
+                TvButton("Done", controller::dismissDialog, Modifier.width(170.dp).height(56.dp).then(if (dialog.media == null) Modifier.focusRequester(firstAction) else Modifier))
             }
             DialogKind.SourceDetails -> {
                 dialog.source?.let { source ->
                     Text(source.description.ifBlank { source.provider }, color = Muted, fontSize = 19.sp, maxLines = 12, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 18.dp).height(260.dp))
                     Text(listOfNotNull(source.quality, source.audio, source.provider.takeIf { it.isNotBlank() }).joinToString("  •  "), color = Muted, modifier = Modifier.padding(top = 12.dp))
                 }
-                TvButton("Back", controller::dismissDialog, Modifier.padding(top = 24.dp).focusRequester(firstAction))
+                TvButton("Back", controller::dismissDialog, Modifier.padding(top = 24.dp).width(170.dp).height(56.dp).focusRequester(firstAction))
             }
             DialogKind.PlaybackRecovery -> {
                 Text("Retry the same source at your saved position, choose a different source, or return.", color = Muted, fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 16.dp).width(500.dp))
@@ -705,7 +770,7 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
                     TvButton("Back", controller::backFromPlaybackRecovery, Modifier.width(130.dp).height(56.dp))
                 }
             }
-            else -> TvButton("Done", controller::dismissDialog, Modifier.padding(top = 24.dp).focusRequester(firstAction))
+            else -> TvButton("Done", controller::dismissDialog, Modifier.padding(top = 24.dp).width(170.dp).height(56.dp).focusRequester(firstAction))
         }
     }
 }
@@ -719,6 +784,7 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
     content: (@Composable BoxScope.() -> Unit)? = null,
     onHold: (() -> Unit)? = null,
     onInfo: (() -> Unit)? = null,
+    onFocused: (() -> Unit)? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     val fill = when {
@@ -729,7 +795,10 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
     Holdable(
         onActivate,
         onHold,
-        modifier.onFocusChanged { focused = it.hasFocus }.background(fill, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp),
+        modifier.onFocusChanged {
+            focused = it.hasFocus
+            if (it.hasFocus) onFocused?.invoke()
+        }.background(fill, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp),
         onInfo = onInfo,
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

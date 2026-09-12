@@ -130,6 +130,8 @@ class MediaCardPolicyTest {
         assertTrue(HomeHoldPolicy.opensSourcesFromHero(continueWatchingRow = false, media = progressed))
         assertFalse(HomeHoldPolicy.opensSourcesFromHero(continueWatchingRow = true, media = progressed))
         assertFalse(HomeHoldPolicy.opensSourcesFromHero(continueWatchingRow = false, media = Media("live", "live")))
+        assertFalse(HomeHoldPolicy.opensSourcesFromHero(continueWatchingRow = false, media = Media("series", "series")))
+        assertTrue(HomeHoldPolicy.opensSourcesFromHero(continueWatchingRow = false, media = Media("episode", "series", season = 1, episode = 2)))
     }
 }
 
@@ -166,6 +168,19 @@ class HomeQueuePolicyTest {
     @Test fun `queue row role is metadata rather than its display title`() {
         assertTrue(HomeShelf("Localized queue label", emptyList(), isQueueShelf = true).isQueueShelf)
         assertFalse(HomeShelf("Continue Watching", emptyList()).isQueueShelf)
+    }
+
+    @Test fun `vertical Home move keeps card column and reaches the next shelf`() {
+        val first = Media("first", "movie")
+        val second = Media("second", "movie")
+        val lower = Media("lower", "movie")
+        val shelves = listOf(
+            HomeShelf("Continue", listOf(first, second), isQueueShelf = true),
+            HomeShelf("Recent", listOf(lower)),
+        )
+        val current = HomeFocusPolicy.record(HomeFocusSnapshot(), 0, "Continue", second)
+        assertEquals(HomeShelfFocusTarget(1, "Recent", lower), HomeShelfFocusPolicy.move(shelves, current, 1))
+        assertEquals(null, HomeShelfFocusPolicy.move(shelves, current, -1))
     }
 }
 

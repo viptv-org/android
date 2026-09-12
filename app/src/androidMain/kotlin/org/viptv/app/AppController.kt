@@ -1250,8 +1250,17 @@ class AppController(context: Context, private val origin: String = "https://vipt
             }
         }
     }
-    fun recordHomeFocus(shelfIndex: Int, shelfTitle: String, media: Media) {
-        if (_state.value.route == Route.Browse(Destination.Home)) _state.value = _state.value.copy(homeFocus = HomeFocusPolicy.record(_state.value.homeFocus, shelfIndex, shelfTitle, media))
+    fun recordHomeFocus(
+        shelfIndex: Int,
+        shelfTitle: String,
+        media: Media,
+        surface: HomeFocusSurface = HomeFocusSurface.Card,
+    ) {
+        if (_state.value.route == Route.Browse(Destination.Home)) {
+            _state.value = _state.value.copy(
+                homeFocus = HomeFocusPolicy.record(_state.value.homeFocus, shelfIndex, shelfTitle, media, surface),
+            )
+        }
     }
     fun recordHomeDirectionalInput() {
         if (_state.value.route == Route.Browse(Destination.Home)) {
