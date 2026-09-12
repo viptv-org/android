@@ -402,7 +402,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun removeAddon(addon: Addon) = scope.launch { guarded("Enter parent PIN") { gateway.removeAddon(addon); openSettings() } }
     fun editProfile(profile: Profile? = null) { _state.value = _state.value.copy(route = Route.ProfileEditor(profile), message = null) }
     fun requestDeleteProfile(profile: Profile) { _state.value = _state.value.copy(dialog = DialogState(DialogKind.DeleteProfile, "Delete ${profile.name}?", profile = profile)) }
-    fun saveProfile(profile: Profile?, name: String, avatarStyle: String, avatarSeed: String?) {
+    fun saveProfile(profile: Profile?, name: String, avatarStyle: String, avatarChoice: Int?) {
         val normalizedName = name.trim()
         if (normalizedName.isEmpty()) {
             update(loading = false, message = "Enter a name to continue.")
@@ -412,9 +412,9 @@ class AppController(context: Context, private val origin: String = "https://vipt
             update(loading = true, message = "Saving profile…")
             guarded("Enter parent PIN to manage profiles") {
                 val saved = if (profile == null) {
-                    gateway.createProfile(normalizedName, avatarStyle, avatarSeed)
+                    gateway.createProfile(normalizedName, avatarStyle, avatarChoice)
                 } else {
-                    gateway.updateProfile(profile, normalizedName, avatarStyle, avatarSeed)
+                    gateway.updateProfile(profile, normalizedName, avatarStyle, avatarChoice)
                 }
                 val profiles = _state.value.profiles.filterNot { it.id == saved.id } + saved
                 _state.value = _state.value.copy(route = Route.Profiles, profiles = profiles, loading = false, message = "Profile saved.")

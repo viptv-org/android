@@ -1,13 +1,22 @@
 package org.viptv.app
 
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
+import java.io.IOException
 import java.net.URL
 import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.math.roundToLong
 
 interface BackendGateway {
@@ -43,8 +52,8 @@ interface BackendGateway {
     suspend fun addons(): List<Addon>
     suspend fun setAddonEnabled(addon: Addon, enabled: Boolean)
     suspend fun removeAddon(addon: Addon)
-    suspend fun createProfile(name: String, avatarStyle: String, avatarSeed: String?): Profile
-    suspend fun updateProfile(profile: Profile, name: String, avatarStyle: String, avatarSeed: String?): Profile
+    suspend fun createProfile(name: String, avatarStyle: String, avatarChoice: Int?): Profile
+    suspend fun updateProfile(profile: Profile, name: String, avatarStyle: String, avatarChoice: Int?): Profile
     suspend fun deleteProfile(profile: Profile)
     suspend fun unlockParent(pin: String)
     suspend fun logout()
@@ -81,6 +90,11 @@ data class PlaybackTrack(
 
 /** HTTP adapter for the documented Rust /api contract. It owns credentials and never logs them. */
 class VipTvHttpGateway(private val origin: String, private var accessToken: String? = null) : BackendGateway {
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .callTimeout(30, TimeUnit.SECONDS)
+        .build()
     override suspend fun startDevicePairing(deviceName: String): DeviceCode = json("POST", "/auth/device/code", JSONObject().put("device_name", deviceName)).let {
         DeviceCode(it.getString("device_code"), it.getString("user_code"), it.getString("verification_uri"), it.optString("verification_uri_complete").ifBlank { null }, it.optString("qr_uri").ifBlank { null }, it.optLong("interval", 5))
     }
@@ -117,7 +131,7 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
                 val streams = event.optJSONArray("streams") ?: JSONArray()
                 for (index in 0 until streams.length()) {
                     val stream = streams.optJSONObject(index) ?: continue
-                    stream.source().also { source -> if (source.id.isNotBlank()) accumulated.putIfAbsent(source.id, source) }
+                    stream.source(event.optString("source").ifBlank { null }).also { source -> if (source.id.isNotBlank()) accumulated.putIfAbsent(source.id, source) }
                 }
             }
             onUpdate(accumulated.values.toList())
@@ -182,11 +196,13 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
     override suspend fun savePreferences(profileId: String, preferences: PlaybackPreferences) {
         json("PUT", "/profiles/${enc(profileId)}/preferences", preferences.body())
     }
-    override suspend fun addons(): List<Addon> = json("GET", "/addons").array("items").mapNotNull { it.optJSONObject()?.addon() }
+    override suspend fun addons(): List<Addon> = jsonArray("GET", "/addons").objects().mapNotNull { it.addon() }
     override suspend fun setAddonEnabled(addon: Addon, enabled: Boolean) { json("PATCH", "/addons/${enc(addon.id)}", JSONObject().put("enabled", enabled)) }
     override suspend fun removeAddon(addon: Addon) { json("DELETE", "/addons/${enc(addon.id)}") }
-    override suspend fun createProfile(name: String, avatarStyle: String, avatarSeed: String?): Profile = json("POST", "/profiles", JSONObject().put("name", name).put("avatar_style", avatarStyle).putOpt("avatar_seed", avatarSeed)).profile()
-    override suspend fun updateProfile(profile: Profile, name: String, avatarStyle: String, avatarSeed: String?): Profile = json("PATCH", "/profiles/${enc(profile.id)}", JSONObject().put("name", name).put("avatar_style", avatarStyle).putOpt("avatar_seed", avatarSeed)).profile()
+    override suspend fun createProfile(name: String, avatarStyle: String, avatarChoice: Int?): Profile =
+        json("POST", "/profiles", profilePayload(name, avatarStyle, avatarChoice, setupComplete = false)).profile()
+    override suspend fun updateProfile(profile: Profile, name: String, avatarStyle: String, avatarChoice: Int?): Profile =
+        json("PATCH", "/profiles/${enc(profile.id)}", profilePayload(name, avatarStyle, avatarChoice, setupComplete = true)).profile()
     override suspend fun deleteProfile(profile: Profile) { json("DELETE", "/profiles/${enc(profile.id)}") }
     override suspend fun unlockParent(pin: String) { json("POST", "/parent/unlock", JSONObject().put("pin", pin)) }
     override suspend fun logout() { json("POST", "/auth/logout", JSONObject()) }
@@ -194,15 +210,40 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         val token = value.getString("access_token"); accessToken = token
         return DeviceSession(token, value.getString("refresh_token"), value.opt("profile_id")?.toString())
     }
-    private suspend fun json(method: String, path: String, body: JSONObject? = null): JSONObject = withContext(Dispatchers.IO) {
-        val connection = (URL(origin.trimEnd('/') + "/api" + path).openConnection() as HttpURLConnection).apply {
-            requestMethod = method; connectTimeout = 10_000; readTimeout = 20_000; setRequestProperty("Accept", "application/json")
-            accessToken?.let { setRequestProperty("Authorization", "Bearer $it") }
-            if (body != null) { doOutput = true; setRequestProperty("Content-Type", "application/json"); outputStream.bufferedWriter().use { it.write(body.toString()) } }
-        }
-        val status = connection.responseCode; val text = (if (status in 200..299) connection.inputStream else connection.errorStream).bufferedReader().use { it.readText() }
-        if (status !in 200..299) throw GatewayError(status, JSONObject(text.ifBlank { "{}" }).optString("error", "Request failed"))
-        JSONObject(text)
+    private suspend fun json(method: String, path: String, body: JSONObject? = null): JSONObject = JSONObject(responseText(method, path, body))
+    /** `/addons` is deliberately a raw JSON array in the Rust API. */
+    private suspend fun jsonArray(method: String, path: String, body: JSONObject? = null): JSONArray = JSONArray(responseText(method, path, body))
+    /**
+     * A cancellable OkHttp boundary works in Android and host-JVM wire tests,
+     * including PATCH. Calls are bounded and cancelled with their coroutine.
+     */
+    private suspend fun responseText(method: String, path: String, body: JSONObject? = null): String = suspendCancellableCoroutine { continuation ->
+        val request = Request.Builder()
+            .url(origin.trimEnd('/') + "/api" + path)
+            .header("Accept", "application/json")
+            .apply { accessToken?.let { header("Authorization", "Bearer $it") } }
+            .method(method, body?.toString()?.toRequestBody(JSON_MEDIA_TYPE))
+            .build()
+        val call = client.newCall(request)
+        continuation.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, error: IOException) {
+                if (continuation.isActive) continuation.resumeWithException(error)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    val text = it.body?.string().orEmpty()
+                    if (!it.isSuccessful) {
+                        val message = runCatching { JSONObject(text.ifBlank { "{}" }).optString("error", "Request failed") }
+                            .getOrDefault("Request failed")
+                        if (continuation.isActive) continuation.resumeWithException(GatewayError(it.code, message))
+                    } else if (continuation.isActive) {
+                        continuation.resume(text)
+                    }
+                }
+            }
+        })
     }
     private fun enc(value: String) = URLEncoder.encode(value, "UTF-8")
     /** Playback URLs are server capabilities. Reject an unexpected external URL before Media3 sees it. */
@@ -216,9 +257,32 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
     }
 }
 class GatewayError(val status: Int, override val message: String) : IllegalStateException(message)
-private fun JSONObject.profile() = Profile(get("id").toString(), getString("name"), optString("avatar_url").ifBlank { null }, optBoolean("kids"), optBoolean("is_primary"), optString("avatar_style", "critters"), optString("avatar_seed").ifBlank { null })
+
+private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+/**
+ * `avatar_seed` is server storage, never a profile mutation field. The public
+ * wire contract exposes a bounded avatar choice and setup completion only.
+ */
+private fun profilePayload(name: String, avatarStyle: String, avatarChoice: Int?, setupComplete: Boolean): JSONObject =
+    JSONObject().put("name", name).put("avatar_style", avatarStyle).also { body ->
+        avatarChoice?.let { body.put("avatar_choice", it) }
+        // Create rejects setup_complete. Saving the profile editor completes an
+        // imported profile, so updates send the only valid value: true.
+        if (setupComplete) body.put("setup_complete", true)
+    }
+
+private fun JSONObject.profile() = Profile(
+    id = get("id").toString(),
+    name = getString("name"),
+    avatarUrl = optString("avatar_url").ifBlank { null },
+    kids = optBoolean("kids"),
+    primary = optBoolean("is_primary"),
+    avatarStyle = optString("avatar_style", "critters"),
+    avatarChoice = (opt("avatar_choice") as? Number)?.toInt()?.takeIf { it in 1..48 },
+    setupComplete = optBoolean("setup_complete"),
+)
 private fun JSONObject.media(): Media {
-    val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), optString("poster").ifBlank { null }, optString("description").ifBlank { null }, millis(optDouble("position", 0.0)), optDouble("duration", 0.0).takeIf { it > 0 }?.let(::millis), optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null })
+    val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), optString("poster").ifBlank { null }, optString("description").ifBlank { null }, millis(optDouble("position", 0.0)), optDouble("duration", 0.0).takeIf { it > 0 }?.let(::millis), optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null }, episodeTitle = optString("episode_title", optString("episodeTitle")).ifBlank { null })
     val videos = optJSONArray("videos") ?: optJSONArray("episodes") ?: return base
     return base.copy(episodes = (0 until videos.length()).mapNotNull { index -> videos.optJSONObject(index)?.media()?.let { episode ->
         episode.copy(
@@ -228,9 +292,22 @@ private fun JSONObject.media(): Media {
     } })
 }
 private fun JSONObject.mediaArray(vararg keys: String): List<Media> { val a = keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray(); return (0 until a.length()).mapNotNull { a.optJSONObject(it)?.media() } }
-private fun JSONObject.source() = Source(optString("id", optString("stream_id")), optString("provider", optString("source", "Source")), optString("name", optString("provider", optString("source", "Source"))), optString("description", optString("filename")), optJSONObject("headers")?.headers() ?: emptyMap(), optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null })
+private fun JSONObject.source(eventProvider: String? = null): Source {
+    val provider = optString("provider", optString("source", eventProvider ?: "Source"))
+    return Source(
+        id = optString("id", optString("stream_id")),
+        provider = provider,
+        name = optString("source_name", optString("title", optString("name", provider))).ifBlank { provider },
+        description = optString("description", optString("filename")),
+        addonId = optString("source_addon_id").ifBlank { null },
+        fingerprint = optString("source_fingerprint").ifBlank { null },
+        quality = optString("source_quality").ifBlank { null },
+        audio = optString("source_audio").ifBlank { null },
+    )
+}
 private fun JSONObject.track() = PlaybackTrack(optInt("input_index"), optString("codec").ifBlank { null }, optString("language").ifBlank { null }, optString("language_status", "unknown"), optString("title"), optBoolean("selected"), optBoolean("supported"), optBoolean("selectable"))
 private fun JSONObject.headers(): Map<String, String> = keys().asSequence().associateWith { get(it).toString() }
+private fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }
 private fun JSONObject.array(vararg keys: String): List<Any?> = (keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray()).let { array -> (0 until array.length()).map { index -> array.opt(index) } }
 private fun Any?.optJSONObject(): JSONObject? = this as? JSONObject
 private fun JSONObject.channel() = LiveChannel(get("id").toString(), optString("name", optString("title")), optString("logo").ifBlank { null }, optString("category").ifBlank { null })

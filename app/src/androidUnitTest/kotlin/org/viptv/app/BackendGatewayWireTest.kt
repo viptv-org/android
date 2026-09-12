@@ -13,7 +13,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Exercises VipTvHttpGateway through its real HttpURLConnection boundary. The
+ * Exercises VipTvHttpGateway through its real OkHttp boundary. The
  * fixture intentionally speaks the server's JSON wire shape rather than
  * mocking the gateway or its JSON helpers.
  */
@@ -25,8 +25,8 @@ class BackendGatewayWireTest {
                 "/api/streams" -> FixtureResponse("""{"id":"job-1"}""")
                 "/api/streams/job-1?after=0" -> FixtureResponse(
                     """{"events":[
-                        {"seq":1,"source":"addon:one","streams":[
-                          {"id":"stream-a","name":"1080p","filename":"a.mkv","source_addon_id":"addon:one","source_fingerprint":"fp-a"},
+                        {"seq":1,"source":"iptv:4","streams":[
+                          {"id":"stream-a","provider":"iptv:4","source_name":"Evening News","filename":"evening-news.mkv","source_quality":"1080p","source_audio":"English 5.1","headers":{"Authorization":"private-token"},"source_addon_id":"addon:one","source_fingerprint":"fp-a"},
                           {"id":"stream-b","name":"720p","filename":"b.mkv","source_addon_id":"addon:one","source_fingerprint":"fp-b"}
                         ]},
                         {"seq":2,"source":"addon:two","streams":[
@@ -41,8 +41,14 @@ class BackendGatewayWireTest {
             val sources = VipTvHttpGateway(server.origin).sources(Media("movie-1", "movie", "Movie")) { updates += it }
 
             assertEquals(listOf("stream-a", "stream-b", "stream-c"), sources.map(Source::id))
+            assertEquals("iptv:4", sources.first().provider)
+            assertEquals("Evening News", sources.first().name)
+            assertEquals("evening-news.mkv", sources.first().description)
+            assertEquals("1080p", sources.first().quality)
+            assertEquals("English 5.1", sources.first().audio)
             assertEquals("addon:one", sources.first().addonId)
             assertEquals("fp-c", sources.last().fingerprint)
+            assertFalse(sources.toString().contains("private-token"))
             assertEquals(sources, updates.last())
             assertEquals("POST", server.requests[0].method)
             assertEquals("GET", server.requests[1].method)
@@ -99,6 +105,77 @@ class BackendGatewayWireTest {
             assertEquals("addon:one", progress.getString("source_addon_id"))
             assertEquals("fp-one", progress.getString("source_fingerprint"))
             assertNull(progress.opt("source_name").takeIf { it != JSONObject.NULL })
+            server.assertHealthy()
+        }
+    }
+
+    @Test
+    fun `profile mutations send avatar choice not server seed and honor setup complete rules`() = runBlocking {
+        FixtureServer(2) { request ->
+            when (request.target) {
+                "/api/profiles" -> FixtureResponse(
+                    """{"id":"7","name":"New","avatar_style":"pixel-art","avatar_choice":3,"setup_complete":true}""",
+                )
+                "/api/profiles/7" -> FixtureResponse(
+                    """{"id":"7","name":"Renamed","avatar_style":"moods","avatar_choice":9,"setup_complete":true}""",
+                )
+                else -> error("Unexpected request ${request.target}")
+            }
+        }.use { server ->
+            val gateway = VipTvHttpGateway(server.origin)
+            val created = gateway.createProfile("New", "pixel-art", avatarChoice = 3)
+            val updated = gateway.updateProfile(created.copy(setupComplete = false), "Renamed", "moods", avatarChoice = 9)
+
+            val create = JSONObject(server.requests[0].body)
+            assertEquals("POST", server.requests[0].method)
+            assertEquals("New", create.getString("name"))
+            assertEquals("pixel-art", create.getString("avatar_style"))
+            assertEquals(3, create.getInt("avatar_choice"))
+            assertFalse(create.has("avatar_seed"))
+            assertFalse(create.has("setup_complete"))
+
+            val update = JSONObject(server.requests[1].body)
+            assertEquals("PATCH", server.requests[1].method)
+            assertEquals("Renamed", update.getString("name"))
+            assertEquals("moods", update.getString("avatar_style"))
+            assertEquals(9, update.getInt("avatar_choice"))
+            assertTrue(update.getBoolean("setup_complete"))
+            assertFalse(update.has("avatar_seed"))
+            assertEquals(9, updated.avatarChoice)
+            assertTrue(updated.setupComplete)
+            server.assertHealthy()
+        }
+    }
+
+    @Test
+    fun `metadata preserves episode title while inheriting series context`() = runBlocking {
+        FixtureServer(1) { request ->
+            assertEquals("GET", request.method)
+            assertEquals("/api/meta/series/show-1", request.target)
+            FixtureResponse(
+                """{"meta":{"id":"show-1","type":"series","name":"Fixture Show","videos":[{"id":"show-1:1:2","name":"Fixture Show","episode_title":"The Signal","season":1,"episode":2}]}}""",
+            )
+        }.use { server ->
+            val show = VipTvHttpGateway(server.origin).metadata(Media("show-1", "series", "Fixture Show"))
+            val episode = show.episodes.single()
+
+            assertEquals("Fixture Show", episode.name)
+            assertEquals("The Signal", episode.episodeTitle)
+            assertEquals("show-1", episode.seriesId)
+            assertEquals("series", episode.type)
+            server.assertHealthy()
+        }
+    }
+
+    @Test
+    fun `addons consume the backend raw array response`() = runBlocking {
+        FixtureServer(1) { request ->
+            assertEquals("GET", request.method)
+            assertEquals("/api/addons", request.target)
+            FixtureResponse("""[{"id":2,"name":"Fixture","manifest_url":"https://example.test/manifest.json","enabled":false}]""")
+        }.use { server ->
+            val addons = VipTvHttpGateway(server.origin).addons()
+            assertEquals(listOf(Addon("2", "Fixture", "https://example.test/manifest.json", false)), addons)
             server.assertHealthy()
         }
     }

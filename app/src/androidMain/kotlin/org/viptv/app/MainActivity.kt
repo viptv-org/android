@@ -328,7 +328,7 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
             if (!episode.poster.isNullOrBlank()) AsyncImage(model = episode.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
         Text("S${episode.season ?: 0} E${episode.episode ?: 0}", color = Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp))
-        Text(episode.name.ifBlank { "Episode ${episode.episode ?: ""}" }, color = if (focused) Color.White else White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 12.dp))
+        Text(episode.episodeTitle ?: episode.name.ifBlank { "Episode ${episode.episode ?: ""}" }, color = if (focused) Color.White else White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 12.dp))
         Text(episode.description ?: "", color = Muted, fontSize = 16.sp, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp).height(94.dp))
         }
     }
@@ -363,6 +363,9 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
     AndroidView(factory = { SurfaceView(it).also(controller.player::attach) }, modifier = Modifier.fillMaxSize())
     if (chromeVisible) Column(Modifier.align(Alignment.BottomStart).padding(64.dp)) {
         Text(media.name, color = White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+        if (media.type == "series" && media.season != null && media.episode != null) {
+            Text("S${media.season} E${media.episode}${media.episodeTitle?.let { " · $it" } ?: ""}", color = Muted, modifier = Modifier.padding(top = 6.dp))
+        }
         seekPreview?.let { Text("Seek preview: ${it.targetMillis / 1_000}s", color = Muted, modifier = Modifier.padding(top = 8.dp)) }
         Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             if (media.type != "live") {
@@ -419,7 +422,7 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
         Text(if (profile == null) "Add a profile" else "Edit profile", color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
         TextField(value = name, onValueChange = { name = it }, label = { Text("Profile name") }, modifier = Modifier.width(560.dp).padding(top = 28.dp))
         TvButton("Avatar: $avatarStyle", { avatarStyle = if (avatarStyle == "critters") "pixel-art" else "critters" }, Modifier.padding(top = 16.dp))
-        Row(Modifier.padding(top = 32.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Save", { controller.saveProfile(profile, name.trim(), avatarStyle, profile?.avatarSeed) }); TvButton("Cancel", controller::back); if (profile != null && !profile.primary) TvButton("Delete profile", { controller.requestDeleteProfile(profile) }) }
+        Row(Modifier.padding(top = 32.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Save", { controller.saveProfile(profile, name.trim(), avatarStyle, profile?.avatarChoice) }); TvButton("Cancel", controller::back); if (profile != null && !profile.primary) TvButton("Delete profile", { controller.requestDeleteProfile(profile) }) }
     }
 }
 

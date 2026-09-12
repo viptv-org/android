@@ -14,6 +14,8 @@ data class Media(
     val sourceAddonId: String? = null,
     val sourceFingerprint: String? = null,
     val episodes: List<Media> = emptyList(),
+    /** Episode-specific title when upstream video `name` repeats the series title. */
+    val episodeTitle: String? = null,
 )
 
 data class Source(
@@ -21,9 +23,12 @@ data class Source(
     val provider: String,
     val name: String = provider,
     val description: String = "",
-    val headers: Map<String, String> = emptyMap(),
+    /** Source discovery must never expose upstream delivery credentials to UI state. */
     val addonId: String? = null,
     val fingerprint: String? = null,
+    /** Safe server display facts; provider identity is kept separately for ranking. */
+    val quality: String? = null,
+    val audio: String? = null,
 )
 
 sealed interface PlaybackIntent {
@@ -159,7 +164,10 @@ data class Profile(
     val kids: Boolean = false,
     val primary: Boolean = false,
     val avatarStyle: String = "critters",
-    val avatarSeed: String? = null,
+    /** Server-selected public avatar ordinal. `avatar_seed` is never exposed or sent by clients. */
+    val avatarChoice: Int? = null,
+    /** The server only accepts this mutation as true, and never on create. */
+    val setupComplete: Boolean = false,
 )
 data class DeviceCode(val code: String, val userCode: String, val verificationUri: String, val verificationUriComplete: String?, val qrUri: String?, val intervalSeconds: Long)
 data class DeviceSession(val accessToken: String, val refreshToken: String, val profileId: String?)

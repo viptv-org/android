@@ -21,14 +21,15 @@ kotlin {
             implementation(libs.kotlinx.coroutines.android)
             implementation("io.coil-kt:coil-compose:2.7.0")
             implementation("com.google.zxing:core:3.5.3")
+            implementation("com.squareup.okhttp3:okhttp:4.12.0")
         }
         androidUnitTest.dependencies {
             implementation(kotlin("test"))
             implementation(platform("androidx.compose:compose-bom:2025.04.01"))
             implementation(libs.androidx.compose.ui.test.junit4)
-            // JVM unit tests exercise the real HttpURLConnection/JSON boundary;
-            // Android's framework stub is not executable on the host JVM.
+            // JVM unit tests exercise the real OkHttp/JSON boundary.
             implementation("org.json:json:20240303")
+            implementation("com.squareup.okhttp3:okhttp:4.12.0")
         }
     }
 }
