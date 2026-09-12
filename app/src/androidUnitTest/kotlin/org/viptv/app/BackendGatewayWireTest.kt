@@ -207,12 +207,31 @@ class BackendGatewayWireTest {
                 else -> error("Unexpected request ${request.target}")
             }
         }.use { server ->
-            val sections = VipTvHttpGateway(server.origin).search("space opera")
+            val results = VipTvHttpGateway(server.origin).search("space opera")
 
-            assertEquals(listOf("Movie catalog", "Live TV"), sections.map(SearchSection::source))
-            assertEquals(listOf("movie-1", "movie-2"), sections[0].items.map(Media::id))
-            assertEquals(listOf("live-1"), sections[1].items.map(Media::id))
+            assertTrue(results.partialFailure)
+            assertEquals(listOf("Movie catalog", "Live TV"), results.sections.map(SearchSection::source))
+            assertEquals(listOf("movie-1", "movie-2"), results.sections[0].items.map(Media::id))
+            assertEquals(listOf("live-1"), results.sections[1].items.map(Media::id))
             assertEquals(4, server.requests.size)
+            server.assertHealthy()
+        }
+    }
+
+    @Test
+    fun `catalog lookup failure retains live results and signals partial search`() = runBlocking {
+        FixtureServer(2) { request ->
+            when {
+                request.target == "/api/catalogs" -> FixtureResponse("""{"error":"catalog index unavailable"}""", 503)
+                request.target.startsWith("/api/live?") -> FixtureResponse("""{"channels":[{"id":"live-2","name":"Still live"}],"total":1}""")
+                else -> error("Unexpected request ${request.target}")
+            }
+        }.use { server ->
+            val results = VipTvHttpGateway(server.origin).search("news")
+
+            assertTrue(results.partialFailure)
+            assertEquals(listOf("Live TV"), results.sections.map(SearchSection::source))
+            assertEquals("live-2", results.sections.single().items.single().id)
             server.assertHealthy()
         }
     }

@@ -185,6 +185,8 @@ data class Addon(val id: String, val name: String, val manifestUrl: String, val 
 data class ServerAbout(val mediaServiceAvailable: Boolean)
 /** A labelled source section retained when another search source fails. */
 data class SearchSection(val source: String, val items: List<Media>)
+/** Partial failures are explicit so the UI can retain results without lying about coverage. */
+data class SearchResults(val sections: List<SearchSection>, val partialFailure: Boolean)
 data class PlaybackPreferences(
     val audioLanguage: String = "en", val subtitleLanguage: String = "en", val subtitlesEnabled: Boolean = false,
     val subtitleSize: String = "normal", val subtitleStyle: String = "system", val quality: String = "auto", val autoplay: Boolean = true,

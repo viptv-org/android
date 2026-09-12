@@ -33,7 +33,7 @@ interface BackendGateway {
     suspend fun selectProfile(profileId: String)
     suspend fun home(profileId: String): List<HomeShelf>
     suspend fun discover(type: String = "movie", search: String? = null): List<Media>
-    suspend fun search(query: String): List<SearchSection>
+    suspend fun search(query: String): SearchResults
     suspend fun metadata(media: Media): Media
     suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit = {}): List<Source>
     suspend fun playback(
@@ -124,33 +124,53 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         return listOf(HomeShelf("Continue Watching", continuing), HomeShelf("Recently Watched", recent), HomeShelf("Trending", movies)).filter { it.items.isNotEmpty() }
     }
     override suspend fun discover(type: String, search: String?): List<Media> = json("GET", discoverPath(type, search = search)).mediaArray("metas", "items", "rows")
-    override suspend fun search(query: String): List<SearchSection> {
+    override suspend fun search(query: String): SearchResults {
         val term = query.trim()
-        if (term.isEmpty()) return emptyList()
-        val catalogs = jsonArray("GET", "/catalogs").objects()
-            .mapNotNull { it.searchCatalog() }
-            .filter { it.supportsSearch && it.type != "live" }
-            .take(128)
+        if (term.isEmpty()) return SearchResults(emptyList(), partialFailure = false)
         val gate = Semaphore(3)
         return coroutineScope {
-            val catalogSections = catalogs.map { catalog -> async {
-                partial { gate.withPermit {
-                    val items = json("GET", discoverPath(catalog.type, catalog.id, catalog.addonId, term))
-                        .mediaArray("metas", "items", "rows")
-                        .distinctBy { "${it.type}\u0000${it.id}" }
-                        .take(24)
-                    SearchSection(catalog.name, items)
-                } }
-            } }.awaitAll().filterNotNull().filter { it.items.isNotEmpty() }.toMutableList()
-            partial { gate.withPermit {
+            // Live search starts independently: a failed catalog index must not
+            // suppress the user's live matches.
+            val catalogIndex = async { attempt { gate.withPermit { jsonArray("GET", "/catalogs") } } }
+            val liveSearch = async { attempt { gate.withPermit {
                 val live = json("GET", "/live?view=us&limit=80&search=${enc(term)}")
                     .array("items", "channels")
                     .mapNotNull { it.optJSONObject()?.channel()?.asMedia() }
                     .distinctBy { it.id }
                     .take(24)
                 SearchSection("Live TV", live)
-            } }?.takeIf { it.items.isNotEmpty() }?.let(catalogSections::add)
-            catalogSections
+            } } }
+            var partialFailure = false
+            val catalogs = when (val result = catalogIndex.await()) {
+                is SearchAttempt.Value -> result.value.objects()
+                    .mapNotNull { it.searchCatalog() }
+                    .filter { it.supportsSearch && it.type != "live" }
+                    .take(128)
+                SearchAttempt.Failure -> {
+                    partialFailure = true
+                    emptyList()
+                }
+            }
+            val catalogResults = catalogs.map { catalog -> async {
+                catalog to attempt { gate.withPermit {
+                    val items = json("GET", discoverPath(catalog.type, catalog.id, catalog.addonId, term))
+                        .mediaArray("metas", "items", "rows")
+                        .distinctBy { "${it.type}\u0000${it.id}" }
+                        .take(24)
+                    SearchSection(catalog.name, items)
+                } }
+            } }.awaitAll()
+            val sections = buildList {
+                for ((_, result) in catalogResults) when (result) {
+                    is SearchAttempt.Value -> if (result.value.items.isNotEmpty()) add(result.value)
+                    SearchAttempt.Failure -> partialFailure = true
+                }
+                when (val result = liveSearch.await()) {
+                    is SearchAttempt.Value -> result.value.takeIf { it.items.isNotEmpty() }?.let(::add)
+                    SearchAttempt.Failure -> partialFailure = true
+                }
+            }
+            SearchResults(sections, partialFailure)
         }
     }
     override suspend fun metadata(media: Media): Media = json("GET", "/meta/${enc(media.type)}/${enc(media.id)}").optJSONObject("meta")?.media() ?: media
@@ -334,12 +354,16 @@ private fun discoverPath(type: String, catalog: String? = null, addonId: String?
     addonId?.takeIf(String::isNotBlank)?.let { append("&addon_id=").append(URLEncoder.encode(it, "UTF-8")) }
     search?.takeIf(String::isNotBlank)?.let { append("&search=").append(URLEncoder.encode(it, "UTF-8")) }
 }
-private suspend fun <T> partial(request: suspend () -> T): T? = try {
-    request()
+private sealed interface SearchAttempt<out T> {
+    data class Value<T>(val value: T) : SearchAttempt<T>
+    data object Failure : SearchAttempt<Nothing>
+}
+private suspend fun <T> attempt(request: suspend () -> T): SearchAttempt<T> = try {
+    SearchAttempt.Value(request())
 } catch (error: CancellationException) {
     throw error
 } catch (_: Throwable) {
-    null
+    SearchAttempt.Failure
 }
 private fun LiveChannel.asMedia() = Media(id, "live", name, poster = logo)
 
