@@ -31,7 +31,7 @@ sealed interface PlaybackIntent {
 /** Product policy from the design contract. The player adapter does not choose sources. */
 object PlaybackPolicy {
     fun forResume(saved: Source?, discovered: List<Source>, positionMillis: Long = 0): PlaybackIntent =
-        saved?.takeIf { savedSource -> discovered.any { it.id == savedSource.id } }
+        saved?.takeIf { savedSource -> discovered.any { ResumeIdentity.sourceIdentity(it) == ResumeIdentity.sourceIdentity(savedSource) } }
             ?.let { PlaybackIntent.Open(it, positionMillis) } ?: PlaybackIntent.ChooseSource
 
     fun canAutoNext(
@@ -84,6 +84,32 @@ object HoldPolicy {
     fun release(heldMillis: Long): RemoteAction = if (heldMillis >= thresholdMillis) RemoteAction.Hold else RemoteAction.Activate
 }
 
+/** Back always resolves transient state before leaving its route. */
+enum class BackDisposition { DismissDialog, CancelPin, CancelSeek, HidePlayerChrome, ExitPlayer, Navigate }
+object BackPolicy {
+    fun decide(dialogOpen: Boolean, pinOpen: Boolean, seekPreviewOpen: Boolean, playerChromeOpen: Boolean, inPlayer: Boolean): BackDisposition = when {
+        dialogOpen -> BackDisposition.DismissDialog
+        pinOpen -> BackDisposition.CancelPin
+        seekPreviewOpen -> BackDisposition.CancelSeek
+        inPlayer && playerChromeOpen -> BackDisposition.HidePlayerChrome
+        inPlayer -> BackDisposition.ExitPlayer
+        else -> BackDisposition.Navigate
+    }
+}
+
+object SeekPolicy {
+    /** A preview never commits a request and clamps to known VOD duration or DVR window. */
+    fun target(currentMillis: Long, deltaMillis: Long, durationMillis: Long?, rangeStart: Long? = null, rangeEnd: Long? = null): Long? {
+        val raw = currentMillis + deltaMillis
+        val target = when {
+            durationMillis != null -> raw.coerceIn(0, durationMillis)
+            rangeStart != null && rangeEnd != null -> raw.coerceIn(rangeStart, rangeEnd)
+            else -> return null
+        }
+        return target.takeIf { kotlin.math.abs(it - currentMillis) >= 500 }
+    }
+}
+
 enum class Destination(val label: String) {
     Profile("Profile"), Home("Home"), Discover("Discover"), Live("Live TV"), MyList("My List"), Search("Search"), Settings("Settings")
 }
@@ -125,6 +151,7 @@ data class LiveChannel(val id: String, val name: String, val logo: String? = nul
 enum class DialogKind { QueueManage, MyListManage, EpisodeManage, SourceDetails, LiveManage, DeleteProfile, SignOut, NextUnavailable }
 data class DialogState(val kind: DialogKind, val title: String, val media: Media? = null, val source: Source? = null, val profile: Profile? = null)
 data class PinPrompt(val title: String)
+data class SeekPreview(val targetMillis: Long)
 
 data class AppState(
     val route: Route = Route.Pairing,
@@ -144,6 +171,7 @@ data class AppState(
     val preferences: PlaybackPreferences = PlaybackPreferences(),
     val dialog: DialogState? = null,
     val pinPrompt: PinPrompt? = null,
+    val seekPreview: SeekPreview? = null,
     val deviceCode: DeviceCode? = null,
     /** Player controls begin visible and dismiss after seven seconds of inactivity. */
     val playerChromeVisible: Boolean = true,

@@ -24,6 +24,26 @@ class PlaybackPolicyTest {
         assertEquals(stored, rediscovered)
     }
 
+    @Test fun `resume uses addon and source identity instead of a transient stream id`() {
+        val remembered = Source("expired", "Provider", name = "Premium 1080", addonId = "addon")
+        val rediscovered = Source("new", "Provider", name = "Premium 1080", addonId = "addon")
+        assertEquals(PlaybackIntent.Open(remembered, 12_000), PlaybackPolicy.forResume(remembered, listOf(rediscovered), 12_000))
+    }
+
+    @Test fun `back closes transient UI before player or route navigation`() {
+        assertEquals(BackDisposition.DismissDialog, BackPolicy.decide(dialogOpen = true, pinOpen = true, seekPreviewOpen = true, playerChromeOpen = true, inPlayer = true))
+        assertEquals(BackDisposition.CancelPin, BackPolicy.decide(dialogOpen = false, pinOpen = true, seekPreviewOpen = true, playerChromeOpen = true, inPlayer = true))
+        assertEquals(BackDisposition.CancelSeek, BackPolicy.decide(dialogOpen = false, pinOpen = false, seekPreviewOpen = true, playerChromeOpen = true, inPlayer = true))
+        assertEquals(BackDisposition.HidePlayerChrome, BackPolicy.decide(dialogOpen = false, pinOpen = false, seekPreviewOpen = false, playerChromeOpen = true, inPlayer = true))
+        assertEquals(BackDisposition.ExitPlayer, BackPolicy.decide(dialogOpen = false, pinOpen = false, seekPreviewOpen = false, playerChromeOpen = false, inPlayer = true))
+    }
+
+    @Test fun `seek preview clamps and ignores tiny no-op movement`() {
+        assertEquals(100_000, SeekPolicy.target(95_000, 30_000, durationMillis = 100_000))
+        assertEquals(10_000, SeekPolicy.target(15_000, -30_000, durationMillis = 100_000))
+        assertEquals(null, SeekPolicy.target(10_000, 200, durationMillis = 100_000))
+    }
+
     @Test fun `next needs active unpaused series in final ten seconds`() {
         assertTrue(PlaybackPolicy.canAutoNext(Media("e", "series"), 91_000, 100_000, true, false, true))
         assertFalse(PlaybackPolicy.canAutoNext(Media("e", "series"), 91_000, 100_000, false, false, true))

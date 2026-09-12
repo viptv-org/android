@@ -1,8 +1,13 @@
 package org.viptv.app
 
 import android.os.Bundle
+import android.graphics.Bitmap
 import android.view.KeyEvent
 import android.view.SurfaceView
+import coil.compose.AsyncImage
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.MultiFormatWriter
+import com.google.zxing.common.BitMatrix
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -18,10 +23,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -29,8 +36,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
@@ -47,10 +56,13 @@ class MainActivity : ComponentActivity() {
     val controller = remember { AppController(context.applicationContext) }
     val state by controller.state.collectAsStateWithLifecycle()
     DisposableEffect(Unit) { onDispose(controller::close) }
-    // Every TV viewport renders the same 1280×720 design frame with one uniform scale.
+    // Scale density, rather than a rendered layer, so the logical frame measures to the viewport.
+    // This keeps both coordinates and focus hit targets in the 1280×720 design space.
     val scale = minOf(maxWidth.value / 1280f, maxHeight.value / 720f)
-    Box(Modifier.width(1280.dp).height(720.dp).align(Alignment.Center).graphicsLayer { scaleX = scale; scaleY = scale }.onPreviewKeyEvent { event ->
-        if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK && event.nativeKeyEvent.action == KeyEvent.ACTION_UP) { controller.back(); true } else false
+    val density = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
+    Box(Modifier.width(1280.dp).height(720.dp).align(Alignment.Center).onPreviewKeyEvent { event ->
+        if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK && event.nativeKeyEvent.action == KeyEvent.ACTION_UP) controller.handleBack() else false
     }) {
         when (val route = state.route) {
             Route.Pairing -> Pairing(state, controller)
@@ -58,7 +70,7 @@ class MainActivity : ComponentActivity() {
             is Route.Browse -> Browse(state, route.destination, controller)
             is Route.Details -> Details(route.media, controller)
             is Route.Sources -> SourcePicker(route.media, state.sources, controller)
-            is Route.Player -> Player(route.media, state.playerChromeVisible, controller)
+            is Route.Player -> Player(route.media, state.playerChromeVisible, state.seekPreview, controller)
             Route.Search -> SearchScreen(state, controller)
             Route.Settings -> SettingsScreen(state, controller)
             Route.Addons -> AddonsScreen(state, controller)
@@ -70,6 +82,7 @@ class MainActivity : ComponentActivity() {
         state.pinPrompt?.let { PinDialog(it, controller, Modifier.align(Alignment.Center)) }
         state.dialog?.let { ActionDialog(it, controller, Modifier.align(Alignment.Center)) }
     }
+    }
 }
 
 @Composable private fun Pairing(state: AppState, controller: AppController) = Box(Modifier.fillMaxSize()) {
@@ -78,19 +91,65 @@ class MainActivity : ComponentActivity() {
     Text("Visit this address, then enter the code shown below.", color = Muted, fontSize = 24.sp, modifier = Modifier.offset(96.dp, 260.dp))
     Text(state.deviceCode?.verificationUri ?: "Preparing secure pairing…", color = White, fontSize = 22.sp, modifier = Modifier.offset(96.dp, 364.dp))
     Text(state.deviceCode?.userCode ?: "", color = White, fontSize = 40.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(96.dp, 450.dp))
-    TvButton("Try again", controller::beginPairing, Modifier.offset(96.dp, 540.dp).width(170.dp).height(56.dp))
+    state.deviceCode?.let { code -> PairingQr(code.qrUri ?: "${code.verificationUri}?code=${code.userCode}", Modifier.offset(886.dp, 184.dp)) }
+    if (state.message != null) TvButton("Try again", controller::beginPairing, Modifier.offset(96.dp, 540.dp).width(170.dp).height(56.dp))
 }
 
-@Composable private fun ProfileChooser(state: AppState, controller: AppController) = Column(Modifier.fillMaxSize().padding(100.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-    Text(if (state.managingProfiles) "Manage profiles" else "Who's watching?", color = White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
-    Spacer(Modifier.height(62.dp)); Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) { state.profiles.drop(state.profilePage * 5).take(5).forEach { profile -> TvButton(profile.name, { if (state.managingProfiles) controller.editProfile(profile) else controller.chooseProfile(profile) }, Modifier.size(178.dp, 210.dp)) } }
-    Row(Modifier.padding(top = 36.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Add profile", { controller.editProfile() }); TvButton(if (state.managingProfiles) "Done" else "Manage", controller::toggleProfileManagement) }
-    if (state.profiles.size > 5) Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { TvButton("Previous", { controller.setProfilePage(state.profilePage - 1) }); Text("Page ${state.profilePage + 1} of ${(state.profiles.size + 4) / 5}", color = Muted, modifier = Modifier.padding(top = 18.dp)); TvButton("Next", { controller.setProfilePage(state.profilePage + 1) }) }
+@Composable private fun PairingQr(value: String, modifier: Modifier = Modifier) {
+    val image = remember(value) { qrBitmap(value).asImageBitmap() }
+    Box(modifier.width(298.dp).height(298.dp).background(White).padding(24.dp), contentAlignment = Alignment.Center) {
+        Image(image, contentDescription = "Scan to pair VIPTV", modifier = Modifier.size(250.dp))
+    }
+}
+
+private fun qrBitmap(value: String): Bitmap {
+    val matrix: BitMatrix = MultiFormatWriter().encode(value, BarcodeFormat.QR_CODE, 250, 250)
+    return Bitmap.createBitmap(250, 250, Bitmap.Config.ARGB_8888).also { bitmap ->
+        for (y in 0 until 250) for (x in 0 until 250) bitmap.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+    }
+}
+
+@Composable private fun ProfileChooser(state: AppState, controller: AppController) = Box(Modifier.fillMaxSize()) {
+    Text(if (state.managingProfiles) "Manage profiles" else "Who's watching?", color = White, fontSize = 40.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.offset(100.dp, 146.dp).width(1080.dp))
+    Row(Modifier.offset(y = 252.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(34.dp, Alignment.CenterHorizontally)) {
+        state.profiles.drop(state.profilePage * 5).take(5).forEach { profile ->
+            ProfileCard(profile, state.managingProfiles, controller)
+        }
+    }
+    Row(Modifier.offset(y = 530.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)) {
+        TvButton("Add profile", { controller.editProfile() }, Modifier.width(240.dp).height(56.dp))
+        TvButton(if (state.managingProfiles) "Done" else "Manage", controller::toggleProfileManagement, Modifier.width(240.dp).height(56.dp))
+    }
+    if (state.profiles.size > 5) Row(Modifier.offset(y = 612.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+        TvButton("Previous", { controller.setProfilePage(state.profilePage - 1) }, Modifier.width(180.dp).height(40.dp))
+        Text("Page ${state.profilePage + 1} of ${(state.profiles.size + 4) / 5}", color = Muted, modifier = Modifier.width(220.dp), textAlign = TextAlign.Center)
+        TvButton("Next", { controller.setProfilePage(state.profilePage + 1) }, Modifier.width(180.dp).height(40.dp))
+    }
+}
+
+@Composable private fun ProfileCard(profile: Profile, managing: Boolean, controller: AppController) = Holdable(
+    onActivate = { if (managing) controller.editProfile(profile) else controller.chooseProfile(profile) },
+    onHold = null,
+    modifier = Modifier.width(178.dp).height(210.dp),
+) {
+    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.width(178.dp).height(178.dp).padding(9.dp).clip(RoundedCornerShape(12.dp)).background(avatarFallback(profile.name)), contentAlignment = Alignment.Center) {
+            Text(profile.name.take(2).uppercase(), color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
+            if (!profile.avatarUrl.isNullOrBlank()) AsyncImage(model = profile.avatarUrl, contentDescription = "${profile.name} avatar", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        Text(profile.name, color = White, fontSize = 22.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 3.dp))
+    }
+}
+
+private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, char -> hash * 31 + char.code } and Int.MAX_VALUE) % 4) {
+    0 -> Color(0xFF3D4A5A); 1 -> Color(0xFF55435C); 2 -> Color(0xFF40584D); else -> Color(0xFF5A4D3D)
 }
 
 @Composable private fun Browse(state: AppState, destination: Destination, controller: AppController) = Row(Modifier.fillMaxSize()) {
     Rail(destination, controller); Box(Modifier.weight(1f).fillMaxHeight()) {
-        Column(Modifier.fillMaxSize().padding(start = 26.dp, top = 46.dp, end = 84.dp)) {
+        val hero = state.shelves.firstOrNull()?.items?.firstOrNull()
+        if (destination == Destination.Home && hero != null) HomeHero(hero, controller)
+        Column(Modifier.fillMaxSize().padding(start = 8.dp, top = if (destination == Destination.Home && hero != null) 466.dp else 46.dp, end = 84.dp)) {
             Text(destination.label, color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
             Text(state.selectedProfile?.name ?: "", color = Muted, modifier = Modifier.padding(top = 6.dp))
             if (destination == Destination.Live) {
@@ -105,6 +164,19 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@Composable private fun HomeHero(media: Media, controller: AppController) = Box(Modifier.fillMaxWidth().height(450.dp).background(Canvas)) {
+    if (!media.poster.isNullOrBlank()) AsyncImage(model = media.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+    Column(Modifier.padding(start = 8.dp, top = 128.dp).width(600.dp)) {
+        Text(if (media.type == "live") "LIVE NOW" else "FEATURED ${media.type.uppercase()}", color = Muted, fontSize = 18.sp)
+        Text(media.name, color = White, fontSize = 44.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 12.dp))
+        Text(media.description ?: "", color = Muted, fontSize = 19.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 18.dp))
+        Row(Modifier.padding(top = 26.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TvButton(if (media.positionMillis > 0 && media.type != "live") "Resume" else "Play", { if (media.positionMillis > 0 && media.type != "live") controller.chooseSources(media, resume = true) else controller.open(media) }, Modifier.width(144.dp).height(50.dp))
+            TvButton("My List", { controller.toggleMyList(media) }, Modifier.width(144.dp).height(50.dp))
+        }
+    }
+}
+
 @Composable private fun Rail(selected: Destination, controller: AppController) = Column(Modifier.width(92.dp).fillMaxHeight().padding(top = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
     Destination.entries.forEach { destination -> TvButton(destination.label.take(1), { controller.navigate(destination) }, Modifier.size(60.dp).padding(vertical = 2.dp), selected = destination == selected) }
 }
@@ -115,9 +187,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable private fun MediaCard(media: Media, controller: AppController) {
-    Holdable({ if (media.positionMillis > 0 && media.type != "live") controller.chooseSources(media, resume = true) else controller.open(media) }, { controller.chooseSources(media) }, Modifier.width(256.dp).height(200.dp).clip(RoundedCornerShape(8.dp)).background(Surface).padding(10.dp)) {
+    val resumable = media.positionMillis > 0 && media.type != "live"
+    Holdable({ if (resumable) controller.chooseSources(media, resume = true) else controller.open(media) }, if (resumable) ({ controller.chooseSources(media) }) else null, Modifier.width(256.dp).height(200.dp).clip(RoundedCornerShape(8.dp)).background(Surface).padding(10.dp)) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
-            Box(Modifier.fillMaxWidth().height(132.dp).background(Color(0xFF242628)), contentAlignment = Alignment.Center) { Text(media.name.take(1), color = Muted, fontSize = 42.sp) }
+            Box(Modifier.fillMaxWidth().height(132.dp).background(Color(0xFF242628)), contentAlignment = Alignment.Center) {
+                Text(media.name.take(1), color = Muted, fontSize = 42.sp)
+                if (!media.poster.isNullOrBlank()) AsyncImage(model = media.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            }
             Text(media.name, color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
             Text(media.type, color = Muted, fontSize = 14.sp, maxLines = 1)
         }
@@ -150,7 +226,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable private fun Player(media: Media, chromeVisible: Boolean, controller: AppController) = Box(
+@Composable private fun Player(media: Media, chromeVisible: Boolean, seekPreview: SeekPreview?, controller: AppController) = Box(
     Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent { event ->
         if (event.nativeKeyEvent.action == KeyEvent.ACTION_UP && event.nativeKeyEvent.keyCode != KeyEvent.KEYCODE_BACK) controller.showPlayerChrome()
         false
@@ -159,13 +235,18 @@ class MainActivity : ComponentActivity() {
     val playback by controller.player.state.collectAsState()
     val audioTracks by controller.player.audioTracks.collectAsState()
     val subtitleTracks by controller.player.subtitleTracks.collectAsState()
+    LaunchedEffect(media.type, media.id, playback.positionMillis, playback.isPlaying, playback.timeline?.durationMillis) {
+        controller.maybeAutoNext(media, playback.positionMillis, playback.timeline?.durationMillis, playback.isPlaying)
+    }
     AndroidView(factory = { SurfaceView(it).also(controller.player::attach) }, modifier = Modifier.fillMaxSize())
     if (chromeVisible) Column(Modifier.align(Alignment.BottomStart).padding(64.dp)) {
         Text(media.name, color = White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+        seekPreview?.let { Text("Seek preview: ${it.targetMillis / 1_000}s", color = Muted, modifier = Modifier.padding(top = 8.dp)) }
         Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (playback.timeline?.canSeek == true) TvButton("↶ 10", { controller.showPlayerChrome(); controller.player.seekTo(max(0, playback.positionMillis - 10_000)) })
+            if (playback.timeline?.canSeek == true) TvButton("↶ 10", { controller.previewSeek(-10_000) })
             TvButton(if (playback.isPlaying) "Pause" else "Play", { controller.showPlayerChrome(); if (playback.isPlaying) controller.player.pause() else controller.player.play() })
-            if (playback.timeline?.canSeek == true) TvButton("10 ↷", { controller.showPlayerChrome(); controller.player.seekTo(playback.positionMillis + 10_000) })
+            if (playback.timeline?.canSeek == true) TvButton("30 ↷", { controller.previewSeek(30_000) })
+            seekPreview?.let { TvButton("Seek", controller::commitSeek); TvButton("Cancel", controller::cancelSeek) }
             if (audioTracks.isNotEmpty()) TvButton("Audio", { controller.showPlayerChrome(); val next = audioTracks.firstOrNull { it.id != playback.selectedAudioTrackId } ?: audioTracks.first(); controller.player.selectAudioTrack(next.id) })
             if (subtitleTracks.isNotEmpty()) TvButton("Captions", { controller.showPlayerChrome(); val next = subtitleTracks.firstOrNull { it.id != playback.selectedSubtitleTrackId }; controller.player.selectSubtitleTrack(next?.id) })
             if (media.type == "series") TvButton("Next episode", { controller.nextEpisode(media) })
@@ -240,14 +321,14 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable private fun TvButton(label: String, onActivate: () -> Unit, modifier: Modifier = Modifier.width(170.dp).height(56.dp), selected: Boolean = false, multiline: Boolean = false) = Holdable(onActivate, onActivate, modifier.background(if (selected) White else Surface, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp), selected) {
+@Composable private fun TvButton(label: String, onActivate: () -> Unit, modifier: Modifier = Modifier.width(170.dp).height(56.dp), selected: Boolean = false, multiline: Boolean = false) = Holdable(onActivate, null, modifier.background(if (selected) White else Surface, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp), selected) {
     Text(label, color = if (selected) Canvas else White, fontWeight = FontWeight.Bold, maxLines = if (multiline) 4 else 1, overflow = TextOverflow.Ellipsis)
 }
 
 /** 700ms remote hold: exactly one action on release; hold suppresses ordinary activation. */
-@Composable private fun Holdable(onActivate: () -> Unit, onHold: () -> Unit, modifier: Modifier, selected: Boolean = false, content: @Composable BoxScope.() -> Unit) {
+@Composable private fun Holdable(onActivate: () -> Unit, onHold: (() -> Unit)?, modifier: Modifier, selected: Boolean = false, content: @Composable BoxScope.() -> Unit) {
     var downAt by remember { mutableLongStateOf(0L) }; var held by remember { mutableStateOf(false) }
-    LaunchedEffect(downAt) { if (downAt != 0L) { delay(HoldPolicy.thresholdMillis); if (downAt != 0L) { held = true; onHold() } } }
+    LaunchedEffect(downAt, onHold) { if (downAt != 0L && onHold != null) { delay(HoldPolicy.thresholdMillis); if (downAt != 0L) { held = true; onHold() } } }
     Box(modifier = modifier.border(if (selected) 2.dp else 0.dp, White, RoundedCornerShape(12.dp)).focusable().clickable(onClick = onActivate).onPreviewKeyEvent { event ->
         val key = event.nativeKeyEvent; if (key.keyCode != KeyEvent.KEYCODE_DPAD_CENTER && key.keyCode != KeyEvent.KEYCODE_ENTER) return@onPreviewKeyEvent false
         if (key.action == KeyEvent.ACTION_DOWN && downAt == 0L) { downAt = key.eventTime; held = false; true }

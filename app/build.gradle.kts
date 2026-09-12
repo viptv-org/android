@@ -18,6 +18,8 @@ kotlin {
             implementation(libs.androidx.compose.material3)
             implementation(libs.androidx.lifecycle.runtime.compose)
             implementation(libs.kotlinx.coroutines.android)
+            implementation("io.coil-kt:coil-compose:2.7.0")
+            implementation("com.google.zxing:core:3.5.3")
         }
         androidUnitTest.dependencies {
             implementation(kotlin("test"))
@@ -41,5 +43,20 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+    signingConfigs {
+        create("viptvDevelopment") {
+            // This committed key is deliberately debug-only and can never sign a release build.
+            storeFile = file("signing/viptv-development.p12")
+            storeType = "PKCS12"
+            storePassword = "viptv-development-only"
+            keyAlias = "viptv-development"
+            keyPassword = "viptv-development-only"
+        }
+    }
+    buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("viptvDevelopment")
+        }
     }
 }

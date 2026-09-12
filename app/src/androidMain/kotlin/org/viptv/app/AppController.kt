@@ -138,21 +138,59 @@ class AppController(context: Context, private val origin: String = "https://vipt
             }.onFailure { error -> if (error !is CancellationException) { player.play(); _state.value = _state.value.copy(message = error.message ?: "Could not prepare the next episode.") } }
         }
     }
-    fun back() {
-        when (val route = _state.value.route) {
-            is Route.Player -> {
-                if (nextEpisodeJob?.isActive == true) { nextEpisodeJob?.cancel(); player.play(); _state.value = _state.value.copy(message = null) }
-                else if (_state.value.playerChromeVisible) _state.value = _state.value.copy(playerChromeVisible = false)
-                else { stopPlayback(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
-            }
-            is Route.Sources -> { sourceDiscovery?.cancel(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
-            is Route.Profiles -> if (_state.value.managingProfiles) _state.value = _state.value.copy(managingProfiles = false) else _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
-            is Route.Details, is Route.Search, is Route.Settings, is Route.Addons, is Route.ProfileEditor, is Route.Guide -> _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
-            is Route.Browse -> if (route.destination != Destination.Home) _state.value = _state.value.copy(route = Route.Browse(Destination.Home))
-            Route.Pairing -> Unit
+    private var autoNextMediaKey: String? = null
+    /** Player state triggers a bounded request; the server decides whether a successor exists. */
+    fun maybeAutoNext(media: Media, positionMillis: Long, durationMillis: Long?, playing: Boolean) {
+        val key = "${media.type}.${media.id}"
+        if (PlaybackPolicy.canAutoNext(media, positionMillis, durationMillis, playing, seeking = false, nextAvailable = true) && autoNextMediaKey != key && nextEpisodeJob?.isActive != true) {
+            autoNextMediaKey = key
+            nextEpisode(media)
         }
     }
+    fun back() { handleBack() }
+    /** Returns false only when Android should handle app exit at a root gate/page. */
+    fun handleBack(): Boolean {
+        if (_state.value.route is Route.Player && nextEpisodeJob?.isActive == true) {
+            nextEpisodeJob?.cancel()
+            player.play()
+            _state.value = _state.value.copy(message = null)
+            return true
+        }
+        when (BackPolicy.decide(_state.value.dialog != null, _state.value.pinPrompt != null, _state.value.seekPreview != null, _state.value.playerChromeVisible, _state.value.route is Route.Player)) {
+            BackDisposition.DismissDialog -> { dismissDialog(); return true }
+            BackDisposition.CancelPin -> { cancelPin(); return true }
+            BackDisposition.CancelSeek -> { _state.value = _state.value.copy(seekPreview = null); return true }
+            BackDisposition.HidePlayerChrome -> { _state.value = _state.value.copy(playerChromeVisible = false); return true }
+            BackDisposition.ExitPlayer, BackDisposition.Navigate -> Unit
+        }
+        when (val route = _state.value.route) {
+            is Route.Player -> {
+                stopPlayback(); _state.value = _state.value.copy(route = Route.Details(route.media))
+            }
+            is Route.Sources -> { sourceDiscovery?.cancel(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
+            is Route.Profiles -> if (_state.value.managingProfiles) _state.value = _state.value.copy(managingProfiles = false) else if (_state.value.selectedProfile != null) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null) else return false
+            is Route.Details, is Route.Search, is Route.Settings, is Route.Addons, is Route.ProfileEditor, is Route.Guide -> _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
+            is Route.Browse -> if (route.destination != Destination.Home) _state.value = _state.value.copy(route = Route.Browse(Destination.Home)) else return false
+            Route.Pairing -> return false
+        }
+        return true
+    }
     fun saveProgress(media: Media) = scope.launch { _state.value.selectedProfile?.let { gateway.updateProgress(it.id, media, player.state.value.positionMillis) } }
+    fun previewSeek(deltaMillis: Long) {
+        val playback = player.state.value
+        val timeline = playback.timeline ?: return
+        val base = _state.value.seekPreview?.targetMillis ?: playback.positionMillis
+        SeekPolicy.target(base, deltaMillis, timeline.durationMillis, timeline.seekableRange?.startMillis, timeline.seekableRange?.endMillis)?.let { target ->
+            _state.value = _state.value.copy(seekPreview = SeekPreview(target))
+            showPlayerChrome()
+        }
+    }
+    fun commitSeek() {
+        _state.value.seekPreview?.let { player.seekTo(it.targetMillis) }
+        _state.value = _state.value.copy(seekPreview = null)
+        showPlayerChrome()
+    }
+    fun cancelSeek() { _state.value = _state.value.copy(seekPreview = null) }
     /** Any player input restores controls and restarts the seven-second visibility timer. */
     fun showPlayerChrome() {
         if (_state.value.route !is Route.Player) return
