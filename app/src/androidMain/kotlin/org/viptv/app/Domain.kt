@@ -181,6 +181,10 @@ data class DeviceSession(val accessToken: String, val refreshToken: String, val 
 data class HomeShelf(val title: String, val items: List<Media>)
 data class NextResult(val status: String, val item: Media? = null)
 data class Addon(val id: String, val name: String, val manifestUrl: String, val enabled: Boolean)
+/** Deliberately minimal, account-safe facts for the informational Settings section. */
+data class ServerAbout(val mediaServiceAvailable: Boolean)
+/** A labelled source section retained when another search source fails. */
+data class SearchSection(val source: String, val items: List<Media>)
 data class PlaybackPreferences(
     val audioLanguage: String = "en", val subtitleLanguage: String = "en", val subtitlesEnabled: Boolean = false,
     val subtitleSize: String = "normal", val subtitleStyle: String = "system", val quality: String = "auto", val autoplay: Boolean = true,

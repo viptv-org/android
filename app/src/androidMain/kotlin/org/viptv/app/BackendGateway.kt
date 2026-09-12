@@ -1,7 +1,13 @@
 package org.viptv.app
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -27,6 +33,7 @@ interface BackendGateway {
     suspend fun selectProfile(profileId: String)
     suspend fun home(profileId: String): List<HomeShelf>
     suspend fun discover(type: String = "movie", search: String? = null): List<Media>
+    suspend fun search(query: String): List<SearchSection>
     suspend fun metadata(media: Media): Media
     suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit = {}): List<Source>
     suspend fun playback(
@@ -50,6 +57,8 @@ interface BackendGateway {
     suspend fun preferences(profileId: String): PlaybackPreferences
     suspend fun savePreferences(profileId: String, preferences: PlaybackPreferences)
     suspend fun addons(): List<Addon>
+    suspend fun addAddon(manifestUrl: String): Addon
+    suspend fun serverAbout(): ServerAbout
     suspend fun setAddonEnabled(addon: Addon, enabled: Boolean)
     suspend fun removeAddon(addon: Addon)
     suspend fun createProfile(name: String, avatarStyle: String, avatarChoice: Int?): Profile
@@ -114,7 +123,36 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         val movies = discover("movie")
         return listOf(HomeShelf("Continue Watching", continuing), HomeShelf("Recently Watched", recent), HomeShelf("Trending", movies)).filter { it.items.isNotEmpty() }
     }
-    override suspend fun discover(type: String, search: String?): List<Media> = json("GET", buildString { append("/discover?type="); append(enc(type)); if (!search.isNullOrBlank()) append("&search=").append(enc(search)) }).mediaArray("metas", "items", "rows")
+    override suspend fun discover(type: String, search: String?): List<Media> = json("GET", discoverPath(type, search = search)).mediaArray("metas", "items", "rows")
+    override suspend fun search(query: String): List<SearchSection> {
+        val term = query.trim()
+        if (term.isEmpty()) return emptyList()
+        val catalogs = jsonArray("GET", "/catalogs").objects()
+            .mapNotNull { it.searchCatalog() }
+            .filter { it.supportsSearch && it.type != "live" }
+            .take(128)
+        val gate = Semaphore(3)
+        return coroutineScope {
+            val catalogSections = catalogs.map { catalog -> async {
+                partial { gate.withPermit {
+                    val items = json("GET", discoverPath(catalog.type, catalog.id, catalog.addonId, term))
+                        .mediaArray("metas", "items", "rows")
+                        .distinctBy { "${it.type}\u0000${it.id}" }
+                        .take(24)
+                    SearchSection(catalog.name, items)
+                } }
+            } }.awaitAll().filterNotNull().filter { it.items.isNotEmpty() }.toMutableList()
+            partial { gate.withPermit {
+                val live = json("GET", "/live?view=us&limit=80&search=${enc(term)}")
+                    .array("items", "channels")
+                    .mapNotNull { it.optJSONObject()?.channel()?.asMedia() }
+                    .distinctBy { it.id }
+                    .take(24)
+                SearchSection("Live TV", live)
+            } }?.takeIf { it.items.isNotEmpty() }?.let(catalogSections::add)
+            catalogSections
+        }
+    }
     override suspend fun metadata(media: Media): Media = json("GET", "/meta/${enc(media.type)}/${enc(media.id)}").optJSONObject("meta")?.media() ?: media
     override suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit): List<Source> {
         val job = json("POST", "/streams", JSONObject().put("id", media.id).put("type", media.type).put("name", media.name).putOpt("series_id", media.seriesId).putOpt("season", media.season).putOpt("episode", media.episode))
@@ -197,6 +235,8 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         json("PUT", "/profiles/${enc(profileId)}/preferences", preferences.body())
     }
     override suspend fun addons(): List<Addon> = jsonArray("GET", "/addons").objects().mapNotNull { it.addon() }
+    override suspend fun addAddon(manifestUrl: String): Addon = json("POST", "/addons", JSONObject().put("manifest_url", manifestUrl)).addon()
+    override suspend fun serverAbout(): ServerAbout = ServerAbout(json("GET", "/status").optBoolean("ffmpeg_available"))
     override suspend fun setAddonEnabled(addon: Addon, enabled: Boolean) { json("PATCH", "/addons/${enc(addon.id)}", JSONObject().put("enabled", enabled)) }
     override suspend fun removeAddon(addon: Addon) { json("DELETE", "/addons/${enc(addon.id)}") }
     override suspend fun createProfile(name: String, avatarStyle: String, avatarChoice: Int?): Profile =
@@ -281,6 +321,28 @@ private fun JSONObject.profile() = Profile(
     avatarChoice = (opt("avatar_choice") as? Number)?.toInt()?.takeIf { it in 1..48 },
     setupComplete = optBoolean("setup_complete"),
 )
+private data class SearchCatalog(val id: String, val name: String, val type: String, val addonId: String?, val supportsSearch: Boolean)
+private fun JSONObject.searchCatalog(): SearchCatalog? {
+    val id = optString("id")
+    val type = optString("type")
+    if (id.isBlank() || type.isBlank()) return null
+    return SearchCatalog(id, optString("name", id), type, opt("addon_id")?.toString(), optBoolean("supports_search", true))
+}
+private fun discoverPath(type: String, catalog: String? = null, addonId: String? = null, search: String? = null): String = buildString {
+    append("/discover?type=").append(URLEncoder.encode(type, "UTF-8"))
+    catalog?.takeIf(String::isNotBlank)?.let { append("&catalog=").append(URLEncoder.encode(it, "UTF-8")) }
+    addonId?.takeIf(String::isNotBlank)?.let { append("&addon_id=").append(URLEncoder.encode(it, "UTF-8")) }
+    search?.takeIf(String::isNotBlank)?.let { append("&search=").append(URLEncoder.encode(it, "UTF-8")) }
+}
+private suspend fun <T> partial(request: suspend () -> T): T? = try {
+    request()
+} catch (error: CancellationException) {
+    throw error
+} catch (_: Throwable) {
+    null
+}
+private fun LiveChannel.asMedia() = Media(id, "live", name, poster = logo)
+
 private fun JSONObject.media(): Media {
     val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), optString("poster").ifBlank { null }, optString("description").ifBlank { null }, millis(optDouble("position", 0.0)), optDouble("duration", 0.0).takeIf { it > 0 }?.let(::millis), optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null }, episodeTitle = optString("episode_title", optString("episodeTitle")).ifBlank { null })
     val videos = optJSONArray("videos") ?: optJSONArray("episodes") ?: return base

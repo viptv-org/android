@@ -168,6 +168,56 @@ class BackendGatewayWireTest {
     }
 
     @Test
+    fun `add-on installation and server facts use bounded public wire fields`() = runBlocking {
+        FixtureServer(2) { request ->
+            when (request.target) {
+                "/api/addons" -> FixtureResponse("""{"id":4,"name":"Installed","manifest_url":"https://addons.example.test/manifest.json","enabled":true}""")
+                "/api/status" -> FixtureResponse("""{"providers":3,"addons":4,"profiles":8,"active_sessions":2,"ffmpeg_available":true,"video_acceleration":{"backend":"vaapi"}}""")
+                else -> error("Unexpected request ${request.target}")
+            }
+        }.use { server ->
+            val gateway = VipTvHttpGateway(server.origin)
+            val addon = gateway.addAddon("https://addons.example.test/manifest.json")
+            val about = gateway.serverAbout()
+
+            assertEquals("POST", server.requests[0].method)
+            assertEquals("https://addons.example.test/manifest.json", JSONObject(server.requests[0].body).getString("manifest_url"))
+            assertEquals(Addon("4", "Installed", "https://addons.example.test/manifest.json", true), addon)
+            assertTrue(about.mediaServiceAvailable)
+            server.assertHealthy()
+        }
+    }
+
+    @Test
+    fun `search keeps successful labelled catalogs and live results when one catalog fails`() = runBlocking {
+        FixtureServer(4) { request ->
+            when {
+                request.target == "/api/catalogs" -> FixtureResponse("""[
+                    {"id":"movies","name":"Movie catalog","type":"movie","addon_id":2,"supports_search":true},
+                    {"id":"series","name":"Broken catalog","type":"series","addon_id":3,"supports_search":true},
+                    {"id":"hidden","name":"Hidden","type":"movie","addon_id":4,"supports_search":false}
+                ]""".trimIndent())
+                request.target.startsWith("/api/discover?type=movie") -> FixtureResponse("""{"metas":[
+                    {"id":"movie-1","type":"movie","name":"Movie one"},
+                    {"id":"movie-1","type":"movie","name":"Duplicate"},
+                    {"id":"movie-2","type":"movie","name":"Movie two"}
+                ]}""")
+                request.target.startsWith("/api/discover?type=series") -> FixtureResponse("""{"error":"provider failed"}""", 502)
+                request.target.startsWith("/api/live?") -> FixtureResponse("""{"channels":[{"id":"live-1","name":"Live one"}],"total":1}""")
+                else -> error("Unexpected request ${request.target}")
+            }
+        }.use { server ->
+            val sections = VipTvHttpGateway(server.origin).search("space opera")
+
+            assertEquals(listOf("Movie catalog", "Live TV"), sections.map(SearchSection::source))
+            assertEquals(listOf("movie-1", "movie-2"), sections[0].items.map(Media::id))
+            assertEquals(listOf("live-1"), sections[1].items.map(Media::id))
+            assertEquals(4, server.requests.size)
+            server.assertHealthy()
+        }
+    }
+
+    @Test
     fun `addons consume the backend raw array response`() = runBlocking {
         FixtureServer(1) { request ->
             assertEquals("GET", request.method)
