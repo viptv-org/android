@@ -38,6 +38,7 @@ interface BackendGateway {
     suspend fun discover(request: CatalogDiscoverRequest): DiscoverPage
     suspend fun search(query: String): SearchResults
     suspend fun metadata(media: Media): Media
+    suspend fun seriesProgress(profileId: String, seriesId: String): List<Media> = emptyList()
     suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit = {}): List<Source>
     suspend fun playback(
         source: Source,
@@ -426,6 +427,8 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
             SearchResults(sections, partialFailure)
         }
     }
+    override suspend fun seriesProgress(profileId: String, seriesId: String): List<Media> =
+        jsonArray("GET", "/profiles/${enc(profileId)}/progress/series?series_id=${enc(seriesId)}").objects().take(2000).map { it.media() }
     override suspend fun metadata(media: Media): Media {
         val type = if (media.type == "episode") "series" else media.type
         val id = if (type == "series") media.seriesId ?: media.id else media.id

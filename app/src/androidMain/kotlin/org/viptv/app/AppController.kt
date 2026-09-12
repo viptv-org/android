@@ -322,7 +322,23 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun open(media: Media) = scope.launch {
         val origin = (_state.value.route as? Route.Browse)?.destination
         update(loading = true)
-        runCatching { gateway.metadata(media) }.onSuccess { metadata ->
+        runCatching {
+            val details = gateway.metadata(media)
+            if (details.type != "series") details else {
+                val progress = try { gateway.seriesProgress(requireProfile(), details.id) }
+                    catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                    catch (_: Exception) { emptyList() }
+                details.copy(episodes = details.episodes.map { episode ->
+                    val record = progress.firstOrNull { it.id == episode.id }
+                        ?: progress.firstOrNull { it.seriesId == details.id && it.season == episode.season && it.episode == episode.episode }
+                    if (record == null) episode else episode.copy(
+                        positionMillis = record.positionMillis, durationMillis = record.durationMillis ?: episode.durationMillis,
+                        watched = record.watched, updatedAtMillis = record.updatedAtMillis,
+                        sourceAddonId = record.sourceAddonId, sourceFingerprint = record.sourceFingerprint,
+                    )
+                })
+            }
+        }.onSuccess { metadata ->
             // Catalog/history carries artwork and progress that sparse metadata
             // responses may omit. Metadata may enrich it, never erase it.
             val detail = metadata.copy(
