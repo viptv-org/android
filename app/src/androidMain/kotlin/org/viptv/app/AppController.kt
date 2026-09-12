@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-class AppController(context: Context, private val origin: String = "https://viptv.app") {
+class AppController(context: Context, private val origin: String = "https://viptv.syek.tech") {
     private val store = context.getSharedPreferences("viptv.auth", Context.MODE_PRIVATE)
     private val gateway = VipTvHttpGateway(origin, store.getString("access", null))
     private val scope = CoroutineScope(Job() + Dispatchers.Main.immediate)
@@ -220,5 +220,8 @@ class AppController(context: Context, private val origin: String = "https://vipt
         } catch (error: Throwable) { fail(error) }
     }
     private fun update(loading: Boolean = _state.value.loading, message: String? = _state.value.message) { _state.value = _state.value.copy(loading = loading, message = message) }
-    private fun fail(error: Throwable) { _state.value = _state.value.copy(loading = false, message = error.message ?: "Could not complete that request.") }
+    private fun fail(error: Throwable) {
+        val message = (error as? GatewayError)?.message ?: "Could not complete that request. Check your connection and try again."
+        _state.value = _state.value.copy(loading = false, message = message)
+    }
 }

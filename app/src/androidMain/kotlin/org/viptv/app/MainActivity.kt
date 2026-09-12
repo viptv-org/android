@@ -72,13 +72,13 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable private fun Pairing(state: AppState, controller: AppController) = Column(Modifier.fillMaxSize().padding(54.dp), verticalArrangement = Arrangement.Center) {
-    Image(painterResource(R.drawable.viptv_mark), contentDescription = "VIPTV", modifier = Modifier.width(42.dp).height(36.dp))
-    Spacer(Modifier.height(68.dp)); Text("Sign in to VIPTV", color = White, fontSize = 44.sp, fontWeight = FontWeight.Bold)
-    Text("Visit this address, then enter the code shown below.", color = Muted, fontSize = 24.sp, modifier = Modifier.padding(top = 28.dp))
-    Text(state.deviceCode?.verificationUri ?: "Preparing secure pairing…", color = White, fontSize = 22.sp, modifier = Modifier.padding(top = 30.dp))
-    Text(state.deviceCode?.userCode ?: "", color = White, fontSize = 40.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 18.dp))
-    TvButton("Try again", controller::beginPairing, Modifier.padding(top = 34.dp))
+@Composable private fun Pairing(state: AppState, controller: AppController) = Box(Modifier.fillMaxSize()) {
+    Image(painterResource(R.drawable.viptv_mark), contentDescription = "VIPTV", modifier = Modifier.offset(96.dp, 44.dp).width(42.dp).height(36.dp))
+    Text("Sign in to VIPTV", color = White, fontSize = 44.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(96.dp, 170.dp))
+    Text("Visit this address, then enter the code shown below.", color = Muted, fontSize = 24.sp, modifier = Modifier.offset(96.dp, 260.dp))
+    Text(state.deviceCode?.verificationUri ?: "Preparing secure pairing…", color = White, fontSize = 22.sp, modifier = Modifier.offset(96.dp, 364.dp))
+    Text(state.deviceCode?.userCode ?: "", color = White, fontSize = 40.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(96.dp, 450.dp))
+    TvButton("Try again", controller::beginPairing, Modifier.offset(96.dp, 540.dp).width(170.dp).height(56.dp))
 }
 
 @Composable private fun ProfileChooser(state: AppState, controller: AppController) = Column(Modifier.fillMaxSize().padding(100.dp), horizontalAlignment = Alignment.CenterHorizontally) {
