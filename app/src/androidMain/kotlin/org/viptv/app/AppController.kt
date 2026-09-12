@@ -4,8 +4,14 @@ import android.content.Context
 import com.getair.video.AndroidMedia3BackendFactory
 import com.getair.video.AndroidMedia3VideoPlayer
 import com.getair.video.PlaybackKind
+import com.getair.video.PlaybackStatus
+import com.getair.video.PlaybackEvent
+import com.getair.video.PlaybackErrorCode
 import com.getair.video.PlaybackSource
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -13,8 +19,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class AppController(context: Context, private val origin: String = "https://viptv.syek.tech") {
     private val store = context.getSharedPreferences("viptv.auth", Context.MODE_PRIVATE)
@@ -31,14 +40,26 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private var heartbeatJob: Job? = null
     private var progressJob: Job? = null
     private var playbackSessionId: String? = null
+    /** Nonzero only when a managed delivery segment begins at title time. */
+    private var playbackTitleOffsetMillis = 0L
+    private var playbackTitleDurationMillis: Long? = null
+    private var lastTrustedTitlePositionMillis = 0L
     private var afterParentUnlock: (suspend () -> Unit)? = null
     private var selectedAudioTrackIndex: Int? = null
     private var selectedSubtitleTrackIndex: Int? = null
     private var subtitlesOff = false
     private var continuationRestore: Route.Player? = null
     private var continuationWasPlaying = false
+    private var guideGeneration = 0L
+    private var managedRecoveryKey: String? = null
+    private val playbackPrepareMutex = Mutex()
+    private var playbackGeneration = 0L
+    private val guideScheduleCache = mutableMapOf<String, GuideScheduleCache>()
 
-    init { restore() }
+    init {
+        scope.launch { player.events.collect(::onPlayerEvent) }
+        restore()
+    }
     fun beginPairing() = scope.launch {
         update(loading = true, message = null)
         runCatching { gateway.startDevicePairing("VIPTV Android TV") }.onSuccess { code ->
@@ -128,9 +149,14 @@ class AppController(context: Context, private val origin: String = "https://vipt
     }
     private var explicitResumeAwaitingCompletionKey: String? = null
 
-    fun start(media: Media, source: Source, explicitResume: Boolean = false) = scope.launch {
-        sourceDiscovery?.cancel()
-        prepareAndStart(media, source, explicitResume, playWhenReady = true, resetTrackChoices = true)
+    fun start(media: Media, source: Source, explicitResume: Boolean = false) {
+        val requestGeneration = ++playbackGeneration
+        scope.launch {
+            managedRecoveryKey = null
+            sourceDiscovery?.cancel()
+            if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
+            prepareAndStart(media, source, explicitResume, playWhenReady = true, resetTrackChoices = true)
+        }
     }
 
     /**
@@ -144,6 +170,18 @@ class AppController(context: Context, private val origin: String = "https://vipt
         explicitResume: Boolean,
         playWhenReady: Boolean,
         resetTrackChoices: Boolean,
+    ): Boolean = playbackPrepareMutex.withLock {
+        val generation = ++playbackGeneration
+        prepareAndStartLocked(media, source, explicitResume, playWhenReady, resetTrackChoices, generation)
+    }
+
+    private suspend fun prepareAndStartLocked(
+        media: Media,
+        source: Source,
+        explicitResume: Boolean,
+        playWhenReady: Boolean,
+        resetTrackChoices: Boolean,
+        generation: Long,
     ): Boolean {
         val returnDestination = when (val current = _state.value.route) {
             is Route.Sources -> PlaybackReturnPolicy.afterSourceStart(current.resume)
@@ -155,7 +193,18 @@ class AppController(context: Context, private val origin: String = "https://vipt
         val requestedSubtitlesOff = if (resetTrackChoices) false else subtitlesOff
         update(loading = true, message = null)
         return try {
-            val launch = gateway.playback(source, media.positionMillis, requestedAudio, requestedSubtitle, requestedSubtitlesOff)
+            val launch = gateway.playback(
+                source = source,
+                positionMillis = media.positionMillis,
+                capabilities = PlaybackClientCapabilities.from(player.capabilities.value),
+                audioTrackIndex = requestedAudio,
+                subtitleTrackIndex = requestedSubtitle,
+                subtitlesOff = requestedSubtitlesOff,
+            )
+            if (!PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) {
+                runCatching { gateway.stopPlayback(launch.sessionId) }
+                return false
+            }
             if (launch.url.isBlank()) {
                 update(loading = false, message = "The selected source could not be prepared.")
                 false
@@ -174,6 +223,22 @@ class AppController(context: Context, private val origin: String = "https://vipt
                     runCatching { gateway.stopPlayback(launch.sessionId) }
                     throw error
                 }
+                if (!PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) {
+                    player.stop()
+                    runCatching { gateway.stopPlayback(launch.sessionId) }
+                    return false
+                }
+                // Direct delivery uses the title clock locally. Server-managed
+                // remux/transcode delivery starts a new segment at launch.position.
+                if (!launch.live && !SeekCommitPolicy.usesManagedReplacement(launch.mode) && launch.positionMillis > 0L && !player.seekTo(launch.positionMillis)) {
+                    player.stop()
+                    runCatching { gateway.stopPlayback(launch.sessionId) }
+                    update(loading = false, message = "This source cannot resume at the requested position. Choose another source.")
+                    return false
+                }
+                playbackTitleOffsetMillis = PlaybackTimelinePolicy.titleOffsetMillis(launch.mode, launch.positionMillis)
+                playbackTitleDurationMillis = launch.durationMillis ?: media.durationMillis
+                lastTrustedTitlePositionMillis = launch.positionMillis
                 replacePlaybackSession(launch.sessionId)
                 selectedAudioTrackIndex = requestedAudio
                 selectedSubtitleTrackIndex = requestedSubtitle
@@ -210,6 +275,34 @@ class AppController(context: Context, private val origin: String = "https://vipt
             false
         }
     }
+    private fun onPlayerEvent(event: PlaybackEvent) {
+        if (event !is PlaybackEvent.Failed) return
+        val route = _state.value.route as? Route.Player ?: return
+        val key = "${route.media.type}:${route.media.id}:${route.source.id}"
+        if (!ManagedRecoveryPolicy.shouldAttempt(
+                serverManaged = SeekCommitPolicy.usesManagedReplacement(_state.value.playbackDeliveryMode),
+                networkFailure = event.error.code == PlaybackErrorCode.Network,
+                alreadyAttempted = managedRecoveryKey == key,
+            )
+        ) return
+        val titlePosition = absolutePositionMillis()
+        val playWhenReady = player.state.value.playWhenReady
+        val requestGeneration = playbackGeneration
+        managedRecoveryKey = key
+        scope.launch {
+            if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
+            _state.value = _state.value.copy(message = "Reconnecting at your previous position…", loading = false)
+            val restored = prepareAndStart(
+                route.media.copy(positionMillis = titlePosition),
+                route.source,
+                explicitResume = false,
+                playWhenReady = playWhenReady,
+                resetTrackChoices = false,
+            )
+            if (!restored) _state.value = _state.value.copy(message = "Playback could not recover. Choose a source to try again.", loading = false)
+        }
+    }
+
     /** Controlled continuation is the only non-Resume automatic source path. */
     fun nextEpisode(outgoing: Media) {
         nextEpisodeJob?.cancel()
@@ -272,6 +365,9 @@ class AppController(context: Context, private val origin: String = "https://vipt
             nextEpisode(media)
         }
     }
+    /** Invalidates an in-flight source/playback request before a user leaves its surface. */
+    private fun invalidatePlaybackPreparation() { playbackGeneration++ }
+
     fun back() { handleBack() }
     fun consumesBack(): Boolean = when (_state.value.route) {
         is Route.Player, is Route.Sources, is Route.Details, Route.Search, Route.Settings, Route.Addons, is Route.ProfileEditor, is Route.Guide -> true
@@ -295,6 +391,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
         when (val route = _state.value.route) {
             is Route.Player -> {
+                invalidatePlaybackPreparation()
                 stopPlayback(route.media)
                 _state.value = _state.value.copy(
                     route = when (route.returnDestination) {
@@ -303,7 +400,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                     },
                 )
             }
-            is Route.Sources -> { sourceDiscovery?.cancel(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
+            is Route.Sources -> { invalidatePlaybackPreparation(); sourceDiscovery?.cancel(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
             is Route.Profiles -> if (_state.value.managingProfiles) _state.value = _state.value.copy(managingProfiles = false) else if (_state.value.selectedProfile != null) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null) else return false
             is Route.Details, is Route.Search, is Route.Settings, is Route.Addons, is Route.ProfileEditor, is Route.Guide -> _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
             is Route.Browse -> if (route.destination != Destination.Home) _state.value = _state.value.copy(route = Route.Browse(Destination.Home)) else return false
@@ -311,16 +408,31 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
         return true
     }
+    /** The Media3 adapter exposes session-relative HLS time; map it once to title time. */
+    fun absolutePositionMillis(): Long {
+        val candidate = PlaybackTimelinePolicy.absolutePositionMillis(player.state.value.positionMillis, playbackTitleOffsetMillis)
+        return if (player.state.value.status == PlaybackStatus.Error && lastTrustedTitlePositionMillis > 0L) {
+            lastTrustedTitlePositionMillis
+        } else {
+            lastTrustedTitlePositionMillis = candidate
+            candidate
+        }
+    }
+    fun titleDurationMillis(): Long? = playbackTitleDurationMillis ?: player.state.value.timeline?.durationMillis
+
     fun saveProgress(media: Media) {
         val profileId = _state.value.selectedProfile?.id
-        val position = player.state.value.positionMillis
+        val position = absolutePositionMillis()
         scope.launch { persistProgress(profileId, media, position) }
     }
     fun previewSeek(deltaMillis: Long) {
         val playback = player.state.value
         val timeline = playback.timeline ?: return
-        val base = _state.value.seekPreview?.targetMillis ?: playback.positionMillis
-        SeekPolicy.target(base, deltaMillis, timeline.durationMillis, timeline.seekableRange?.startMillis, timeline.seekableRange?.endMillis)?.let { target ->
+        val base = _state.value.seekPreview?.targetMillis ?: absolutePositionMillis()
+        val range = timeline.seekableRange
+        val rangeStart = range?.startMillis?.let { PlaybackTimelinePolicy.absolutePositionMillis(it, playbackTitleOffsetMillis) }
+        val rangeEnd = range?.endMillis?.let { PlaybackTimelinePolicy.absolutePositionMillis(it, playbackTitleOffsetMillis) }
+        SeekPolicy.target(base, deltaMillis, titleDurationMillis(), rangeStart, rangeEnd)?.let { target ->
             _state.value = _state.value.copy(seekPreview = SeekPreview(target))
             showPlayerChrome()
         }
@@ -329,15 +441,18 @@ class AppController(context: Context, private val origin: String = "https://vipt
         val target = _state.value.seekPreview?.targetMillis ?: return
         val route = _state.value.route as? Route.Player ?: return
         if (!SeekCommitPolicy.usesManagedReplacement(_state.value.playbackDeliveryMode)) {
-            if (player.seekTo(target)) {
+            if (player.seekTo(PlaybackTimelinePolicy.segmentPositionMillis(target, playbackTitleOffsetMillis))) {
                 _state.value = _state.value.copy(seekPreview = null)
                 showPlayerChrome()
             }
             return
         }
         val wasPlaying = player.state.value.isPlaying
+        managedRecoveryKey = null
+        val requestGeneration = ++playbackGeneration
         _state.value = _state.value.copy(seekPreview = null)
         scope.launch {
+            if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
             prepareAndStart(
                 route.media.copy(positionMillis = target),
                 route.source,
@@ -372,9 +487,12 @@ class AppController(context: Context, private val origin: String = "https://vipt
     }
 
     private fun replaceForManualTrackChoice(route: Route.Player, rollback: () -> Unit) {
-        val position = player.state.value.positionMillis
+        managedRecoveryKey = null
+        val requestGeneration = ++playbackGeneration
+        val position = absolutePositionMillis()
         val wasPlaying = player.state.value.isPlaying
         scope.launch {
+            if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
             val replaced = prepareAndStart(
                 route.media.copy(positionMillis = position),
                 route.source,
@@ -396,34 +514,164 @@ class AppController(context: Context, private val origin: String = "https://vipt
         searchJob?.cancel()
         val normalized = query.trim()
         _state.value = _state.value.copy(
+            searchQuery = query.take(256),
             searchResults = emptyList(),
+            searchSections = emptyList(),
+            searchStatus = if (normalized.isEmpty()) "Find your next favorite." else "Searching…",
             loading = false,
-            message = if (normalized.isEmpty()) "Find your next favorite." else "Searching…",
+            message = null,
         )
         if (normalized.isEmpty()) return
         searchJob = scope.launch {
             delay(650)
             try {
-                val results = gateway.discover(search = normalized)
+                val results = gateway.search(normalized)
                 if (isActive) {
+                    val count = results.sections.sumOf { it.items.size }
+                    val baseStatus = if (count == 0) "No results. Try another title." else "$count results"
                     _state.value = _state.value.copy(
-                        searchResults = results,
+                        searchSections = results.sections,
+                        searchResults = results.sections.flatMap(SearchSection::items),
+                        searchStatus = if (results.partialFailure) "$baseStatus  Some sources couldn't load." else baseStatus,
                         loading = false,
-                        message = if (results.isEmpty()) "No results. Try another title." else "${results.size} results",
                     )
                 }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Throwable) {
-                if (isActive) _state.value = _state.value.copy(loading = false, message = "Searching…  Some sources couldn't load.")
+                if (isActive) _state.value = _state.value.copy(loading = false, searchStatus = "Searching…  Some sources couldn't load.")
             }
         }
     }
     fun openMyList() = scope.launch { update(loading = true); runCatching { gateway.favorites(requireProfile()) }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.MyList), favorites = it, catalog = it, loading = false) }.onFailure(::fail) }
     fun openQueue() = scope.launch { update(loading = true); runCatching { gateway.queue(requireProfile()) }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.Home), queue = it, loading = false) }.onFailure(::fail) }
     fun openLive() = scope.launch { update(loading = true); runCatching { gateway.live() }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.Live), liveChannels = it, loading = false) }.onFailure(::fail) }
-    fun openGuide(channel: LiveChannel) = scope.launch { update(loading = true); runCatching { gateway.guide(channel.id) }.onSuccess { _state.value = _state.value.copy(route = Route.Guide(channel), guide = it, loading = false) }.onFailure(::fail) }
-    fun openSettings() = scope.launch { update(loading = true); runCatching { gateway.preferences(requireProfile()) to gateway.addons() }.onSuccess { (preferences, addons) -> _state.value = _state.value.copy(route = Route.Settings, preferences = preferences, addons = addons, loading = false) }.onFailure(::fail) }
+
+    /** Opens a 40-channel Guide page, then fills the selected five rows plus two look-ahead rows. */
+    fun openGuide(channel: LiveChannel) = scope.launch {
+        val generation = ++guideGeneration
+        val channels = runCatching { if (_state.value.liveChannels.isEmpty()) gateway.live() else _state.value.liveChannels }
+            .getOrElse { error -> fail(error); return@launch }
+            .let { available -> if (available.any { it.id == channel.id }) available else listOf(channel) + available }
+        val page = GuidePolicy.pageFor(channels, channel.id)
+        val now = System.currentTimeMillis()
+        val prior = _state.value.guideUi
+        val guide = prior.copy(
+            channels = channels,
+            selectedChannelId = channel.id,
+            page = page,
+            windowStartMillis = prior.windowStartMillis.takeIf { it > 0 } ?: GuidePolicy.nowWindow(now),
+            followsNow = true,
+        )
+        _state.value = _state.value.copy(
+            route = Route.Guide(channel), liveChannels = channels, guideUi = guide,
+            guide = guide.schedulesByChannelId[channel.id].orEmpty(), loading = false, message = null,
+        )
+        refreshGuideRows(generation)
+    }
+
+    fun selectGuideChannel(channel: LiveChannel) {
+        val current = _state.value.guideUi
+        if (current.selectedChannelId == channel.id) return
+        val generation = ++guideGeneration
+        val channels = if (current.channels.any { it.id == channel.id }) current.channels else listOf(channel) + current.channels
+        val guide = current.copy(channels = channels, selectedChannelId = channel.id, page = GuidePolicy.pageFor(channels, channel.id))
+        _state.value = _state.value.copy(route = Route.Guide(channel), guideUi = guide, guide = guide.schedulesByChannelId[channel.id].orEmpty(), message = null)
+        scope.launch { refreshGuideRows(generation) }
+    }
+
+    fun changeGuidePage(delta: Int) {
+        val current = _state.value.guideUi
+        if (current.channels.isEmpty()) return
+        val maxPage = ((current.channels.size - 1).coerceAtLeast(0) / GuidePolicy.PAGE_SIZE)
+        val page = (current.page + delta).coerceIn(0, maxPage)
+        if (page == current.page) return
+        val first = current.channels[page * GuidePolicy.PAGE_SIZE]
+        val generation = ++guideGeneration
+        val guide = current.copy(page = page, selectedChannelId = first.id)
+        _state.value = _state.value.copy(route = Route.Guide(first), guideUi = guide, guide = guide.schedulesByChannelId[first.id].orEmpty())
+        scope.launch { refreshGuideRows(generation) }
+    }
+
+    fun shiftGuideWindow(hours: Int) {
+        val current = _state.value.guideUi
+        if (current.windowStartMillis == 0L) return
+        val now = System.currentTimeMillis()
+        _state.value = _state.value.copy(guideUi = current.copy(windowStartMillis = GuidePolicy.shiftedWindow(current.windowStartMillis, hours, now), followsNow = false))
+    }
+
+    fun followGuideNow() {
+        val current = _state.value.guideUi
+        _state.value = _state.value.copy(guideUi = current.copy(windowStartMillis = GuidePolicy.nowWindow(System.currentTimeMillis()), followsNow = true))
+    }
+
+    fun watchGuideChannel(channel: LiveChannel) = chooseSources(Media(channel.id, "live", channel.name))
+
+    private suspend fun refreshGuideRows(generation: Long) {
+        val before = _state.value.guideUi
+        val ids = GuidePolicy.visibleRows(before).plus(before.channels.drop(before.page * GuidePolicy.PAGE_SIZE + GuidePolicy.VISIBLE_ROWS).take(2))
+            .map(LiveChannel::id).distinct()
+        val now = System.currentTimeMillis()
+        val valid = ids.filter { id -> guideScheduleCache[id]?.let { now < it.expiresAtMillis } == true }
+        val missing = ids - valid.toSet()
+        if (missing.isEmpty()) {
+            publishGuideCache(generation)
+            return
+        }
+        _state.value = _state.value.copy(guideUi = before.copy(loadingChannelIds = before.loadingChannelIds + missing))
+        coroutineScope {
+            missing.chunked(3).forEach { batch ->
+                batch.map { id -> async { id to runCatching { gateway.guide(id) } } }.awaitAll().forEach { (id, result) ->
+                    val fetchedAt = System.currentTimeMillis()
+                    guideScheduleCache[id] = result.fold(
+                        onSuccess = { GuideScheduleCache(it, fetchedAt + 300_000L) },
+                        onFailure = { GuideScheduleCache(emptyList(), fetchedAt + 60_000L) },
+                    )
+                }
+            }
+        }
+        publishGuideCache(generation)
+    }
+
+    private fun publishGuideCache(generation: Long) {
+        if (generation != guideGeneration || _state.value.route !is Route.Guide) return
+        val current = _state.value.guideUi
+        val schedules = current.schedulesByChannelId + guideScheduleCache.mapValues { it.value.entries }
+        val selected = current.selectedChannelId
+        _state.value = _state.value.copy(guideUi = current.copy(schedulesByChannelId = schedules, loadingChannelIds = emptySet()), guide = selected?.let { schedules[it] }.orEmpty(), loading = false)
+    }
+
+    /** Settings remains usable when the optional server-status endpoint is unavailable. */
+    fun openSettings() = scope.launch {
+        _state.value = _state.value.copy(route = Route.Settings, loading = false, message = null)
+        val profileId = runCatching(::requireProfile).getOrElse { return@launch }
+        coroutineScope {
+            val preferences = async { runCatching { gateway.preferences(profileId) } }
+            val addons = async { runCatching { gateway.addons() } }
+            val about = async { runCatching { gateway.serverAbout() } }
+            val prefResult = preferences.await()
+            val addonResult = addons.await()
+            val aboutResult = about.await()
+            if (prefResult.isFailure && addonResult.isFailure) {
+                fail(prefResult.exceptionOrNull() ?: addonResult.exceptionOrNull()!!)
+                return@coroutineScope
+            }
+            _state.value = _state.value.copy(
+                route = Route.Settings,
+                preferences = prefResult.getOrElse { _state.value.preferences },
+                addons = addonResult.getOrElse { _state.value.addons },
+                serverAbout = aboutResult.getOrNull(),
+                loading = false,
+                message = if (aboutResult.isFailure) "Server information is unavailable." else null,
+            )
+        }
+    }
+    fun installAddon(manifestUrl: String) = scope.launch {
+        guarded("Enter parent PIN") {
+            gateway.addAddon(manifestUrl)
+            openSettings()
+        }
+    }
     fun openAddons() = scope.launch { update(loading = true); runCatching { gateway.addons() }.onSuccess { addons -> _state.value = _state.value.copy(route = Route.Addons, addons = addons, loading = false) }.onFailure(::fail) }
     fun toggleMyList(media: Media) = scope.launch { guarded("Enter parent PIN") { val saved = gateway.toggleFavorite(requireProfile(), media); _state.value = _state.value.copy(message = if (saved) "Added to My List." else "Removed from My List.") } }
     fun removeFromQueue(media: Media) = scope.launch { guarded("Enter parent PIN") { gateway.setQueueVisibility(requireProfile(), media, true); _state.value = _state.value.copy(queue = _state.value.queue.filterNot { it.id == media.id }, dialog = DialogState(DialogKind.QueueManage, "Removed from Continue Watching", media)) } }
@@ -460,6 +708,8 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun cancelPin() { afterParentUnlock = null; _state.value = _state.value.copy(pinPrompt = null) }
     fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback((_state.value.route as? Route.Player)?.media); gateway.logout(); store.edit().clear().apply(); _state.value = AppState(route = Route.Pairing); beginPairing() } }
     fun close() { pairingPoll?.cancel(); sourceDiscovery?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
+    private data class GuideScheduleCache(val entries: List<GuideProgramme>, val expiresAtMillis: Long)
+
     private fun requireProfile() = checkNotNull(_state.value.selectedProfile).id
     private fun schedulePlayerChromeDismissal() {
         playerChromeJob?.cancel()
@@ -487,7 +737,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
         progressJob = scope.launch {
             while (isActive) {
                 delay(15_000)
-                persistProgress(profileId, media, player.state.value.positionMillis)
+                persistProgress(profileId, media, absolutePositionMillis())
             }
         }
     }
@@ -497,11 +747,15 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
     }
     private fun stopPlayback(media: Media? = null) {
-        val position = player.state.value.positionMillis
+        invalidatePlaybackPreparation()
+        val position = absolutePositionMillis()
         val profileId = _state.value.selectedProfile?.id
         progressJob?.cancel()
         media?.let { item -> scope.launch { persistProgress(profileId, item, position) } }
         player.stop()
+        playbackTitleOffsetMillis = 0L
+        playbackTitleDurationMillis = null
+        lastTrustedTitlePositionMillis = 0L
         heartbeatJob?.cancel()
         playbackSessionId?.let { id -> scope.launch { runCatching { gateway.stopPlayback(id) } } }
         playbackSessionId = null

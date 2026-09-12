@@ -6,4 +6,4 @@ Keep product policy in `PlaybackPolicy`/`AppController` and backend I/O in `VipT
 
 Device tokens, refresh tokens, stream URLs, headers and parent PINs are secrets. Store tokens only in private app storage, retain PINs in memory only for a submitted unlock request, and never log any of them. Use the backend's direct/copy/remux/transcode decision; Android must not request a transcode merely because a container name looks unfamiliar.
 
-Do not run emulators, Gradle, or connected tests when the workspace is resource-constrained. The review workflow is intentionally manual and one worker. A build or unit pass is not Android TV media/focus evidence.
+Do not run emulators, Gradle, or connected tests when the workspace is resource-constrained. GitHub-hosted review CI runs automatically on main and pull requests with one worker; use its uploaded APK for device validation. A build or unit pass is not Android TV media/focus evidence.

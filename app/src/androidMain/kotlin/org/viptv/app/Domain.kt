@@ -31,9 +31,30 @@ data class Source(
     val audio: String? = null,
 )
 
+object SourceDisplayPolicy {
+    private val opaqueProviderId = Regex("^[A-Za-z0-9._-]+:[0-9]+$")
+    /** Provider worker IDs are not meaningful metadata; prefer the server filename/title. */
+    fun title(source: Source): String = when {
+        source.name.isNotBlank() && !opaqueProviderId.matches(source.name) -> source.name
+        source.description.isNotBlank() -> source.description.lineSequence().first().take(180)
+        source.provider.isNotBlank() && !opaqueProviderId.matches(source.provider) -> source.provider
+        else -> "Source"
+    }
+    fun body(source: Source): String = source.description.ifBlank { source.provider.takeUnless(opaqueProviderId::matches).orEmpty() }
+}
+
 sealed interface PlaybackIntent {
     data class Open(val source: Source, val positionMillis: Long) : PlaybackIntent
     data object ChooseSource : PlaybackIntent
+}
+
+enum class MediaCardAction { OpenDetails, ResumeExactSource }
+object MediaCardPolicy {
+    /** Only Continue Watching has a Resume primary action; discovery always opens details. */
+    fun primary(resumeSurface: Boolean, media: Media): MediaCardAction =
+        if (resumeSurface && media.positionMillis > 0 && media.type != "live") MediaCardAction.ResumeExactSource else MediaCardAction.OpenDetails
+    fun supportsChooseSourceHold(resumeSurface: Boolean, media: Media): Boolean =
+        primary(resumeSurface, media) == MediaCardAction.ResumeExactSource
 }
 
 /** Product policy from the design contract. The player adapter does not choose sources. */
@@ -109,6 +130,12 @@ object HoldPolicy {
     fun release(heldMillis: Long): RemoteAction = if (heldMillis >= thresholdMillis) RemoteAction.Hold else RemoteAction.Activate
 }
 
+/** A release belongs only to the focus owner that observed the initial non-repeat press. */
+object HoldPressPolicy {
+    fun begins(downAtMillis: Long, repeatCount: Int): Boolean = downAtMillis == 0L && repeatCount == 0
+    fun activatesOnRelease(downAtMillis: Long, held: Boolean): Boolean = downAtMillis != 0L && !held
+}
+
 /** Back always resolves transient state before leaving its route. */
 enum class BackDisposition { DismissDialog, CancelPin, CancelSeek, HidePlayerChrome, ExitPlayer, Navigate }
 object BackPolicy {
@@ -137,6 +164,27 @@ object SeekPolicy {
 
 object SeekCommitPolicy {
     fun usesManagedReplacement(deliveryMode: String): Boolean = !deliveryMode.equals("direct", ignoreCase = true)
+}
+
+/** Maps a server-managed segment clock onto the title clock used by UX and progress. */
+object PlaybackTimelinePolicy {
+    fun titleOffsetMillis(deliveryMode: String, launchPositionMillis: Long): Long =
+        if (SeekCommitPolicy.usesManagedReplacement(deliveryMode)) launchPositionMillis.coerceAtLeast(0) else 0L
+    fun absolutePositionMillis(segmentPositionMillis: Long, titleOffsetMillis: Long): Long =
+        segmentPositionMillis.coerceAtLeast(0) + titleOffsetMillis.coerceAtLeast(0)
+    fun segmentPositionMillis(titlePositionMillis: Long, titleOffsetMillis: Long): Long =
+        (titlePositionMillis - titleOffsetMillis).coerceAtLeast(0)
+}
+
+/** Behind-window recovery is a single managed reprepare, never a jump to live edge. */
+object ManagedRecoveryPolicy {
+    fun shouldAttempt(serverManaged: Boolean, networkFailure: Boolean, alreadyAttempted: Boolean): Boolean =
+        serverManaged && networkFailure && !alreadyAttempted
+}
+
+/** A late preparation has no authority after Back, profile change, or a newer request. */
+object PlaybackRequestPolicy {
+    fun isCurrent(requestGeneration: Long, currentGeneration: Long): Boolean = requestGeneration == currentGeneration
 }
 
 enum class Destination(val label: String) {
@@ -199,6 +247,40 @@ data class PlaybackTrackChoices(
 )
 data class GuideProgramme(val title: String, val startMillis: Long, val endMillis: Long, val description: String? = null)
 data class LiveChannel(val id: String, val name: String, val logo: String? = null, val category: String? = null)
+
+/**
+ * Server schedules are cached per channel while the Guide owns window, page and
+ * selection.  It stays UI-neutral so Compose can render its five-row grid
+ * without making network decisions.
+ */
+data class GuideUiState(
+    val channels: List<LiveChannel> = emptyList(),
+    val schedulesByChannelId: Map<String, List<GuideProgramme>> = emptyMap(),
+    val selectedChannelId: String? = null,
+    val page: Int = 0,
+    val windowStartMillis: Long = 0,
+    val followsNow: Boolean = true,
+    val loadingChannelIds: Set<String> = emptySet(),
+)
+
+object GuidePolicy {
+    const val PAGE_SIZE = 40
+    const val VISIBLE_ROWS = 5
+    const val WINDOW_MILLIS = 2 * 60 * 60 * 1_000L
+    private const val HALF_HOUR_MILLIS = 30 * 60 * 1_000L
+    private const val MAX_AHEAD_MILLIS = 24 * 60 * 60 * 1_000L
+
+    fun nowWindow(nowMillis: Long): Long = nowMillis / HALF_HOUR_MILLIS * HALF_HOUR_MILLIS
+    fun pageFor(channels: List<LiveChannel>, channelId: String): Int =
+        (channels.indexOfFirst { it.id == channelId }.coerceAtLeast(0) / PAGE_SIZE)
+    fun visibleRows(state: GuideUiState): List<LiveChannel> {
+        val pageChannels = state.channels.drop(state.page * PAGE_SIZE).take(PAGE_SIZE)
+        val selected = pageChannels.indexOfFirst { it.id == state.selectedChannelId }.coerceAtLeast(0)
+        return pageChannels.drop((selected - (VISIBLE_ROWS - 1)).coerceAtLeast(0)).take(VISIBLE_ROWS)
+    }
+    fun shiftedWindow(windowStartMillis: Long, hours: Int, nowMillis: Long): Long =
+        (windowStartMillis + hours * 60 * 60 * 1_000L).coerceIn(nowWindow(nowMillis), nowWindow(nowMillis) + MAX_AHEAD_MILLIS)
+}
 enum class DialogKind { QueueManage, MyListManage, EpisodeManage, SourceDetails, LiveManage, DeleteProfile, SignOut, NextUnavailable }
 data class DialogState(val kind: DialogKind, val title: String, val media: Media? = null, val source: Source? = null, val profile: Profile? = null)
 data class PinPrompt(val title: String)
@@ -215,10 +297,16 @@ data class AppState(
     val sources: List<Source> = emptyList(),
     val favorites: List<Media> = emptyList(),
     val queue: List<Media> = emptyList(),
-    val searchResults: List<Media> = emptyList(),
+    /** Query-owned state survives focus moves between keyboard and source-labelled rows. */
+    val searchQuery: String = "",
+    val searchStatus: String = "Find your next favorite.",
+    val searchSections: List<SearchSection> = emptyList(),
+    val searchResults: List<Media> = emptyList(), // Compatibility projection for older surfaces.
     val liveChannels: List<LiveChannel> = emptyList(),
     val guide: List<GuideProgramme> = emptyList(),
+    val guideUi: GuideUiState = GuideUiState(),
     val addons: List<Addon> = emptyList(),
+    val serverAbout: ServerAbout? = null,
     val preferences: PlaybackPreferences = PlaybackPreferences(),
     val playbackTracks: PlaybackTrackChoices = PlaybackTrackChoices(),
     /** Server delivery category; safe UI state used to choose native versus managed seek. */

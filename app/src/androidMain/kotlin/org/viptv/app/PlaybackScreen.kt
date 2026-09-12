@@ -85,6 +85,10 @@ internal fun PlaybackScreen(
     var trackNotice by remember { mutableStateOf<String?>(null) }
     val rootFocus = remember { FocusRequester() }
     val isLive = media.type == "live"
+    // Media3 reports position in the currently opened delivery segment. The
+    // controller owns the title-relative offset for resume, progress and Next.
+    val absolutePositionMillis = controller.absolutePositionMillis()
+    val titleDurationMillis = controller.titleDurationMillis() ?: playback.timeline?.durationMillis
 
     fun showChrome() = controller.showPlayerChrome()
     fun preview(delta: Long, code: Int) {
@@ -110,11 +114,11 @@ internal fun PlaybackScreen(
         }
     }
 
-    LaunchedEffect(media.type, media.id, playback.positionMillis, playback.isPlaying, playback.timeline?.durationMillis) {
+    LaunchedEffect(media.type, media.id, absolutePositionMillis, playback.isPlaying, titleDurationMillis) {
         controller.maybeAutoNext(
             media,
-            playback.positionMillis,
-            playback.timeline?.durationMillis,
+            absolutePositionMillis,
+            titleDurationMillis,
             playback.isPlaying,
             playback.status == PlaybackStatus.Ended,
         )
@@ -148,17 +152,18 @@ internal fun PlaybackScreen(
                 when (native.action) {
                     NativeKeyEvent.ACTION_DOWN -> when (code) {
                         NativeKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                            if (!isLive) {
+                            // Repeat events are still consumed, but never toggle again while held.
+                            if (!isLive && native.repeatCount == 0) {
                                 if (playback.isPlaying) controller.player.pause() else controller.player.play()
                             }
                             true
                         }
                         NativeKeyEvent.KEYCODE_MEDIA_PLAY -> {
-                            if (!isLive) controller.player.play()
+                            if (!isLive && native.repeatCount == 0) controller.player.play()
                             true
                         }
                         NativeKeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                            if (!isLive) controller.player.pause()
+                            if (!isLive && native.repeatCount == 0) controller.player.pause()
                             true
                         }
                         NativeKeyEvent.KEYCODE_MEDIA_REWIND -> if (!isLive) { preview(-60_000, code); true } else true
@@ -180,8 +185,8 @@ internal fun PlaybackScreen(
     ) {
         AndroidView(factory = { SurfaceView(it).also(controller.player::attach) }, modifier = Modifier.fillMaxSize())
         if (chromeVisible) {
-            Box(Modifier.fillMaxSize().height(210.dp).background(PlayerOverlayTop))
-            Box(Modifier.fillMaxSize().offset(y = 382.dp).height(338.dp).background(PlayerOverlayBottom))
+            Box(Modifier.width(1280.dp).height(210.dp).background(PlayerOverlayTop))
+            Box(Modifier.offset(y = 382.dp).width(1280.dp).height(338.dp).background(PlayerOverlayBottom))
             androidx.compose.foundation.Image(
                 painterResource(R.drawable.viptv_mark),
                 contentDescription = "VIPTV",
@@ -189,14 +194,14 @@ internal fun PlaybackScreen(
                 contentScale = ContentScale.Fit,
             )
             Text(media.name, color = Color(0xFFF5F5F5), fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(112.dp, 36.dp).width(700.dp))
-            Text(if (isLive) "LIVE" else formatTime(playback.positionMillis), color = Color(0xFFBFC1C3), fontSize = 16.sp, textAlign = TextAlign.End, modifier = Modifier.offset(1048.dp, 36.dp).width(168.dp))
+            Text(playbackStatusLabel(playback.status, playback.isPlaying, playback.isBuffering, isLive), color = Color(0xFFBFC1C3), fontSize = 16.sp, textAlign = TextAlign.End, modifier = Modifier.offset(1048.dp, 36.dp).width(168.dp))
             Text(if (isLive) "LIVE NOW" else "PLAYBACK", color = Color(0xFFBFC1C3), fontSize = 16.sp, modifier = Modifier.offset(64.dp, 460.dp))
             Text(media.name, color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(64.dp, 486.dp).width(1090.dp))
             Text(playerContext(media, seekPreview), color = Color(0xFFBFC1C3), fontSize = 17.sp, modifier = Modifier.offset(64.dp, 524.dp).width(1090.dp))
             if (!isLive) {
                 PlaybackTimeline(
-                    positionMillis = playback.positionMillis,
-                    durationMillis = playback.timeline?.durationMillis,
+                    positionMillis = absolutePositionMillis,
+                    durationMillis = titleDurationMillis,
                     preview = seekPreview,
                     modifier = Modifier.offset(64.dp, 572.dp),
                     onFocused = { timelineFocused = it },
@@ -239,10 +244,11 @@ private fun PlaybackTimeline(positionMillis: Long, durationMillis: Long?, previe
         onFocused = onFocused,
         onActivate = onActivate,
     ) { focused ->
-        Box(Modifier.align(Alignment.TopStart).offset(y = 6.dp).fillMaxSize().height(6.dp).clip(RoundedCornerShape(3.dp)).background(PlayerTrack))
-        Box(Modifier.align(Alignment.TopStart).offset(y = 6.dp).width((1152f * fraction.coerceIn(0f, 1f)).dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(Color.White))
-        Box(Modifier.align(Alignment.TopStart).offset(x = (1152f * fraction.coerceIn(0f, 1f) - 8f).dp, y = 1.dp).size(16.dp).clip(RoundedCornerShape(8.dp)).background(if (focused) Color.White else Color(0xFFF5F5F5)))
-        Text("${formatTime(shown)} / ${formatTime(durationMillis ?: 0)}", color = Color(0xFFBFC1C3), fontSize = 14.sp, modifier = Modifier.offset(y = 16.dp))
+        Box(Modifier.align(Alignment.TopStart).width(1152.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(PlayerTrack))
+        Box(Modifier.align(Alignment.TopStart).width((1152f * fraction.coerceIn(0f, 1f)).dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(Color.White))
+        Box(Modifier.align(Alignment.TopStart).offset(x = (1152f * fraction.coerceIn(0f, 1f) - 8f).dp, y = (-5).dp).size(16.dp).clip(RoundedCornerShape(8.dp)).background(if (focused) Color.White else Color(0xFFF5F5F5)))
+        Text(formatTime(shown), color = Color(0xFFF5F5F5), fontSize = 14.sp, modifier = Modifier.offset(y = 12.dp).width(576.dp))
+        Text(formatTime(durationMillis ?: 0), color = Color(0xFFA6A8AA), fontSize = 14.sp, textAlign = TextAlign.End, modifier = Modifier.offset(x = 576.dp, y = 12.dp).width(576.dp))
     }
 }
 
@@ -252,21 +258,21 @@ private fun PlayerControls(media: Media, isLive: Boolean, isPlaying: Boolean, ca
     val captions = serverTracks.subtitlesSupported
     Box(Modifier.fillMaxSize()) {
         if (!isLive) {
-            if (canSeek) PlayerIconButton("Rewind 60 seconds", Modifier.offset(64.dp, 624.dp).size(64.dp), { onSeek(-60_000) }) { PlayerGlyph(Icons.Default.FastRewind, it) }
-            PlayerIconButton(if (isPlaying) "Pause" else "Play", Modifier.offset(144.dp, 624.dp).size(64.dp), { if (isPlaying) controller.player.pause() else controller.player.play() }) { PlayerGlyph(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, it) }
-            if (canSeek) PlayerIconButton("Forward 60 seconds", Modifier.offset(224.dp, 624.dp).size(64.dp), { onSeek(60_000) }) { PlayerGlyph(Icons.Default.FastForward, it) }
-            if (media.type == "series") PlayerIconButton("Next episode", Modifier.offset(304.dp, 624.dp).size(64.dp), { controller.nextEpisode(media) }) { PlayerGlyph(Icons.Default.SkipNext, it) }
+            if (canSeek) PlayerIconButton("Rewind 60 seconds", Modifier.offset(64.dp, 624.dp).size(64.dp), { onSeek(-60_000) }) { PlayerGlyph(Icons.Default.FastRewind, "Rewind 60 seconds", it) }
+            PlayerIconButton(if (isPlaying) "Pause" else "Play", Modifier.offset(144.dp, 624.dp).size(64.dp), { if (isPlaying) controller.player.pause() else controller.player.play() }) { PlayerGlyph(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (isPlaying) "Pause" else "Play", it) }
+            if (canSeek) PlayerIconButton("Forward 60 seconds", Modifier.offset(224.dp, 624.dp).size(64.dp), { onSeek(60_000) }) { PlayerGlyph(Icons.Default.FastForward, "Forward 60 seconds", it) }
+            if (media.type == "series") PlayerIconButton("Next episode", Modifier.offset(304.dp, 624.dp).size(64.dp), { controller.nextEpisode(media) }) { PlayerGlyph(Icons.Default.SkipNext, "Next episode", it) }
         }
-        if (audio) PlayerIconButton("Audio", Modifier.offset(if (isLive) 544.dp else 928.dp, 624.dp).size(64.dp), { onMenu(PlayerTrackMenu.Audio) }) { PlayerGlyph(Icons.Default.VolumeUp, it) }
-        if (captions) PlayerIconButton("Captions", Modifier.offset(if (isLive) 624.dp else 1008.dp, 624.dp).size(64.dp), { onMenu(PlayerTrackMenu.Subtitles) }) { PlayerGlyph(Icons.Default.ClosedCaption, it) }
+        if (audio) PlayerIconButton("Audio", Modifier.offset(if (isLive) 608.dp else 992.dp, 624.dp).size(64.dp), { onMenu(PlayerTrackMenu.Audio) }) { PlayerGlyph(Icons.Default.VolumeUp, "Audio", it) }
+        if (captions) PlayerIconButton("Captions", Modifier.offset(if (isLive) 688.dp else 1072.dp, 624.dp).size(64.dp), { onMenu(PlayerTrackMenu.Subtitles) }) { PlayerGlyph(Icons.Default.ClosedCaption, "Captions", it) }
         // Back owns final progress persistence and session stop as one ordered
         // transition. Calling saveProgress here races a second write with stop.
-        PlayerIconButton("Exit", Modifier.offset(1088.dp, 624.dp).size(64.dp), { controller.back() }) { PlayerGlyph(Icons.Default.Close, it) }
+        PlayerIconButton("Exit", Modifier.offset(1152.dp, 624.dp).size(64.dp), { controller.back() }) { PlayerGlyph(Icons.Default.Close, "Exit", it) }
     }
 }
 
 @Composable
-private fun PlayerGlyph(icon: androidx.compose.ui.graphics.vector.ImageVector, focused: Boolean) = Icon(icon, contentDescription = null, tint = if (focused) Color(0xFF101112) else Color(0xFFF5F5F5), modifier = Modifier.size(28.dp))
+private fun PlayerGlyph(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, focused: Boolean) = Icon(icon, contentDescription = description, tint = if (focused) Color(0xFF101112) else Color(0xFFF5F5F5), modifier = Modifier.size(28.dp))
 
 @Composable
 private fun PlayerIconButton(label: String, modifier: Modifier, onActivate: () -> Unit, onFocused: (Boolean) -> Unit = {}, content: @Composable BoxScope.(Boolean) -> Unit) {
@@ -315,6 +321,15 @@ private fun PlayerMenuChoice(label: String, modifier: Modifier = Modifier, onAct
 private fun formatTime(millis: Long): String {
     val total = max(0, millis / 1_000)
     return "%d:%02d".format(total / 60, total % 60)
+}
+
+private fun playbackStatusLabel(status: PlaybackStatus, isPlaying: Boolean, isBuffering: Boolean, live: Boolean): String = when (status) {
+    PlaybackStatus.Opening -> "BUFFERING"
+    PlaybackStatus.Ready -> if (isBuffering) "BUFFERING" else if (live) "● LIVE" else if (isPlaying) "PLAYING" else "PAUSED"
+    PlaybackStatus.Ended -> "ENDED"
+    PlaybackStatus.Error -> "ERROR"
+    PlaybackStatus.Released -> "STOPPED"
+    PlaybackStatus.Idle -> "READY"
 }
 
 private fun playerContext(media: Media, seek: SeekPreview?): String = buildString {

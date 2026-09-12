@@ -57,6 +57,14 @@ class PlaybackPolicyTest {
         assertTrue(SeekCommitPolicy.usesManagedReplacement("transcode"))
     }
 
+    @Test fun `managed segment position maps to the title timeline`() {
+        val offset = PlaybackTimelinePolicy.titleOffsetMillis("remux", 42_000)
+        assertEquals(42_000, PlaybackTimelinePolicy.absolutePositionMillis(0, offset))
+        assertEquals(51_500, PlaybackTimelinePolicy.absolutePositionMillis(9_500, offset))
+        assertEquals(8_000, PlaybackTimelinePolicy.segmentPositionMillis(50_000, offset))
+        assertEquals(0, PlaybackTimelinePolicy.titleOffsetMillis("direct", 42_000))
+    }
+
     @Test fun `next needs active unpaused series in final ten seconds`() {
         assertTrue(PlaybackPolicy.canAutoNext(Media("e", "series"), 91_000, 100_000, true, false, true))
         assertFalse(PlaybackPolicy.canAutoNext(Media("e", "series"), 91_000, 100_000, false, false, true))
@@ -92,5 +100,64 @@ class PlaybackPolicyTest {
         assertEquals(sameAddon, ContinuationSourcePolicy.select(next, outgoing, listOf(other, ranked, sameAddon)))
         assertEquals(ranked, ContinuationSourcePolicy.select(next, null, listOf(other, ranked)))
         assertEquals(null, ContinuationSourcePolicy.select(next, outgoing, listOf(other)))
+    }
+}
+
+class GuidePolicyTest {
+    @Test fun `guide pages in forties and keeps five selected-neighbor rows`() {
+        val channels = (1..82).map { LiveChannel(it.toString(), "Channel $it") }
+        assertEquals(1, GuidePolicy.pageFor(channels, "41"))
+        val state = GuideUiState(channels = channels, page = 1, selectedChannelId = "45")
+        assertEquals(listOf("41", "42", "43", "44", "45"), GuidePolicy.visibleRows(state).map(LiveChannel::id))
+    }
+
+    @Test fun `guide window never moves before now or beyond one day`() {
+        val now = 1_800_123_000_000L
+        val initial = GuidePolicy.nowWindow(now)
+        assertEquals(initial, GuidePolicy.shiftedWindow(initial, -1, now))
+        assertEquals(initial + 24 * 60 * 60 * 1_000L, GuidePolicy.shiftedWindow(initial, 25, now))
+    }
+}
+
+class MediaCardPolicyTest {
+    @Test fun `only continue watching resumes from a card primary action`() {
+        val progressed = Media("movie", "movie", positionMillis = 10_000)
+        assertEquals(MediaCardAction.ResumeExactSource, MediaCardPolicy.primary(true, progressed))
+        assertEquals(MediaCardAction.OpenDetails, MediaCardPolicy.primary(false, progressed))
+        assertFalse(MediaCardPolicy.supportsChooseSourceHold(false, progressed))
+    }
+}
+
+class SourceDisplayPolicyTest {
+    @Test fun `opaque provider worker id yields to filename metadata`() {
+        val source = Source("stream", "iptv:4", name = "iptv:4", description = "Mayday.2021.1080p.mkv")
+        assertEquals("Mayday.2021.1080p.mkv", SourceDisplayPolicy.title(source))
+        assertEquals("Mayday.2021.1080p.mkv", SourceDisplayPolicy.body(source))
+    }
+}
+
+class ManagedRecoveryPolicyTest {
+    @Test fun `only one managed network recovery is permitted`() {
+        assertTrue(ManagedRecoveryPolicy.shouldAttempt(serverManaged = true, networkFailure = true, alreadyAttempted = false))
+        assertFalse(ManagedRecoveryPolicy.shouldAttempt(serverManaged = false, networkFailure = true, alreadyAttempted = false))
+        assertFalse(ManagedRecoveryPolicy.shouldAttempt(serverManaged = true, networkFailure = false, alreadyAttempted = false))
+        assertFalse(ManagedRecoveryPolicy.shouldAttempt(serverManaged = true, networkFailure = true, alreadyAttempted = true))
+    }
+}
+
+class HoldPressPolicyTest {
+    @Test fun `focus-lost release cannot activate a newly focused control`() {
+        assertTrue(HoldPressPolicy.begins(0L, repeatCount = 0))
+        assertFalse(HoldPressPolicy.activatesOnRelease(0L, held = false))
+        assertFalse(HoldPressPolicy.begins(0L, repeatCount = 1))
+        assertFalse(HoldPressPolicy.activatesOnRelease(100L, held = true))
+        assertTrue(HoldPressPolicy.activatesOnRelease(100L, held = false))
+    }
+}
+
+class PlaybackRequestPolicyTest {
+    @Test fun `back invalidation makes a late preparation obsolete`() {
+        assertTrue(PlaybackRequestPolicy.isCurrent(7, 7))
+        assertFalse(PlaybackRequestPolicy.isCurrent(7, 8))
     }
 }
