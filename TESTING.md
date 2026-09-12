@@ -27,6 +27,13 @@ On the authorized Android 14/API 34 onn. Streaming Device 4K pro, installed as a
 
 Later working-tree changes are not certified by that evidence. Re-run Resume, direct/managed seek with pause preservation, track replacement, Next and progress against the corrected full-title clock. Also inspect the expanded Guide, Search, source paging/filtering, profile/avatar editor and Settings on the actual device. Discover parity and physical focus-return cases remain under implementation/acceptance.
 
+The hosted `1a67fe9` artifact passed compilation and unit checks, but its initial physical
+check found that remote DPAD Center did not activate focused Home/hero actions. Touch
+activation reached the correct Source picker, isolating the defect to the shared
+`Holdable` remote modifier order. The next candidate moves preview key handling ahead
+of the sole clickable focus target; this correction still needs hosted and physical
+validation.
+
 ## Release acceptance record
 
 Record immutable commit, hosted run, device model/OS, source delivery mode, entry action, result, failure/recovery and return destination for each scenario. Record automated, real-media and hardware evidence separately. Missing tests and observed failures remain explicit; neither a debug APK nor passing fixture tests establishes 100% device or design conformance.

@@ -34,6 +34,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     val player: AndroidMedia3VideoPlayer = AndroidMedia3BackendFactory(context).createAndroidPlayer()
     private var pairingPoll: Job? = null
     private var sourceDiscovery: Job? = null
+    private var discoverJob: Job? = null
     private var searchJob: Job? = null
     private var nextEpisodeJob: Job? = null
     private var playerChromeJob: Job? = null
@@ -50,7 +51,9 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private var subtitlesOff = false
     private var continuationRestore: Route.Player? = null
     private var continuationWasPlaying = false
+    private var detailReturnDestination: Destination? = null
     private var guideGeneration = 0L
+    private var discoverGeneration = 0L
     private var managedRecoveryKey: String? = null
     private val playbackPrepareMutex = Mutex()
     private var playbackGeneration = 0L
@@ -68,10 +71,26 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }.onFailure { fail(it) }
     }
     private suspend fun pollPairing(code: DeviceCode) {
+        var intervalSeconds = code.intervalSeconds.coerceAtLeast(1)
         repeat(120) {
-            delay(code.intervalSeconds * 1_000)
-            runCatching { gateway.exchangeDeviceCode(code.code) }.getOrNull()?.let { session ->
-                persist(session); loadProfiles(session.profileId); return
+            delay(intervalSeconds * 1_000)
+            try {
+                when (val result = gateway.exchangeDeviceCode(code.code)) {
+                    is DevicePollResult.Authorized -> {
+                        persist(result.session)
+                        loadProfiles(result.session.profileId)
+                        return
+                    }
+                    DevicePollResult.Pending -> intervalSeconds = DevicePollPolicy.nextIntervalSeconds(code.intervalSeconds, intervalSeconds, rateLimited = false)
+                    DevicePollResult.RateLimited -> intervalSeconds = DevicePollPolicy.nextIntervalSeconds(code.intervalSeconds, intervalSeconds, rateLimited = true)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                _state.value = _state.value.copy(
+                    loading = false,
+                    message = (error as? GatewayError)?.message ?: "Could not check pairing. Waiting to retry…",
+                )
             }
         }
         update(loading = false, message = "Pairing expired. Try again.")
@@ -79,8 +98,23 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private fun restore() = scope.launch {
         val refresh = store.getString("refresh", null)
         if (refresh == null) { _state.value = AppState(route = Route.Pairing); beginPairing(); return@launch }
-        runCatching { gateway.refresh(refresh) }.onSuccess { persist(it); loadProfiles(it.profileId) }.onFailure { store.edit().clear().apply(); _state.value = AppState(route = Route.Pairing); beginPairing() }
+        runCatching { gateway.refresh(refresh) }.onSuccess { persist(it); loadProfiles(it.profileId) }.onFailure { error ->
+            if (AuthSessionPolicy.discardStoredGrant((error as? GatewayError)?.status)) {
+                store.edit().clear().apply()
+                _state.value = AppState(route = Route.Pairing)
+                beginPairing()
+            } else {
+                // Keep a transiently unavailable grant intact. Pairing again
+                // would create needless device codes and orphan this session.
+                _state.value = AppState(
+                    route = Route.Pairing,
+                    message = "Could not restore your session. Check your connection and try again.",
+                )
+            }
+        }
     }
+    /** Retries a retained refresh grant; starts device pairing only when none exists. */
+    fun retryAuthentication() { if (store.getString("refresh", null) == null) beginPairing() else restore() }
     private suspend fun loadProfiles(selected: String?) {
         val (profiles, current) = gateway.profiles(); val chosen = profiles.firstOrNull { it.id == (selected ?: current) }
         _state.value = _state.value.copy(route = if (chosen == null) Route.Profiles else Route.Browse(Destination.Home), profiles = profiles, selectedProfile = chosen, loading = chosen != null)
@@ -104,15 +138,176 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun setProfilePage(page: Int) { _state.value = _state.value.copy(profilePage = page.coerceIn(0, ((_state.value.profiles.size - 1).coerceAtLeast(0)) / 5)) }
     fun toggleProfileManagement() { _state.value = _state.value.copy(managingProfiles = !_state.value.managingProfiles) }
     fun navigate(destination: Destination) = scope.launch {
+        if (destination != Destination.Discover) {
+            discoverJob?.cancel()
+            discoverGeneration++
+        }
         if (destination == Destination.Profile) { _state.value = _state.value.copy(route = Route.Profiles); return@launch }
         if (destination == Destination.Settings) { openSettings(); return@launch }
         if (destination == Destination.MyList) { openMyList(); return@launch }
         if (destination == Destination.Live) { openLive(); return@launch }
         if (destination == Destination.Search) { _state.value = _state.value.copy(route = Route.Search, loading = false); return@launch }
+        if (destination == Destination.Discover) { openDiscover(); return@launch }
         _state.value = _state.value.copy(route = Route.Browse(destination), loading = true, message = null)
         runCatching { when (destination) { Destination.Home -> gateway.home(requireProfile()); Destination.Discover, Destination.Search -> listOf(HomeShelf("Discover", gateway.discover())); Destination.MyList -> listOf(HomeShelf("My List", gateway.discover())); Destination.Live -> listOf(HomeShelf("Live TV", gateway.discover("live"))); Destination.Settings, Destination.Profile -> emptyList() } }.onSuccess { shelves -> _state.value = _state.value.copy(shelves = shelves, catalog = shelves.flatMap(HomeShelf::items), loading = false) }.onFailure(::fail)
     }
+
+    /** Fetches declared catalogs before exposing Discover; no synthetic filters or catalog IDs. */
+    fun openDiscover() {
+        discoverJob?.cancel()
+        val generation = ++discoverGeneration
+        discoverJob = scope.launch {
+            val previous = _state.value.discoverUi
+            _state.value = _state.value.copy(
+                route = Route.Browse(Destination.Discover),
+                discoverUi = previous.copy(loading = true, error = null),
+                loading = false,
+                message = null,
+            )
+            try {
+                val catalogs = gateway.catalogs()
+                if (!isCurrentDiscover(generation)) return@launch
+                val catalog = catalogs.firstOrNull { it.key == previous.selectedCatalogKey && it.key.type == previous.selectedType }
+                    ?: DiscoverPolicy.firstCatalog(catalogs, previous.selectedType)
+                if (catalog == null) {
+                    _state.value = _state.value.copy(discoverUi = DiscoverUiState(catalogs = catalogs, loading = false, error = "No catalogs are available."))
+                    return@launch
+                }
+                val filters = if (catalog.key == previous.selectedCatalogKey) previous.selectedFilters else DiscoverPolicy.defaults(catalog)
+                _state.value = _state.value.copy(
+                    discoverUi = previous.copy(
+                        catalogs = catalogs,
+                        selectedType = catalog.key.type,
+                        selectedCatalogKey = catalog.key,
+                        selectedFilters = filters,
+                        loading = true,
+                        error = null,
+                    ),
+                )
+                requestDiscoverPage(generation, catalogs, catalog, filters, skip = 0, previousSkips = emptyList())
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                if (isCurrentDiscover(generation)) {
+                    _state.value = _state.value.copy(discoverUi = previous.copy(loading = false, error = "Couldn't load catalogs. Press OK to retry."))
+                }
+            }
+        }
+    }
+
+    fun setDiscoverType(type: String) {
+        val current = _state.value.discoverUi
+        val catalog = DiscoverPolicy.firstCatalog(current.catalogs, type) ?: return
+        startDiscoverRequest(catalog, DiscoverPolicy.defaults(catalog), skip = 0, previousSkips = emptyList(), selectedType = type)
+    }
+
+    fun setDiscoverCatalog(key: CatalogKey) {
+        val catalog = _state.value.discoverUi.catalogs.firstOrNull { it.key == key } ?: return
+        startDiscoverRequest(catalog, DiscoverPolicy.defaults(catalog), skip = 0, previousSkips = emptyList(), selectedType = catalog.key.type)
+    }
+
+    /** Search, genre, and extras all reset the forward-only server cursor. */
+    fun setDiscoverFilter(key: String, value: String?) {
+        val current = _state.value.discoverUi
+        val catalog = current.catalogs.firstOrNull { it.key == current.selectedCatalogKey } ?: return
+        val declared = catalog.filters.firstOrNull { it.name == key }
+        if (key != "search" && declared == null) return
+        if (key == "search" && !catalog.supportsSearch && declared?.kind != CatalogFilterKind.Search) return
+        val normalized = value?.trim().orEmpty()
+        val replacement = when {
+            normalized.isNotBlank() -> normalized
+            declared?.required == true -> declared.defaultValue ?: declared.options.firstOrNull().orEmpty()
+            else -> ""
+        }
+        val filters = current.selectedFilters.toMutableMap().apply {
+            if (replacement.isBlank()) remove(key) else put(key, replacement)
+        }
+        if (filters == current.selectedFilters) return
+        startDiscoverRequest(catalog, filters, skip = 0, previousSkips = emptyList(), selectedType = current.selectedType)
+    }
+
+    fun changeDiscoverPage(delta: Int) {
+        val current = _state.value.discoverUi
+        val catalog = current.catalogs.firstOrNull { it.key == current.selectedCatalogKey } ?: return
+        when {
+            delta > 0 && current.nextSkip != null -> startDiscoverRequest(
+                catalog, current.selectedFilters, current.nextSkip,
+                current.previousSkips + current.requestedSkip, current.selectedType,
+            )
+            delta < 0 && current.previousSkips.isNotEmpty() -> startDiscoverRequest(
+                catalog, current.selectedFilters, current.previousSkips.last(),
+                current.previousSkips.dropLast(1), current.selectedType,
+            )
+        }
+    }
+
+    private fun startDiscoverRequest(
+        catalog: DiscoverCatalog,
+        filters: Map<String, String>,
+        skip: Int,
+        previousSkips: List<Int>,
+        selectedType: String,
+    ) {
+        discoverJob?.cancel()
+        val generation = ++discoverGeneration
+        discoverJob = scope.launch {
+            val catalogs = _state.value.discoverUi.catalogs
+            _state.value = _state.value.copy(
+                route = Route.Browse(Destination.Discover),
+                discoverUi = _state.value.discoverUi.copy(
+                    catalogs = catalogs,
+                    selectedType = selectedType,
+                    selectedCatalogKey = catalog.key,
+                    selectedFilters = filters,
+                    requestedSkip = skip,
+                    previousSkips = previousSkips,
+                    loading = true,
+                    error = null,
+                ),
+                loading = false,
+                message = null,
+            )
+            requestDiscoverPage(generation, catalogs, catalog, filters, skip, previousSkips)
+        }
+    }
+
+    private suspend fun requestDiscoverPage(
+        generation: Long,
+        catalogs: List<DiscoverCatalog>,
+        catalog: DiscoverCatalog,
+        filters: Map<String, String>,
+        skip: Int,
+        previousSkips: List<Int>,
+    ) {
+        try {
+            val page = gateway.discover(DiscoverPolicy.request(catalog, filters, skip))
+            if (!isCurrentDiscover(generation) || page.catalog != catalog.key) return
+            _state.value = _state.value.copy(
+                discoverUi = _state.value.discoverUi.copy(
+                    catalogs = catalogs,
+                    selectedCatalogKey = catalog.key,
+                    selectedFilters = filters,
+                    items = page.items,
+                    requestedSkip = page.requestedSkip,
+                    nextSkip = page.nextSkip?.takeIf { page.hasMore },
+                    previousSkips = previousSkips,
+                    loading = false,
+                    error = null,
+                ),
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            if (isCurrentDiscover(generation)) {
+                _state.value = _state.value.copy(discoverUi = _state.value.discoverUi.copy(loading = false, error = "Couldn't load this catalog. Press OK to retry."))
+            }
+        }
+    }
+
+    private fun isCurrentDiscover(generation: Long): Boolean =
+        generation == discoverGeneration && _state.value.route == Route.Browse(Destination.Discover)
     fun open(media: Media) = scope.launch {
+        val origin = (_state.value.route as? Route.Browse)?.destination
         update(loading = true)
         runCatching { gateway.metadata(media) }.onSuccess { metadata ->
             // Catalog/history carries artwork and progress that sparse metadata
@@ -125,6 +320,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 sourceAddonId = metadata.sourceAddonId ?: media.sourceAddonId,
                 sourceFingerprint = metadata.sourceFingerprint ?: media.sourceFingerprint,
             )
+            detailReturnDestination = origin
             _state.value = _state.value.copy(route = Route.Details(detail), loading = false)
         }.onFailure(::fail)
     }
@@ -155,7 +351,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
             managedRecoveryKey = null
             sourceDiscovery?.cancel()
             if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
-            prepareAndStart(media, source, explicitResume, playWhenReady = true, resetTrackChoices = true)
+            prepareAndStart(media, source, explicitResume, playWhenReady = true, resetTrackChoices = true, expectedGeneration = requestGeneration)
         }
     }
 
@@ -170,9 +366,11 @@ class AppController(context: Context, private val origin: String = "https://vipt
         explicitResume: Boolean,
         playWhenReady: Boolean,
         resetTrackChoices: Boolean,
+        /** Captured before this request can queue on the preparation mutex. */
+        expectedGeneration: Long,
     ): Boolean = playbackPrepareMutex.withLock {
-        val generation = ++playbackGeneration
-        prepareAndStartLocked(media, source, explicitResume, playWhenReady, resetTrackChoices, generation)
+        if (!PlaybackRequestPolicy.mayPrepareAfterMutexWait(expectedGeneration, playbackGeneration)) return@withLock false
+        prepareAndStartLocked(media, source, explicitResume, playWhenReady, resetTrackChoices, expectedGeneration)
     }
 
     private suspend fun prepareAndStartLocked(
@@ -298,6 +496,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 explicitResume = false,
                 playWhenReady = playWhenReady,
                 resetTrackChoices = false,
+                expectedGeneration = requestGeneration,
             )
             if (!restored) _state.value = _state.value.copy(message = "Playback could not recover. Choose a source to try again.", loading = false)
         }
@@ -307,6 +506,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun nextEpisode(outgoing: Media) {
         nextEpisodeJob?.cancel()
         val outgoingRoute = _state.value.route as? Route.Player ?: return
+        val requestGeneration = ++playbackGeneration
         continuationRestore = outgoingRoute
         continuationWasPlaying = player.state.value.isPlaying
         nextEpisodeJob = scope.launch {
@@ -314,13 +514,17 @@ class AppController(context: Context, private val origin: String = "https://vipt
             _state.value = _state.value.copy(message = "LOADING", loading = false)
             try {
                 val result = gateway.nextEpisode(requireProfile(), outgoing)
+                if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
                 when (result.status) {
                     "next" -> {
                         val next = result.item ?: run {
-                            restoreContinuation("Episode information is unavailable. Open the series to choose an episode.")
+                            if (PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) {
+                                restoreContinuation("Episode information is unavailable. Open the series to choose an episode.")
+                            }
                             return@launch
                         }
                         val candidates = gateway.sources(next)
+                        if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
                         val selected = ContinuationSourcePolicy.select(next, outgoingRoute.source, candidates)
                         if (selected == null) {
                             _state.value = _state.value.copy(
@@ -330,19 +534,19 @@ class AppController(context: Context, private val origin: String = "https://vipt
                                 message = "Choose a source for the next episode.",
                             )
                         } else {
-                            val started = prepareAndStart(next, selected, explicitResume = false, playWhenReady = continuationWasPlaying, resetTrackChoices = true)
-                            if (!started) restoreContinuation("Could not prepare the next episode.")
+                            val started = prepareAndStart(next, selected, explicitResume = false, playWhenReady = continuationWasPlaying, resetTrackChoices = true, expectedGeneration = requestGeneration)
+                            if (!started && PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) restoreContinuation("Could not prepare the next episode.")
                         }
                     }
-                    "caught_up" -> restoreContinuation("You're caught up. No next episode is listed yet.")
-                    "upcoming" -> restoreContinuation("The next episode hasn't been released yet.")
-                    else -> restoreContinuation("Episode information is unavailable. Open the series to choose an episode.")
+                    "caught_up" -> if (PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) restoreContinuation("You're caught up. No next episode is listed yet.")
+                    "upcoming" -> if (PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) restoreContinuation("The next episode hasn't been released yet.")
+                    else -> if (PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) restoreContinuation("Episode information is unavailable. Open the series to choose an episode.")
                 }
             } catch (error: CancellationException) {
-                restoreContinuation(null)
+                if (PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) restoreContinuation(null)
                 throw error
             } catch (_: Throwable) {
-                restoreContinuation("Could not prepare the next episode.")
+                if (PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) restoreContinuation("Could not prepare the next episode.")
             }
         }
     }
@@ -378,6 +582,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     /** Returns false only when Android should handle app exit at a root gate/page. */
     fun handleBack(): Boolean {
         if (continuationRestore != null && ((_state.value.route is Route.Player && nextEpisodeJob?.isActive == true) || _state.value.route is Route.Sources)) {
+            invalidatePlaybackPreparation()
             nextEpisodeJob?.cancel()
             restoreContinuation(null)
             return true
@@ -391,7 +596,6 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
         when (val route = _state.value.route) {
             is Route.Player -> {
-                invalidatePlaybackPreparation()
                 stopPlayback(route.media)
                 _state.value = _state.value.copy(
                     route = when (route.returnDestination) {
@@ -402,8 +606,19 @@ class AppController(context: Context, private val origin: String = "https://vipt
             }
             is Route.Sources -> { invalidatePlaybackPreparation(); sourceDiscovery?.cancel(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
             is Route.Profiles -> if (_state.value.managingProfiles) _state.value = _state.value.copy(managingProfiles = false) else if (_state.value.selectedProfile != null) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null) else return false
-            is Route.Details, is Route.Search, is Route.Settings, is Route.Addons, is Route.ProfileEditor, is Route.Guide -> _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
-            is Route.Browse -> if (route.destination != Destination.Home) _state.value = _state.value.copy(route = Route.Browse(Destination.Home)) else return false
+            is Route.Details -> {
+                val destination = DetailReturnPolicy.destination(detailReturnDestination)
+                detailReturnDestination = null
+                _state.value = _state.value.copy(route = Route.Browse(destination), dialog = null, pinPrompt = null)
+            }
+            is Route.Search, is Route.Settings, is Route.Addons, is Route.ProfileEditor, is Route.Guide -> _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
+            is Route.Browse -> if (route.destination != Destination.Home) {
+                if (route.destination == Destination.Discover) {
+                    discoverJob?.cancel()
+                    discoverGeneration++
+                }
+                _state.value = _state.value.copy(route = Route.Browse(Destination.Home))
+            } else return false
             Route.Pairing -> return false
         }
         return true
@@ -459,6 +674,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 explicitResume = false,
                 playWhenReady = wasPlaying,
                 resetTrackChoices = false,
+                expectedGeneration = requestGeneration,
             )
         }
     }
@@ -499,8 +715,9 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 explicitResume = false,
                 playWhenReady = wasPlaying,
                 resetTrackChoices = false,
+                expectedGeneration = requestGeneration,
             )
-            if (!replaced) rollback()
+            if (!replaced && PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) rollback()
         }
     }
     /** Any player input restores controls and restarts the seven-second visibility timer. */
@@ -707,7 +924,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun submitPin(pin: String) = scope.launch { if (!pin.matches(Regex("\\d{4,8}"))) { update(message = "Enter a 4–8 digit parent PIN."); return@launch }; runCatching { gateway.unlockParent(pin) }.onSuccess { _state.value = _state.value.copy(pinPrompt = null, message = null); afterParentUnlock?.also { pending -> afterParentUnlock = null; pending() } }.onFailure { error -> _state.value = _state.value.copy(message = error.message ?: "Incorrect PIN. Try again.") } }
     fun cancelPin() { afterParentUnlock = null; _state.value = _state.value.copy(pinPrompt = null) }
     fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback((_state.value.route as? Route.Player)?.media); gateway.logout(); store.edit().clear().apply(); _state.value = AppState(route = Route.Pairing); beginPairing() } }
-    fun close() { pairingPoll?.cancel(); sourceDiscovery?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
+    fun close() { pairingPoll?.cancel(); sourceDiscovery?.cancel(); discoverJob?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
     private data class GuideScheduleCache(val entries: List<GuideProgramme>, val expiresAtMillis: Long)
 
     private fun requireProfile() = checkNotNull(_state.value.selectedProfile).id

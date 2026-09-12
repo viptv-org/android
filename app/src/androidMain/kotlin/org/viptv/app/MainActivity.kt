@@ -80,13 +80,16 @@ class MainActivity : ComponentActivity() {
     val scale = minOf(maxWidth.value / 1280f, maxHeight.value / 720f)
     val density = LocalDensity.current
     CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
-    Box(Modifier.width(1280.dp).height(720.dp).align(Alignment.Center).onPreviewKeyEvent { event ->
-        if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK && event.nativeKeyEvent.action == KeyEvent.ACTION_UP) controller.handleBack() else false
-    }) {
+    Box(Modifier.width(1280.dp).height(720.dp).align(Alignment.Center)) {
         when (val route = state.route) {
             Route.Pairing -> Pairing(state, controller)
             Route.Profiles -> ProfileChooser(state, controller)
-            is Route.Browse -> Browse(state, route.destination, controller)
+            is Route.Browse -> if (route.destination == Destination.Discover) {
+                Box(Modifier.fillMaxSize()) {
+                    DiscoverScreen(state, controller)
+                    Rail(route.destination, controller)
+                }
+            } else Browse(state, route.destination, controller)
             is Route.Details -> Details(route.media, controller)
             is Route.Sources -> SourcePicker(route.media, state.sources, controller)
             is Route.Player -> PlaybackScreen(route.media, state.playerChromeVisible, state.seekPreview, state.playbackTracks, controller)
@@ -126,7 +129,7 @@ class MainActivity : ComponentActivity() {
     Text(state.deviceCode?.verificationUri ?: "Preparing secure pairing…", color = White, fontSize = 28.sp, modifier = Modifier.offset(96.dp, 364.dp))
     Text(state.deviceCode?.userCode ?: "", color = White, fontSize = 44.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(96.dp, 450.dp))
     state.deviceCode?.let { code -> PairingQr(code.verificationUriComplete ?: "${code.verificationUri}?code=${code.userCode}", Modifier.offset(886.dp, 184.dp)) }
-    if (state.message != null) TvButton("Try again", controller::beginPairing, Modifier.offset(96.dp, 540.dp).width(170.dp).height(56.dp))
+    if (state.message != null) TvButton("Try again", controller::retryAuthentication, Modifier.offset(96.dp, 540.dp).width(170.dp).height(56.dp))
 }
 
 @Composable private fun PairingQr(value: String, modifier: Modifier = Modifier) {
@@ -581,9 +584,9 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
     LaunchedEffect(downAt, onHold) { if (downAt != 0L && onHold != null) { delay(HoldPolicy.thresholdMillis); if (downAt != 0L) { held = true; onHold() } } }
     Box(modifier = modifier.then(if (selected) Modifier.border(2.dp, White, RoundedCornerShape(12.dp)) else Modifier)
         .onFocusChanged { if (!it.hasFocus && downAt != 0L) { downAt = 0L; held = true } }
-        .focusable().clickable(onClick = onActivate).onPreviewKeyEvent { event ->
+        .onPreviewKeyEvent { event ->
             val key = event.nativeKeyEvent; if (key.keyCode != KeyEvent.KEYCODE_DPAD_CENTER && key.keyCode != KeyEvent.KEYCODE_ENTER) return@onPreviewKeyEvent false
             if (key.action == KeyEvent.ACTION_DOWN && HoldPressPolicy.begins(downAt, key.repeatCount)) { downAt = key.eventTime; held = false; true }
             else if (key.action == KeyEvent.ACTION_UP) { val doActivate = HoldPressPolicy.activatesOnRelease(downAt, held); downAt = 0L; if (doActivate) onActivate(); true } else true
-        }, contentAlignment = Alignment.Center, content = content)
+        }.clickable(onClick = onActivate), contentAlignment = Alignment.Center, content = content)
 }

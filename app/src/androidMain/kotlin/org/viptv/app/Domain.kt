@@ -83,6 +83,22 @@ object ResumeIdentity {
     fun sourceIdentity(source: Source): String? = sourceIdentity(source.addonId, source.fingerprint)
 }
 
+/**
+ * Durable device grants are only discarded when the server has conclusively
+ * rejected them.  A timeout, rate limit, or server fault must leave the saved
+ * refresh token available for an explicit retry instead of forcing a new TV
+ * pairing flow.
+ */
+object AuthSessionPolicy {
+    fun discardStoredGrant(httpStatus: Int?): Boolean = httpStatus == 401
+}
+
+object DevicePollPolicy {
+    fun nextIntervalSeconds(issuedSeconds: Long, currentSeconds: Long, rateLimited: Boolean): Long =
+        if (rateLimited) (currentSeconds.coerceAtLeast(issuedSeconds.coerceAtLeast(1)) * 2).coerceAtMost(30)
+        else issuedSeconds.coerceAtLeast(1)
+}
+
 /** Product-only transition policy; the backend remains the authority on the actual next source. */
 sealed interface ContinuationDecision {
     data object PrepareNext : ContinuationDecision
@@ -185,6 +201,9 @@ object ManagedRecoveryPolicy {
 /** A late preparation has no authority after Back, profile change, or a newer request. */
 object PlaybackRequestPolicy {
     fun isCurrent(requestGeneration: Long, currentGeneration: Long): Boolean = requestGeneration == currentGeneration
+    /** A request queued on the preparation mutex keeps its original authority. */
+    fun mayPrepareAfterMutexWait(capturedGeneration: Long, currentGeneration: Long): Boolean =
+        isCurrent(capturedGeneration, currentGeneration)
 }
 
 enum class Destination(val label: String) {
@@ -235,6 +254,51 @@ data class ServerAbout(val mediaServiceAvailable: Boolean)
 data class SearchSection(val source: String, val items: List<Media>)
 /** Partial failures are explicit so the UI can retain results without lying about coverage. */
 data class SearchResults(val sections: List<SearchSection>, val partialFailure: Boolean)
+
+/** Server-declared catalog choices and cursor history for the Discover surface. */
+data class DiscoverUiState(
+    val catalogs: List<DiscoverCatalog> = emptyList(),
+    val selectedType: String = "movie",
+    val selectedCatalogKey: CatalogKey? = null,
+    val selectedFilters: Map<String, String> = emptyMap(),
+    val items: List<Media> = emptyList(),
+    val requestedSkip: Int = 0,
+    val nextSkip: Int? = null,
+    val previousSkips: List<Int> = emptyList(),
+    val loading: Boolean = false,
+    val error: String? = null,
+)
+
+object DiscoverPolicy {
+    fun firstCatalog(catalogs: List<DiscoverCatalog>, type: String): DiscoverCatalog? =
+        catalogs.firstOrNull { it.key.type == type } ?: catalogs.firstOrNull()
+
+    /** Required declared filters use their server default or first allowed choice. */
+    fun defaults(catalog: DiscoverCatalog): Map<String, String> = buildMap {
+        catalog.filters.forEach { filter ->
+            val value = filter.defaultValue ?: filter.options.firstOrNull()
+            if (filter.required && !value.isNullOrBlank()) put(filter.name, value)
+        }
+    }
+
+    fun request(catalog: DiscoverCatalog, filters: Map<String, String>, skip: Int): CatalogDiscoverRequest {
+        val normalized = filters.mapValues { it.value.trim() }.filterValues(String::isNotBlank)
+        return CatalogDiscoverRequest(
+            catalog = catalog,
+            skip = skip,
+            search = normalized["search"].takeIf {
+                catalog.supportsSearch || catalog.filters.any { filter -> filter.kind == CatalogFilterKind.Search }
+            },
+            genre = normalized["genre"],
+            extras = normalized.filterKeys { it != "search" && it != "genre" },
+        )
+    }
+}
+
+/** Detail navigation retains its originating browse surface and its filter/page snapshot. */
+object DetailReturnPolicy {
+    fun destination(origin: Destination?): Destination = origin ?: Destination.Home
+}
 data class PlaybackPreferences(
     val audioLanguage: String = "en", val subtitleLanguage: String = "en", val subtitlesEnabled: Boolean = false,
     val subtitleSize: String = "normal", val subtitleStyle: String = "system", val quality: String = "auto", val autoplay: Boolean = true,
@@ -302,6 +366,7 @@ data class AppState(
     val searchStatus: String = "Find your next favorite.",
     val searchSections: List<SearchSection> = emptyList(),
     val searchResults: List<Media> = emptyList(), // Compatibility projection for older surfaces.
+    val discoverUi: DiscoverUiState = DiscoverUiState(),
     val liveChannels: List<LiveChannel> = emptyList(),
     val guide: List<GuideProgramme> = emptyList(),
     val guideUi: GuideUiState = GuideUiState(),

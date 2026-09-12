@@ -160,4 +160,61 @@ class PlaybackRequestPolicyTest {
         assertTrue(PlaybackRequestPolicy.isCurrent(7, 7))
         assertFalse(PlaybackRequestPolicy.isCurrent(7, 8))
     }
+
+    @Test fun `a request queued behind preparation cannot mint new authority after Back`() {
+        val queuedSourceRequest = 12L
+        val generationAfterBack = 13L
+        assertFalse(PlaybackRequestPolicy.mayPrepareAfterMutexWait(queuedSourceRequest, generationAfterBack))
+        assertTrue(PlaybackRequestPolicy.mayPrepareAfterMutexWait(generationAfterBack, generationAfterBack))
+    }
+}
+
+class AuthSessionPolicyTest {
+    @Test fun `only a conclusive unauthorized refresh drops the saved device grant`() {
+        assertTrue(AuthSessionPolicy.discardStoredGrant(401))
+        assertFalse(AuthSessionPolicy.discardStoredGrant(429))
+        assertFalse(AuthSessionPolicy.discardStoredGrant(500))
+        assertFalse(AuthSessionPolicy.discardStoredGrant(null))
+    }
+
+    @Test fun `device poll returns to the issued interval and backs off only on rate limit`() {
+        assertEquals(5, DevicePollPolicy.nextIntervalSeconds(5, 20, rateLimited = false))
+        assertEquals(10, DevicePollPolicy.nextIntervalSeconds(5, 5, rateLimited = true))
+        assertEquals(30, DevicePollPolicy.nextIntervalSeconds(5, 30, rateLimited = true))
+    }
+}
+
+class DiscoverPolicyTest {
+    private val alphaMovies = DiscoverCatalog(
+        key = CatalogKey("alpha", "movie", "popular"),
+        name = "Popular",
+        supportsSearch = true,
+        supportsSkip = true,
+        filters = listOf(
+            CatalogFilter("genre", CatalogFilterKind.Genre, required = true, options = listOf("Drama", "Comedy")),
+            CatalogFilter("quality", CatalogFilterKind.Choice, required = false, options = listOf("HD")),
+        ),
+    )
+
+    @Test fun `catalog identity stays source qualified when ids collide`() {
+        val betaMovies = alphaMovies.copy(key = CatalogKey("beta", "movie", "popular"))
+        assertEquals(alphaMovies, DiscoverPolicy.firstCatalog(listOf(alphaMovies, betaMovies), "movie"))
+        assertFalse(alphaMovies.key == betaMovies.key)
+    }
+
+    @Test fun `required defaults and declared filters become the exact discover request`() {
+        assertEquals(mapOf("genre" to "Drama"), DiscoverPolicy.defaults(alphaMovies))
+        val request = DiscoverPolicy.request(alphaMovies, mapOf("genre" to "Comedy", "search" to "planet", "quality" to "HD"), 40)
+        assertEquals("planet", request.search)
+        assertEquals("Comedy", request.genre)
+        assertEquals(mapOf("quality" to "HD"), request.extras)
+        assertEquals(40, request.skip)
+    }
+}
+
+class DetailReturnPolicyTest {
+    @Test fun `discover details return to the retained discover surface`() {
+        assertEquals(Destination.Discover, DetailReturnPolicy.destination(Destination.Discover))
+        assertEquals(Destination.Home, DetailReturnPolicy.destination(null))
+    }
 }
