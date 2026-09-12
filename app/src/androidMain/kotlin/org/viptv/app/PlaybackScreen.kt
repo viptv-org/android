@@ -31,7 +31,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.onDispose
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -150,7 +149,6 @@ internal fun PlaybackScreen(
         Modifier.fillMaxSize()
             .background(Color.Black)
             .focusRequester(rootFocus)
-            .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
                 val code = native.keyCode
@@ -195,7 +193,7 @@ internal fun PlaybackScreen(
                     }
                     else -> false
                 }
-            },
+            }.focusable(),
     ) {
         AndroidView(factory = { SurfaceView(it).also(controller.player::attach) }, modifier = Modifier.fillMaxSize())
         if (chromeVisible) {
@@ -296,7 +294,6 @@ private fun PlayerIconButton(label: String, modifier: Modifier, onActivate: () -
             // The timeline thumb extends five pixels above its track. Do not clip
             // the button bounds or the unfocused thumb becomes a half-circle.
             .background(if (focused) Color(0xFFF5F5F5) else Color.Transparent, RoundedCornerShape(12.dp))
-            .focusable()
             .clickable(onClick = onActivate),
         contentAlignment = Alignment.Center,
     ) { content(focused) }
@@ -328,7 +325,7 @@ private fun PlayerTrackDialog(menu: PlayerTrackMenu, tracks: List<PlaybackTrack>
 @Composable
 private fun PlayerMenuChoice(label: String, modifier: Modifier = Modifier, onActivate: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    Box(modifier.width(792.dp).height(52.dp).clip(RoundedCornerShape(10.dp)).background(if (focused) Color.White else Color.Transparent).onFocusChanged { focused = it.hasFocus }.focusable().clickable(onClick = onActivate), contentAlignment = Alignment.CenterStart) {
+    Box(modifier.width(792.dp).height(52.dp).clip(RoundedCornerShape(10.dp)).background(if (focused) Color.White else Color.Transparent).onFocusChanged { focused = it.hasFocus }.clickable(onClick = onActivate), contentAlignment = Alignment.CenterStart) {
         Text(label, color = if (focused) Color(0xFF101112) else Color.White, fontSize = 20.sp, modifier = Modifier.offset(x = 18.dp))
     }
 }

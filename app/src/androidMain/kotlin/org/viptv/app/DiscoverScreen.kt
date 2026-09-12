@@ -5,7 +5,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -218,7 +217,7 @@ private fun DiscoverChipButton(label: String, value: String, modifier: Modifier,
     var focused by remember { mutableStateOf(false) }
     Box(
         modifier.clip(RoundedCornerShape(12.dp)).background(if (focused) Color.White else DiscoverSelected)
-            .onFocusChanged { focused = it.hasFocus }.focusable().clickable(onClick = onActivate),
+            .onFocusChanged { focused = it.hasFocus }.clickable(onClick = onActivate),
         contentAlignment = Alignment.CenterStart,
     ) {
         Text(label, color = if (focused) DiscoverCanvas else DiscoverMuted, fontSize = 12.sp, modifier = Modifier.offset(18.dp, 4.dp).width(200.dp))
@@ -262,7 +261,7 @@ private fun DiscoverChoicePanel(
                     Box(
                         Modifier.width(656.dp).height(52.dp).then(if (index == 0) Modifier.focusRequester(first) else Modifier)
                             .clip(RoundedCornerShape(10.dp)).background(if (focused) Color.White else Color.Transparent)
-                            .onFocusChanged { focused = it.hasFocus }.focusable().clickable { choice.second(); onClose() },
+                            .onFocusChanged { focused = it.hasFocus }.clickable { choice.second(); onClose() },
                         contentAlignment = Alignment.CenterStart,
                     ) { Text(choice.first, color = if (focused) DiscoverCanvas else Color.White, fontSize = 20.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 18.dp)) }
                 }
@@ -329,7 +328,7 @@ private fun DiscoverTextEntry(field: DiscoverField, value: String, onValue: (Str
 @Composable
 private fun DiscoverTextKey(label: String, modifier: Modifier, onActivate: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    Box(modifier.clip(RoundedCornerShape(6.dp)).background(if (focused) Color.White else DiscoverSelected).onFocusChanged { focused = it.hasFocus }.focusable().clickable(onClick = onActivate), contentAlignment = Alignment.Center) {
+    Box(modifier.clip(RoundedCornerShape(6.dp)).background(if (focused) Color.White else DiscoverSelected).onFocusChanged { focused = it.hasFocus }.clickable(onClick = onActivate), contentAlignment = Alignment.Center) {
         Text(label, color = if (focused) DiscoverCanvas else Color.White, fontSize = 14.sp)
     }
 }
@@ -340,7 +339,7 @@ private fun DiscoverCard(media: Media, modifier: Modifier, requester: FocusReque
     Box(
         modifier.width(256.dp).height(192.dp).then(if (requester == null) Modifier else Modifier.focusRequester(requester))
             .onFocusChanged { focused = it.hasFocus }.then(if (focused) Modifier.border(2.dp, Color.White, RoundedCornerShape(8.dp)) else Modifier)
-            .focusable().clickable(onClick = onActivate),
+            .clickable(onClick = onActivate),
     ) {
         Box(Modifier.width(256.dp).height(144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)), contentAlignment = Alignment.Center) {
             Text(media.name, color = DiscoverMuted, fontSize = 16.sp, textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(220.dp))

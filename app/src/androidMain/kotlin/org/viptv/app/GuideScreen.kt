@@ -3,7 +3,6 @@ package org.viptv.app
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -151,10 +150,11 @@ private fun GuideCell(programme: GuideProgramme, selected: Boolean, modifier: Mo
         modifier.clip(RoundedCornerShape(6.dp)).background(if (focused) Color(0xFFF5F5F5) else GuideSurface)
             .then(if (focused) Modifier.border(3.dp, Color.White, RoundedCornerShape(6.dp)) else Modifier)
             .onFocusChanged { focused = it.hasFocus; if (it.hasFocus) onFocus() }
-            .focusable().clickable(onClick = onActivate)
             .onPreviewKeyEvent { event ->
                 if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN && event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MEDIA_PLAY) { onWatch(); true } else false
-            }.padding(10.dp),
+            }
+            .clickable(onClick = onActivate)
+            .padding(10.dp),
     ) {
         Text(programme.title, color = if (focused) GuideCanvas else Color.White, fontSize = 16.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
@@ -182,7 +182,7 @@ private fun guideTime(millis: Long): String = java.text.SimpleDateFormat("h:mm a
 @Composable
 private fun GuideButton(label: String, modifier: Modifier, selected: Boolean = false, onActivate: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    Box(modifier.background(if (focused) Color.White else if (selected) Color(0xFF303234) else Color.Transparent, RoundedCornerShape(21.dp)).onFocusChanged { focused = it.hasFocus }.focusable().clickable(onClick = onActivate), contentAlignment = Alignment.Center) {
+    Box(modifier.background(if (focused) Color.White else if (selected) Color(0xFF303234) else Color.Transparent, RoundedCornerShape(21.dp)).onFocusChanged { focused = it.hasFocus }.clickable(onClick = onActivate), contentAlignment = Alignment.Center) {
         Text(label, color = if (focused) GuideCanvas else Color.White, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

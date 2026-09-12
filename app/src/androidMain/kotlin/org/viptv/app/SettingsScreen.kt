@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -245,7 +244,6 @@ private fun SettingsAction(label: String, onActivate: () -> Unit, modifier: Modi
             .onFocusChanged { focused = it.hasFocus }
             .then(if (focused) Modifier.border(2.dp, SettingsWhite, SettingsShape) else Modifier)
             .background(if (focused) SettingsWhite else SettingsSurface, SettingsShape)
-            .focusable()
             .clickable(onClick = onActivate)
             .padding(horizontal = 20.dp),
         contentAlignment = Alignment.CenterStart,
