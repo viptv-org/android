@@ -324,8 +324,8 @@ private fun formatTime(millis: Long): String {
 }
 
 private fun playbackStatusLabel(status: PlaybackStatus, isPlaying: Boolean, isBuffering: Boolean, live: Boolean): String = when (status) {
-    PlaybackStatus.Opening -> "BUFFERING"
-    PlaybackStatus.Ready -> if (isBuffering) "BUFFERING" else if (live) "● LIVE" else if (isPlaying) "PLAYING" else "PAUSED"
+    PlaybackStatus.Opening -> "LOADING"
+    PlaybackStatus.Ready -> if (isBuffering) "LOADING" else if (live) "● LIVE" else if (isPlaying) "PLAYING" else "PAUSED"
     PlaybackStatus.Ended -> "ENDED"
     PlaybackStatus.Error -> "ERROR"
     PlaybackStatus.Released -> "STOPPED"

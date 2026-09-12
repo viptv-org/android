@@ -80,10 +80,10 @@ fun SettingsScreen(
             SettingsAction("Profiles", onOpenProfiles, Modifier.focusRequester(profilesFocus))
 
             SettingsHeading("Playback")
-            SettingsAction("Autoplay next episode: ${onOff(preferences.autoplay)}") {
+            SettingsAction("Autoplay next episode: ${onOff(preferences.autoplay)}", onActivate = {
                 onSavePreferences(preferences.copy(autoplay = !preferences.autoplay))
-            }
-            SettingsAction("Start with subtitles: ${onOff(preferences.subtitlesEnabled)}") {
+            })
+            SettingsAction("Start with subtitles: ${onOff(preferences.subtitlesEnabled)}", onActivate = {
                 choice = SettingsChoice(
                     "Start with subtitles",
                     listOf(
@@ -91,18 +91,18 @@ fun SettingsScreen(
                         SettingOption("Off") { onSavePreferences(preferences.copy(subtitlesEnabled = false)) },
                     ),
                 )
-            }
-            SettingsAction("Preferred audio: ${languageLabel(preferences.audioLanguage)}") {
+            })
+            SettingsAction("Preferred audio: ${languageLabel(preferences.audioLanguage)}", onActivate = {
                 choice = languageChoice("Preferred audio") {
                     onSavePreferences(preferences.copy(audioLanguage = it))
                 }
-            }
-            SettingsAction("Preferred subtitles: ${languageLabel(preferences.subtitleLanguage)}") {
+            })
+            SettingsAction("Preferred subtitles: ${languageLabel(preferences.subtitleLanguage)}", onActivate = {
                 choice = languageChoice("Preferred subtitles") {
                     onSavePreferences(preferences.copy(subtitleLanguage = it))
                 }
-            }
-            SettingsAction("Subtitle size: ${sizeLabel(preferences.subtitleSize)}") {
+            })
+            SettingsAction("Subtitle size: ${sizeLabel(preferences.subtitleSize)}", onActivate = {
                 choice = SettingsChoice(
                     "Subtitle size",
                     listOf(
@@ -111,8 +111,8 @@ fun SettingsScreen(
                         SettingOption("Large") { onSavePreferences(preferences.copy(subtitleSize = "large")) },
                     ),
                 )
-            }
-            SettingsAction("Subtitle appearance: ${styleLabel(preferences.subtitleStyle)}") {
+            })
+            SettingsAction("Subtitle appearance: ${styleLabel(preferences.subtitleStyle)}", onActivate = {
                 choice = SettingsChoice(
                     "Subtitle appearance",
                     listOf(
@@ -121,8 +121,8 @@ fun SettingsScreen(
                         SettingOption("White text on black") { onSavePreferences(preferences.copy(subtitleStyle = "opaque")) },
                     ),
                 )
-            }
-            SettingsAction("Maximum quality: ${qualityLabel(preferences.quality)}") {
+            })
+            SettingsAction("Maximum quality: ${qualityLabel(preferences.quality)}", onActivate = {
                 choice = SettingsChoice(
                     "Maximum quality",
                     listOf(
@@ -132,7 +132,7 @@ fun SettingsScreen(
                         SettingOption("480p") { onSavePreferences(preferences.copy(quality = "480p")) },
                     ),
                 )
-            }
+            })
             Text(
                 "Applies to your next playback. Manual track choices take priority.",
                 color = SettingsMuted,
@@ -142,10 +142,10 @@ fun SettingsScreen(
 
             SettingsHeading("Add-ons")
             Text("Shared by all profiles and devices on your account.", color = SettingsMuted, modifier = Modifier.padding(bottom = 10.dp))
-            SettingsAction("Install add-on") {
+            SettingsAction("Install add-on", onActivate = {
                 installing = true
                 manifestError = null
-            }
+            })
             if (installing) {
                 TextField(
                     value = manifestUrl,
@@ -170,7 +170,7 @@ fun SettingsScreen(
                 }
             }
             addons.forEach { addon ->
-                SettingsAction("${addon.name} · ${if (addon.enabled) "Enabled" else "Disabled"}") {
+                SettingsAction("${addon.name} · ${if (addon.enabled) "Enabled" else "Disabled"}", onActivate = {
                     choice = SettingsChoice(
                         "Manage ${addon.name}",
                         listOf(
@@ -179,7 +179,7 @@ fun SettingsScreen(
                             SettingOption("Cancel") {},
                         ),
                     )
-                }
+                })
             }
 
             SettingsHeading("Server & About")
