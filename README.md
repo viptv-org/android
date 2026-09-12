@@ -1,86 +1,19 @@
-# Air Video KMP
+# VIPTV Android video
 
-Backend-neutral Kotlin Multiplatform playback contracts and platform adapters
-for Air across Android, JVM desktop, Apple, Windows, Linux, JavaScript, and
-Wasm. Application controls, focus, in-app picture-in-picture layout,
-fullscreen layout, and playback policy remain outside this library.
+Android and Android TV playback contracts backed by AndroidX Media3. This is a library, not the VIPTV application: product controls, focus, screens, and playback policy belong to the platform application and must follow the design repository.
 
-The historical TypeScript/React implementation now lives only in
-[`get-air/video`](https://github.com/get-air/video). Its observable behavior
-and fixtures remain useful porting references, but this repository contains no
-npm package source and can never publish `@get-air/video`.
+The initial import was derived from `air-tv/video` at `57551ec48d63c81d407e098214611140230739f4`. Upstream history and the included Apache-2.0 and MIT license texts are retained.
 
-## Current backends
+## Scope
 
-- Android/Android TV: Media3-backed playback with native live-policy mapping,
-  external subtitles, track selection, request headers, and runtime capability
-  reporting.
-- Apple: AVFoundation playback behind an app-owned `AVPlayerLayer`.
-- JVM/Linux: internal MPV conformance and embedding harnesses; production
-  desktop surface work lives in the `air-tv/mediamp` fork.
-- Browser/Wasm: an `HTMLVideoElement` adapter with runtime codec/container
-  capability reporting and external WebVTT support.
+- Android API 24+ and Android TV only.
+- Media3 playback, headers, external subtitles, track selection, live/DVR semantics, and runtime capability reporting.
+- No desktop, Apple, browser, JavaScript, WebAssembly, MPV, AVFoundation, package publishing, or inherited automation.
 
-All public state is session-scoped and platform-neutral. Playback sources,
-headers, cookies, licenses, local paths, and credential-bearing URLs must never
-appear in logs, errors, analytics, or `toString()` output.
+## Local validation
 
-## Build and test
-
-JDK 17 is required. Use the checked-in Gradle wrapper:
-
-```bash
-./gradlew jvmTest jsNodeTest wasmJsNodeTest testReleaseUnitTest --max-workers=2
-CHROME_BIN=/path/to/chrome ./gradlew wasmJsBrowserTest --max-workers=2
-```
-
-Native, Apple, Android-device, HDR, PiP, power, and codec claims require their
-own host or physical-device gates. Engine and surface acceptance fixtures live
-under [`corpus/`](corpus/), while measured budgets and backend decisions live
-under [`docs/`](docs/).
-
-## Publishing
-
-Kotlin Multiplatform artifacts use the `com.getair:video` coordinate family and
-publish only from explicit stable releases in `air-tv/video` to:
-
-```text
-https://maven.pkg.github.com/air-tv/video
-```
-
-GitHub Packages requires authenticated consumption. npm publication is not
-configured here; the `@get-air/video` scope and release ownership remain in the
-separate historical TypeScript repository linked above.
-
-The existing `v0.1.x` and `v0.2.x` tags/releases belong to that legacy npm
-history and are not KMP Maven releases. A KMP version becomes available only
-after a future explicit stable release from this repository completes every
-host verification and publication job.
-
-Consumers configure the authenticated repository outside the project source:
-
-```kotlin
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven {
-            url = uri("https://maven.pkg.github.com/air-tv/video")
-            credentials {
-                username = providers.environmentVariable("GITHUB_ACTOR").orNull
-                password = providers.environmentVariable("GITHUB_TOKEN").orNull
-            }
-        }
-    }
-}
-```
-
-Local consumers use a classic personal access token with `read:packages`.
-GitHub Actions consumers grant `packages: read` and use the workflow
-`GITHUB_TOKEN` after the package grants that repository access. Never commit a
-package token or place one in repository `gradle.properties`.
+Install JDK 17 and Android SDK Platform 36. Use `./gradlew testDebugUnitTest` for Android unit tests, and run connected tests only on an emulator or physical Android/TV device.
 
 ## License
 
-Air Video KMP is available under either the Apache License 2.0 or the MIT
-License, at your option. Both license texts are included in published archives.
+This imported work remains available under Apache-2.0 or MIT, at the consumer's option. See `LICENSE-APACHE` and `LICENSE-MIT`.
