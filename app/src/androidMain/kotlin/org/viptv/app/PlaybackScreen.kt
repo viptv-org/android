@@ -300,32 +300,94 @@ private fun PlayerIconButton(label: String, modifier: Modifier, onActivate: () -
 }
 
 @Composable
-private fun PlayerTrackDialog(menu: PlayerTrackMenu, tracks: List<PlaybackTrack>, canDisable: Boolean, notice: String?, onAudio: (PlaybackTrack) -> Unit, onText: (PlaybackTrack?) -> Unit, onUnavailable: () -> Unit, onClose: () -> Unit) {
-    val first = remember { FocusRequester() }
-    LaunchedEffect(menu) { first.requestFocus() }
+private fun PlayerTrackDialog(
+    menu: PlayerTrackMenu,
+    tracks: List<PlaybackTrack>,
+    canDisable: Boolean,
+    notice: String?,
+    onAudio: (PlaybackTrack) -> Unit,
+    onText: (PlaybackTrack?) -> Unit,
+    onUnavailable: () -> Unit,
+    onClose: () -> Unit,
+) {
+    var page by remember(menu) { mutableIntStateOf(0) }
+    val pageCount = max(1, (tracks.size + TRACKS_PER_PAGE - 1) / TRACKS_PER_PAGE)
+    LaunchedEffect(pageCount) { if (page >= pageCount) page = pageCount - 1 }
+    val visiblePage = page.coerceIn(0, pageCount - 1)
+    val visibleTracks = tracks.drop(visiblePage * TRACKS_PER_PAGE).take(TRACKS_PER_PAGE)
+    val entries = buildList<PlayerMenuEntry> {
+        if (canDisable) add(PlayerMenuEntry("Off") { onText(null) })
+        visibleTracks.forEach { track ->
+            val title = track.title.ifBlank { track.language ?: "Track ${track.inputIndex + 1}" }
+            add(PlayerMenuEntry(if (track.selectable && track.supported) title else "$title · unavailable") {
+                if (!track.selectable || !track.supported) onUnavailable()
+                else if (menu == PlayerTrackMenu.Audio) onAudio(track) else onText(track)
+            })
+        }
+        if (visiblePage > 0) add(PlayerMenuEntry("Previous tracks") { page = visiblePage - 1 })
+        if (visiblePage + 1 < pageCount) add(PlayerMenuEntry("More tracks") { page = visiblePage + 1 })
+        // Every dialog has this entry, including an audio output with no tracks.
+        add(PlayerMenuEntry("Back to player", onClose))
+    }
+    val requesters = remember(menu, visiblePage, canDisable, tracks) { List(entries.size) { FocusRequester() } }
+    LaunchedEffect(requesters) { requesters.first().requestFocus() }
     Box(Modifier.fillMaxSize().background(Color(0xDC080909)), contentAlignment = Alignment.Center) {
-        Box(Modifier.width(880.dp).background(Color(0xFF191B1D), RoundedCornerShape(12.dp)).offset(y = (-8).dp)) {
-            Text(if (menu == PlayerTrackMenu.Audio) "Audio" else "Subtitles", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(44.dp, 32.dp))
+        // The list begins at y=96 and can show five tracks plus paging/back rows.
+        // Keep a fixed panel surface instead of letting the background end at its title.
+        Box(Modifier.width(880.dp).height(640.dp).background(Color(0xFF191B1D), RoundedCornerShape(12.dp)).offset(y = (-8).dp)) {
+            Text(if (menu == PlayerTrackMenu.Audio) "Audio tracks" else "Subtitles", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(44.dp, 32.dp))
             androidx.compose.foundation.layout.Column(Modifier.offset(44.dp, 96.dp).width(792.dp)) {
-                if (canDisable) PlayerMenuChoice("Off", Modifier.focusRequester(first)) { onText(null) }
-                tracks.take(5).forEachIndexed { index, track ->
-                    val title = track.title.ifBlank { track.language ?: "Track ${track.inputIndex + 1}" }
-                    PlayerMenuChoice(if (track.selectable && track.supported) title else "$title · unavailable", if (!canDisable && index == 0) Modifier.focusRequester(first) else Modifier) {
-                        if (!track.selectable || !track.supported) onUnavailable()
-                        else if (menu == PlayerTrackMenu.Audio) onAudio(track) else onText(track)
-                    }
+                entries.forEachIndexed { index, entry ->
+                    PlayerMenuChoice(
+                        entry.label,
+                        Modifier.focusRequester(requesters[index]),
+                        onActivate = entry.onActivate,
+                        onDirectional = { keyCode ->
+                            when (keyCode) {
+                                NativeKeyEvent.KEYCODE_DPAD_UP -> if (index > 0) requesters[index - 1].requestFocus()
+                                NativeKeyEvent.KEYCODE_DPAD_DOWN -> if (index + 1 < requesters.size) requesters[index + 1].requestFocus()
+                            }
+                        },
+                    )
                 }
-                PlayerMenuChoice("Close") { onClose() }
                 notice?.let { Text(it, color = Color(0xFFD5D6D7), fontSize = 16.sp, modifier = Modifier.offset(y = 12.dp)) }
             }
         }
     }
 }
 
+private const val TRACKS_PER_PAGE = 5
+private data class PlayerMenuEntry(val label: String, val onActivate: () -> Unit)
+
 @Composable
-private fun PlayerMenuChoice(label: String, modifier: Modifier = Modifier, onActivate: () -> Unit) {
+private fun PlayerMenuChoice(
+    label: String,
+    modifier: Modifier = Modifier,
+    onActivate: () -> Unit,
+    onDirectional: (Int) -> Unit = {},
+) {
     var focused by remember { mutableStateOf(false) }
-    Box(modifier.width(792.dp).height(52.dp).clip(RoundedCornerShape(10.dp)).background(if (focused) Color.White else Color.Transparent).onFocusChanged { focused = it.hasFocus }.clickable(onClick = onActivate), contentAlignment = Alignment.CenterStart) {
+    Box(
+        modifier.width(792.dp).height(52.dp).clip(RoundedCornerShape(10.dp)).background(if (focused) Color.White else Color.Transparent)
+            .onFocusChanged { focused = it.hasFocus }
+            // Consume all directional events at this dialog boundary. Up/Down move
+            // among its entries; Left/Right intentionally have no player action.
+            .onPreviewKeyEvent { event ->
+                val code = event.nativeKeyEvent.keyCode
+                if (event.nativeKeyEvent.action == NativeKeyEvent.ACTION_DOWN && code in setOf(
+                        NativeKeyEvent.KEYCODE_DPAD_UP,
+                        NativeKeyEvent.KEYCODE_DPAD_DOWN,
+                        NativeKeyEvent.KEYCODE_DPAD_LEFT,
+                        NativeKeyEvent.KEYCODE_DPAD_RIGHT,
+                    )
+                ) {
+                    onDirectional(code)
+                    true
+                } else false
+            }
+            .clickable(onClick = onActivate),
+        contentAlignment = Alignment.CenterStart,
+    ) {
         Text(label, color = if (focused) Color(0xFF101112) else Color.White, fontSize = 20.sp, modifier = Modifier.offset(x = 18.dp))
     }
 }
