@@ -76,6 +76,12 @@ object HomeHoldPolicy {
             )
 }
 
+/** Hero primary differs from an ordinary card only for manual playable media. */
+object HomeHeroPrimaryPolicy {
+    fun choosesManualSource(action: MediaCardAction, queueShelf: Boolean, media: Media): Boolean =
+        action == MediaCardAction.OpenDetails && HomeHoldPolicy.opensSourcesFromHero(queueShelf, media)
+}
+
 /**
  * Source discovery remembers the surface that opened it.  This is deliberately
  * separate from the player return route: a Home shortcut can cancel back to

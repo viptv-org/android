@@ -338,6 +338,15 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
     MediaCardAction.PlayQueuedNext -> controller.playQueuedNext(media)
 }
 
+/** Hero primary preserves Roku's manual-source entry without changing ordinary cards. */
+private fun activateHomeHero(action: MediaCardAction, media: Media, queueShelf: Boolean, controller: AppController) {
+    if (HomeHeroPrimaryPolicy.choosesManualSource(action, queueShelf, media)) {
+        controller.chooseSources(media, resume = false, origin = SourceReturn.Home)
+    } else {
+        activateHomeCard(action, media, controller)
+    }
+}
+
 @Composable private fun HomeHero(
     card: HomeCardFocus,
     controller: AppController,
@@ -416,7 +425,7 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
                 MediaCardAction.PlayQueuedNext -> "Play next episode"
                 MediaCardAction.OpenDetails -> if (media.type == "live") "Watch live" else "Play"
             },
-            { activateHomeCard(action, media, controller) },
+            { activateHomeHero(action, media, resumeSurface, controller) },
             Modifier.width(if (action == MediaCardAction.PlayQueuedNext) 236.dp else 144.dp).height(50.dp).focusRequester(primaryFocus),
             onHold = homeHold,
             onInfo = homeHold,

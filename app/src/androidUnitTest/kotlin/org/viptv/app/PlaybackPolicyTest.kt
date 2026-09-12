@@ -132,6 +132,9 @@ class MediaCardPolicyTest {
         assertFalse(HomeHoldPolicy.opensSourcesFromHero(continueWatchingRow = false, media = Media("live", "live")))
         assertFalse(HomeHoldPolicy.opensSourcesFromHero(continueWatchingRow = false, media = Media("series", "series")))
         assertTrue(HomeHoldPolicy.opensSourcesFromHero(continueWatchingRow = false, media = Media("episode", "series", season = 1, episode = 2)))
+        assertTrue(HomeHeroPrimaryPolicy.choosesManualSource(MediaCardAction.OpenDetails, queueShelf = false, media = Media("movie", "movie")))
+        assertFalse(HomeHeroPrimaryPolicy.choosesManualSource(MediaCardAction.OpenDetails, queueShelf = false, media = Media("series", "series")))
+        assertFalse(HomeHeroPrimaryPolicy.choosesManualSource(MediaCardAction.ResumeExactSource, queueShelf = false, media = Media("movie", "movie", positionMillis = 1)))
     }
 }
 
