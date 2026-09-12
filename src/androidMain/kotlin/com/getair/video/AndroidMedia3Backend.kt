@@ -130,12 +130,12 @@ internal class AndroidMedia3Backend(
             while (true) {
                 delay(500)
                 val active = sessionId ?: continue
-                eventsFlow.tryEmit(BackendEvent.PositionChanged(active, player.currentPosition.coerceAtLeast(0)))
+                eventsFlow.tryEmit(BackendEvent.PositionChanged(active, sessionPositionMillis(player.currentPosition)))
                 eventsFlow.tryEmit(
                     BackendEvent.BufferingChanged(
                         active,
                         player.playbackState == Player.STATE_BUFFERING,
-                        player.bufferedPosition.takeIf { it >= 0 },
+                        player.bufferedPosition.takeIf { it >= 0 }?.let(::sessionPositionMillis),
                     ),
                 )
                 eventsFlow.tryEmit(BackendEvent.StatisticsChanged(active, snapshotStatistics()))
@@ -245,7 +245,7 @@ internal class AndroidMedia3Backend(
     override fun seekTo(positionMillis: Long) = runOnPlayerThread {
         manualSeekPending = true
         manualSeekInProgress = true
-        player.seekTo(positionMillis)
+        player.seekTo(nativeSeekPositionMillis(positionMillis))
     }
 
     override fun selectAudioTrack(id: String?): TrackSelectionResult = selectTrack(C.TRACK_TYPE_AUDIO, id)
@@ -382,7 +382,7 @@ internal class AndroidMedia3Backend(
             if (reason == Player.DISCONTINUITY_REASON_SEEK) {
                 if (manualSeekPending) {
                     manualSeekPending = false
-                    eventsFlow.tryEmit(BackendEvent.SeekFinished(active, newPosition.positionMs))
+                    eventsFlow.tryEmit(BackendEvent.SeekFinished(active, sessionPositionMillis(newPosition.positionMs)))
                 }
             } else if (hasReachedReady) {
                 discontinuityCount += 1
@@ -502,6 +502,31 @@ internal class AndroidMedia3Backend(
         val window = player.currentTimeline.getWindow(player.currentMediaItemIndex, Timeline.Window())
         val duration = window.durationMs.takeUnless { it == C.TIME_UNSET || it < 0 }
         return media3Timeline(window.isLive, window.isSeekable, duration, kindHint)
+    }
+
+    /**
+     * Media3 positions are relative to the current timeline window. Managed VOD uses a
+     * rolling HLS playlist, so that local zero moves as old segments are removed. The
+     * window's first-period position is the native, paused-safe session clock; adding it
+     * avoids guessing elapsed wall time or clamping backwards samples. Live coordinates
+     * deliberately remain native because their ranges are window-relative by contract.
+     */
+    private fun sessionPositionMillis(nativePositionMillis: Long): Long = media3SessionPositionMillis(
+        kindHint = kindHint,
+        nativePositionMillis = nativePositionMillis,
+        windowPositionInFirstPeriodMillis = currentWindowPositionInFirstPeriodMillis(),
+    )
+
+    private fun nativeSeekPositionMillis(sessionPositionMillis: Long): Long = media3NativeSeekPositionMillis(
+        kindHint = kindHint,
+        sessionPositionMillis = sessionPositionMillis,
+        windowPositionInFirstPeriodMillis = currentWindowPositionInFirstPeriodMillis(),
+    )
+
+    private fun currentWindowPositionInFirstPeriodMillis(): Long {
+        if (player.currentTimeline.isEmpty || player.currentMediaItemIndex < 0) return 0
+        val window = player.currentTimeline.getWindow(player.currentMediaItemIndex, Timeline.Window())
+        return window.positionInFirstPeriodMs.takeUnless { it == C.TIME_UNSET || it < 0 } ?: 0
     }
 
     private fun snapshotTracks(tracks: Tracks): TrackSnapshot {
@@ -776,6 +801,37 @@ internal fun media3Timeline(
     isLive -> PlaybackTimeline(PlaybackKind.Live, liveEdgeMillis = durationMillis)
     else -> PlaybackTimeline(PlaybackKind.OnDemand, durationMillis = durationMillis ?: 0)
 }
+
+/**
+ * Converts Media3's current-window coordinate to a stable coordinate within one playback
+ * session. `Timeline.Window.positionInFirstPeriodMs` is the native offset of the rolling
+ * window; it is not wall-clock time and remains valid while playback is paused.
+ */
+internal fun media3SessionPositionMillis(
+    kindHint: PlaybackKind?,
+    nativePositionMillis: Long,
+    windowPositionInFirstPeriodMillis: Long,
+): Long {
+    val native = nativePositionMillis.coerceAtLeast(0)
+    if (kindHint != PlaybackKind.OnDemand) return native
+    val offset = windowPositionInFirstPeriodMillis.takeUnless { it == C.TIME_UNSET || it < 0 } ?: 0
+    return native.saturatingAdd(offset)
+}
+
+/** The inverse used for a direct native seek within the currently available VOD HLS window. */
+internal fun media3NativeSeekPositionMillis(
+    kindHint: PlaybackKind?,
+    sessionPositionMillis: Long,
+    windowPositionInFirstPeriodMillis: Long,
+): Long {
+    val session = sessionPositionMillis.coerceAtLeast(0)
+    if (kindHint != PlaybackKind.OnDemand) return session
+    val offset = windowPositionInFirstPeriodMillis.takeUnless { it == C.TIME_UNSET || it < 0 } ?: 0
+    return (session - offset).coerceAtLeast(0)
+}
+
+private fun Long.saturatingAdd(other: Long): Long =
+    if (Long.MAX_VALUE - this < other) Long.MAX_VALUE else this + other
 
 private fun probeMedia3Capabilities(): PlayerCapabilities {
     val decoders = runCatching {

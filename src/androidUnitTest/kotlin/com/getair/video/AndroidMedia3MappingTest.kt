@@ -9,6 +9,66 @@ import kotlin.test.assertTrue
 
 class AndroidMedia3MappingTest {
     @Test
+    fun onDemandRollingHlsUsesTheTimelineWindowAsItsSessionClock() {
+        // A 32-second HLS window has slid forward 26 seconds. Media3's native
+        // position is relative to that window; the app's progress clock is not.
+        assertEquals(
+            29_000,
+            media3SessionPositionMillis(
+                kindHint = PlaybackKind.OnDemand,
+                nativePositionMillis = 29_000,
+                windowPositionInFirstPeriodMillis = 0,
+            ),
+        )
+        assertEquals(
+            29_000,
+            media3SessionPositionMillis(
+                kindHint = PlaybackKind.OnDemand,
+                nativePositionMillis = 3_000,
+                windowPositionInFirstPeriodMillis = 26_000,
+            ),
+        )
+        // Seeking that session-relative time must return to the current native
+        // window coordinate rather than asking Media3 to seek past its window.
+        assertEquals(
+            3_000,
+            media3NativeSeekPositionMillis(
+                kindHint = PlaybackKind.OnDemand,
+                sessionPositionMillis = 29_000,
+                windowPositionInFirstPeriodMillis = 26_000,
+            ),
+        )
+    }
+
+    @Test
+    fun rollingWindowMappingDoesNotChangeLiveCoordinatesOrTrustUnsetOffsets() {
+        assertEquals(
+            3_000,
+            media3SessionPositionMillis(
+                kindHint = PlaybackKind.Live,
+                nativePositionMillis = 3_000,
+                windowPositionInFirstPeriodMillis = 26_000,
+            ),
+        )
+        assertEquals(
+            3_000,
+            media3NativeSeekPositionMillis(
+                kindHint = PlaybackKind.SeekableLive,
+                sessionPositionMillis = 3_000,
+                windowPositionInFirstPeriodMillis = 26_000,
+            ),
+        )
+        assertEquals(
+            3_000,
+            media3SessionPositionMillis(
+                kindHint = PlaybackKind.OnDemand,
+                nativePositionMillis = 3_000,
+                windowPositionInFirstPeriodMillis = androidx.media3.common.C.TIME_UNSET,
+            ),
+        )
+    }
+
+    @Test
     fun mapsLiveDvrAndVodWithoutGivingPlainLiveASeekBar() {
         val live = media3Timeline(isLive = true, isSeekable = false, durationMillis = null)
         val dvr = media3Timeline(isLive = true, isSeekable = true, durationMillis = 90_000)
