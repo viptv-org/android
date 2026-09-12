@@ -28,12 +28,14 @@ import kotlin.math.roundToLong
 
 interface BackendGateway {
     suspend fun startDevicePairing(deviceName: String): DeviceCode
-    suspend fun exchangeDeviceCode(code: String): DeviceSession?
+    suspend fun exchangeDeviceCode(code: String): DevicePollResult
     suspend fun refresh(refreshToken: String): DeviceSession
     suspend fun profiles(): Pair<List<Profile>, String?>
     suspend fun selectProfile(profileId: String)
     suspend fun home(profileId: String): List<HomeShelf>
     suspend fun discover(type: String = "movie", search: String? = null): List<Media>
+    suspend fun catalogs(): List<DiscoverCatalog>
+    suspend fun discover(request: CatalogDiscoverRequest): DiscoverPage
     suspend fun search(query: String): SearchResults
     suspend fun metadata(media: Media): Media
     suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit = {}): List<Source>
@@ -69,6 +71,72 @@ interface BackendGateway {
     suspend fun unlockParent(pin: String)
     suspend fun logout()
 }
+
+/** Device polling failures with a server-defined retry action; other errors remain failures. */
+sealed interface DevicePollResult {
+    data class Authorized(val session: DeviceSession) : DevicePollResult
+    data object Pending : DevicePollResult
+    data object RateLimited : DevicePollResult
+}
+
+/** A catalog identifier is only unique within an add-on and media type. */
+data class CatalogKey(
+    val addonId: String,
+    val type: String,
+    val id: String,
+) {
+    init {
+        require(addonId.isNotBlank())
+        require(type.isNotBlank())
+        require(id.isNotBlank())
+    }
+
+    val stableId: String get() = "$addonId\u0000$type\u0000$id"
+}
+
+enum class CatalogFilterKind { Search, Genre, Choice, FreeText }
+
+/** A normalized server-declared filter. `skip` is pagination metadata, not a UI filter. */
+data class CatalogFilter(
+    val name: String,
+    val kind: CatalogFilterKind,
+    val required: Boolean,
+    val options: List<String> = emptyList(),
+    val defaultValue: String? = null,
+    val optionsLimit: Int? = null,
+)
+
+data class DiscoverCatalog(
+    val key: CatalogKey,
+    val name: String,
+    val supportsSearch: Boolean,
+    val supportsSkip: Boolean,
+    val filters: List<CatalogFilter>,
+)
+
+/** Query fields map exactly to the Rust `/discover` envelope. */
+data class CatalogDiscoverRequest(
+    val catalog: DiscoverCatalog,
+    val skip: Int = 0,
+    val search: String? = null,
+    val genre: String? = null,
+    /** Declared non-search/non-genre extra values, sent as the `extras` JSON object. */
+    val extras: Map<String, String> = emptyMap(),
+) {
+    init {
+        require(skip in 0..10_000)
+        require(extras.keys.none { it == "skip" || it == "search" || it == "genre" })
+    }
+}
+
+/** The server returns only a forward cursor; callers retain earlier requested offsets. */
+data class DiscoverPage(
+    val catalog: CatalogKey,
+    val items: List<Media>,
+    val requestedSkip: Int,
+    val nextSkip: Int?,
+    val hasMore: Boolean,
+)
 
 /**
  * Measured local decoder facts sent to the server's deliberately small playback contract.
@@ -159,9 +227,15 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
     override suspend fun startDevicePairing(deviceName: String): DeviceCode = json("POST", "/auth/device/code", JSONObject().put("device_name", deviceName)).let {
         DeviceCode(it.getString("device_code"), it.getString("user_code"), it.getString("verification_uri"), it.optString("verification_uri_complete").ifBlank { null }, it.optString("qr_uri").ifBlank { null }, it.optLong("interval", 5))
     }
-    override suspend fun exchangeDeviceCode(code: String): DeviceSession? = try {
-        session(json("POST", "/auth/device/token", JSONObject().put("device_code", code)))
-    } catch (error: GatewayError) { if (error.status == 428 || error.status == 404) null else throw error }
+    override suspend fun exchangeDeviceCode(code: String): DevicePollResult = try {
+        DevicePollResult.Authorized(session(json("POST", "/auth/device/token", JSONObject().put("device_code", code))))
+    } catch (error: GatewayError) {
+        when {
+            error.status == 400 && error.message == "authorization_pending" -> DevicePollResult.Pending
+            error.status == 429 -> DevicePollResult.RateLimited
+            else -> throw error
+        }
+    }
     override suspend fun refresh(refreshToken: String): DeviceSession = session(json("POST", "/auth/device/refresh", JSONObject().put("refresh_token", refreshToken)))
     override suspend fun profiles(): Pair<List<Profile>, String?> {
         val root = json("GET", "/auth/me")
@@ -176,6 +250,33 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         return listOf(HomeShelf("Continue Watching", continuing), HomeShelf("Recently Watched", recent), HomeShelf("Trending", movies)).filter { it.items.isNotEmpty() }
     }
     override suspend fun discover(type: String, search: String?): List<Media> = json("GET", discoverPath(type, search = search)).mediaArray("metas", "items", "rows")
+    override suspend fun catalogs(): List<DiscoverCatalog> = jsonArray("GET", "/catalogs")
+        .objects()
+        .mapNotNull(JSONObject::discoverCatalog)
+    override suspend fun discover(request: CatalogDiscoverRequest): DiscoverPage {
+        val catalog = request.catalog
+        val root = json(
+            "GET",
+            discoverPath(
+                type = catalog.key.type,
+                catalog = catalog.key.id,
+                addonId = catalog.key.addonId,
+                skip = request.skip,
+                search = request.search,
+                genre = request.genre,
+                extras = request.extras,
+            ),
+        )
+        val hasMore = root.optBoolean("has_more", false)
+        val nextSkip = (root.opt("next_skip") as? Number)?.toInt()?.takeIf { it in 0..10_000 }
+        return DiscoverPage(
+            catalog = catalog.key,
+            items = root.mediaArray("metas", "items", "rows"),
+            requestedSkip = request.skip,
+            nextSkip = nextSkip,
+            hasMore = hasMore,
+        )
+    }
     override suspend fun search(query: String): SearchResults {
         val term = query.trim()
         if (term.isEmpty()) return SearchResults(emptyList(), partialFailure = false)
@@ -195,8 +296,8 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
             var partialFailure = false
             val catalogs = when (val result = catalogIndex.await()) {
                 is SearchAttempt.Value -> result.value.objects()
-                    .mapNotNull { it.searchCatalog() }
-                    .filter { it.supportsSearch && it.type != "live" }
+                    .mapNotNull { it.discoverCatalog() }
+                    .filter { it.supportsSearch && it.key.type != "live" }
                     .take(128)
                 SearchAttempt.Failure -> {
                     partialFailure = true
@@ -205,7 +306,7 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
             }
             val catalogResults = catalogs.map { catalog -> async {
                 catalog to attempt { gate.withPermit {
-                    val items = json("GET", discoverPath(catalog.type, catalog.id, catalog.addonId, term))
+                    val items = json("GET", discoverPath(catalog.key.type, catalog.key.id, catalog.key.addonId, search = term))
                         .mediaArray("metas", "items", "rows")
                         .distinctBy { "${it.type}\u0000${it.id}" }
                         .take(24)
@@ -393,18 +494,65 @@ private fun JSONObject.profile() = Profile(
     avatarChoice = (opt("avatar_choice") as? Number)?.toInt()?.takeIf { it in 1..48 },
     setupComplete = optBoolean("setup_complete"),
 )
-private data class SearchCatalog(val id: String, val name: String, val type: String, val addonId: String?, val supportsSearch: Boolean)
-private fun JSONObject.searchCatalog(): SearchCatalog? {
+private fun JSONObject.discoverCatalog(): DiscoverCatalog? {
     val id = optString("id")
     val type = optString("type")
-    if (id.isBlank() || type.isBlank()) return null
-    return SearchCatalog(id, optString("name", id), type, opt("addon_id")?.toString(), optBoolean("supports_search", true))
+    val addonId = opt("addon_id")?.toString().orEmpty()
+    if (id.isBlank() || type.isBlank() || addonId.isBlank()) return null
+    val filters = array("extra")
+        .mapNotNull { it.optJSONObject()?.catalogFilter() }
+        .filterNot { it.name == "skip" }
+    return DiscoverCatalog(
+        key = CatalogKey(addonId, type, id),
+        name = optString("name", id),
+        supportsSearch = optBoolean("supports_search", false),
+        supportsSkip = optBoolean("supports_skip", false),
+        filters = filters,
+    )
 }
-private fun discoverPath(type: String, catalog: String? = null, addonId: String? = null, search: String? = null): String = buildString {
+private fun JSONObject.catalogFilter(): CatalogFilter? {
+    val name = optString("name").trim()
+    if (name.isBlank()) return null
+    val options = array("options").mapNotNull { it as? String }
+    val kind = when (name) {
+        "search" -> CatalogFilterKind.Search
+        "genre" -> CatalogFilterKind.Genre
+        else -> if (options.isEmpty()) CatalogFilterKind.FreeText else CatalogFilterKind.Choice
+    }
+    return CatalogFilter(
+        name = name,
+        kind = kind,
+        required = optBoolean("is_required", false),
+        options = options,
+        defaultValue = (opt("default") as? String)?.takeIf(String::isNotBlank),
+        optionsLimit = (opt("options_limit") as? Number)?.toInt()?.takeIf { it > 0 },
+    )
+}
+private fun discoverPath(
+    type: String,
+    catalog: String? = null,
+    addonId: String? = null,
+    skip: Int? = null,
+    search: String? = null,
+    genre: String? = null,
+    extras: Map<String, String> = emptyMap(),
+): String = buildString {
     append("/discover?type=").append(URLEncoder.encode(type, "UTF-8"))
     catalog?.takeIf(String::isNotBlank)?.let { append("&catalog=").append(URLEncoder.encode(it, "UTF-8")) }
     addonId?.takeIf(String::isNotBlank)?.let { append("&addon_id=").append(URLEncoder.encode(it, "UTF-8")) }
+    skip?.let { append("&skip=").append(it.coerceIn(0, 10_000)) }
     search?.takeIf(String::isNotBlank)?.let { append("&search=").append(URLEncoder.encode(it, "UTF-8")) }
+    genre?.takeIf(String::isNotBlank)?.let { append("&genre=").append(URLEncoder.encode(it, "UTF-8")) }
+    extras
+        .filterKeys { it.isNotBlank() && it !in setOf("skip", "search", "genre") }
+        .filterValues(String::isNotBlank)
+        .takeIf { it.isNotEmpty() }
+        ?.let { values ->
+            val encoded = JSONObject().also { json ->
+                values.toSortedMap().forEach { (name, value) -> json.put(name, value) }
+            }.toString()
+            append("&extras=").append(URLEncoder.encode(encoded, "UTF-8"))
+        }
 }
 private sealed interface SearchAttempt<out T> {
     data class Value<T>(val value: T) : SearchAttempt<T>

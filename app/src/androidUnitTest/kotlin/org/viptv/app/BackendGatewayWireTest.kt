@@ -4,8 +4,10 @@ import com.getair.video.PlayerCapabilities
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import java.net.ServerSocket
+import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -19,6 +21,111 @@ import kotlin.test.assertTrue
  * mocking the gateway or its JSON helpers.
  */
 class BackendGatewayWireTest {
+    @Test
+    fun `device poll distinguishes pending rate limit and unexpected failures`() = runBlocking {
+        val attempt = AtomicInteger()
+        FixtureServer(3) { request ->
+            assertEquals("POST", request.method)
+            assertEquals("/api/auth/device/token", request.target)
+            assertEquals("device-code", JSONObject(request.body).getString("device_code"))
+            when (attempt.getAndIncrement()) {
+                0 -> FixtureResponse("""{"error":"authorization_pending","code":"authorization_pending"}""", 400)
+                1 -> FixtureResponse("""{"error":"Please try again shortly","code":"rate_limited"}""", 429)
+                else -> FixtureResponse("""{"error":"Invalid device request","code":"invalid_request"}""", 400)
+            }
+        }.use { server ->
+            val gateway = VipTvHttpGateway(server.origin)
+
+            assertEquals(DevicePollResult.Pending, gateway.exchangeDeviceCode("device-code"))
+            assertEquals(DevicePollResult.RateLimited, gateway.exchangeDeviceCode("device-code"))
+            val error = try {
+                gateway.exchangeDeviceCode("device-code")
+                error("Expected the invalid device request to fail")
+            } catch (error: GatewayError) {
+                error
+            }
+            assertEquals(400, error.status)
+            server.assertHealthy()
+        }
+    }
+
+    @Test
+    fun `catalogs retain source qualified identities and declared filters`() = runBlocking {
+        FixtureServer(1) { request ->
+            assertEquals("GET", request.method)
+            assertEquals("/api/catalogs", request.target)
+            FixtureResponse(
+                """[
+                  {"addon_id":1,"id":"top","type":"movie","name":"First Top","supports_search":true,"supports_skip":true,"extra":[
+                    {"name":"search","is_required":true,"options":[],"default":null},
+                    {"name":"genre","is_required":false,"options":["Drama","Science Fiction"],"default":"Drama","options_limit":32},
+                    {"name":"year","is_required":true,"options":["2024","2025"],"default":"2025","options_limit":2},
+                    {"name":"query","is_required":false,"options":[],"default":null},
+                    {"name":"skip","is_required":false,"options":[]}
+                  ]},
+                  {"addon_id":2,"id":"top","type":"movie","name":"Second Top","supports_search":false,"supports_skip":false,"extra":[]}
+                ]""".trimIndent(),
+            )
+        }.use { server ->
+            val catalogs = VipTvHttpGateway(server.origin).catalogs()
+
+            assertEquals(2, catalogs.size)
+            assertEquals("1\u0000movie\u0000top", catalogs[0].key.stableId)
+            assertEquals("2\u0000movie\u0000top", catalogs[1].key.stableId)
+            assertTrue(catalogs[0].key != catalogs[1].key)
+            assertTrue(catalogs[0].supportsSkip)
+            assertEquals(CatalogFilterKind.Search, catalogs[0].filters.single { it.name == "search" }.kind)
+            assertEquals(CatalogFilterKind.Genre, catalogs[0].filters.single { it.name == "genre" }.kind)
+            assertEquals("Drama", catalogs[0].filters.single { it.name == "genre" }.defaultValue)
+            assertEquals(CatalogFilterKind.Choice, catalogs[0].filters.single { it.name == "year" }.kind)
+            assertTrue(catalogs[0].filters.single { it.name == "year" }.required)
+            assertEquals(CatalogFilterKind.FreeText, catalogs[0].filters.single { it.name == "query" }.kind)
+            assertFalse(catalogs[0].filters.any { it.name == "skip" })
+            server.assertHealthy()
+        }
+    }
+
+    @Test
+    fun `catalog discover applies qualified filters and returns the forward cursor`() = runBlocking {
+        FixtureServer(1) { request ->
+            assertEquals("GET", request.method)
+            val query = queryParameters(request.target)
+            assertEquals("movie", query["type"])
+            assertEquals("top", query["catalog"])
+            assertEquals("2", query["addon_id"])
+            assertEquals("40", query["skip"])
+            assertEquals("space opera", query["search"])
+            assertEquals("Science Fiction", query["genre"])
+            assertEquals("en", JSONObject(query.getValue("extras")).getString("language"))
+            assertEquals("2025", JSONObject(query.getValue("extras")).getString("year"))
+            FixtureResponse("""{"metas":[{"id":"movie-41","type":"movie","name":"Page item"}],"has_more":true,"next_skip":64}""")
+        }.use { server ->
+            val catalog = DiscoverCatalog(
+                key = CatalogKey(addonId = "2", type = "movie", id = "top"),
+                name = "Second Top",
+                supportsSearch = true,
+                supportsSkip = true,
+                filters = emptyList(),
+            )
+            val page = VipTvHttpGateway(server.origin).discover(
+                CatalogDiscoverRequest(
+                    catalog = catalog,
+                    skip = 40,
+                    search = "space opera",
+                    genre = "Science Fiction",
+                    extras = mapOf("year" to "2025", "language" to "en"),
+                ),
+            )
+
+            assertEquals(catalog.key, page.catalog)
+            assertEquals(40, page.requestedSkip)
+            assertTrue(page.hasMore)
+            assertEquals(64, page.nextSkip)
+            assertEquals(listOf("movie-41"), page.items.map(Media::id))
+            server.assertHealthy()
+        }
+    }
+
     @Test
     fun `playback client capabilities retain only measured decoder facts`() {
         val measured = PlaybackClientCapabilities.from(
@@ -307,6 +414,15 @@ class BackendGatewayWireTest {
 
 private data class FixtureRequest(val method: String, val target: String, val body: String)
 private data class FixtureResponse(val body: String, val status: Int = 200)
+
+private fun queryParameters(target: String): Map<String, String> = target
+    .substringAfter('?', "")
+    .split('&')
+    .filter(String::isNotBlank)
+    .associate { pair ->
+        val (name, value) = pair.split('=', limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+        URLDecoder.decode(name, "UTF-8") to URLDecoder.decode(value, "UTF-8")
+    }
 
 private class FixtureServer(
     private val expectedRequests: Int,
