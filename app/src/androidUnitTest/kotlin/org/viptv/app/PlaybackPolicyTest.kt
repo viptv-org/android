@@ -43,6 +43,7 @@ class PlaybackPolicyTest {
         assertEquals(BackDisposition.CancelSeek, BackPolicy.decide(dialogOpen = false, pinOpen = false, seekPreviewOpen = true, playerChromeOpen = true, inPlayer = true))
         assertEquals(BackDisposition.HidePlayerChrome, BackPolicy.decide(dialogOpen = false, pinOpen = false, seekPreviewOpen = false, playerChromeOpen = true, inPlayer = true))
         assertEquals(BackDisposition.ExitPlayer, BackPolicy.decide(dialogOpen = false, pinOpen = false, seekPreviewOpen = false, playerChromeOpen = false, inPlayer = true))
+        assertEquals(BackDisposition.ExitPlayer, BackPolicy.decide(dialogOpen = false, pinOpen = false, seekPreviewOpen = false, playerChromeOpen = true, inPlayer = true, explicitExit = true))
     }
 
     @Test fun `seek preview clamps and ignores tiny no-op movement`() {

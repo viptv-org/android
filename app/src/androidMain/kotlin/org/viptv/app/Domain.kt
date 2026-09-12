@@ -155,7 +155,8 @@ object HoldPressPolicy {
 /** Back always resolves transient state before leaving its route. */
 enum class BackDisposition { DismissDialog, CancelPin, CancelSeek, HidePlayerChrome, ExitPlayer, Navigate }
 object BackPolicy {
-    fun decide(dialogOpen: Boolean, pinOpen: Boolean, seekPreviewOpen: Boolean, playerChromeOpen: Boolean, inPlayer: Boolean): BackDisposition = when {
+    fun decide(dialogOpen: Boolean, pinOpen: Boolean, seekPreviewOpen: Boolean, playerChromeOpen: Boolean, inPlayer: Boolean, explicitExit: Boolean = false): BackDisposition = when {
+        explicitExit && inPlayer -> BackDisposition.ExitPlayer
         dialogOpen -> BackDisposition.DismissDialog
         pinOpen -> BackDisposition.CancelPin
         seekPreviewOpen -> BackDisposition.CancelSeek

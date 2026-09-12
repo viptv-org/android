@@ -279,7 +279,7 @@ private fun PlayerControls(media: Media, isLive: Boolean, isPlaying: Boolean, ca
         if (captions) PlayerIconButton("Captions", Modifier.offset(if (isLive) 688.dp else 1072.dp, 624.dp).size(64.dp), { onMenu(PlayerTrackMenu.Subtitles) }) { PlayerGlyph(Icons.Default.ClosedCaption, "Captions", it) }
         // Back owns final progress persistence and session stop as one ordered
         // transition. Calling saveProgress here races a second write with stop.
-        PlayerIconButton("Exit", Modifier.offset(1152.dp, 624.dp).size(64.dp), { controller.back() }) { PlayerGlyph(Icons.Default.Close, "Exit", it) }
+        PlayerIconButton("Exit", Modifier.offset(1152.dp, 624.dp).size(64.dp), controller::exitPlayback) { PlayerGlyph(Icons.Default.Close, "Exit", it) }
     }
 }
 

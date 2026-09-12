@@ -672,6 +672,14 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
         return true
     }
+    /** The visible Exit control is intentionally immediate; only hardware Back hides chrome first. */
+    fun exitPlayback() {
+        val route = _state.value.route as? Route.Player ?: return
+        if (BackPolicy.decide(dialogOpen = false, pinOpen = false, seekPreviewOpen = false, playerChromeOpen = _state.value.playerChromeVisible, inPlayer = true, explicitExit = true) == BackDisposition.ExitPlayer) {
+            exitPlayer(route, snapshotPlaybackMedia(route))
+        }
+    }
+
     private fun exitPlayer(route: Route.Player, media: Media) {
         stopPlayback(media)
         _state.value = _state.value.copy(
