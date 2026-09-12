@@ -1,5 +1,6 @@
 package org.viptv.app
 
+import com.getair.video.PlayerCapabilities
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import java.net.ServerSocket
@@ -18,6 +19,37 @@ import kotlin.test.assertTrue
  * mocking the gateway or its JSON helpers.
  */
 class BackendGatewayWireTest {
+    @Test
+    fun `playback client capabilities retain only measured decoder facts`() {
+        val measured = PlaybackClientCapabilities.from(
+            PlayerCapabilities(
+                containers = setOf("mp4"),
+                videoCodecs = setOf("h264", "hevc"),
+                audioCodecs = setOf("aac"),
+                maxVideoWidth = 3840,
+                maxVideoHeight = 2160,
+                supportsHevcSdr = true,
+            ),
+        )
+        val unknownSize = PlaybackClientCapabilities.from(
+            PlayerCapabilities(
+                adaptiveProtocols = setOf("hls"),
+                videoCodecs = setOf("h264", "hevc"),
+                audioCodecs = setOf("aac"),
+                supportsHevcSdr = true,
+            ),
+        )
+
+        assertEquals(3840, measured.maxWidth)
+        assertEquals(2160, measured.maxHeight)
+        assertTrue(measured.hevc)
+        assertTrue(measured.hevcSdr)
+        assertTrue(measured.directPlay)
+        assertEquals(0, unknownSize.maxWidth)
+        assertEquals(0, unknownSize.maxHeight)
+        assertFalse(unknownSize.directPlay)
+    }
+
     @Test
     fun `source polling consumes every streams array event`() = runBlocking {
         FixtureServer(2) { request ->
@@ -76,7 +108,22 @@ class BackendGatewayWireTest {
         }.use { server ->
             val gateway = VipTvHttpGateway(server.origin)
             val source = Source("stream-1", "Provider", name = "1080p", addonId = "addon:one", fingerprint = "fp-one")
-            val launch = gateway.playback(source, 42_500, audioTrackIndex = 2, subtitleTrackIndex = 4, subtitlesOff = true)
+            val launch = gateway.playback(
+                source = source,
+                positionMillis = 42_500,
+                capabilities = PlaybackClientCapabilities(
+                    maxWidth = 3840,
+                    maxHeight = 2160,
+                    h264 = true,
+                    hevc = true,
+                    hevcSdr = true,
+                    aac = true,
+                    directPlay = true,
+                ),
+                audioTrackIndex = 2,
+                subtitleTrackIndex = 4,
+                subtitlesOff = true,
+            )
             gateway.updateProgress(
                 "profile-1",
                 Media("movie-1", "movie", "Movie", positionMillis = 42_500, durationMillis = 120_250, sourceAddonId = "addon:one", sourceFingerprint = "fp-one"),
@@ -88,6 +135,14 @@ class BackendGatewayWireTest {
             assertEquals(2, playback.getInt("audio_track_index"))
             assertEquals(4, playback.getInt("subtitle_track_index"))
             assertTrue(playback.getBoolean("subtitles_off"))
+            val capabilities = playback.getJSONObject("capabilities")
+            assertEquals(3840, capabilities.getInt("max_width"))
+            assertEquals(2160, capabilities.getInt("max_height"))
+            assertTrue(capabilities.getBoolean("h264"))
+            assertTrue(capabilities.getBoolean("hevc"))
+            assertTrue(capabilities.getBoolean("hevc_sdr"))
+            assertTrue(capabilities.getBoolean("aac"))
+            assertTrue(capabilities.getBoolean("direct_play"))
 
             assertEquals("${server.origin}/media/session-1/capability/index.m3u8", launch.url)
             assertEquals("remux", launch.mode)

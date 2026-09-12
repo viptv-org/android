@@ -846,6 +846,7 @@ private fun probeMedia3Capabilities(): PlayerCapabilities {
         MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filterNot(MediaCodecInfo::isEncoder)
     }.getOrDefault(emptyList())
     val mimeTypes = decoders.flatMap { it.supportedTypes.asIterable() }.map(String::lowercase).toSet()
+    val directVideoLimits = media3DirectVideoLimits(decoders)
     val hardwareMimeTypes = decoders.filter { info ->
         if (Build.VERSION.SDK_INT >= 29) info.isHardwareAccelerated else !info.name.isSoftwareCodecName()
     }.flatMap { it.supportedTypes.asIterable() }.filter { it.startsWith("video/", ignoreCase = true) }
@@ -889,8 +890,67 @@ private fun probeMedia3Capabilities(): PlayerCapabilities {
         } else {
             HardwareAcceleration.Unknown
         },
+        maxVideoWidth = directVideoLimits?.maxWidth,
+        maxVideoHeight = directVideoLimits?.maxHeight,
+        supportsHevcSdr = directVideoLimits?.supportsHevcSdr == true,
     )
 }
+
+/**
+ * The server accepts one size limit for both H264 and HEVC direct delivery. Use the
+ * intersection of the actual H264 decoder and the HEVC Main decoder when both are
+ * advertised, rather than claiming a size supported by only one codec.
+ */
+private fun media3DirectVideoLimits(decoders: List<MediaCodecInfo>): Media3DirectVideoLimits? {
+    val codecLimits = decoders.flatMap { decoder ->
+        decoder.supportedTypes.asIterable()
+            .filter { it.equals("video/avc", ignoreCase = true) || it.equals("video/hevc", ignoreCase = true) }
+            .mapNotNull { mimeType ->
+                runCatching {
+                    val capabilities = decoder.getCapabilitiesForType(mimeType)
+                    val video = capabilities.videoCapabilities ?: return@runCatching null
+                    val maxWidth = video.supportedWidths.upper
+                    val maxHeight = video.supportedHeights.upper
+                    if (maxWidth < 2 || maxHeight < 2) return@runCatching null
+                    Media3DecoderLimit(
+                        mimeType = mimeType.lowercase(),
+                        maxWidth = maxWidth,
+                        maxHeight = maxHeight,
+                        supportsHevcSdr = mimeType.equals("video/hevc", ignoreCase = true) &&
+                            capabilities.profileLevels.any { it.profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain },
+                    )
+                }.getOrNull()
+            }
+    }
+    val h264 = codecLimits.filter { it.mimeType == "video/avc" }.maxByOrNull(Media3DecoderLimit::area)
+        ?: return null
+    val hevcSdr = codecLimits.filter { it.mimeType == "video/hevc" && it.supportsHevcSdr }
+        .maxByOrNull(Media3DecoderLimit::area)
+    return if (hevcSdr == null) {
+        Media3DirectVideoLimits(h264.maxWidth, h264.maxHeight, supportsHevcSdr = false)
+    } else {
+        Media3DirectVideoLimits(
+            maxWidth = minOf(h264.maxWidth, hevcSdr.maxWidth),
+            maxHeight = minOf(h264.maxHeight, hevcSdr.maxHeight),
+            supportsHevcSdr = true,
+        )
+    }
+}
+
+private data class Media3DecoderLimit(
+    val mimeType: String,
+    val maxWidth: Int,
+    val maxHeight: Int,
+    val supportsHevcSdr: Boolean,
+) {
+    val area: Long get() = maxWidth.toLong() * maxHeight
+}
+
+private data class Media3DirectVideoLimits(
+    val maxWidth: Int,
+    val maxHeight: Int,
+    val supportsHevcSdr: Boolean,
+)
 
 private fun videoCodecs(mimeTypes: Set<String>): Set<String> = buildSet {
     if ("video/avc" in mimeTypes) add("h264")

@@ -209,6 +209,11 @@ data class PlayerCapabilities(
     val supportsCompositedOverlays: Boolean = false,
     val supportedLivePolicies: Set<LivePlaybackPolicy> = emptySet(),
     val hardwareAcceleration: HardwareAcceleration = HardwareAcceleration.Unknown,
+    /** Measured decoder limits; null means this backend could not determine them. */
+    val maxVideoWidth: Int? = null,
+    val maxVideoHeight: Int? = null,
+    /** A decoder explicitly advertised the SDR HEVC Main profile used by the server. */
+    val supportsHevcSdr: Boolean = false,
 )
 
 enum class HardwareAcceleration { Unknown, None, Decode, DecodeAndRender }

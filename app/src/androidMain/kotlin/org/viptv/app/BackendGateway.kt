@@ -1,5 +1,6 @@
 package org.viptv.app
 
+import com.getair.video.PlayerCapabilities
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -39,6 +40,7 @@ interface BackendGateway {
     suspend fun playback(
         source: Source,
         positionMillis: Long,
+        capabilities: PlaybackClientCapabilities,
         audioTrackIndex: Int? = null,
         subtitleTrackIndex: Int? = null,
         subtitlesOff: Boolean = false,
@@ -66,6 +68,56 @@ interface BackendGateway {
     suspend fun deleteProfile(profile: Profile)
     suspend fun unlockParent(pin: String)
     suspend fun logout()
+}
+
+/**
+ * Measured local decoder facts sent to the server's deliberately small playback contract.
+ * Zero dimensions mean the adapter could not establish a usable video limit; they are sent
+ * unchanged so the server declines safely instead of receiving an invented fallback.
+ */
+data class PlaybackClientCapabilities(
+    val maxWidth: Int,
+    val maxHeight: Int,
+    val h264: Boolean,
+    val hevc: Boolean,
+    val hevcSdr: Boolean,
+    val aac: Boolean,
+    val directPlay: Boolean,
+) {
+    init {
+        require(maxWidth >= 0)
+        require(maxHeight >= 0)
+        require(!hevcSdr || hevc)
+    }
+
+    companion object {
+        fun from(player: PlayerCapabilities): PlaybackClientCapabilities {
+            val h264 = "h264" in player.videoCodecs
+            val hevc = "hevc" in player.videoCodecs
+            val aac = "aac" in player.audioCodecs
+            val maxWidth = player.maxVideoWidth ?: 0
+            val maxHeight = player.maxVideoHeight ?: 0
+            return PlaybackClientCapabilities(
+                maxWidth = maxWidth,
+                maxHeight = maxHeight,
+                h264 = h264,
+                hevc = hevc,
+                hevcSdr = hevc && player.supportsHevcSdr,
+                aac = aac,
+                directPlay = h264 && aac && maxWidth >= 2 && maxHeight >= 2 &&
+                    ("hls" in player.adaptiveProtocols || "mp4" in player.containers),
+            )
+        }
+    }
+
+    fun toWireJson(): JSONObject = JSONObject()
+        .put("max_width", maxWidth)
+        .put("max_height", maxHeight)
+        .put("h264", h264)
+        .put("hevc", hevc)
+        .put("hevc_sdr", hevcSdr)
+        .put("aac", aac)
+        .put("direct_play", directPlay)
 }
 
 /** Complete server-owned delivery facts. The controller decides the UX; it never guesses from a URL. */
@@ -201,15 +253,15 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
     override suspend fun playback(
         source: Source,
         positionMillis: Long,
+        capabilities: PlaybackClientCapabilities,
         audioTrackIndex: Int?,
         subtitleTrackIndex: Int?,
         subtitlesOff: Boolean,
     ): PlaybackLaunch {
-        val capabilities = JSONObject().put("max_width", 1920).put("max_height", 1080).put("h264", true).put("aac", true).put("direct_play", true)
         val body = JSONObject()
             .put("stream_id", source.id)
             .put("position", seconds(positionMillis))
-            .put("capabilities", capabilities)
+            .put("capabilities", capabilities.toWireJson())
             .putOpt("audio_track_index", audioTrackIndex)
             .putOpt("subtitle_track_index", subtitleTrackIndex)
             .put("subtitles_off", subtitlesOff)
