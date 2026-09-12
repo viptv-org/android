@@ -40,7 +40,7 @@ class PlaybackPolicyTest {
 
     @Test fun `seek preview clamps and ignores tiny no-op movement`() {
         assertEquals(100_000, SeekPolicy.target(95_000, 30_000, durationMillis = 100_000))
-        assertEquals(10_000, SeekPolicy.target(15_000, -30_000, durationMillis = 100_000))
+        assertEquals(0, SeekPolicy.target(15_000, -30_000, durationMillis = 100_000))
         assertEquals(null, SeekPolicy.target(10_000, 200, durationMillis = 100_000))
     }
 

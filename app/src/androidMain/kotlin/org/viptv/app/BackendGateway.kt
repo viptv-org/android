@@ -142,7 +142,16 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
 }
 class GatewayError(val status: Int, override val message: String) : IllegalStateException(message)
 private fun JSONObject.profile() = Profile(get("id").toString(), getString("name"), optString("avatar_url").ifBlank { null }, optBoolean("kids"), optBoolean("is_primary"), optString("avatar_style", "critters"), optString("avatar_seed").ifBlank { null })
-private fun JSONObject.media() = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), optString("poster").ifBlank { null }, optString("description").ifBlank { null }, optLong("position", 0), optLong("duration").takeIf { it > 0 }, optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null })
+private fun JSONObject.media(): Media {
+    val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), optString("poster").ifBlank { null }, optString("description").ifBlank { null }, optLong("position", 0), optLong("duration").takeIf { it > 0 }, optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null })
+    val videos = optJSONArray("videos") ?: optJSONArray("episodes") ?: return base
+    return base.copy(episodes = (0 until videos.length()).mapNotNull { index -> videos.optJSONObject(index)?.media()?.let { episode ->
+        episode.copy(
+            type = videos.optJSONObject(index)?.optString("type").orEmpty().ifBlank { base.type },
+            seriesId = episode.seriesId ?: base.id,
+        )
+    } })
+}
 private fun JSONObject.mediaArray(vararg keys: String): List<Media> { val a = keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray(); return (0 until a.length()).mapNotNull { a.optJSONObject(it)?.media() } }
 private fun JSONObject.source() = Source(optString("id", optString("stream_id")), optString("provider", optString("source", "Source")), optString("name", optString("provider", optString("source", "Source"))), optString("description", optString("filename")), optJSONObject("headers")?.headers() ?: emptyMap(), optString("source_addon_id").ifBlank { null })
 private fun JSONObject.headers(): Map<String, String> = keys().asSequence().associateWith { get(it).toString() }

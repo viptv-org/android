@@ -208,6 +208,27 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
         TvButton("Choose source", { controller.chooseSources(media) })
         TvButton("My List", { controller.toggleMyList(media) })
     }
+    if (media.type == "series" && media.episodes.isNotEmpty()) {
+        Text("Episodes", color = White, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 46.dp))
+        LazyRow(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            items(media.episodes, key = { it.id }) { episode -> EpisodeCard(episode, controller) }
+        }
+    }
+}
+
+@Composable private fun EpisodeCard(episode: Media, controller: AppController) = Holdable(
+    onActivate = { controller.chooseSources(episode) },
+    onHold = null,
+    modifier = Modifier.width(256.dp).height(200.dp).clip(RoundedCornerShape(8.dp)).background(Surface).padding(10.dp),
+) {
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
+        Box(Modifier.fillMaxWidth().height(132.dp).background(Color(0xFF242628)), contentAlignment = Alignment.Center) {
+            Text("S${episode.season ?: 0} E${episode.episode ?: 0}", color = Muted, fontSize = 20.sp)
+            if (!episode.poster.isNullOrBlank()) AsyncImage(model = episode.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        Text(episode.name.ifBlank { "Episode ${episode.episode ?: ""}" }, color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
+        Text("S${episode.season ?: 0} E${episode.episode ?: 0}", color = Muted, fontSize = 14.sp)
+    }
 }
 
 @Composable private fun SourcePicker(media: Media, sources: List<Source>, controller: AppController) {

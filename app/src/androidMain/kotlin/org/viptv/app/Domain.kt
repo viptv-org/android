@@ -12,6 +12,7 @@ data class Media(
     val season: Int? = null,
     val episode: Int? = null,
     val sourceAddonId: String? = null,
+    val episodes: List<Media> = emptyList(),
 )
 
 data class Source(
