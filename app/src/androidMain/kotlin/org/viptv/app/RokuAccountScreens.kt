@@ -87,6 +87,7 @@ private val AccountSurface = Color(0xFF202224)
     val first = remember { FocusRequester() }
     LaunchedEffect(state.profilePage, shown.map { it.id }) { first.requestFocus() }
     Box(Modifier.fillMaxSize().background(AccountCanvas)) {
+        AccountMark()
         AccountText(if(state.managingProfiles) "Manage profiles" else "Who's watching?",100,146,1080,44,centered=true)
         val start = (1280 - (shown.size*178 + (shown.size-1).coerceAtLeast(0)*34))/2
         shown.forEachIndexed { index, profile ->
@@ -114,9 +115,10 @@ private val AccountSurface = Color(0xFF202224)
 }
 
 @Composable private fun AccountAvatar(name:String,url:String?,modifier:Modifier=Modifier) {
-    Box(modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF30363C)),contentAlignment=Alignment.Center) {
-        Text(name.take(2).uppercase(),color=AccountWhite,fontSize=42.sp,fontWeight=FontWeight.Bold)
-        if(!url.isNullOrBlank()) AsyncImage(url,"$name avatar",Modifier.fillMaxSize(),contentScale=ContentScale.Fit)
+    var ready by remember(url) {mutableStateOf(false)}
+    Box(modifier.clip(RoundedCornerShape(12.dp)).background(if(ready) Color.Transparent else Color(0xFF30363C)),contentAlignment=Alignment.Center) {
+        if(!ready) Text(name.take(2).uppercase(),color=AccountWhite,fontSize=42.sp,fontWeight=FontWeight.Bold)
+        if(!url.isNullOrBlank()) AsyncImage(url,"$name avatar",Modifier.fillMaxSize(),contentScale=ContentScale.Fit,onSuccess={ready=true},onError={ready=false})
     }
 }
 
