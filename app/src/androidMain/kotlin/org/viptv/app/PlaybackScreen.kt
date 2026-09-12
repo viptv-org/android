@@ -122,6 +122,11 @@ internal fun PlaybackScreen(
             controller.commitSeek()
         }
     }
+    fun dismissTrackMenu() {
+        // A notice belongs to its menu. The first Back dismisses the notice,
+        // while the next one returns to the player control that opened it.
+        if (trackNotice != null) trackNotice = null else menu = null
+    }
 
     LaunchedEffect(media.type, media.id, absolutePositionMillis, playback.isPlaying, titleDurationMillis) {
         controller.maybeAutoNext(
@@ -164,9 +169,7 @@ internal fun PlaybackScreen(
         onDispose { controller.setPlayerMenuOpen(false) }
     }
     BackHandler(enabled = menu != null) {
-        // An unavailable-track notice is dismissed before its containing menu;
-        // the next Back returns focus to player chrome.
-        if (trackNotice != null) trackNotice = null else menu = null
+        dismissTrackMenu()
     }
 
     val focusOwner = if (!chromeVisible && menu == null) {
@@ -175,7 +178,6 @@ internal fun PlaybackScreen(
     Box(
         Modifier.fillMaxSize()
             .background(Color.Black)
-            .then(focusOwner)
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
                 val code = native.keyCode
@@ -184,6 +186,14 @@ internal fun PlaybackScreen(
                 // after that policy cancels the preview.
                 if (code == NativeKeyEvent.KEYCODE_BACK) {
                     commitJob?.cancel()
+                    // Some TV remotes deliver Back as a focused key event rather
+                    // than through OnBackPressedDispatcher. Consume both halves
+                    // here so a local track dialog closes before controller Back
+                    // policy can hide chrome or exit playback.
+                    if (menu != null) {
+                        if (native.action == NativeKeyEvent.ACTION_UP) dismissTrackMenu()
+                        return@onPreviewKeyEvent true
+                    }
                     return@onPreviewKeyEvent false
                 }
                 if (native.action == NativeKeyEvent.ACTION_DOWN && code != NativeKeyEvent.KEYCODE_BACK) {
@@ -234,7 +244,8 @@ internal fun PlaybackScreen(
                     }
                     else -> false
                 }
-            }.focusable(),
+            }
+            .then(focusOwner),
     ) {
         AndroidView(factory = { SurfaceView(it).also(controller.player::attach) }, modifier = Modifier.fillMaxSize())
         if (chromeVisible) {
