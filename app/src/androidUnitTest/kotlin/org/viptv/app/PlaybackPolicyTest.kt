@@ -7,9 +7,10 @@ import kotlin.test.assertTrue
 
 class PlaybackPolicyTest {
     @Test fun `resume only auto starts exact remembered source`() {
-        val exact = Source("a", "Addon A")
-        assertEquals(PlaybackIntent.Open(exact, 42_000), PlaybackPolicy.forResume(exact, listOf(exact), 42_000))
-        assertEquals(PlaybackIntent.ChooseSource, PlaybackPolicy.forResume(exact, listOf(Source("b", "Addon B"))))
+        val exact = Source("a", "Addon A", addonId = "addon", fingerprint = "release-a")
+        val identity = ResumeIdentity.sourceIdentity(exact)
+        assertEquals(PlaybackIntent.Open(exact, 42_000), PlaybackPolicy.forResume(identity, listOf(exact), 42_000))
+        assertEquals(PlaybackIntent.ChooseSource, PlaybackPolicy.forResume(identity, listOf(Source("b", "Addon B", addonId = "addon", fingerprint = "release-b"))))
     }
 
     @Test fun `remembered source identity is profile scoped`() {
@@ -19,15 +20,16 @@ class PlaybackPolicyTest {
     }
 
     @Test fun `resume identity survives a new stream job id`() {
-        val stored = ResumeIdentity.sourceIdentity(Source("expired-job", "Addon", name = "1080p", addonId = "org.example.addon"))
-        val rediscovered = ResumeIdentity.sourceIdentity(Source("new-job", "Addon", name = "1080p", addonId = "org.example.addon"))
+        val stored = ResumeIdentity.sourceIdentity(Source("expired-job", "Addon", name = "1080p", addonId = "org.example.addon", fingerprint = "release"))
+        val rediscovered = ResumeIdentity.sourceIdentity(Source("new-job", "Addon", name = "1080p", addonId = "org.example.addon", fingerprint = "release"))
         assertEquals(stored, rediscovered)
     }
 
-    @Test fun `resume uses addon and source identity instead of a transient stream id`() {
-        val remembered = Source("expired", "Provider", name = "Premium 1080", addonId = "addon")
-        val rediscovered = Source("new", "Provider", name = "Premium 1080", addonId = "addon")
-        assertEquals(PlaybackIntent.Open(remembered, 12_000), PlaybackPolicy.forResume(remembered, listOf(rediscovered), 12_000))
+    @Test fun `resume rejects same-name lookalikes with a different fingerprint`() {
+        val remembered = Source("expired", "Provider", name = "Premium 1080", addonId = "addon", fingerprint = "known-release")
+        val lookalike = Source("new", "Provider", name = "Premium 1080", addonId = "addon", fingerprint = "different-release")
+        assertEquals(PlaybackIntent.ChooseSource, PlaybackPolicy.forResume(ResumeIdentity.sourceIdentity(remembered), listOf(lookalike), 12_000))
+        assertEquals(PlaybackIntent.ChooseSource, PlaybackPolicy.forResume(null, listOf(remembered), 12_000))
     }
 
     @Test fun `back closes transient UI before player or route navigation`() {
@@ -48,6 +50,8 @@ class PlaybackPolicyTest {
         assertTrue(PlaybackPolicy.canAutoNext(Media("e", "series"), 91_000, 100_000, true, false, true))
         assertFalse(PlaybackPolicy.canAutoNext(Media("e", "series"), 91_000, 100_000, false, false, true))
         assertFalse(PlaybackPolicy.canAutoNext(Media("e", "movie"), 91_000, 100_000, true, false, true))
+        assertFalse(PlaybackPolicy.canAutoNext(Media("e", "series"), 1_000, 10_000, true, false, true))
+        assertFalse(PlaybackPolicy.canAutoNext(Media("e", "series"), 91_000, 100_000, true, false, true, autoplay = false))
     }
 
     @Test fun `short release activates and long press suppresses activation`() {
@@ -66,5 +70,16 @@ class PlaybackPolicyTest {
         assertEquals(ContinuationDecision.PrepareNext, ContinuationPolicy.decide(episode, 90_000, 100_000, true, false, "next"))
         assertEquals(ContinuationDecision.KeepOutgoing, ContinuationPolicy.decide(episode, 89_999, 100_000, true, false, "next"))
         assertEquals(ContinuationDecision.ShowCaughtUp, ContinuationPolicy.decide(episode, 95_000, 100_000, true, false, "caught_up"))
+    }
+
+    @Test fun `continuation keeps the active IPTV add-on and never falls back arbitrarily`() {
+        val outgoing = Source("stream-a", "IPTV", addonId = "iptv-a", fingerprint = "old")
+        val next = Media("episode-5", "series", sourceAddonId = "ranked-b")
+        val sameAddon = Source("stream-next", "IPTV", addonId = "iptv-a", fingerprint = "new")
+        val ranked = Source("stream-ranked", "Provider", addonId = "ranked-b", fingerprint = "new")
+        val other = Source("stream-other", "Provider", addonId = "other", fingerprint = "new")
+        assertEquals(sameAddon, ContinuationSourcePolicy.select(next, outgoing, listOf(other, ranked, sameAddon)))
+        assertEquals(ranked, ContinuationSourcePolicy.select(next, null, listOf(other, ranked)))
+        assertEquals(null, ContinuationSourcePolicy.select(next, outgoing, listOf(other)))
     }
 }

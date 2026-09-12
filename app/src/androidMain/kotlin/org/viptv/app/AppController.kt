@@ -30,6 +30,11 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private var heartbeatJob: Job? = null
     private var playbackSessionId: String? = null
     private var afterParentUnlock: (suspend () -> Unit)? = null
+    private var selectedAudioTrackIndex: Int? = null
+    private var selectedSubtitleTrackIndex: Int? = null
+    private var subtitlesOff = false
+    private var continuationRestore: Route.Player? = null
+    private var continuationWasPlaying = false
 
     init { restore() }
     fun beginPairing() = scope.launch {
@@ -93,56 +98,152 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 val route = _state.value.route
                 if (route is Route.Sources && route.media.type == media.type && route.media.id == media.id) _state.value = _state.value.copy(sources = arriving)
             } }.onSuccess { discovered ->
-            val savedIdentity = _state.value.selectedProfile?.let { profile -> store.getString(sourceKey(profile.id, media), null) }
+            val savedIdentity = ResumeIdentity.sourceIdentity(media.sourceAddonId, media.sourceFingerprint)
             val exact = if (resume) discovered.firstOrNull { ResumeIdentity.sourceIdentity(it) == savedIdentity } else null
-            if (exact != null) start(media, exact) else {
+            if (exact != null) start(media, exact, explicitResume = true) else {
                 _state.value = _state.value.copy(
                     route = Route.Sources(media, resume), sources = discovered, loading = false,
-                    message = when { discovered.isEmpty() -> "No sources found. Choose another title or try again."; resume -> "Your previous source is unavailable. Choose a source."; else -> null },
+                    message = when { discovered.isEmpty() -> "No sources found. Choose another title or try again."; resume && savedIdentity == null -> "Choose a source to resume. Your prior source cannot be verified."; resume -> "Your previous source is unavailable. Choose a source."; else -> null },
                 )
             }
         }.onFailure { error -> if (error !is CancellationException) fail(error) }
         }
     }
-    fun start(media: Media, source: Source) = scope.launch {
+    private var explicitResumeAwaitingCompletionKey: String? = null
+
+    fun start(media: Media, source: Source, explicitResume: Boolean = false) = scope.launch {
         sourceDiscovery?.cancel()
-        update(loading = true); runCatching { gateway.playback(source, media.positionMillis) }.onSuccess { launch ->
-            if (launch.url.isBlank()) { update(loading = false, message = "The selected source could not be prepared."); return@onSuccess }
-            player.open(PlaybackSource(launch.url, headers = launch.headers, title = media.name, kindHint = if (media.type == "live") PlaybackKind.Live else PlaybackKind.OnDemand))
-            replacePlaybackSession(launch.sessionId)
-            _state.value.selectedProfile?.let { profile -> store.edit().putString(sourceKey(profile.id, media), ResumeIdentity.sourceIdentity(source)).apply() }
-            _state.value = _state.value.copy(route = Route.Player(media, source), playerChromeVisible = true, loading = false)
-            schedulePlayerChromeDismissal()
-        }.onFailure(::fail)
+        prepareAndStart(media, source, explicitResume, playWhenReady = true, resetTrackChoices = true)
+    }
+
+    /**
+     * Opens a replacement session only after the server has accepted the exact
+     * source, position, and manual track request. A failed replacement leaves
+     * the outgoing session playable and avoids stopping its server lease.
+     */
+    private suspend fun prepareAndStart(
+        media: Media,
+        source: Source,
+        explicitResume: Boolean,
+        playWhenReady: Boolean,
+        resetTrackChoices: Boolean,
+    ): Boolean {
+        val requestedAudio = if (resetTrackChoices) null else selectedAudioTrackIndex
+        val requestedSubtitle = if (resetTrackChoices) null else selectedSubtitleTrackIndex
+        val requestedSubtitlesOff = if (resetTrackChoices) false else subtitlesOff
+        update(loading = true, message = null)
+        return try {
+            val launch = gateway.playback(source, media.positionMillis, requestedAudio, requestedSubtitle, requestedSubtitlesOff)
+            if (launch.url.isBlank()) {
+                update(loading = false, message = "The selected source could not be prepared.")
+                false
+            } else {
+                try {
+                    player.open(
+                        PlaybackSource(
+                            launch.url,
+                            headers = launch.headers,
+                            title = media.name,
+                            kindHint = if (launch.live || media.type == "live") PlaybackKind.Live else PlaybackKind.OnDemand,
+                        ),
+                        playWhenReady = playWhenReady,
+                    )
+                } catch (error: Throwable) {
+                    runCatching { gateway.stopPlayback(launch.sessionId) }
+                    throw error
+                }
+                replacePlaybackSession(launch.sessionId)
+                selectedAudioTrackIndex = requestedAudio
+                selectedSubtitleTrackIndex = requestedSubtitle
+                subtitlesOff = requestedSubtitlesOff
+                val playbackMedia = media.copy(
+                    positionMillis = launch.positionMillis,
+                    durationMillis = launch.durationMillis ?: media.durationMillis,
+                    sourceAddonId = source.addonId,
+                    sourceFingerprint = source.fingerprint,
+                )
+                val key = "${playbackMedia.type}.${playbackMedia.id}"
+                val previousKey = (_state.value.route as? Route.Player)?.media?.let { "${it.type}.${it.id}" }
+                if (previousKey != key) autoNextMediaKey = null
+                if (explicitResume && playbackMedia.durationMillis != null && playbackMedia.positionMillis >= playbackMedia.durationMillis - 10_000) {
+                    explicitResumeAwaitingCompletionKey = key
+                }
+                _state.value = _state.value.copy(
+                    route = Route.Player(playbackMedia, source),
+                    playerChromeVisible = true,
+                    playbackTracks = PlaybackTrackChoices(launch.audioTracks, launch.subtitleTracks, launch.subtitlesSupported),
+                    loading = false,
+                )
+                continuationRestore = null
+                schedulePlayerChromeDismissal()
+                true
+            }
+        } catch (error: CancellationException) {
+            update(loading = false)
+            throw error
+        } catch (error: Throwable) {
+            fail(error)
+            false
+        }
     }
     /** Controlled continuation is the only non-Resume automatic source path. */
     fun nextEpisode(outgoing: Media) {
         nextEpisodeJob?.cancel()
+        val outgoingRoute = _state.value.route as? Route.Player ?: return
+        continuationRestore = outgoingRoute
+        continuationWasPlaying = player.state.value.isPlaying
         nextEpisodeJob = scope.launch {
             player.pause()
             _state.value = _state.value.copy(message = "LOADING", loading = false)
-            runCatching { gateway.nextEpisode(requireProfile(), outgoing) }.onSuccess { result ->
+            try {
+                val result = gateway.nextEpisode(requireProfile(), outgoing)
                 when (result.status) {
                     "next" -> {
-                        val next = result.item ?: run { player.play(); _state.value = _state.value.copy(message = "Episode information is unavailable. Open the series to choose an episode."); return@onSuccess }
+                        val next = result.item ?: run {
+                            restoreContinuation("Episode information is unavailable. Open the series to choose an episode.")
+                            return@launch
+                        }
                         val candidates = gateway.sources(next)
-                        val selected = next.sourceAddonId?.let { addon -> candidates.firstOrNull { it.addonId == addon } }
+                        val selected = ContinuationSourcePolicy.select(next, outgoingRoute.source, candidates)
                         if (selected == null) {
-                            _state.value = _state.value.copy(route = Route.Sources(next), sources = candidates, message = "Choose a source for the next episode.")
-                        } else start(next, selected)
+                            _state.value = _state.value.copy(
+                                route = Route.Sources(next),
+                                sources = candidates,
+                                loading = false,
+                                message = "Choose a source for the next episode.",
+                            )
+                        } else {
+                            val started = prepareAndStart(next, selected, explicitResume = false, playWhenReady = continuationWasPlaying, resetTrackChoices = true)
+                            if (!started) restoreContinuation("Could not prepare the next episode.")
+                        }
                     }
-                    "caught_up" -> { player.play(); _state.value = _state.value.copy(message = "You're caught up. No next episode is listed yet.") }
-                    "upcoming" -> { player.play(); _state.value = _state.value.copy(message = "The next episode hasn't been released yet.") }
-                    else -> { player.play(); _state.value = _state.value.copy(message = "Episode information is unavailable. Open the series to choose an episode.") }
+                    "caught_up" -> restoreContinuation("You're caught up. No next episode is listed yet.")
+                    "upcoming" -> restoreContinuation("The next episode hasn't been released yet.")
+                    else -> restoreContinuation("Episode information is unavailable. Open the series to choose an episode.")
                 }
-            }.onFailure { error -> if (error !is CancellationException) { player.play(); _state.value = _state.value.copy(message = error.message ?: "Could not prepare the next episode.") } }
+            } catch (error: CancellationException) {
+                restoreContinuation(null)
+                throw error
+            } catch (_: Throwable) {
+                restoreContinuation("Could not prepare the next episode.")
+            }
         }
+    }
+
+    /** Back/cancel returns to the still-live outgoing session and its play intent. */
+    private fun restoreContinuation(message: String?) {
+        continuationRestore?.let { _state.value = _state.value.copy(route = it, sources = emptyList(), loading = false, message = message) }
+        if (continuationWasPlaying) player.play() else player.pause()
+        continuationRestore = null
     }
     private var autoNextMediaKey: String? = null
     /** Player state triggers a bounded request; the server decides whether a successor exists. */
-    fun maybeAutoNext(media: Media, positionMillis: Long, durationMillis: Long?, playing: Boolean) {
+    fun maybeAutoNext(media: Media, positionMillis: Long, durationMillis: Long?, playing: Boolean, ended: Boolean) {
         val key = "${media.type}.${media.id}"
-        if (PlaybackPolicy.canAutoNext(media, positionMillis, durationMillis, playing, seeking = false, nextAvailable = true) && autoNextMediaKey != key && nextEpisodeJob?.isActive != true) {
+        if (explicitResumeAwaitingCompletionKey == key && !ended) return
+        if (explicitResumeAwaitingCompletionKey == key && ended) explicitResumeAwaitingCompletionKey = null
+        val eligible = if (ended) media.type == "series" && durationMillis != null && durationMillis > 10_000 && _state.value.preferences.autoplay else PlaybackPolicy.canAutoNext(media, positionMillis, durationMillis, playing, seeking = false, nextAvailable = true, autoplay = _state.value.preferences.autoplay)
+        if (eligible && autoNextMediaKey != key && nextEpisodeJob?.isActive != true) {
             autoNextMediaKey = key
             nextEpisode(media)
         }
@@ -156,10 +257,9 @@ class AppController(context: Context, private val origin: String = "https://vipt
     } || _state.value.dialog != null || _state.value.pinPrompt != null || _state.value.seekPreview != null
     /** Returns false only when Android should handle app exit at a root gate/page. */
     fun handleBack(): Boolean {
-        if (_state.value.route is Route.Player && nextEpisodeJob?.isActive == true) {
+        if (continuationRestore != null && ((_state.value.route is Route.Player && nextEpisodeJob?.isActive == true) || _state.value.route is Route.Sources)) {
             nextEpisodeJob?.cancel()
-            player.play()
-            _state.value = _state.value.copy(message = null)
+            restoreContinuation(null)
             return true
         }
         when (BackPolicy.decide(_state.value.dialog != null, _state.value.pinPrompt != null, _state.value.seekPreview != null, _state.value.playerChromeVisible, _state.value.route is Route.Player)) {
@@ -192,11 +292,58 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
     }
     fun commitSeek() {
-        _state.value.seekPreview?.let { player.seekTo(it.targetMillis) }
+        val target = _state.value.seekPreview?.targetMillis ?: return
+        val route = _state.value.route as? Route.Player ?: return
+        val wasPlaying = player.state.value.isPlaying
         _state.value = _state.value.copy(seekPreview = null)
-        showPlayerChrome()
+        scope.launch {
+            prepareAndStart(
+                route.media.copy(positionMillis = target),
+                route.source,
+                explicitResume = false,
+                playWhenReady = wasPlaying,
+                resetTrackChoices = false,
+            )
+        }
     }
     fun cancelSeek() { _state.value = _state.value.copy(seekPreview = null) }
+
+    /** Server-managed selection replaces the playback session; native track IDs are output-local. */
+    fun selectAudioTrack(track: PlaybackTrack) {
+        if (!track.selectable || !track.supported) return
+        val route = _state.value.route as? Route.Player ?: return
+        val priorAudio = selectedAudioTrackIndex
+        selectedAudioTrackIndex = track.inputIndex
+        replaceForManualTrackChoice(route) { selectedAudioTrackIndex = priorAudio }
+    }
+
+    fun selectSubtitleTrack(track: PlaybackTrack?) {
+        val route = _state.value.route as? Route.Player ?: return
+        if (track != null && (!track.selectable || !track.supported)) return
+        val priorSubtitle = selectedSubtitleTrackIndex
+        val priorSubtitlesOff = subtitlesOff
+        selectedSubtitleTrackIndex = track?.inputIndex
+        subtitlesOff = track == null
+        replaceForManualTrackChoice(route) {
+            selectedSubtitleTrackIndex = priorSubtitle
+            subtitlesOff = priorSubtitlesOff
+        }
+    }
+
+    private fun replaceForManualTrackChoice(route: Route.Player, rollback: () -> Unit) {
+        val position = player.state.value.positionMillis
+        val wasPlaying = player.state.value.isPlaying
+        scope.launch {
+            val replaced = prepareAndStart(
+                route.media.copy(positionMillis = position),
+                route.source,
+                explicitResume = false,
+                playWhenReady = wasPlaying,
+                resetTrackChoices = false,
+            )
+            if (!replaced) rollback()
+        }
+    }
     /** Any player input restores controls and restarts the seven-second visibility timer. */
     fun showPlayerChrome() {
         if (_state.value.route !is Route.Player) return
@@ -228,7 +375,6 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback(); gateway.logout(); store.edit().clear().apply(); _state.value = AppState(route = Route.Pairing); beginPairing() } }
     fun close() { pairingPoll?.cancel(); sourceDiscovery?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback(); player.close() }
     private fun requireProfile() = checkNotNull(_state.value.selectedProfile).id
-    private fun sourceKey(profileId: String, media: Media) = ResumeIdentity.storageKey(profileId, media)
     private fun schedulePlayerChromeDismissal() {
         playerChromeJob?.cancel()
         playerChromeJob = scope.launch {

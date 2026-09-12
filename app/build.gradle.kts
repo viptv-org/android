@@ -26,6 +26,9 @@ kotlin {
             implementation(kotlin("test"))
             implementation(platform("androidx.compose:compose-bom:2025.04.01"))
             implementation(libs.androidx.compose.ui.test.junit4)
+            // JVM unit tests exercise the real HttpURLConnection/JSON boundary;
+            // Android's framework stub is not executable on the host JVM.
+            implementation("org.json:json:20240303")
         }
     }
 }

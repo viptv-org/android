@@ -6,7 +6,7 @@
 
 ## Product seam
 
-The application and the design repository own screens, focus, remote-button handling, overlays, next-episode policy, resume prompts, and user-visible wording. `:app` uses the Rust backend's device pairing/refresh, profile, catalog, source-discovery, playback/heartbeat cleanup, and progress routes. It records a profile-scoped addon/source-name identity locally only to enforce exact-source Resume; ephemeral stream job IDs are never used for Resume. An unavailable remembered source opens the manual picker and never starts a substitute. The library reports end-of-media and playback facts so the application can apply shared VIPTV behavior.
+The application and the design repository own screens, focus, remote-button handling, overlays, next-episode policy, resume prompts, and user-visible wording. `:app` uses the Rust backend's device pairing/refresh, profile, catalog, source-discovery, playback/heartbeat cleanup, and progress routes. Exact-source Resume compares the server-supplied add-on and source fingerprint carried in profile progress; ephemeral stream job IDs and display names are never used. Missing or unavailable identity opens the manual picker and never starts a substitute. The library reports end-of-media and playback facts so the application can apply shared VIPTV behavior.
 
 ## Media behavior
 

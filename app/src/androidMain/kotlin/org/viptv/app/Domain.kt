@@ -12,6 +12,7 @@ data class Media(
     val season: Int? = null,
     val episode: Int? = null,
     val sourceAddonId: String? = null,
+    val sourceFingerprint: String? = null,
     val episodes: List<Media> = emptyList(),
 )
 
@@ -22,6 +23,7 @@ data class Source(
     val description: String = "",
     val headers: Map<String, String> = emptyMap(),
     val addonId: String? = null,
+    val fingerprint: String? = null,
 )
 
 sealed interface PlaybackIntent {
@@ -31,8 +33,8 @@ sealed interface PlaybackIntent {
 
 /** Product policy from the design contract. The player adapter does not choose sources. */
 object PlaybackPolicy {
-    fun forResume(saved: Source?, discovered: List<Source>, positionMillis: Long = 0): PlaybackIntent =
-        saved?.takeIf { savedSource -> discovered.any { ResumeIdentity.sourceIdentity(it) == ResumeIdentity.sourceIdentity(savedSource) } }
+    fun forResume(expectedIdentity: String?, discovered: List<Source>, positionMillis: Long = 0): PlaybackIntent =
+        expectedIdentity?.let { expected -> discovered.firstOrNull { ResumeIdentity.sourceIdentity(it) == expected } }
             ?.let { PlaybackIntent.Open(it, positionMillis) } ?: PlaybackIntent.ChooseSource
 
     fun canAutoNext(
@@ -42,14 +44,17 @@ object PlaybackPolicy {
         playing: Boolean,
         seeking: Boolean,
         nextAvailable: Boolean,
-    ): Boolean = media.type == "series" && durationMillis != null && playing && !seeking && nextAvailable &&
+        autoplay: Boolean = true,
+    ): Boolean = media.type == "series" && durationMillis != null && durationMillis > 10_000 && autoplay && playing && !seeking && nextAvailable &&
         positionMillis >= durationMillis - 10_000
 }
 
 object ResumeIdentity {
     fun storageKey(profileId: String, media: Media): String = "source.$profileId.${media.type}.${media.id}"
-    /** Stream job IDs expire. Resume is bound to the persisted addon and source name instead. */
-    fun sourceIdentity(source: Source): String = listOf(source.addonId.orEmpty(), source.name).joinToString("\u0000")
+    /** Stream job IDs and display names are unstable; both server-owned fields are required. */
+    fun sourceIdentity(addonId: String?, fingerprint: String?): String? =
+        addonId?.takeIf(String::isNotBlank)?.let { addon -> fingerprint?.takeIf(String::isNotBlank)?.let { "$addon\u0000$it" } }
+    fun sourceIdentity(source: Source): String? = sourceIdentity(source.addonId, source.fingerprint)
 }
 
 /** Product-only transition policy; the backend remains the authority on the actual next source. */
@@ -76,6 +81,20 @@ object ContinuationPolicy {
             "upcoming" -> ContinuationDecision.ShowUpcoming
             else -> ContinuationDecision.KeepOutgoing
         }
+    }
+}
+
+/**
+ * A controlled continuation may stay with the active IPTV add-on or use the
+ * add-on ranked by the server for the returned episode. It never substitutes
+ * an arbitrary source merely to keep autoplay moving.
+ */
+object ContinuationSourcePolicy {
+    fun select(next: Media, outgoing: Source?, candidates: List<Source>): Source? {
+        val outgoingAddon = outgoing?.addonId?.takeIf(String::isNotBlank)
+        val rankedAddon = next.sourceAddonId?.takeIf(String::isNotBlank)
+        return outgoingAddon?.let { wanted -> candidates.firstOrNull { it.addonId == wanted } }
+            ?: rankedAddon?.let { wanted -> candidates.firstOrNull { it.addonId == wanted } }
     }
 }
 
@@ -138,7 +157,7 @@ data class Profile(
     val avatarStyle: String = "critters",
     val avatarSeed: String? = null,
 )
-data class DeviceCode(val code: String, val userCode: String, val verificationUri: String, val qrUri: String?, val intervalSeconds: Long)
+data class DeviceCode(val code: String, val userCode: String, val verificationUri: String, val verificationUriComplete: String?, val qrUri: String?, val intervalSeconds: Long)
 data class DeviceSession(val accessToken: String, val refreshToken: String, val profileId: String?)
 data class HomeShelf(val title: String, val items: List<Media>)
 data class NextResult(val status: String, val item: Media? = null)
@@ -146,6 +165,12 @@ data class Addon(val id: String, val name: String, val manifestUrl: String, val 
 data class PlaybackPreferences(
     val audioLanguage: String = "en", val subtitleLanguage: String = "en", val subtitlesEnabled: Boolean = false,
     val subtitleSize: String = "normal", val subtitleStyle: String = "system", val quality: String = "auto", val autoplay: Boolean = true,
+)
+/** Safe server-owned track facts only; URLs and request headers never enter UI state. */
+data class PlaybackTrackChoices(
+    val audio: List<PlaybackTrack> = emptyList(),
+    val subtitles: List<PlaybackTrack> = emptyList(),
+    val subtitlesSupported: Boolean = false,
 )
 data class GuideProgramme(val title: String, val startMillis: Long, val endMillis: Long, val description: String? = null)
 data class LiveChannel(val id: String, val name: String, val logo: String? = null, val category: String? = null)
@@ -170,6 +195,7 @@ data class AppState(
     val guide: List<GuideProgramme> = emptyList(),
     val addons: List<Addon> = emptyList(),
     val preferences: PlaybackPreferences = PlaybackPreferences(),
+    val playbackTracks: PlaybackTrackChoices = PlaybackTrackChoices(),
     val dialog: DialogState? = null,
     val pinPrompt: PinPrompt? = null,
     val seekPreview: SeekPreview? = null,
