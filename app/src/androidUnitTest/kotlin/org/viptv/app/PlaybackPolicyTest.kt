@@ -125,10 +125,11 @@ class MediaCardPolicyTest {
         val progressed = Media("movie", "movie", positionMillis = 10_000)
         assertEquals(MediaCardAction.ResumeExactSource, MediaCardPolicy.primary(true, progressed))
         assertEquals(MediaCardAction.OpenDetails, MediaCardPolicy.primary(false, progressed))
-        assertTrue(MediaCardPolicy.supportsChooseSourceHold(homeSurface = true, resumeSurface = false, media = progressed))
-        assertTrue(MediaCardPolicy.supportsChooseSourceHold(homeSurface = true, resumeSurface = true, media = progressed))
-        assertFalse(MediaCardPolicy.supportsChooseSourceHold(homeSurface = false, resumeSurface = false, media = progressed))
-        assertFalse(MediaCardPolicy.supportsChooseSourceHold(homeSurface = true, resumeSurface = false, media = Media("live", "live")))
+        assertTrue(HomeHoldPolicy.opensQueueManage(continueWatchingRow = true, media = progressed))
+        assertFalse(HomeHoldPolicy.opensQueueManage(continueWatchingRow = false, media = progressed))
+        assertTrue(HomeHoldPolicy.opensSourcesFromHero(continueWatchingRow = false, media = progressed))
+        assertFalse(HomeHoldPolicy.opensSourcesFromHero(continueWatchingRow = true, media = progressed))
+        assertFalse(HomeHoldPolicy.opensSourcesFromHero(continueWatchingRow = false, media = Media("live", "live")))
     }
 }
 
@@ -148,12 +149,23 @@ class HomeQueuePolicyTest {
     }
 
     @Test fun `directional input invalidates delayed Home focus restore`() {
-        val focused = HomeFocusPolicy.record(HomeFocusSnapshot(), "Continue Watching", Media("id", "movie"))
+        val focused = HomeFocusPolicy.record(HomeFocusSnapshot(), 0, "Continue Watching", Media("id", "movie"))
         val requested = HomeFocusPolicy.requestRestore(focused)
         assertTrue(HomeFocusPolicy.mayRestore(requested, requested.inputEpoch))
         val moved = HomeFocusPolicy.afterDirectionalInput(requested)
         assertFalse(HomeFocusPolicy.mayRestore(moved, requested.inputEpoch))
+        assertEquals(0, moved.shelfIndex)
         assertEquals("movie\u0000id", moved.mediaKey)
+    }
+
+    @Test fun `an older queue refresh cannot overwrite a newer Undo refresh`() {
+        assertFalse(HomeRefreshPolicy.accepts(responseGeneration = 7, currentGeneration = 8))
+        assertTrue(HomeRefreshPolicy.accepts(responseGeneration = 8, currentGeneration = 8))
+    }
+
+    @Test fun `queue row role is metadata rather than its display title`() {
+        assertTrue(HomeShelf("Localized queue label", emptyList(), isQueueShelf = true).isQueueShelf)
+        assertFalse(HomeShelf("Continue Watching", emptyList()).isQueueShelf)
     }
 }
 
@@ -275,6 +287,10 @@ class BackAvailabilityPolicyTest {
 
     @Test fun `an empty Guide filter still owns Guide Back rather than legacy Live`() {
         assertTrue(BackAvailabilityPolicy.consumes(AppState(route = Route.Guide())))
+    }
+
+    @Test fun `queued next preparation owns Back while its route is still Home`() {
+        assertTrue(BackAvailabilityPolicy.consumes(AppState(route = Route.Browse(Destination.Home), queueContinuationPending = true)))
     }
 }
 

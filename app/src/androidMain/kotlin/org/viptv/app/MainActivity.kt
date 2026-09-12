@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.view.KeyEvent
 import android.view.SurfaceView
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.compose.rememberAsyncImagePainter
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
@@ -46,6 +48,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
@@ -192,7 +195,9 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
 }
 
 @Composable private fun Browse(state: AppState, destination: Destination, controller: AppController) = Box(Modifier.fillMaxSize()) {
-    val homeCards = state.shelves.flatMap { shelf -> shelf.items.map { media -> HomeCardFocus(shelf.title, media) } }
+    val homeCards = state.shelves.flatMapIndexed { shelfIndex, shelf ->
+        shelf.items.map { media -> HomeCardFocus(shelfIndex, shelf.title, shelf.isQueueShelf, media) }
+    }
     val homeCardKeys = homeCards.map { it.key }
     // Keep requesters by identity across Home refreshes. Replacing every
     // requester when a later shelf arrives can detach the focused card before
@@ -211,12 +216,12 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
         delay(150)
         if (!HomeFocusPolicy.mayRestore(currentHomeFocus, inputEpoch)) return@LaunchedEffect
         val target = homeCards.firstOrNull {
-            it.shelfTitle == currentHomeFocus.shelfTitle && HomeFocusPolicy.mediaKey(it.media) == currentHomeFocus.mediaKey
+            it.shelfIndex == currentHomeFocus.shelfIndex && HomeFocusPolicy.mediaKey(it.media) == currentHomeFocus.mediaKey
         } ?: homeCards.first()
         homeRequesters[target.key]?.requestFocus()
     }
     val heroCard = homeCards.firstOrNull {
-        it.shelfTitle == state.homeFocus.shelfTitle && HomeFocusPolicy.mediaKey(it.media) == state.homeFocus.mediaKey
+        it.shelfIndex == state.homeFocus.shelfIndex && HomeFocusPolicy.mediaKey(it.media) == state.homeFocus.mediaKey
     } ?: homeCards.firstOrNull()
     val compactHomeHero = destination == Destination.Home && heroCard?.shelfTitle != state.shelves.firstOrNull()?.title
     Box(
@@ -228,7 +233,7 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
         },
     ) {
         val hero = heroCard?.media
-        if (destination == Destination.Home && hero != null) HomeHero(hero, controller, heroCard?.shelfTitle == "Continue Watching", compactHomeHero)
+        if (destination == Destination.Home && hero != null) HomeHero(hero, controller, heroCard?.isQueueShelf == true, compactHomeHero)
         Column(
             Modifier.fillMaxSize()
                 .padding(
@@ -251,13 +256,15 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
                 if (!state.loading && state.liveChannels.isEmpty()) Text("No channels are available for this filter.", color = Muted, modifier = Modifier.padding(top = 120.dp))
             } else {
                 val shelves = if (destination == Destination.Home) state.shelves else listOf(HomeShelf(destination.label, state.catalog.ifEmpty { state.shelves.flatMap(HomeShelf::items) }))
-                shelves.forEach { shelf ->
+                shelves.forEachIndexed { shelfIndex, shelf ->
                     Shelf(
                         shelf = shelf,
                         controller = controller,
                         focusRequesters = if (destination == Destination.Home) homeRequesters else emptyMap(),
                         onCardFocused = if (destination == Destination.Home) controller::recordHomeFocus else null,
                         homeSurface = destination == Destination.Home,
+                        shelfIndex = shelfIndex,
+                        queueShelf = destination == Destination.Home && shelf.isQueueShelf,
                         topPadding = if (destination == Destination.Home) 0.dp else 26.dp,
                     )
                 }
@@ -268,8 +275,13 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
     Rail(destination, controller)
 }
 
-private data class HomeCardFocus(val shelfTitle: String, val media: Media) {
-    val key: String = "$shelfTitle\u0001${HomeFocusPolicy.mediaKey(media)}"
+private data class HomeCardFocus(
+    val shelfIndex: Int,
+    val shelfTitle: String,
+    val isQueueShelf: Boolean,
+    val media: Media,
+) {
+    val key: String = "$shelfIndex\u0001$shelfTitle\u0001${HomeFocusPolicy.mediaKey(media)}"
 }
 
 private val HomeDirectionalKeys = setOf(
@@ -293,8 +305,27 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
     val density = LocalDensity.current
     val leftGradientEnd = with(density) { 760.dp.toPx() }
     val bottomGradientStart = with(density) { 140.dp.toPx() }
-    if (!media.poster.isNullOrBlank()) {
-        AsyncImage(model = media.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+    // Coil may need a network round-trip when focus changes. Keep the last
+    // decoded Home image behind the next request until the sharper painter is
+    // actually ready; dropping straight to canvas causes a visible flash.
+    var retainedPosterPainter by remember { mutableStateOf<Painter?>(null) }
+    val poster = media.poster?.takeIf(String::isNotBlank)
+    if (poster != null) {
+        val requestedPainter = rememberAsyncImagePainter(model = poster)
+        val readyPainter = (requestedPainter.state as? AsyncImagePainter.State.Success)
+            ?.takeIf { it.result.request.data == poster }
+            ?.painter
+        LaunchedEffect(readyPainter) {
+            if (readyPainter != null) retainedPosterPainter = readyPainter
+        }
+        (readyPainter ?: retainedPosterPainter)?.let { painter ->
+            Image(
+                painter = painter,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
     // The server currently supplies landscape poster art only. These source-faithful
     // overlays preserve readable hero copy until a dedicated backdrop field arrives.
@@ -324,6 +355,14 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
         modifier = Modifier.offset(100.dp, if (compact) 178.dp else 228.dp).width(548.dp).height(80.dp),
     )
     val action = MediaCardPolicy.primary(resumeSurface, media)
+    val homeHold = when {
+        HomeHoldPolicy.opensQueueManage(resumeSurface, media) -> ({ controller.requestQueueManage(media) })
+        HomeHoldPolicy.opensSourcesFromHero(resumeSurface, media) -> ({ controller.chooseSources(media, origin = SourceReturn.Home) })
+        else -> null
+    }
+    if (!compact && homeHold != null) {
+        Text("Hold OK or Menu for options", color = Muted, fontSize = 14.sp, modifier = Modifier.offset(100.dp, 350.dp))
+    }
     if (!compact) Row(Modifier.offset(100.dp, 375.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         TvButton(
             when (action) {
@@ -333,13 +372,8 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
             },
             { activateHomeCard(action, media, controller) },
             Modifier.width(if (action == MediaCardAction.PlayQueuedNext) 236.dp else 144.dp).height(50.dp),
-            onHold = when (action) {
-                MediaCardAction.PlayQueuedNext -> ({ controller.requestQueueManage(media) })
-                MediaCardAction.ResumeExactSource,
-                MediaCardAction.OpenDetails -> media.takeIf {
-                    MediaCardPolicy.supportsChooseSourceHold(homeSurface = true, resumeSurface = resumeSurface, media = it)
-                }?.let { ({ controller.chooseSources(it, origin = SourceReturn.Home) }) }
-            },
+            onHold = homeHold,
+            onInfo = homeHold,
         )
         TvButton("My List", { controller.toggleMyList(media) }, Modifier.width(144.dp).height(50.dp))
     }
@@ -376,21 +410,24 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
     shelf: HomeShelf,
     controller: AppController,
     focusRequesters: Map<String, FocusRequester> = emptyMap(),
-    onCardFocused: ((String, Media) -> Unit)? = null,
+    onCardFocused: ((Int, String, Media) -> Unit)? = null,
     homeSurface: Boolean = false,
+    shelfIndex: Int = -1,
+    queueShelf: Boolean = false,
     topPadding: androidx.compose.ui.unit.Dp = 26.dp,
 ) = Column(Modifier.padding(top = topPadding)) {
     Text(shelf.title, color = White, fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 10.dp))
-    val resumeSurface = shelf.title == "Continue Watching"
+    val resumeSurface = queueShelf
     LazyRow(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
         itemsIndexed(shelf.items, key = { _, media -> HomeFocusPolicy.mediaKey(media) }) { _, media ->
             MediaCard(
                 media = media,
                 controller = controller,
-                focusRequester = focusRequesters[HomeCardFocus(shelf.title, media).key],
+                focusRequester = focusRequesters[HomeCardFocus(shelfIndex, shelf.title, queueShelf, media).key],
                 resumeSurface = resumeSurface,
                 homeSurface = homeSurface,
-                onFocused = { onCardFocused?.invoke(shelf.title, media) },
+                queueCard = queueShelf,
+                onFocused = { onCardFocused?.invoke(shelfIndex, shelf.title, media) },
             )
         }
     }
@@ -402,6 +439,7 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
     focusRequester: FocusRequester? = null,
     resumeSurface: Boolean = false,
     homeSurface: Boolean = false,
+    queueCard: Boolean = false,
     onFocused: (() -> Unit)? = null,
 ) {
     val action = MediaCardPolicy.primary(resumeSurface, media)
@@ -409,8 +447,7 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
     Holdable(
         { activateHomeCard(action, media, controller) },
         when {
-            homeSurface && action == MediaCardAction.PlayQueuedNext -> ({ controller.requestQueueManage(media) })
-            MediaCardPolicy.supportsChooseSourceHold(homeSurface, resumeSurface, media) -> ({ controller.chooseSources(media, origin = SourceReturn.Home) })
+            HomeHoldPolicy.opensQueueManage(queueCard, media) -> ({ controller.requestQueueManage(media) })
             else -> null
         },
         Modifier.width(256.dp).height(200.dp).then(if (focusRequester == null) Modifier else Modifier.focusRequester(focusRequester))
@@ -419,6 +456,7 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
                 if (focus.hasFocus) onFocused?.invoke()
             }
             .then(if (focused) Modifier.border(2.dp, White, RoundedCornerShape(8.dp)) else Modifier),
+        onInfo = if (HomeHoldPolicy.opensQueueManage(queueCard, media)) ({ controller.requestQueueManage(media) }) else null,
     ) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxWidth().height(144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)), contentAlignment = Alignment.Center) {
@@ -459,7 +497,7 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
-    Text("Hold a source for details", color = Muted, fontSize = 16.sp, textAlign = TextAlign.End, modifier = Modifier.offset(836.dp, 178.dp).width(360.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Text("Hold OK or Menu for details", color = Muted, fontSize = 16.sp, textAlign = TextAlign.End, modifier = Modifier.offset(836.dp, 178.dp).width(360.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
     if (providers.isNotEmpty()) LazyRow(Modifier.offset(292.dp, 166.dp).width(520.dp).height(48.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         item { TvButton("All providers", { provider = null; requestFirstSourceFocus = true }, selected = provider == null, modifier = Modifier.width(170.dp).height(48.dp)) }
         items(providers, key = { it }) { item ->
@@ -497,6 +535,7 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
             .then(if (focusRequester == null) Modifier else Modifier.focusRequester(focusRequester))
             .onFocusChanged { focused = it.hasFocus }
             .background(if (focused) White else Surface, RoundedCornerShape(12.dp)),
+        onInfo = { controller.requestDialog(DialogKind.SourceDetails, SourceDisplayPolicy.title(source), source = source) },
     ) {
         Column(Modifier.fillMaxSize().padding(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 10.dp)) {
             Text(SourceDisplayPolicy.title(source), color = foreground, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -679,6 +718,7 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
     multiline: Boolean = false,
     content: (@Composable BoxScope.() -> Unit)? = null,
     onHold: (() -> Unit)? = null,
+    onInfo: (() -> Unit)? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     val fill = when {
@@ -690,6 +730,7 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
         onActivate,
         onHold,
         modifier.onFocusChanged { focused = it.hasFocus }.background(fill, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp),
+        onInfo = onInfo,
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             if (content == null) Text(label, color = if (focused) Canvas else White, fontWeight = FontWeight.Bold, maxLines = if (multiline) 4 else 1, overflow = TextOverflow.Ellipsis)
@@ -699,13 +740,26 @@ private fun activateHomeCard(action: MediaCardAction, media: Media, controller: 
 }
 
 /** 700ms remote hold: exactly one action on release; hold suppresses ordinary activation. */
-@Composable internal fun Holdable(onActivate: () -> Unit, onHold: (() -> Unit)?, modifier: Modifier, selected: Boolean = false, content: @Composable BoxScope.() -> Unit) {
+@Composable internal fun Holdable(
+    onActivate: () -> Unit,
+    onHold: (() -> Unit)?,
+    modifier: Modifier,
+    selected: Boolean = false,
+    onInfo: (() -> Unit)? = null,
+    content: @Composable BoxScope.() -> Unit,
+) {
     var downAt by remember { mutableLongStateOf(0L) }; var held by remember { mutableStateOf(false) }
     LaunchedEffect(downAt, onHold) { if (downAt != 0L && onHold != null) { delay(HoldPolicy.thresholdMillis); if (downAt != 0L) { held = true; onHold() } } }
     Box(modifier = modifier.then(if (selected) Modifier.border(2.dp, White, RoundedCornerShape(12.dp)) else Modifier)
         .onFocusChanged { if (!it.hasFocus && downAt != 0L) { downAt = 0L; held = true } }
         .onPreviewKeyEvent { event ->
-            val key = event.nativeKeyEvent; if (key.keyCode != KeyEvent.KEYCODE_DPAD_CENTER && key.keyCode != KeyEvent.KEYCODE_ENTER) return@onPreviewKeyEvent false
+            val key = event.nativeKeyEvent
+            if (key.keyCode == KeyEvent.KEYCODE_MENU || key.keyCode == KeyEvent.KEYCODE_INFO) {
+                if (onInfo == null) return@onPreviewKeyEvent false
+                if (key.action == KeyEvent.ACTION_DOWN && key.repeatCount == 0) onInfo()
+                return@onPreviewKeyEvent true
+            }
+            if (key.keyCode != KeyEvent.KEYCODE_DPAD_CENTER && key.keyCode != KeyEvent.KEYCODE_ENTER) return@onPreviewKeyEvent false
             if (key.action == KeyEvent.ACTION_DOWN && HoldPressPolicy.begins(downAt, key.repeatCount)) { downAt = key.eventTime; held = false; true }
             else if (key.action == KeyEvent.ACTION_UP) { val doActivate = HoldPressPolicy.activatesOnRelease(downAt, held); downAt = 0L; if (doActivate) onActivate(); true } else true
         }.clickable(onClick = onActivate), contentAlignment = Alignment.Center, content = content)

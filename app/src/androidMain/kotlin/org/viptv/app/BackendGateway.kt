@@ -300,7 +300,11 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         val continuing = json("GET", "/profiles/${enc(profileId)}/continue/page?limit=40").mediaArray("items", "rows", "metas")
         val recent = json("GET", "/profiles/${enc(profileId)}/progress/page?limit=40").mediaArray("items", "rows", "metas")
         val movies = discover("movie")
-        return listOf(HomeShelf("Continue Watching", continuing), HomeShelf("Recently Watched", recent), HomeShelf("Trending", movies)).filter { it.items.isNotEmpty() }
+        return listOf(
+            HomeShelf("Continue Watching", continuing, isQueueShelf = true),
+            HomeShelf("Recently Watched", recent),
+            HomeShelf("Trending", movies),
+        ).filter { it.items.isNotEmpty() }
     }
     override suspend fun discover(type: String, search: String?): List<Media> = json("GET", discoverPath(type, search = search)).mediaArray("metas", "items", "rows")
     override suspend fun catalogs(): List<DiscoverCatalog> = jsonArray("GET", "/catalogs")

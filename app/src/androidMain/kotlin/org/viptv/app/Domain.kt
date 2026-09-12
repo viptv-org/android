@@ -61,9 +61,14 @@ object MediaCardPolicy {
             resumeSurface && media.positionMillis > 0 && media.type != "live" -> MediaCardAction.ResumeExactSource
             else -> MediaCardAction.OpenDetails
         }
-    /** Only Home uses this source-control hold; library cards have their own management holds. */
-    fun supportsChooseSourceHold(homeSurface: Boolean, resumeSurface: Boolean, media: Media): Boolean =
-        homeSurface && media.type != "live" && primary(resumeSurface, media) != MediaCardAction.PlayQueuedNext
+}
+
+/** Exact Roku Home hold/Info inventory; ordinary shelf cards do not invent source menus. */
+object HomeHoldPolicy {
+    /** Continue Watching is logical Home row zero and always opens Queue Manage. */
+    fun opensQueueManage(continueWatchingRow: Boolean, media: Media): Boolean = continueWatchingRow && QueuePolicy.canManage(media)
+    /** Other Home hero VOD/episodes retain the explicit manual source control. */
+    fun opensSourcesFromHero(continueWatchingRow: Boolean, media: Media): Boolean = !continueWatchingRow && media.type != "live"
 }
 
 /**
@@ -94,6 +99,7 @@ object QueuePolicy {
 }
 
 data class HomeFocusSnapshot(
+    val shelfIndex: Int? = null,
     val shelfTitle: String? = null,
     val mediaKey: String? = null,
     /** Incremented when a route explicitly returns to Home and asks Compose to restore. */
@@ -104,11 +110,16 @@ data class HomeFocusSnapshot(
 
 object HomeFocusPolicy {
     fun mediaKey(media: Media): String = "${media.type}\u0000${media.id}"
-    fun record(current: HomeFocusSnapshot, shelfTitle: String, media: Media): HomeFocusSnapshot =
-        current.copy(shelfTitle = shelfTitle, mediaKey = mediaKey(media))
+    fun record(current: HomeFocusSnapshot, shelfIndex: Int, shelfTitle: String, media: Media): HomeFocusSnapshot =
+        current.copy(shelfIndex = shelfIndex, shelfTitle = shelfTitle, mediaKey = mediaKey(media))
     fun afterDirectionalInput(current: HomeFocusSnapshot): HomeFocusSnapshot = current.copy(inputEpoch = current.inputEpoch + 1)
     fun requestRestore(current: HomeFocusSnapshot): HomeFocusSnapshot = current.copy(restoreRequest = current.restoreRequest + 1)
     fun mayRestore(snapshot: HomeFocusSnapshot, observedInputEpoch: Long): Boolean = snapshot.inputEpoch == observedInputEpoch
+}
+
+/** An older queue refresh must never overwrite a later Undo response. */
+object HomeRefreshPolicy {
+    fun accepts(responseGeneration: Long, currentGeneration: Long): Boolean = responseGeneration == currentGeneration
 }
 
 /** Product policy from the design contract. The player adapter does not choose sources. */
@@ -227,7 +238,7 @@ object BackAvailabilityPolicy {
         is Route.Profiles -> state.managingProfiles || state.selectedProfile != null
         is Route.Browse -> state.route.destination != Destination.Home
         Route.Pairing -> false
-    } || state.dialog != null || state.pinPrompt != null || state.seekPreview != null
+    } || state.dialog != null || state.pinPrompt != null || state.seekPreview != null || state.queueContinuationPending
 }
 
 object SeekPolicy {
@@ -334,7 +345,11 @@ data class Profile(
 )
 data class DeviceCode(val code: String, val userCode: String, val verificationUri: String, val verificationUriComplete: String?, val qrUri: String?, val intervalSeconds: Long)
 data class DeviceSession(val accessToken: String, val refreshToken: String, val profileId: String?)
-data class HomeShelf(val title: String, val items: List<Media>)
+/**
+ * Home rows carry their role separately from server-provided display copy.
+ * Queue controls follow this flag even when the row has just become empty.
+ */
+data class HomeShelf(val title: String, val items: List<Media>, val isQueueShelf: Boolean = false)
 data class NextResult(val status: String, val item: Media? = null)
 data class Addon(val id: String, val name: String, val manifestUrl: String, val enabled: Boolean)
 /** Deliberately minimal, account-safe facts for the informational Settings section. */
@@ -480,6 +495,8 @@ data class AppState(
     val sources: List<Source> = emptyList(),
     val favorites: List<Media> = emptyList(),
     val queue: List<Media> = emptyList(),
+    /** Queued Next is cancellable from Home before it has a source route. */
+    val queueContinuationPending: Boolean = false,
     /** Query-owned state survives focus moves between keyboard and source-labelled rows. */
     val searchQuery: String = "",
     val searchStatus: String = "Find your next favorite.",

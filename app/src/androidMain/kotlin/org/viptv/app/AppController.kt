@@ -35,6 +35,8 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private var pairingPoll: Job? = null
     private var sourceDiscovery: Job? = null
     private var queueContinuationJob: Job? = null
+    /** Last queue/Home refresh wins over any earlier response racing Undo. */
+    private var homeRefreshGeneration = 0L
     private var discoverJob: Job? = null
     private var searchJob: Job? = null
     private var nextEpisodeJob: Job? = null
@@ -1141,8 +1143,14 @@ class AppController(context: Context, private val origin: String = "https://vipt
         if (!QueuePolicy.hasResolvedNext(queueItem)) return
         cancelPendingQueueContinuation()
         val requestGeneration = ++playbackGeneration
+        // Publish this before launching so Back is owned even if the user
+        // presses it between this call and the coroutine's first dispatch.
+        _state.value = _state.value.copy(
+            loading = true,
+            message = "Preparing next episode…",
+            queueContinuationPending = true,
+        )
         queueContinuationJob = scope.launch {
-            update(loading = true, message = "Preparing next episode…")
             try {
                 val result = gateway.nextEpisode(requireProfile(), previous)
                 if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
@@ -1151,6 +1159,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                     _state.value = _state.value.copy(
                         loading = false,
                         message = null,
+                        queueContinuationPending = false,
                         dialog = DialogState(DialogKind.NextUnavailable, queueNextUnavailableMessage(result.status), media = previous),
                     )
                     return@launch
@@ -1168,6 +1177,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                     route = Route.Sources(next, origin = SourceReturn.Home),
                     sources = candidates,
                     loading = false,
+                    queueContinuationPending = false,
                     message = if (selected == null) "Choose a source for the next episode." else null,
                 )
                 if (selected != null) start(next, selected)
@@ -1178,6 +1188,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                     _state.value = _state.value.copy(
                         loading = false,
                         message = null,
+                        queueContinuationPending = false,
                         dialog = DialogState(DialogKind.NextUnavailable, "Episode information is unavailable. Open the series to choose an episode.", media = previous),
                     )
                 }
@@ -1196,7 +1207,8 @@ class AppController(context: Context, private val origin: String = "https://vipt
             val displayKey = HomeFocusPolicy.mediaKey(media)
             val targetKey = HomeFocusPolicy.mediaKey(target)
             val shelves = _state.value.shelves.map { shelf ->
-                if (shelf.title == "Continue Watching") shelf.copy(items = shelf.items.filterNot {
+                // The queue role is data, not localized server display text.
+                if (shelf.isQueueShelf) shelf.copy(items = shelf.items.filterNot {
                     val key = HomeFocusPolicy.mediaKey(it)
                     key == displayKey || key == targetKey || HomeFocusPolicy.mediaKey(QueuePolicy.manageTarget(it)) == targetKey
                 }) else shelf
@@ -1221,17 +1233,25 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
     }
     private fun refreshHomeAfterQueueMutation() = scope.launch {
+        val generation = ++homeRefreshGeneration
         val profile = _state.value.selectedProfile ?: return@launch
         runCatching { gateway.home(profile.id) }.onSuccess { shelves ->
-            if (_state.value.selectedProfile?.id == profile.id) _state.value = _state.value.copy(shelves = shelves, queue = shelves.firstOrNull { it.title == "Continue Watching" }?.items.orEmpty())
+            if (HomeRefreshPolicy.accepts(generation, homeRefreshGeneration) && _state.value.selectedProfile?.id == profile.id) {
+                _state.value = _state.value.copy(shelves = shelves, queue = shelves.firstOrNull(HomeShelf::isQueueShelf)?.items.orEmpty())
+            }
         }.onFailure {
             // The acknowledged mutation is already represented locally. Retain
             // that truthful state and let the next Home visit retry refresh.
-            if (_state.value.route == Route.Browse(Destination.Home)) _state.value = _state.value.copy(message = "Continue Watching will refresh when available.")
+            if (
+                HomeRefreshPolicy.accepts(generation, homeRefreshGeneration) &&
+                _state.value.route == Route.Browse(Destination.Home)
+            ) {
+                _state.value = _state.value.copy(message = "Continue Watching will refresh when available.")
+            }
         }
     }
-    fun recordHomeFocus(shelfTitle: String, media: Media) {
-        if (_state.value.route == Route.Browse(Destination.Home)) _state.value = _state.value.copy(homeFocus = HomeFocusPolicy.record(_state.value.homeFocus, shelfTitle, media))
+    fun recordHomeFocus(shelfIndex: Int, shelfTitle: String, media: Media) {
+        if (_state.value.route == Route.Browse(Destination.Home)) _state.value = _state.value.copy(homeFocus = HomeFocusPolicy.record(_state.value.homeFocus, shelfIndex, shelfTitle, media))
     }
     fun recordHomeDirectionalInput() {
         if (_state.value.route == Route.Browse(Destination.Home)) {
@@ -1250,7 +1270,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
         queueContinuationJob?.cancel()
         queueContinuationJob = null
         invalidatePlaybackPreparation()
-        if (_state.value.loading) _state.value = _state.value.copy(loading = false, message = null)
+        if (_state.value.loading || _state.value.queueContinuationPending) _state.value = _state.value.copy(loading = false, message = null, queueContinuationPending = false)
     }
     fun correctEpisode(media: Media, watched: Boolean) = scope.launch { guarded("Enter parent PIN") { gateway.correctProgress(requireProfile(), media, if (watched) "watched" else "unwatched"); _state.value = _state.value.copy(message = if (watched) "Marked watched." else "Marked unwatched.") } }
     fun setPreference(preferences: PlaybackPreferences) = scope.launch { guarded("Enter parent PIN") { gateway.savePreferences(requireProfile(), preferences); _state.value = _state.value.copy(preferences = preferences, message = "Applies to your next playback. Manual track choices take priority.") } }
