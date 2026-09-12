@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -82,7 +83,7 @@ internal fun RokuHomeScreen(state: AppState, controller: AppController) {
             RokuLabel(if (shelves.firstOrNull()?.isQueueShelf == true) "CONTINUE WATCHING" else if (hero.type == "live") "LIVE NOW" else "FEATURED ${hero.type.uppercase()}",100,128,650,14,color=Color(0xFFC5C6C7))
             RokuLabel(hero.name,100,166,600,44,bold=true,marquee=true)
             RokuLabel(hero.description.orEmpty(),100,228,548,20,lines=3,color=Color(0xFFD5D6D7))
-            RokuLabel(rokuFacts(hero),100,322,650,18,color=Color(0xFFC5C6C7))
+            RokuLabel(rokuHeroFacts(hero),100,322,650,18,color=Color(0xFFC5C6C7))
             val queue = shelves.firstOrNull()?.isQueueShelf == true
             Row(Modifier.offset(100.dp,375.dp), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 Holdable(onActivate={activate(hero,queue,true)}, onHold=when {queue&&QueuePolicy.canManage(hero)->{{controller.requestQueueManage(hero)}};HomeHoldPolicy.opensSourcesFromHero(false,hero)->{{controller.chooseSources(hero,origin=SourceReturn.Home)}};else->null}, modifier=Modifier.width(if(QueuePolicy.hasResolvedNext(hero))236.dp else 144.dp).height(50.dp).focusRequester(heroFocus).onPreviewKeyEvent { event -> if(event.nativeKeyEvent.action==KeyEvent.ACTION_DOWN&&event.nativeKeyEvent.keyCode==KeyEvent.KEYCODE_DPAD_DOWN) { requesters.firstOrNull()?.getOrNull(column)?.requestFocus();true } else if(event.nativeKeyEvent.action==KeyEvent.ACTION_DOWN&&event.nativeKeyEvent.keyCode==KeyEvent.KEYCODE_DPAD_LEFT) {railFocus.requestFocus();true} else false }.onFocusChanged { heroFocused=it.hasFocus; if(it.hasFocus) controller.recordHomeFocus(row,shelves[row].title,hero,HomeFocusSurface.Hero) }) {
@@ -93,10 +94,10 @@ internal fun RokuHomeScreen(state: AppState, controller: AppController) {
         }
         if(shelves.isEmpty()) {
             RokuLabel(if(state.loading) "Loading…" else "Nothing here yet",250,304,780,32,bold=true,align=TextAlign.Center)
-        } else LazyColumn(state=list,modifier=Modifier.offset(92.dp,if(expanded)466.dp else 100.dp).width(1188.dp).height(if(expanded)254.dp else 620.dp).clip(androidx.compose.ui.graphics.RectangleShape),userScrollEnabled=false,verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        } else LazyColumn(state=list,modifier=Modifier.offset(92.dp,if(expanded)466.dp else 100.dp).width(1188.dp).height(if(expanded)254.dp else 620.dp).clip(androidx.compose.ui.graphics.RectangleShape),userScrollEnabled=false,verticalArrangement=Arrangement.spacedBy(14.dp)) {
             itemsIndexed(shelves) { shelfIndex,shelf ->
                 Column(Modifier.padding(start=8.dp,top=8.dp)) {
-                    Text(shelf.title,color=RokuWhite,fontSize=22.sp,fontWeight=FontWeight.Bold,modifier=Modifier.height(34.dp))
+                    Text(shelf.title.uppercase(),color=RokuWhite,fontSize=18.sp,fontWeight=FontWeight.Bold,modifier=Modifier.height(32.dp))
                     LazyRow(state=horizontal[shelfIndex],horizontalArrangement=Arrangement.spacedBy(24.dp),modifier=Modifier.height(200.dp)) {
                         itemsIndexed(shelf.items) { cardIndex,media ->
                             RokuArtworkCard(media,Modifier.focusRequester(requesters[shelfIndex][cardIndex]).onFocusChanged { if(it.hasFocus) {row=shelfIndex;column=cardIndex;controller.recordHomeFocus(shelfIndex,shelf.title,media);scope.launch { list.scrollToItem(shelfIndex) }} }.onPreviewKeyEvent {
@@ -136,7 +137,34 @@ internal fun RokuBackdrop(uri:String?,height:Int=720) {
     }
 }
 
-internal fun rokuFacts(media:Media):String = listOfNotNull(media.year,media.runtime,media.genres.take(2).joinToString(" / ").takeIf {it.isNotBlank()},if(media.season!=null&&media.episode!=null)"S${media.season} E${media.episode}" else null).joinToString("  ·  ")
+/** PresentationContext, PresentationFacts and HeroPanel.render from the Roku source. */
+internal fun rokuContext(media: Media): String = when (media.queueStatus) {
+    "caught_up" -> "You're caught up"
+    "upcoming" -> "Next episode not released"
+    "pending", "unavailable" -> "Find next episode"
+    "next" -> "Up next · S${media.season} E${media.episode}"
+    else -> listOfNotNull(
+        media.season?.let { "Season $it" },
+        media.episode?.let { "Episode $it" },
+        media.episodeTitle?.takeIf { it.isNotBlank() },
+        media.positionMillis.takeIf { it > 0 }?.let { "Resume at ${rokuResumeTime(it)}" },
+    ).joinToString("  ·  ")
+}
+private fun rokuResumeTime(millis: Long): String {
+    val seconds = millis / 1000
+    return if (seconds >= 3600) "${seconds / 3600}:${((seconds / 60) % 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}"
+    else "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
+}
+internal fun rokuFacts(media: Media): String = listOfNotNull(
+    media.type.uppercase().takeIf { media.type in listOf("movie", "series", "live") },
+    media.year, media.imdbRating?.takeIf {it.isNotBlank()}?.let {"IMDb $it"}, media.runtime,
+    media.genres.take(3).joinToString(" / ").takeIf { it.isNotBlank() },
+).joinToString("  ·  ")
+private fun rokuHeroFacts(media: Media): String = listOfNotNull(
+    media.year, media.runtime,
+    media.genres.take(2).joinToString(" / ").takeIf { it.isNotBlank() },
+    rokuContext(media).takeIf { it.isNotBlank() },
+).joinToString("  ·  ")
 
 @Composable
 internal fun RokuLabel(text:String,x:Int,y:Int,width:Int,size:Int,lines:Int=1,bold:Boolean=false,color:Color=RokuWhite,marquee:Boolean=false,align:TextAlign=TextAlign.Start) {
@@ -146,19 +174,20 @@ internal fun RokuLabel(text:String,x:Int,y:Int,width:Int,size:Int,lines:Int=1,bo
 @Composable
 internal fun RokuArtworkCard(media:Media,modifier:Modifier=Modifier,onActivate:()->Unit,onHold:(()->Unit)?=null,height:Int=200) {
     var focused by remember {mutableStateOf(false)}
-    Holdable(onActivate,onHold,modifier.width(256.dp).height(height.dp).onFocusChanged {focused=it.hasFocus}.then(if(focused)Modifier.border(2.dp,RokuWhite,RoundedCornerShape(8.dp))else Modifier)) {
+    Holdable(onActivate,onHold,modifier.width(256.dp).height(height.dp).onFocusChanged {focused=it.hasFocus}) {
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.width(256.dp).height(144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)),contentAlignment=Alignment.Center) {
                 Text(media.name,color=RokuMuted,fontSize=19.sp,maxLines=3,textAlign=TextAlign.Center,modifier=Modifier.padding(12.dp))
                 AsyncImage(media.thumbnail?:media.backdrop?:media.poster,null,contentScale=if(media.type=="live")ContentScale.Fit else ContentScale.Crop,modifier=if(media.type=="live")Modifier.size(176.dp,100.dp)else Modifier.fillMaxSize())
                 val duration=media.durationMillis
-                if(duration!=null&&duration>0) {
+                if(duration!=null&&duration>0&&media.positionMillis>0) {
                     Box(Modifier.offset(8.dp,134.dp).align(Alignment.TopStart).size(240.dp,6.dp).background(Color(0xFF4A4C4E)))
                     if(media.positionMillis>0)Box(Modifier.offset(8.dp,134.dp).align(Alignment.TopStart).size((240f*media.positionMillis.toFloat()/duration).coerceIn(6f,240f).dp,6.dp).background(RokuWhite,RoundedCornerShape(3.dp)))
                 }
             }
-            RokuLabel(media.name,0,152,256,22,bold=true,marquee=focused)
-            RokuLabel(if(media.episode!=null)"S${media.season} E${media.episode}" else media.type,0,178,256,17,color=RokuMuted,marquee=focused)
+            AsyncImage(rokuAsset("ui-card-focus.png"),null,contentScale=ContentScale.FillBounds,modifier=Modifier.size(256.dp,144.dp).alpha(if(focused)1f else .35f))
+            RokuLabel(media.name,0,152,256,21,bold=true,marquee=focused)
+            RokuLabel(rokuContext(media).ifBlank {rokuFacts(media)},0,178,256,17,color=RokuMuted,marquee=focused)
         }
     }
 }

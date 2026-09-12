@@ -27,6 +27,7 @@ data class Media(
     val genres: List<String> = emptyList(),
     val credits: String? = null,
     val watched: Boolean = false,
+    val imdbRating: String? = null,
 )
 
 data class Source(

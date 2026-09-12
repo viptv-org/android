@@ -330,6 +330,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 backdrop = metadata.backdrop ?: media.backdrop,
                 thumbnail = metadata.thumbnail ?: media.thumbnail,
                 year = metadata.year ?: media.year,
+                imdbRating = metadata.imdbRating ?: media.imdbRating,
                 runtime = metadata.runtime ?: media.runtime,
                 genres = metadata.genres.ifEmpty { media.genres },
                 credits = metadata.credits ?: media.credits,

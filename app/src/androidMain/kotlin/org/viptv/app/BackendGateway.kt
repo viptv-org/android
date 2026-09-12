@@ -296,14 +296,32 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         return (0 until array.length()).map { index -> array.getJSONObject(index).profile() } to root.opt("profile_id")?.toString()
     }
     override suspend fun selectProfile(profileId: String) { json("POST", "/auth/profile", JSONObject().put("profile_id", profileId)) }
-    override suspend fun home(profileId: String): List<HomeShelf> {
-        val continuing = json("GET", "/profiles/${enc(profileId)}/continue/page?limit=40").mediaArray("items", "rows", "metas")
-        val recent = json("GET", "/profiles/${enc(profileId)}/progress/page?limit=40").mediaArray("items", "rows", "metas")
-        val movies = discover("movie")
-        return listOf(
-            HomeShelf("Continue Watching", continuing, isQueueShelf = true),
-            HomeShelf("Recently Watched", recent),
-            HomeShelf("Trending", movies),
+    override suspend fun home(profileId: String): List<HomeShelf> = coroutineScope {
+        suspend fun optionalFeed(load: suspend () -> List<Media>): List<Media> = try { load() }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: GatewayError) { if (error.status == 401 || error.status == 403) throw error else emptyList() }
+        catch (_: java.io.IOException) { emptyList() }
+        val catalogList = async { catalogs() }
+        suspend fun catalogFeed(type: String): List<Media> {
+            val catalog = catalogList.await().firstOrNull { it.key.type == type } ?: return emptyList()
+            return json("GET", "/discover?type=${enc(type)}&addon_id=${enc(catalog.key.addonId)}&catalog=${enc(catalog.key.id)}&skip=0").mediaArray("metas", "items", "rows")
+        }
+        suspend fun channels(path: String): List<Media> = json("GET", path).array("items", "channels").mapNotNull { it.optJSONObject()?.channel()?.asMedia() }
+        val queue = async { optionalFeed { json("GET", "/profiles/${enc(profileId)}/continue/page?limit=13").mediaArray("items", "rows", "metas") } }
+        val recent = async { optionalFeed { channels("/live?view=us&collection=recent&limit=24") } }
+        val movies = async { optionalFeed { catalogFeed("movie") } }
+        val series = async { optionalFeed { catalogFeed("series") } }
+        val live = async { optionalFeed { channels("/live?view=us&offset=0&limit=12&search=") } }
+        val saved = async { optionalFeed { json("GET", "/profiles/${enc(profileId)}/favorites/page?limit=13&exclude_live=true").mediaArray("items", "rows", "metas") } }
+        val favoriteChannels = async { optionalFeed { channels("/live?view=us&collection=favorites&limit=24") } }
+        listOf(
+            HomeShelf("Continue Watching", queue.await(), isQueueShelf = true),
+            HomeShelf("Recently Watched Live TV", recent.await()),
+            HomeShelf("Trending Movies", movies.await()),
+            HomeShelf("Popular Series", series.await()),
+            HomeShelf("Live Now", live.await()),
+            HomeShelf("My List", saved.await()),
+            HomeShelf("Favorite Channels", favoriteChannels.await()),
         ).filter { it.items.isNotEmpty() }
     }
     override suspend fun discover(type: String, search: String?): List<Media> = json("GET", discoverPath(type, search = search)).mediaArray("metas", "items", "rows")
@@ -661,6 +679,7 @@ private fun JSONObject.media(): Media {
         runtime = displayString("runtime"),
         genres = (optJSONArray("genres") ?: JSONArray()).let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf { value -> value.isNotBlank() && value != "null" } } },
         credits = displayString("credits") ?: listOfNotNull(displayString("director")?.let { "Director: $it" }, displayString("cast")?.let { "Cast: $it" }).joinToString("  ·  ").ifBlank { null },
+        imdbRating = displayString("imdbRating", "imdb_rating", "rating"),
         watched = optBoolean("watched") || optString("watch_state") == "watched",
     )
     val previous = optJSONObject("previous_episode")?.media()
