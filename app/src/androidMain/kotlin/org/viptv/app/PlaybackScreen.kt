@@ -45,6 +45,7 @@ internal fun PlaybackScreen(media:Media,chromeVisible:Boolean,seekPreview:SeekPr
     var button by remember(media.id) { mutableIntStateOf(if(live) 3 else 1) }
     var scrubKey by remember { mutableIntStateOf(KeyEvent.KEYCODE_UNKNOWN) }
     var repeats by remember { mutableIntStateOf(0) }
+    var justCommittedSeek by remember { mutableStateOf(false) }
     var seekJob by remember { mutableStateOf<Job?>(null) }
     var menu by remember { mutableStateOf<PlayerTrackMenu?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -62,7 +63,7 @@ internal fun PlaybackScreen(media:Media,chromeVisible:Boolean,seekPreview:SeekPr
         val multiplier=when { repeats>=15->60;repeats>=9->15;repeats>=5->6;repeats>=2->3;else->1 }
         controller.previewSeek(delta*multiplier);row=0
     }
-    fun release() { scrubKey=KeyEvent.KEYCODE_UNKNOWN;repeats=0;seekJob?.cancel();seekJob=scope.launch {delay(800);controller.commitSeek()} }
+    fun release() { scrubKey=KeyEvent.KEYCODE_UNKNOWN;repeats=0;seekJob?.cancel();seekJob=scope.launch {delay(800);if(controller.state.value.seekPreview!=null) {justCommittedSeek=true;controller.commitSeek()}} }
     fun toggle() { cancelSeek();if(!live) {if(playback.isPlaying) controller.pausePlayback() else controller.resumePlayback()} }
     fun activate(index:Int) {
         when(index) {
@@ -92,6 +93,7 @@ internal fun PlaybackScreen(media:Media,chromeVisible:Boolean,seekPreview:SeekPr
         if(key.action==KeyEvent.ACTION_UP) {if(code==scrubKey) release();return@onPreviewKeyEvent true}
         if(key.action!=KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
         controller.showPlayerChrome()
+        if(code !in listOf(KeyEvent.KEYCODE_DPAD_CENTER,KeyEvent.KEYCODE_ENTER,KeyEvent.KEYCODE_DPAD_LEFT,KeyEvent.KEYCODE_DPAD_RIGHT,KeyEvent.KEYCODE_MEDIA_REWIND,KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)) justCommittedSeek=false
         when(code) {
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> if(key.repeatCount==0) toggle()
             KeyEvent.KEYCODE_MEDIA_PLAY -> if(!live && key.repeatCount==0) controller.resumePlayback()
@@ -109,7 +111,8 @@ internal fun PlaybackScreen(media:Media,chromeVisible:Boolean,seekPreview:SeekPr
             KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {seek(-10_000,code)}
             KeyEvent.KEYCODE_INFO,KeyEvent.KEYCODE_MENU -> {cancelSeek();row=1;button=3}
             KeyEvent.KEYCODE_DPAD_CENTER,KeyEvent.KEYCODE_ENTER -> if(key.repeatCount==0) {
-                if(seekPreview!=null && row==0) {seekJob?.cancel();controller.commitSeek()}
+                if(seekPreview!=null && row==0) {seekJob?.cancel();justCommittedSeek=true;controller.commitSeek()}
+                else if(justCommittedSeek) justCommittedSeek=false
                 else if(shown) {if(row==0) toggle() else activate(button)}
             }
             else -> return@onPreviewKeyEvent false

@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
@@ -40,6 +41,7 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel?, controll
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var anchor by remember { mutableLongStateOf(now) }
     var menuFocus by remember { mutableStateOf(false) }
+    var guideOwnsFocus by remember { mutableStateOf(true) }
     var menuIndex by remember { mutableIntStateOf(1) }
     var detail by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
@@ -76,13 +78,14 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel?, controll
     LaunchedEffect(model.followsNow, model.windowStartMillis) { if (model.followsNow) anchor = System.currentTimeMillis() }
     LaunchedEffect(model.channelOffset) { if (endOfPage) { channels.lastOrNull()?.let(controller::selectGuideChannel); endOfPage = false } }
     LaunchedEffect(searchOpen) { if (!searchOpen) focus.requestFocus() }
-    BackHandler(detail) { detail = false }
+    BackHandler(!searchOpen && guideOwnsFocus) { if (detail) detail = false else railFocus.requestFocus() }
     Box(Modifier.fillMaxSize().background(GuideCanvas).onPreviewKeyEvent { event ->
         val key = event.nativeKeyEvent
         if (searchOpen) return@onPreviewKeyEvent false
         if (key.keyCode == KeyEvent.KEYCODE_BACK) {
             if (detail) { if (key.action == KeyEvent.ACTION_UP) detail = false; return@onPreviewKeyEvent true }
-            return@onPreviewKeyEvent false
+            if (key.action == KeyEvent.ACTION_UP) railFocus.requestFocus()
+            return@onPreviewKeyEvent true
         }
         if (key.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent true
         if (detail) {
@@ -121,7 +124,7 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel?, controll
             else -> return@onPreviewKeyEvent false
         }
         true
-    }.focusRequester(focus).focusable()) {
+    }.focusRequester(focus).onFocusChanged { guideOwnsFocus = it.hasFocus }.focusable()) {
         Text("Live TV", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(112.dp, 34.dp).width(220.dp))
         Box(Modifier.offset(112.dp,149.dp).size(1124.dp,1.dp).background(Color(0xFF303234)))
         repeat(4) { i -> Text(guideTime(window + i * 1_800_000L), color = Color.White, fontSize = 19.sp, modifier = Modifier.offset((432 + i * 201).dp,116.dp).width(197.dp)) }

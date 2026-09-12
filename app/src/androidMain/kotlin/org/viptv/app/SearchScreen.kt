@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -29,16 +31,21 @@ internal fun SearchScreen(state: AppState, controller: AppController) {
     val fieldFocus = remember { FocusRequester() }
     val resultFocus = remember { FocusRequester() }
     val hasResults = state.searchSections.any { it.items.isNotEmpty() }
+    val sectionsScroll = rememberLazyListState()
+    val firstRowScroll = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val firstSection = state.searchSections.indexOfFirst { it.items.isNotEmpty() }
+    fun focusResults() { if (hasResults) scope.launch { sectionsScroll.scrollToItem(firstSection); firstRowScroll.scrollToItem(0); withFrameNanos {}; resultFocus.requestFocus() } }
     Box(Modifier.fillMaxSize().background(Color(0xFF101112))) {
         Text("Search",color=Color.White,fontSize=26.sp,fontWeight=FontWeight.Bold,modifier=Modifier.offset(112.dp,34.dp))
         Text(state.searchQuery.ifEmpty { "Search movies and shows" },color=Color(0xFFF5F5F5),fontSize=26.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.offset(100.dp,164.dp).size(304.dp,44.dp))
-        SearchKeyboard(state.searchQuery,controller::search,Modifier.offset(96.dp,216.dp),onResults={if(hasResults) resultFocus.requestFocus()},firstFocus=fieldFocus)
+        SearchKeyboard(state.searchQuery,controller::search,Modifier.offset(96.dp,216.dp),onResults=::focusResults,firstFocus=fieldFocus)
         Text("Type here or use a connected keyboard. Play/Pause opens results.",color=Color(0xFFA6A8AA),fontSize=20.sp,modifier=Modifier.offset(100.dp,572.dp).size(304.dp,64.dp))
-        LazyColumn(Modifier.offset(456.dp,164.dp).size(740.dp,484.dp).clipToBounds(),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        LazyColumn(Modifier.offset(456.dp,164.dp).size(740.dp,484.dp).clipToBounds(),verticalArrangement=Arrangement.spacedBy(8.dp),state=sectionsScroll) {
             itemsIndexed(state.searchSections,key={index,section->"${section.source}:$index"}) { sectionIndex,section ->
                 Column(Modifier.height(236.dp)) {
                     Text(section.source,color=Color(0xFFF5F5F5),fontSize=26.sp,fontWeight=FontWeight.Bold,modifier=Modifier.height(36.dp))
-                    LazyRow(horizontalArrangement=Arrangement.spacedBy(20.dp)) {
+                    LazyRow(horizontalArrangement=Arrangement.spacedBy(20.dp),state=if(sectionIndex==firstSection) firstRowScroll else rememberLazyListState()) {
                         itemsIndexed(section.items,key={_,item->item.type+":"+item.id}) { index,item ->
                             Box(Modifier.onPreviewKeyEvent { event ->
                                 if(event.nativeKeyEvent.keyCode in listOf(KeyEvent.KEYCODE_INFO,KeyEvent.KEYCODE_MENU) && item.type!="live") { if(event.nativeKeyEvent.action==KeyEvent.ACTION_DOWN && event.nativeKeyEvent.repeatCount==0) controller.toggleMyList(item); true } else if(index==0 && event.nativeKeyEvent.action==KeyEvent.ACTION_DOWN && event.nativeKeyEvent.keyCode==KeyEvent.KEYCODE_DPAD_LEFT) { fieldFocus.requestFocus(); true } else false

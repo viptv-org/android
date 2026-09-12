@@ -33,6 +33,14 @@ data class Media(
     val releasedAtMillis: Long? = null,
 )
 
+/** Only artwork propagates across cached title occurrences; profile progress never does. */
+internal fun Media.withArtworkFrom(other: Media): Media = copy(
+    poster = other.poster ?: poster,
+    backdrop = other.backdrop ?: backdrop,
+    thumbnail = other.thumbnail ?: thumbnail,
+    posterShape = other.posterShape ?: posterShape,
+)
+
 data class Source(
     val id: String,
     val provider: String,

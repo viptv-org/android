@@ -26,6 +26,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -99,7 +102,7 @@ internal fun RokuHomeScreen(state: AppState, controller: AppController) {
             shelves.withIndex().filter {it.index in row..(row+1)}.forEach { (shelfIndex,shelf) ->
                 key(shelf.title) {
                 Column(Modifier.offset(8.dp,((shelfIndex-row)*254+8).dp).width(1180.dp).height(240.dp)) {
-                    Text(shelf.title.uppercase(),color=RokuWhite,fontSize=18.sp,fontWeight=FontWeight.Bold,modifier=Modifier.height(32.dp))
+                    Text(shelf.title.uppercase(),color=RokuWhite,fontSize=18.sp,fontWeight=FontWeight.Bold,style=rokuSingleLineStyle(18),modifier=Modifier.height(32.dp))
                     LazyRow(state=horizontal[shelfIndex],horizontalArrangement=Arrangement.spacedBy(24.dp),modifier=Modifier.height(200.dp)) {
                         itemsIndexed(shelf.items) { cardIndex,media ->
                             RokuArtworkCard(media,Modifier.focusRequester(requesters[shelfIndex][cardIndex]).focusProperties {canFocus=shelfIndex in row..(row+1)}.onFocusChanged { if(it.hasFocus) {row=shelfIndex;column=cardIndex;controller.recordHomeFocus(shelfIndex,shelf.title,media)} }.onPreviewKeyEvent {
@@ -175,9 +178,16 @@ private fun rokuHeroFacts(media: Media): String = listOfNotNull(
     rokuContext(media).takeIf { it.isNotBlank() },
 ).joinToString("  ·  ")
 
+/** Roku labels use their explicit font metrics, not Material body typography leading. */
+private fun rokuSingleLineStyle(size: Int) = TextStyle(
+    lineHeight = size.sp,
+    platformStyle = PlatformTextStyle(includeFontPadding = false),
+    lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Top, LineHeightStyle.Trim.Both),
+)
+
 @Composable
 internal fun RokuLabel(text:String,x:Int,y:Int,width:Int,size:Int,lines:Int=1,bold:Boolean=false,color:Color=RokuWhite,marquee:Boolean=false,align:TextAlign=TextAlign.Start) {
-    Text(text,color=color,fontSize=size.sp,fontWeight=if(bold)FontWeight.Bold else FontWeight.Normal,maxLines=lines,overflow=TextOverflow.Ellipsis,textAlign=align,modifier=Modifier.offset(x.dp,y.dp).width(width.dp).then(if(marquee)Modifier.basicMarquee(iterations=Int.MAX_VALUE)else Modifier))
+    Text(text,color=color,fontSize=size.sp,style=if(lines==1)rokuSingleLineStyle(size)else TextStyle.Default,fontWeight=if(bold)FontWeight.Bold else FontWeight.Normal,maxLines=lines,overflow=TextOverflow.Ellipsis,textAlign=align,modifier=Modifier.offset(x.dp,y.dp).width(width.dp).then(if(marquee)Modifier.basicMarquee(iterations=Int.MAX_VALUE)else Modifier))
 }
 
 @Composable

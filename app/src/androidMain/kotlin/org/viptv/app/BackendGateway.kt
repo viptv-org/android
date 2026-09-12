@@ -272,6 +272,7 @@ data class PlaybackTrack(
 
 /** HTTP adapter for the documented Rust /api contract. It owns credentials and never logs them. */
 class VipTvHttpGateway(private val origin: String, private var accessToken: String? = null) : BackendGateway {
+    private val titleArtwork = java.util.concurrent.ConcurrentHashMap<String, Media>()
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
@@ -314,8 +315,8 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         val live = async { optionalFeed { channels("/live?view=us&offset=0&limit=12&search=") } }
         val saved = async { optionalFeed { json("GET", "/profiles/${enc(profileId)}/favorites/page?limit=13&exclude_live=true").mediaArray("items", "rows", "metas") } }
         val favoriteChannels = async { optionalFeed { channels("/live?view=us&collection=favorites&limit=24") } }
-        val movieItems = movies.await()
-        val seriesItems = series.await()
+        val movieItems = movies.await().map { item -> titleArtwork[item.type + "\u0000" + item.id]?.let(item::withArtworkFrom) ?: item }
+        val seriesItems = series.await().map { item -> titleArtwork[item.type + "\u0000" + item.id]?.let(item::withArtworkFrom) ?: item }
         val known = (movieItems + seriesItems).associateBy { it.type + "\u0000" + it.id }
         val hydrationSlots = Semaphore(3)
         suspend fun enrich(items: List<Media>): List<Media> = coroutineScope {
@@ -428,7 +429,9 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
     override suspend fun metadata(media: Media): Media {
         val type = if (media.type == "episode") "series" else media.type
         val id = if (type == "series") media.seriesId ?: media.id else media.id
-        return json("GET", "/meta/${enc(type)}/${enc(id)}").optJSONObject("meta")?.media() ?: media
+        val result = json("GET", "/meta/${enc(type)}/${enc(id)}").optJSONObject("meta")?.media() ?: media
+        titleArtwork[type + "\u0000" + id] = Media(id, type, poster = result.poster, backdrop = result.backdrop, thumbnail = result.thumbnail, posterShape = result.posterShape)
+        return result
     }
     override suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit): List<Source> {
         val job = json("POST", "/streams", JSONObject().put("id", media.id).put("type", media.type).put("name", media.name).putOpt("series_id", media.seriesId).putOpt("season", media.season).putOpt("episode", media.episode))

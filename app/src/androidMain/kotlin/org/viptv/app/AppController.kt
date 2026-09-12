@@ -344,7 +344,11 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 sourceFingerprint = metadata.sourceFingerprint ?: media.sourceFingerprint,
             )
             detailReturnDestination = origin
-            _state.value = _state.value.copy(route = Route.Details(detail), loading = false)
+            _state.value = _state.value.copy(route = Route.Details(detail), loading = false,
+                shelves = _state.value.shelves.map { shelf -> shelf.copy(items = shelf.items.map { item ->
+                    if ((item.seriesId ?: item.id) == (detail.seriesId ?: detail.id)) item.withArtworkFrom(detail) else item
+                }) },
+            )
         }.onFailure(::fail)
     }
     fun chooseSources(media: Media, resume: Boolean = false, origin: SourceReturn = sourceOrigin()) {
