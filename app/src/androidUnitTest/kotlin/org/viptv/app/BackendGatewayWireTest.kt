@@ -186,7 +186,7 @@ class BackendGatewayWireTest {
                 "/api/streams/job-1?after=0" -> FixtureResponse(
                     """{"events":[
                         {"seq":1,"source":"iptv:4","streams":[
-                          {"id":"stream-a","provider":"iptv:4","source_name":"Evening News","filename":"evening-news.mkv","source_quality":"1080p","source_audio":"English 5.1","headers":{"Authorization":"private-token"},"source_addon_id":"addon:one","source_fingerprint":"fp-a"},
+                          {"id":"stream-a","provider":"iptv:4","source_name":"Evening News","title":"HD broadcast","filename":"evening-news.mkv","source_quality":"1080p","source_audio":"English 5.1","headers":{"Authorization":"private-token"},"source_addon_id":"addon:one","source_fingerprint":"fp-a"},
                           {"id":"stream-b","name":"720p","filename":"b.mkv","source_addon_id":"addon:one","source_fingerprint":"fp-b"}
                         ]},
                         {"seq":2,"source":"addon:two","streams":[
@@ -203,7 +203,7 @@ class BackendGatewayWireTest {
             assertEquals(listOf("stream-a", "stream-b", "stream-c"), sources.map(Source::id))
             assertEquals("iptv:4", sources.first().provider)
             assertEquals("Evening News", sources.first().name)
-            assertEquals("evening-news.mkv", sources.first().description)
+            assertEquals("HD broadcast\nevening-news.mkv", sources.first().description)
             assertEquals("1080p", sources.first().quality)
             assertEquals("English 5.1", sources.first().audio)
             assertEquals("addon:one", sources.first().addonId)

@@ -264,6 +264,14 @@ private data class AvatarCategory(val style:String,val name:String,val entries:L
     }
 }
 
+/** Preserve each server metadata line, with the same readable symbol labels as Roku. */
+private fun sourceCardBody(source:Source):String {
+    var body=source.description
+    mapOf("📄" to "File: ","📁" to "File: ","💾" to "Size: ","👤" to "Peers: ","👥" to "Peers: ","🌐" to "Languages: ","🔊" to "Audio: ","🎧" to "Audio: ","💬" to "Subtitles: ","⚡" to "Cached ","✅" to "Available ","❌" to "Unavailable ").forEach {(symbol,label)->body=body.replace(symbol,label)}
+    return body.lineSequence().map(String::trim).filter(String::isNotEmpty).joinToString("\n")
+}
+private fun sourceBadges(source:Source):String = listOfNotNull(source.quality?.takeIf(String::isNotBlank),source.audio?.takeIf(String::isNotBlank)).joinToString("   ·   ").ifBlank {"AUDIO NOT IDENTIFIED"}
+
 @Composable internal fun SourcePicker(media:Media,sources:List<Source>,controller:AppController) {
     val state by controller.state.collectAsState()
     var provider by remember(media.id) { mutableStateOf<String?>(null) }
@@ -271,13 +279,14 @@ private data class AvatarCategory(val style:String,val name:String,val entries:L
     val filterFocus=remember { FocusRequester() }
     var activeSourceFocus by remember { mutableStateOf<FocusRequester?>(null) }
     LaunchedEffect(state.dialog) { if(state.dialog==null) activeSourceFocus?.requestFocus() }
+    val providerLabels=sources.associate {it.provider to SourceDisplayPolicy.title(it).replace("\n"," · ")}
     val shown=sources.filter {provider==null || it.provider==provider}
     val first=remember { FocusRequester() }
     var claimed by remember(media.id,provider) { mutableStateOf(false) }
     LaunchedEffect(shown.isNotEmpty(),provider,filtering,state.dialog) { if(shown.isNotEmpty() && !claimed && !filtering && state.dialog==null) {first.requestFocus();claimed=true} }
     Box(Modifier.fillMaxSize().background(AccountCanvas)) {
-        AccountText("Choose a source",100,54,size=44);AccountText(media.name,100,119,1096,22,true)
-        TvButton((provider ?: "All providers")+"  ▾",{filtering=true},Modifier.offset(100.dp,166.dp).size(256.dp,48.dp).focusRequester(filterFocus))
+        AccountText("Choose a source",100,54,size=42);AccountText(media.name,100,119,1096,22,true)
+        TvButton((provider?.let {providerLabels[it]} ?: "All providers")+"  ▾",{filtering=true},Modifier.offset(100.dp,166.dp).size(256.dp,48.dp).focusRequester(filterFocus))
         AccountText(if(state.loading) "Finding sources" else "${shown.size} sources",384,178,480,19,true)
         AccountText("Hold OK or Menu for details",804,178,350,19,true)
         if(state.loading) CircularProgressIndicator(Modifier.offset(if(sources.isEmpty()) 610.dp else 1172.dp,if(sources.isEmpty()) 294.dp else 162.dp).size(if(sources.isEmpty()) 60.dp else 26.dp),color=AccountWhite,strokeWidth=3.dp)
@@ -291,17 +300,17 @@ private data class AvatarCategory(val style:String,val name:String,val entries:L
                 val sourceFocus=remember(source.id) {FocusRequester()}
                 Holdable({controller.start(media,source)},{controller.requestDialog(DialogKind.SourceDetails,SourceDisplayPolicy.title(source),source=source)},
                     Modifier.size(1096.dp,216.dp).then(if(index==0) Modifier.focusRequester(first) else Modifier).focusRequester(sourceFocus).onFocusChanged {focused=it.hasFocus;if(focused) activeSourceFocus=sourceFocus}
-                        .background(if(focused) AccountWhite else AccountSurface,RoundedCornerShape(12.dp))) {
-                    Box(Modifier.fillMaxSize()) {
+                        .background(if(focused) AccountWhite else AccountSurface,RoundedCornerShape(8.dp))) {
+                    Box(Modifier.size(1096.dp,216.dp)) {
                         val fg=if(focused) AccountCanvas else AccountWhite
-                        Text(SourceDisplayPolicy.title(source),Modifier.offset(20.dp,10.dp).width(1056.dp),color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold,maxLines=1,overflow=TextOverflow.Ellipsis)
-                        Text(SourceDisplayPolicy.body(source),Modifier.offset(20.dp,46.dp).size(1056.dp,142.dp),color=if(focused) AccountCanvas else Color(0xFFC5C6C7),fontSize=19.sp,lineHeight=23.sp,maxLines=6,overflow=TextOverflow.Ellipsis)
-                        Text(listOfNotNull(source.quality,source.audio).joinToString("  ·  "),Modifier.offset(20.dp,190.dp).width(1056.dp),color=fg,fontSize=16.sp,maxLines=1)
+                        Text(SourceDisplayPolicy.title(source).replace("\n"," · "),Modifier.offset(20.dp,10.dp).size(1056.dp,30.dp),color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold,maxLines=1,overflow=TextOverflow.Ellipsis)
+                        Text(sourceCardBody(source),Modifier.offset(20.dp,46.dp).size(1056.dp,142.dp),color=if(focused) Color(0xFF393B3D) else AccountMuted,fontSize=19.sp,lineHeight=23.sp,maxLines=6,overflow=TextOverflow.Ellipsis)
+                        Text(sourceBadges(source),Modifier.offset(20.dp,190.dp).size(1056.dp,22.dp),color=if(focused) Color(0xFF393B3D) else Color(0xFFC5C6C7),fontSize=16.sp,fontWeight=FontWeight.Bold,maxLines=1)
                     }
                 }
             }
         }
-        if(filtering) RokuChoiceDialog("Providers",listOf("All providers" to {provider=null;claimed=false;filtering=false})+sources.map {it.provider}.distinct().map { item->item to {provider=item;claimed=false;filtering=false} },{filtering=false;filterFocus.requestFocus()})
+        if(filtering) RokuChoiceDialog("Providers",listOf("All providers" to {provider=null;claimed=false;filtering=false})+sources.map {it.provider}.distinct().map { item->(providerLabels[item] ?: "Source") to {provider=item;claimed=false;filtering=false} },{filtering=false;filterFocus.requestFocus()})
     }
 }
 
@@ -315,7 +324,7 @@ private data class AvatarCategory(val style:String,val name:String,val entries:L
         LaunchedEffect(dialog.source?.id) {bodyFocus.requestFocus()}
         Box(modifier.fillMaxSize().background(Color(0xF8101112))) {
             AccountText(dialog.title,100,72,1060,36)
-            Text(dialog.source?.let { SourceDisplayPolicy.body(it) }.orEmpty(),Modifier.offset(100.dp,158.dp).size(1060.dp,460.dp).verticalScroll(scroll).focusRequester(bodyFocus).onPreviewKeyEvent {event->
+            Text(dialog.source?.let { SourceDisplayPolicy.title(it)+"\n\n"+it.description }.orEmpty(),Modifier.offset(100.dp,158.dp).size(1060.dp,460.dp).verticalScroll(scroll).focusRequester(bodyFocus).onPreviewKeyEvent {event->
                 val key=event.nativeKeyEvent
                 val delta=when(key.keyCode) {KeyEvent.KEYCODE_DPAD_DOWN->160;KeyEvent.KEYCODE_DPAD_UP->-160;else->0}
                 if(delta!=0 && ((delta>0 && scroll.value<scroll.maxValue)||(delta<0 && scroll.value>0))) {

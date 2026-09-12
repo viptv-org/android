@@ -123,11 +123,11 @@ private fun RokuSeriesDetails(media:Media,controller:AppController) {
         RokuLabel(media.name,112,74,900,36,bold=true,marquee=true)
         RokuLabel(rokuFacts(media),112,132,900,22,color=RokuMuted)
         Row(Modifier.offset(112.dp,188.dp),horizontalArrangement=Arrangement.spacedBy(24.dp)) {
-            TvButton("${if(season==0)"Specials"else"Season $season"}  ▾",{pickedSeason=false;picker=true},Modifier.size(256.dp,48.dp).focusRequester(seasonFocus))
-            TvButton(if(saved)"Remove from My List"else"+ My List",{controller.toggleMyList(media)},Modifier.size(256.dp,48.dp))
-            TvButton("More info",{info=true},Modifier.size(256.dp,48.dp).focusRequester(infoControlFocus))
+            RokuSeriesChip(if(season==0)"Specials"else"Season $season",{pickedSeason=false;picker=true},Modifier.size(256.dp,48.dp).focusRequester(seasonFocus),dropdown=true)
+            RokuSeriesChip(if(saved)"Remove from My List"else"+ My List",{controller.toggleMyList(media)},Modifier.size(256.dp,48.dp))
+            RokuSeriesChip("More info",{info=true},Modifier.size(256.dp,48.dp).focusRequester(infoControlFocus))
         }
-        RokuLabel("${episodes.size} episodes",976,198,220,22,bold=true,align=androidx.compose.ui.text.style.TextAlign.End)
+        RokuLabel("${episodes.size} episodes",976,198,220,22,color=RokuMuted,align=androidx.compose.ui.text.style.TextAlign.End)
         if(episodes.isEmpty()) RokuLabel("No episodes available",250,360,780,24,align=androidx.compose.ui.text.style.TextAlign.Center)
         LazyVerticalGrid(columns=GridCells.Fixed(4),state=grid,modifier=Modifier.offset(112.dp,262.dp).size(1096.dp,330.dp).clip(androidx.compose.ui.graphics.RectangleShape),horizontalArrangement=Arrangement.spacedBy(24.dp),verticalArrangement=Arrangement.spacedBy(28.dp)) {
             itemsIndexed(episodes,key={_,episode->episode.id}) {index,episode ->
@@ -207,4 +207,17 @@ private fun RokuFullDetails(media:Media,onClose:()->Unit) {
         }.focusable().verticalScroll(scroll))
         RokuLabel("Back to close",100,650,1060,19,color=RokuMuted)
     }
+}
+
+
+@Composable
+private fun RokuSeriesChip(label:String,onActivate:()->Unit,modifier:Modifier,dropdown:Boolean=false) {
+    var focused by remember {mutableStateOf(false)}
+    TvButton(label,onActivate,modifier.onFocusChanged {focused=it.hasFocus},content={
+        Box(Modifier.fillMaxSize()) {
+            val foreground=if(focused)RokuCanvas else RokuMuted
+            RokuLabel(label,18,11,if(dropdown)192 else 216,21,bold=true,color=foreground,marquee=focused)
+            if(dropdown)AsyncImage(rokuAsset("ui-nav-chevron.png"),null,colorFilter=androidx.compose.ui.graphics.ColorFilter.tint(foreground),modifier=Modifier.offset(222.dp,15.dp).size(18.dp))
+        }
+    })
 }

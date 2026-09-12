@@ -96,7 +96,7 @@ internal fun rokuAsset(name: String) = "file:///android_asset/roku/images/$name"
     var focused by remember { mutableStateOf(false) }
     Holdable(onActivate, onHold,
         modifier.onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocused?.invoke() }
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(if (focused) RokuWhite else if (selected) Color(0xFF303234) else RokuSurface),
         onInfo = onInfo,
     ) {

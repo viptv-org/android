@@ -23,6 +23,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -82,10 +83,10 @@ internal fun RokuHomeScreen(state: AppState, controller: AppController) {
     }) {
         if (expanded && hero != null) {
             RokuBackdrop(hero.backdrop)
-            RokuLabel(if (shelves.firstOrNull()?.isQueueShelf == true) "CONTINUE WATCHING" else if (hero.type == "live") "LIVE NOW" else "FEATURED ${hero.type.uppercase()}",100,128,650,14,color=Color(0xFFC5C6C7))
+            RokuLabel(if (shelves.firstOrNull()?.isQueueShelf == true) "CONTINUE WATCHING" else if (hero.type == "live") "LIVE NOW" else "FEATURED ${hero.type.uppercase()}",100,128,650,14,bold=true,color=Color(0xFFC5C6C7))
             RokuLabel(hero.name,100,166,600,44,bold=true,marquee=true)
             RokuLabel(hero.description.orEmpty(),100,228,548,20,lines=3,color=Color(0xFFD5D6D7))
-            RokuLabel(rokuHeroFacts(hero),100,322,650,18,color=Color(0xFFC5C6C7))
+            RokuLabel(rokuHeroFacts(hero),100,322,650,18,color=Color(0xFFB6B8BA),marquee=true)
             val queue = shelves.firstOrNull()?.isQueueShelf == true
             Row(Modifier.offset(100.dp,375.dp), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 Holdable(onActivate={activate(hero,queue,true)}, onHold=when {queue&&QueuePolicy.canManage(hero)->{{controller.requestQueueManage(hero)}};HomeHoldPolicy.opensSourcesFromHero(false,hero)->{{controller.chooseSources(hero,origin=SourceReturn.Home)}};else->null}, modifier=Modifier.width(if(QueuePolicy.hasResolvedNext(hero))236.dp else 144.dp).height(50.dp).focusRequester(heroFocus).onPreviewKeyEvent { event -> if(event.nativeKeyEvent.action==KeyEvent.ACTION_DOWN&&event.nativeKeyEvent.keyCode==KeyEvent.KEYCODE_DPAD_DOWN) { requesters.firstOrNull()?.getOrNull(column)?.requestFocus();true } else if(event.nativeKeyEvent.action==KeyEvent.ACTION_DOWN&&event.nativeKeyEvent.keyCode==KeyEvent.KEYCODE_DPAD_LEFT) {railFocus.requestFocus();true} else false }.onFocusChanged { heroFocused=it.hasFocus; if(it.hasFocus) controller.recordHomeFocus(row,shelves[row].title,hero,HomeFocusSurface.Hero) }) {
@@ -102,7 +103,7 @@ internal fun RokuHomeScreen(state: AppState, controller: AppController) {
             shelves.withIndex().filter {it.index in row..(row+1)}.forEach { (shelfIndex,shelf) ->
                 key(shelf.title) {
                 Column(Modifier.offset(8.dp,((shelfIndex-row)*254+8).dp).width(1180.dp).height(240.dp)) {
-                    Text(shelf.title.uppercase(),color=RokuWhite,fontSize=18.sp,fontWeight=FontWeight.Bold,style=rokuSingleLineStyle(18),modifier=Modifier.height(32.dp))
+                    Text(shelf.title.uppercase(),color=RokuWhite,fontSize=18.sp,fontWeight=FontWeight.Bold,style=rokuSingleLineStyle(18),modifier=Modifier.height(32.dp).graphicsLayer {translationY=(-1.8f).dp.toPx()})
                     LazyRow(state=horizontal[shelfIndex],horizontalArrangement=Arrangement.spacedBy(24.dp),modifier=Modifier.height(200.dp)) {
                         itemsIndexed(shelf.items) { cardIndex,media ->
                             RokuArtworkCard(media,Modifier.focusRequester(requesters[shelfIndex][cardIndex]).focusProperties {canFocus=shelfIndex in row..(row+1)}.onFocusChanged { if(it.hasFocus) {row=shelfIndex;column=cardIndex;controller.recordHomeFocus(shelfIndex,shelf.title,media)} }.onPreviewKeyEvent {
@@ -178,7 +179,9 @@ private fun rokuHeroFacts(media: Media): String = listOfNotNull(
     rokuContext(media).takeIf { it.isNotBlank() },
 ).joinToString("  ·  ")
 
-/** Roku labels use their explicit font metrics, not Material body typography leading. */
+/** Roku label metrics: explicit line leading, without Material body padding.
+ * Android system glyph ink sits about 0.1 em lower than the inspected Roku
+ * system font. Compensate within the renderer, preserving every layout anchor. */
 private fun rokuSingleLineStyle(size: Int) = TextStyle(
     lineHeight = size.sp,
     platformStyle = PlatformTextStyle(includeFontPadding = false),
@@ -187,7 +190,7 @@ private fun rokuSingleLineStyle(size: Int) = TextStyle(
 
 @Composable
 internal fun RokuLabel(text:String,x:Int,y:Int,width:Int,size:Int,lines:Int=1,bold:Boolean=false,color:Color=RokuWhite,marquee:Boolean=false,align:TextAlign=TextAlign.Start) {
-    Text(text,color=color,fontSize=size.sp,style=if(lines==1)rokuSingleLineStyle(size)else TextStyle.Default,fontWeight=if(bold)FontWeight.Bold else FontWeight.Normal,maxLines=lines,overflow=TextOverflow.Ellipsis,textAlign=align,modifier=Modifier.offset(x.dp,y.dp).width(width.dp).then(if(marquee)Modifier.basicMarquee(iterations=Int.MAX_VALUE)else Modifier))
+    Text(text,color=color,fontSize=size.sp,style=if(lines==1)rokuSingleLineStyle(size)else rokuSingleLineStyle(size).copy(lineHeight=(size*1.4f).sp),fontWeight=if(bold)FontWeight.Bold else FontWeight.Normal,maxLines=lines,overflow=TextOverflow.Ellipsis,textAlign=align,modifier=Modifier.offset(x.dp,y.dp).width(width.dp).graphicsLayer {translationY=(-(size*.1f)).dp.toPx()}.then(if(marquee)Modifier.basicMarquee(iterations=Int.MAX_VALUE)else Modifier))
 }
 
 @Composable
