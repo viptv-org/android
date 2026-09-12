@@ -41,6 +41,28 @@ class AndroidMedia3MappingTest {
     }
 
     @Test
+    fun onDemandRollingHlsPublishesSessionCoordinateSeekBounds() {
+        val timeline = media3Timeline(
+            isLive = false,
+            isSeekable = true,
+            durationMillis = 32_000,
+            kindHint = PlaybackKind.OnDemand,
+            windowPositionInFirstPeriodMillis = 70_000,
+        )
+
+        assertEquals(102_000, timeline.durationMillis)
+        assertEquals(SeekableRange(70_000, 102_000), timeline.seekableRange)
+        assertEquals(
+            30_000,
+            media3NativeSeekPositionMillis(
+                kindHint = PlaybackKind.OnDemand,
+                sessionPositionMillis = 100_000,
+                windowPositionInFirstPeriodMillis = 70_000,
+            ),
+        )
+    }
+
+    @Test
     fun rollingWindowMappingDoesNotChangeLiveCoordinatesOrTrustUnsetOffsets() {
         assertEquals(
             3_000,

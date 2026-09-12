@@ -48,6 +48,25 @@ class DefaultVideoPlayerTest {
     }
 
     @Test
+    fun rollingVodClampsWithinSessionCoordinateBounds() = runTest {
+        val backend = FakeBackend(
+            OpenedMedia(
+                PlaybackTimeline(
+                    kind = PlaybackKind.OnDemand,
+                    durationMillis = 102_000,
+                    seekableRange = SeekableRange(70_000, 102_000),
+                ),
+            ),
+        )
+        val player = DefaultVideoPlayer(backend, StandardTestDispatcher(testScheduler))
+        player.open(PlaybackSource("https://example.invalid/rolling-vod.m3u8"))
+
+        assertTrue(player.seekTo(100_000))
+        assertEquals(100_000, backend.lastSeek)
+        player.close()
+    }
+
+    @Test
     fun unsupportedSelectionAndBackendFailuresAreTyped() = runTest {
         val backend = FakeBackend(
             opened = OpenedMedia(PlaybackTimeline(PlaybackKind.OnDemand, 1_000)),

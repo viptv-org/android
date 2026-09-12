@@ -186,11 +186,11 @@ class DefaultVideoPlayer(
         if (!canControl() || state.value.timeline?.canSeek != true) return false
         val timeline = state.value.timeline
         val target = when {
-            timeline?.durationMillis != null -> positionMillis.coerceIn(0, timeline.durationMillis)
             timeline?.seekableRange != null -> positionMillis.coerceIn(
                 timeline.seekableRange.startMillis,
                 timeline.seekableRange.endMillis,
             )
+            timeline?.durationMillis != null -> positionMillis.coerceIn(0, timeline.durationMillis)
             else -> return false
         }
         backend.seekTo(target)

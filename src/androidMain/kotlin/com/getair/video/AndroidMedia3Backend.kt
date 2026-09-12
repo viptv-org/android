@@ -509,7 +509,13 @@ internal class AndroidMedia3Backend(
         }
         val window = player.currentTimeline.getWindow(player.currentMediaItemIndex, Timeline.Window())
         val duration = window.durationMs.takeUnless { it == C.TIME_UNSET || it < 0 }
-        return media3Timeline(window.isLive, window.isSeekable, duration, kindHint)
+        return media3Timeline(
+            isLive = window.isLive,
+            isSeekable = window.isSeekable,
+            durationMillis = duration,
+            kindHint = kindHint,
+            windowPositionInFirstPeriodMillis = window.positionInFirstPeriodMs,
+        )
     }
 
     /**
@@ -790,6 +796,7 @@ internal fun media3Timeline(
     isSeekable: Boolean,
     durationMillis: Long?,
     kindHint: PlaybackKind? = null,
+    windowPositionInFirstPeriodMillis: Long = 0,
 ): PlaybackTimeline = when {
     kindHint == PlaybackKind.Live -> PlaybackTimeline(PlaybackKind.Live, liveEdgeMillis = durationMillis)
     kindHint == PlaybackKind.SeekableLive -> PlaybackTimeline(
@@ -797,10 +804,17 @@ internal fun media3Timeline(
         seekableRange = durationMillis?.let { SeekableRange(0, it) },
         liveEdgeMillis = durationMillis,
     )
-    kindHint == PlaybackKind.OnDemand -> PlaybackTimeline(
-        PlaybackKind.OnDemand,
-        durationMillis = durationMillis ?: 0,
-    )
+    kindHint == PlaybackKind.OnDemand -> {
+        val windowStart = windowPositionInFirstPeriodMillis
+            .takeUnless { it == C.TIME_UNSET || it < 0 }
+            ?: 0
+        val windowEnd = durationMillis?.let { windowStart.saturatingAdd(it) } ?: windowStart
+        PlaybackTimeline(
+            kind = PlaybackKind.OnDemand,
+            durationMillis = windowEnd,
+            seekableRange = SeekableRange(windowStart, windowEnd),
+        )
+    }
     isLive && isSeekable -> PlaybackTimeline(
         kind = PlaybackKind.SeekableLive,
         seekableRange = durationMillis?.let { SeekableRange(0, it) },
