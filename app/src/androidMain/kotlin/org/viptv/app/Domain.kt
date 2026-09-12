@@ -16,6 +16,10 @@ data class Media(
     val episodes: List<Media> = emptyList(),
     /** Episode-specific title when upstream video `name` repeats the series title. */
     val episodeTitle: String? = null,
+    /** Server continuation state for a Continue Watching display row. */
+    val queueStatus: String? = null,
+    /** When a cached next replaces the row, management still addresses this prior episode. */
+    val previousEpisode: Media? = null,
 )
 
 data class Source(
@@ -48,13 +52,63 @@ sealed interface PlaybackIntent {
     data object ChooseSource : PlaybackIntent
 }
 
-enum class MediaCardAction { OpenDetails, ResumeExactSource }
+enum class MediaCardAction { OpenDetails, ResumeExactSource, PlayQueuedNext }
 object MediaCardPolicy {
     /** Only Continue Watching has a Resume primary action; discovery always opens details. */
     fun primary(resumeSurface: Boolean, media: Media): MediaCardAction =
-        if (resumeSurface && media.positionMillis > 0 && media.type != "live") MediaCardAction.ResumeExactSource else MediaCardAction.OpenDetails
-    fun supportsChooseSourceHold(resumeSurface: Boolean, media: Media): Boolean =
-        primary(resumeSurface, media) == MediaCardAction.ResumeExactSource
+        when {
+            resumeSurface && QueuePolicy.hasResolvedNext(media) -> MediaCardAction.PlayQueuedNext
+            resumeSurface && media.positionMillis > 0 && media.type != "live" -> MediaCardAction.ResumeExactSource
+            else -> MediaCardAction.OpenDetails
+        }
+    /** Only Home uses this source-control hold; library cards have their own management holds. */
+    fun supportsChooseSourceHold(homeSurface: Boolean, resumeSurface: Boolean, media: Media): Boolean =
+        homeSurface && media.type != "live" && primary(resumeSurface, media) != MediaCardAction.PlayQueuedNext
+}
+
+/**
+ * Source discovery remembers the surface that opened it.  This is deliberately
+ * separate from the player return route: a Home shortcut can cancel back to
+ * Home, while successful non-live playback still exits through title detail.
+ */
+enum class SourceReturn { Details, Home }
+object SourceReturnPolicy {
+    fun cancelRoute(origin: SourceReturn, media: Media): Route = when (origin) {
+        SourceReturn.Details -> Route.Details(media)
+        SourceReturn.Home -> Route.Browse(Destination.Home)
+    }
+
+    fun playbackReturn(origin: SourceReturn, explicitResume: Boolean): PlaybackReturn = when (origin) {
+        SourceReturn.Home -> PlaybackReturn.Details
+        SourceReturn.Details -> PlaybackReturnPolicy.afterSourceStart(explicitResume)
+    }
+}
+
+/** Queue holds are available only for non-live Continue Watching content. */
+object QueuePolicy {
+    fun canManage(media: Media): Boolean = media.type != "live"
+    fun manageTarget(media: Media): Media = media.previousEpisode ?: media
+    fun canResume(media: Media): Boolean = manageTarget(media).type != "live" && manageTarget(media).positionMillis > 0
+    /** This status is emitted only by the server continuation cache. */
+    fun hasResolvedNext(media: Media): Boolean = media.queueStatus == "next" && media.previousEpisode != null
+}
+
+data class HomeFocusSnapshot(
+    val shelfTitle: String? = null,
+    val mediaKey: String? = null,
+    /** Incremented when a route explicitly returns to Home and asks Compose to restore. */
+    val restoreRequest: Long = 0L,
+    /** A directional event invalidates a queued focus restoration immediately. */
+    val inputEpoch: Long = 0L,
+)
+
+object HomeFocusPolicy {
+    fun mediaKey(media: Media): String = "${media.type}\u0000${media.id}"
+    fun record(current: HomeFocusSnapshot, shelfTitle: String, media: Media): HomeFocusSnapshot =
+        current.copy(shelfTitle = shelfTitle, mediaKey = mediaKey(media))
+    fun afterDirectionalInput(current: HomeFocusSnapshot): HomeFocusSnapshot = current.copy(inputEpoch = current.inputEpoch + 1)
+    fun requestRestore(current: HomeFocusSnapshot): HomeFocusSnapshot = current.copy(restoreRequest = current.restoreRequest + 1)
+    fun mayRestore(snapshot: HomeFocusSnapshot, observedInputEpoch: Long): Boolean = snapshot.inputEpoch == observedInputEpoch
 }
 
 /** Product policy from the design contract. The player adapter does not choose sources. */
@@ -249,13 +303,14 @@ sealed interface Route {
     data object Profiles : Route
     data class Browse(val destination: Destination) : Route
     data class Details(val media: Media) : Route
-    data class Sources(val media: Media, val resume: Boolean = false) : Route
+    data class Sources(val media: Media, val resume: Boolean = false, val origin: SourceReturn = SourceReturn.Details) : Route
     data class Player(val media: Media, val source: Source, val returnDestination: PlaybackReturn = PlaybackReturn.Details) : Route
     data object Search : Route
     data object Settings : Route
     data object Addons : Route
     data class ProfileEditor(val profile: Profile? = null) : Route
-    data class Guide(val channel: LiveChannel) : Route
+    /** A valid empty server filter still owns the Guide filters and Back path. */
+    data class Guide(val channel: LiveChannel? = null) : Route
 }
 
 enum class PlaybackReturn { Details, Sources }
@@ -407,7 +462,7 @@ object PlaybackRecoveryPolicy {
     }
 }
 
-enum class DialogKind { QueueManage, MyListManage, EpisodeManage, SourceDetails, LiveManage, DeleteProfile, SignOut, NextUnavailable, PlaybackRecovery }
+enum class DialogKind { QueueManage, QueueRemoved, MyListManage, EpisodeManage, SourceDetails, LiveManage, DeleteProfile, SignOut, NextUnavailable, PlaybackRecovery }
 data class DialogState(val kind: DialogKind, val title: String, val media: Media? = null, val source: Source? = null, val profile: Profile? = null)
 data class PinPrompt(val title: String)
 data class SeekPreview(val targetMillis: Long)
@@ -419,6 +474,8 @@ data class AppState(
     val profilePage: Int = 0,
     val managingProfiles: Boolean = false,
     val shelves: List<HomeShelf> = emptyList(),
+    /** Identity and restore epoch are product state, so refreshes cannot steal D-pad focus. */
+    val homeFocus: HomeFocusSnapshot = HomeFocusSnapshot(),
     val catalog: List<Media> = emptyList(),
     val sources: List<Source> = emptyList(),
     val favorites: List<Media> = emptyList(),

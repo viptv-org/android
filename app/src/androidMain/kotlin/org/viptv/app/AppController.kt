@@ -34,6 +34,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     val player: AndroidMedia3VideoPlayer = AndroidMedia3BackendFactory(context).createAndroidPlayer()
     private var pairingPoll: Job? = null
     private var sourceDiscovery: Job? = null
+    private var queueContinuationJob: Job? = null
     private var discoverJob: Job? = null
     private var searchJob: Job? = null
     private var nextEpisodeJob: Job? = null
@@ -146,6 +147,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun setProfilePage(page: Int) { _state.value = _state.value.copy(profilePage = page.coerceIn(0, ((_state.value.profiles.size - 1).coerceAtLeast(0)) / 5)) }
     fun toggleProfileManagement() { _state.value = _state.value.copy(managingProfiles = !_state.value.managingProfiles) }
     fun navigate(destination: Destination) = scope.launch {
+        if (destination != Destination.Home) cancelPendingQueueContinuation()
         if (destination != Destination.Discover) {
             discoverJob?.cancel()
             discoverGeneration++
@@ -332,10 +334,11 @@ class AppController(context: Context, private val origin: String = "https://vipt
             _state.value = _state.value.copy(route = Route.Details(detail), loading = false)
         }.onFailure(::fail)
     }
-    fun chooseSources(media: Media, resume: Boolean = false) {
+    fun chooseSources(media: Media, resume: Boolean = false, origin: SourceReturn = sourceOrigin()) {
         sourceDiscovery?.cancel()
         sourceDiscovery = scope.launch {
-            _state.value = _state.value.copy(route = Route.Sources(media, resume), sources = emptyList(), loading = false, message = null)
+            if (origin == SourceReturn.Home) detailReturnDestination = Destination.Home
+            _state.value = _state.value.copy(route = Route.Sources(media, resume, origin), sources = emptyList(), loading = false, message = null)
             runCatching { gateway.sources(media) { arriving ->
                 val route = _state.value.route
                 if (route is Route.Sources && route.media.type == media.type && route.media.id == media.id) _state.value = _state.value.copy(sources = arriving)
@@ -344,12 +347,16 @@ class AppController(context: Context, private val origin: String = "https://vipt
             val exact = if (resume) discovered.firstOrNull { ResumeIdentity.sourceIdentity(it) == savedIdentity } else null
             if (exact != null) start(media, exact, explicitResume = true) else {
                 _state.value = _state.value.copy(
-                    route = Route.Sources(media, resume), sources = discovered, loading = false,
+                    route = Route.Sources(media, resume, origin), sources = discovered, loading = false,
                     message = when { discovered.isEmpty() -> "No sources found. Choose another title or try again."; resume && savedIdentity == null -> "Choose a source to resume. Your prior source cannot be verified."; resume -> "Your previous source is unavailable. Choose a source."; else -> null },
                 )
             }
         }.onFailure { error -> if (error !is CancellationException) fail(error) }
         }
+    }
+    private fun sourceOrigin(): SourceReturn = when (_state.value.route) {
+        is Route.Browse -> if ((_state.value.route as Route.Browse).destination == Destination.Home) SourceReturn.Home else SourceReturn.Details
+        else -> SourceReturn.Details
     }
     private var explicitResumeAwaitingCompletionKey: String? = null
 
@@ -392,7 +399,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
         generation: Long,
     ): Boolean {
         val returnDestination = when (val current = _state.value.route) {
-            is Route.Sources -> PlaybackReturnPolicy.afterSourceStart(current.resume)
+            is Route.Sources -> SourceReturnPolicy.playbackReturn(current.origin, current.resume)
             is Route.Player -> current.returnDestination
             else -> PlaybackReturn.Details
         }
@@ -662,6 +669,10 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun consumesBack(state: AppState = _state.value): Boolean = BackAvailabilityPolicy.consumes(state)
     /** Returns false only when Android should handle app exit at a root gate/page. */
     fun handleBack(): Boolean {
+        if (queueContinuationJob?.isActive == true) {
+            cancelPendingQueueContinuation()
+            return true
+        }
         if (continuationRestore != null && ((_state.value.route is Route.Player && nextEpisodeJob?.isActive == true) || _state.value.route is Route.Sources)) {
             invalidatePlaybackPreparation()
             nextEpisodeJob?.cancel()
@@ -680,17 +691,25 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
         when (val route = _state.value.route) {
             is Route.Player -> exitPlayer(route, snapshotPlaybackMedia(route))
-            is Route.Sources -> { invalidatePlaybackPreparation(); sourceDiscovery?.cancel(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
+            is Route.Sources -> {
+                invalidatePlaybackPreparation()
+                sourceDiscovery?.cancel()
+                queueContinuationJob?.cancel()
+                _state.value = _state.value.copy(route = SourceReturnPolicy.cancelRoute(route.origin, route.media))
+                if (route.origin == SourceReturn.Home) requestHomeFocusRestore()
+            }
             is Route.Profiles -> if (_state.value.managingProfiles) _state.value = _state.value.copy(managingProfiles = false) else if (_state.value.selectedProfile != null) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null) else return false
             is Route.Details -> {
                 val destination = DetailReturnPolicy.destination(detailReturnDestination)
                 detailReturnDestination = null
                 _state.value = _state.value.copy(route = Route.Browse(destination), dialog = null, pinPrompt = null)
+                if (destination == Destination.Home) requestHomeFocusRestore()
             }
             is Route.Guide -> {
                 guideBrowseGeneration++
                 guideGeneration++
                 _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
+                requestHomeFocusRestore()
             }
             is Route.Search, is Route.Settings, is Route.Addons, is Route.ProfileEditor -> _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
             is Route.Browse -> if (route.destination != Destination.Home) {
@@ -699,6 +718,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                     discoverGeneration++
                 }
                 _state.value = _state.value.copy(route = Route.Browse(Destination.Home))
+                requestHomeFocusRestore()
             } else return false
             Route.Pairing -> return false
         }
@@ -924,12 +944,20 @@ class AppController(context: Context, private val origin: String = "https://vipt
         val normalized = query.trim().take(128)
         setGuideFilter(if (normalized.isBlank()) LiveChannelFilter.AllUs else LiveChannelFilter.Search(normalized))
     }
+    fun retryGuidePage() {
+        val current = _state.value.guideUi
+        loadGuidePage(current.channelFilter, current.channelOffset, current.selectedChannelId)
+    }
 
     private fun loadGuidePage(filter: LiveChannelFilter, offset: Int, preferredChannelId: String? = null) {
         val browseGeneration = ++guideBrowseGeneration
         scope.launch {
             val prior = _state.value.guideUi
-            _state.value = _state.value.copy(loading = true, message = null)
+            // Enter the Guide shell before I/O. A first-load fault and an
+            // empty collection retain filters and the normal Guide Back path.
+            val priorChannel = (_state.value.route as? Route.Guide)?.channel
+                ?: prior.channels.firstOrNull { it.id == prior.selectedChannelId }
+            _state.value = _state.value.copy(route = Route.Guide(priorChannel), loading = true, message = null)
             try {
                 val (page, categories) = coroutineScope {
                     val pageRequest = async { gateway.livePage(LiveBrowseRequest(filter, offset, GuidePolicy.PAGE_SIZE)) }
@@ -953,11 +981,18 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 )
                 if (initial == null) {
                     _state.value = _state.value.copy(
-                        route = Route.Browse(Destination.Live),
+                        // Empty filter pages retain the canonical Guide shell.
+                        // Falling back to Browse(Live) discards the active
+                        // filter/search controls and turns Back into a
+                        // different navigation path.
+                        route = Route.Guide(),
                         liveChannels = emptyList(),
                         guideUi = guide,
                         loading = false,
-                        message = "No matching US channels or current programmes. Try a channel name, section, or another title.",
+                        message = when (filter) {
+                            is LiveChannelFilter.Search -> "No matching US channels or current programmes. Try a channel name, section, or another title."
+                            else -> "No channels are available for this filter."
+                        },
                     )
                     return@launch
                 }
@@ -1081,8 +1116,142 @@ class AppController(context: Context, private val origin: String = "https://vipt
     }
     fun openAddons() = scope.launch { update(loading = true); runCatching { gateway.addons() }.onSuccess { addons -> _state.value = _state.value.copy(route = Route.Addons, addons = addons, loading = false) }.onFailure(::fail) }
     fun toggleMyList(media: Media) = scope.launch { guarded("Enter parent PIN") { val saved = gateway.toggleFavorite(requireProfile(), media); _state.value = _state.value.copy(message = if (saved) "Added to My List." else "Removed from My List.") } }
-    fun removeFromQueue(media: Media) = scope.launch { guarded("Enter parent PIN") { gateway.setQueueVisibility(requireProfile(), media, true); _state.value = _state.value.copy(queue = _state.value.queue.filterNot { it.id == media.id }, dialog = DialogState(DialogKind.QueueManage, "Removed from Continue Watching", media)) } }
-    fun undoQueueRemoval(media: Media) = scope.launch { guarded("Enter parent PIN") { gateway.setQueueVisibility(requireProfile(), media, false); openQueue(); dismissDialog() } }
+    fun requestQueueManage(media: Media) {
+        val target = QueuePolicy.manageTarget(media)
+        if (!QueuePolicy.canManage(target)) return
+        _state.value = _state.value.copy(dialog = DialogState(DialogKind.QueueManage, target.name, target))
+    }
+    fun resumeQueueItem(media: Media) {
+        val target = QueuePolicy.manageTarget(media)
+        dismissDialog()
+        chooseSources(target, resume = true, origin = SourceReturn.Home)
+    }
+    fun chooseQueueSource(media: Media) {
+        val target = QueuePolicy.manageTarget(media)
+        dismissDialog()
+        chooseSources(target, resume = false, origin = SourceReturn.Home)
+    }
+    /**
+     * Queue Next is server-controlled continuation, never a guessed source.
+     * The row's preserved prior episode supplies source affinity and Manage
+     * actions; the server remains authoritative for the actual successor.
+     */
+    fun playQueuedNext(queueItem: Media) {
+        val previous = queueItem.previousEpisode ?: return
+        if (!QueuePolicy.hasResolvedNext(queueItem)) return
+        cancelPendingQueueContinuation()
+        val requestGeneration = ++playbackGeneration
+        queueContinuationJob = scope.launch {
+            update(loading = true, message = "Preparing next episode…")
+            try {
+                val result = gateway.nextEpisode(requireProfile(), previous)
+                if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
+                val next = result.item
+                if (result.status != "next" || next == null) {
+                    _state.value = _state.value.copy(
+                        loading = false,
+                        message = null,
+                        dialog = DialogState(DialogKind.NextUnavailable, queueNextUnavailableMessage(result.status), media = previous),
+                    )
+                    return@launch
+                }
+                val candidates = gateway.sources(next)
+                if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
+                val priorSource = Source(
+                    id = "queue-prior",
+                    provider = "",
+                    addonId = previous.sourceAddonId,
+                    fingerprint = previous.sourceFingerprint,
+                )
+                val selected = ContinuationSourcePolicy.select(next, priorSource, candidates)
+                _state.value = _state.value.copy(
+                    route = Route.Sources(next, origin = SourceReturn.Home),
+                    sources = candidates,
+                    loading = false,
+                    message = if (selected == null) "Choose a source for the next episode." else null,
+                )
+                if (selected != null) start(next, selected)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                if (PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) {
+                    _state.value = _state.value.copy(
+                        loading = false,
+                        message = null,
+                        dialog = DialogState(DialogKind.NextUnavailable, "Episode information is unavailable. Open the series to choose an episode.", media = previous),
+                    )
+                }
+            }
+        }
+    }
+    private fun queueNextUnavailableMessage(status: String): String = when (status) {
+        "caught_up" -> "You're caught up. No next episode is listed yet."
+        "upcoming" -> "The next episode hasn't been released yet."
+        else -> "Episode information is unavailable. Open the series to choose an episode."
+    }
+    fun removeFromQueue(media: Media) = scope.launch {
+        guarded("Enter parent PIN") {
+            val target = QueuePolicy.manageTarget(media)
+            gateway.setQueueVisibility(requireProfile(), target, true)
+            val displayKey = HomeFocusPolicy.mediaKey(media)
+            val targetKey = HomeFocusPolicy.mediaKey(target)
+            val shelves = _state.value.shelves.map { shelf ->
+                if (shelf.title == "Continue Watching") shelf.copy(items = shelf.items.filterNot {
+                    val key = HomeFocusPolicy.mediaKey(it)
+                    key == displayKey || key == targetKey || HomeFocusPolicy.mediaKey(QueuePolicy.manageTarget(it)) == targetKey
+                }) else shelf
+            }.filter { it.items.isNotEmpty() }
+            _state.value = _state.value.copy(
+                shelves = shelves,
+                queue = _state.value.queue.filterNot {
+                    val key = HomeFocusPolicy.mediaKey(it)
+                    key == displayKey || key == targetKey || HomeFocusPolicy.mediaKey(QueuePolicy.manageTarget(it)) == targetKey
+                },
+                dialog = DialogState(DialogKind.QueueRemoved, "Removed from Continue Watching", target),
+                message = null,
+            )
+            refreshHomeAfterQueueMutation()
+        }
+    }
+    fun undoQueueRemoval(media: Media) = scope.launch {
+        guarded("Enter parent PIN") {
+            gateway.setQueueVisibility(requireProfile(), QueuePolicy.manageTarget(media), false)
+            dismissDialog()
+            refreshHomeAfterQueueMutation()
+        }
+    }
+    private fun refreshHomeAfterQueueMutation() = scope.launch {
+        val profile = _state.value.selectedProfile ?: return@launch
+        runCatching { gateway.home(profile.id) }.onSuccess { shelves ->
+            if (_state.value.selectedProfile?.id == profile.id) _state.value = _state.value.copy(shelves = shelves, queue = shelves.firstOrNull { it.title == "Continue Watching" }?.items.orEmpty())
+        }.onFailure {
+            // The acknowledged mutation is already represented locally. Retain
+            // that truthful state and let the next Home visit retry refresh.
+            if (_state.value.route == Route.Browse(Destination.Home)) _state.value = _state.value.copy(message = "Continue Watching will refresh when available.")
+        }
+    }
+    fun recordHomeFocus(shelfTitle: String, media: Media) {
+        if (_state.value.route == Route.Browse(Destination.Home)) _state.value = _state.value.copy(homeFocus = HomeFocusPolicy.record(_state.value.homeFocus, shelfTitle, media))
+    }
+    fun recordHomeDirectionalInput() {
+        if (_state.value.route == Route.Browse(Destination.Home)) {
+            cancelPendingQueueContinuation()
+            _state.value = _state.value.copy(homeFocus = HomeFocusPolicy.afterDirectionalInput(_state.value.homeFocus))
+        }
+    }
+    /** UI modal dismissal uses this when its remembered Home card remains valid. */
+    fun restoreHomeFocus() {
+        requestHomeFocusRestore()
+    }
+    private fun requestHomeFocusRestore() {
+        _state.value = _state.value.copy(homeFocus = HomeFocusPolicy.requestRestore(_state.value.homeFocus))
+    }
+    private fun cancelPendingQueueContinuation() {
+        queueContinuationJob?.cancel()
+        queueContinuationJob = null
+        invalidatePlaybackPreparation()
+        if (_state.value.loading) _state.value = _state.value.copy(loading = false, message = null)
+    }
     fun correctEpisode(media: Media, watched: Boolean) = scope.launch { guarded("Enter parent PIN") { gateway.correctProgress(requireProfile(), media, if (watched) "watched" else "unwatched"); _state.value = _state.value.copy(message = if (watched) "Marked watched." else "Marked unwatched.") } }
     fun setPreference(preferences: PlaybackPreferences) = scope.launch { guarded("Enter parent PIN") { gateway.savePreferences(requireProfile(), preferences); _state.value = _state.value.copy(preferences = preferences, message = "Applies to your next playback. Manual track choices take priority.") } }
     fun toggleAddon(addon: Addon) = scope.launch { guarded("Enter parent PIN") { gateway.setAddonEnabled(addon, !addon.enabled); openSettings() } }
@@ -1110,11 +1279,15 @@ class AppController(context: Context, private val origin: String = "https://vipt
     }
     fun deleteProfile(profile: Profile) = scope.launch { if (profile.primary) { update(message = "The primary profile cannot be deleted."); return@launch }; guarded("Enter parent PIN to manage profiles") { gateway.deleteProfile(profile); _state.value = _state.value.copy(route = Route.Profiles, profiles = _state.value.profiles.filterNot { it.id == profile.id }, selectedProfile = _state.value.selectedProfile?.takeIf { it.id != profile.id }, message = "Profile deleted.") } }
     fun requestDialog(kind: DialogKind, title: String, media: Media? = null, source: Source? = null) { _state.value = _state.value.copy(dialog = DialogState(kind, title, media, source)) }
-    fun dismissDialog() { _state.value = _state.value.copy(dialog = null) }
+    fun dismissDialog() {
+        val restoresHomeFocus = _state.value.dialog?.kind in setOf(DialogKind.QueueManage, DialogKind.QueueRemoved)
+        _state.value = _state.value.copy(dialog = null)
+        if (restoresHomeFocus) requestHomeFocusRestore()
+    }
     fun submitPin(pin: String) = scope.launch { if (!pin.matches(Regex("\\d{4,8}"))) { update(message = "Enter a 4–8 digit parent PIN."); return@launch }; runCatching { gateway.unlockParent(pin) }.onSuccess { _state.value = _state.value.copy(pinPrompt = null, message = null); afterParentUnlock?.also { pending -> afterParentUnlock = null; pending() } }.onFailure { error -> _state.value = _state.value.copy(message = error.message ?: "Incorrect PIN. Try again.") } }
     fun cancelPin() { afterParentUnlock = null; _state.value = _state.value.copy(pinPrompt = null) }
     fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback((_state.value.route as? Route.Player)?.media); gateway.logout(); store.edit().clear().apply(); _state.value = AppState(route = Route.Pairing); beginPairing() } }
-    fun close() { pairingPoll?.cancel(); sourceDiscovery?.cancel(); discoverJob?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
+    fun close() { pairingPoll?.cancel(); sourceDiscovery?.cancel(); queueContinuationJob?.cancel(); discoverJob?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
     private data class GuideScheduleCache(val entries: List<GuideProgramme>, val expiresAtMillis: Long)
 
     private fun requireProfile() = checkNotNull(_state.value.selectedProfile).id

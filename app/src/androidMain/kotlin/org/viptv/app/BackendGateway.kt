@@ -645,9 +645,10 @@ private suspend fun <T> attempt(request: suspend () -> T): SearchAttempt<T> = tr
 private fun LiveChannel.asMedia() = Media(id, "live", name, poster = logo)
 
 private fun JSONObject.media(): Media {
-    val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), optString("poster").ifBlank { null }, optString("description").ifBlank { null }, millis(optDouble("position", 0.0)), optDouble("duration", 0.0).takeIf { it > 0 }?.let(::millis), optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null }, episodeTitle = optString("episode_title", optString("episodeTitle")).ifBlank { null })
-    val videos = optJSONArray("videos") ?: optJSONArray("episodes") ?: return base
-    return base.copy(episodes = (0 until videos.length()).mapNotNull { index -> videos.optJSONObject(index)?.media()?.let { episode ->
+    val base = Media(get("id").toString(), optString("type", "movie"), optString("name", optString("title")), optString("poster").ifBlank { null }, optString("description").ifBlank { null }, millis(optDouble("position", 0.0)), optDouble("duration", 0.0).takeIf { it > 0 }?.let(::millis), optString("series_id").ifBlank { null }, optInt("season").takeIf { it > 0 }, optInt("episode").takeIf { it > 0 }, optString("source_addon_id").ifBlank { null }, optString("source_fingerprint").ifBlank { null }, episodeTitle = optString("episode_title", optString("episodeTitle")).ifBlank { null }, queueStatus = optString("queue_status").ifBlank { null })
+    val previous = optJSONObject("previous_episode")?.media()
+    val videos = optJSONArray("videos") ?: optJSONArray("episodes") ?: return base.copy(previousEpisode = previous)
+    return base.copy(previousEpisode = previous, episodes = (0 until videos.length()).mapNotNull { index -> videos.optJSONObject(index)?.media()?.let { episode ->
         episode.copy(
             type = videos.optJSONObject(index)?.optString("type").orEmpty().ifBlank { base.type },
             seriesId = episode.seriesId ?: base.id,

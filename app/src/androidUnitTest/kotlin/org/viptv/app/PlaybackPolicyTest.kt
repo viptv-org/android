@@ -125,7 +125,35 @@ class MediaCardPolicyTest {
         val progressed = Media("movie", "movie", positionMillis = 10_000)
         assertEquals(MediaCardAction.ResumeExactSource, MediaCardPolicy.primary(true, progressed))
         assertEquals(MediaCardAction.OpenDetails, MediaCardPolicy.primary(false, progressed))
-        assertFalse(MediaCardPolicy.supportsChooseSourceHold(false, progressed))
+        assertTrue(MediaCardPolicy.supportsChooseSourceHold(homeSurface = true, resumeSurface = false, media = progressed))
+        assertTrue(MediaCardPolicy.supportsChooseSourceHold(homeSurface = true, resumeSurface = true, media = progressed))
+        assertFalse(MediaCardPolicy.supportsChooseSourceHold(homeSurface = false, resumeSurface = false, media = progressed))
+        assertFalse(MediaCardPolicy.supportsChooseSourceHold(homeSurface = true, resumeSurface = false, media = Media("live", "live")))
+    }
+}
+
+class HomeQueuePolicyTest {
+    @Test fun `Home source cancel preserves its Home origin while title source keeps detail`() {
+        val movie = Media("movie", "movie", positionMillis = 60_000)
+        assertEquals(Route.Browse(Destination.Home), SourceReturnPolicy.cancelRoute(SourceReturn.Home, movie))
+        assertEquals(Route.Details(movie), SourceReturnPolicy.cancelRoute(SourceReturn.Details, movie))
+        assertEquals(PlaybackReturn.Details, SourceReturnPolicy.playbackReturn(SourceReturn.Home, explicitResume = false))
+        assertEquals(PlaybackReturn.Sources, SourceReturnPolicy.playbackReturn(SourceReturn.Details, explicitResume = false))
+    }
+
+    @Test fun `queue management never applies to live and Resume needs progress`() {
+        assertFalse(QueuePolicy.canManage(Media("live", "live")))
+        assertFalse(QueuePolicy.canResume(Media("new", "movie")))
+        assertTrue(QueuePolicy.canResume(Media("progress", "movie", positionMillis = 1)))
+    }
+
+    @Test fun `directional input invalidates delayed Home focus restore`() {
+        val focused = HomeFocusPolicy.record(HomeFocusSnapshot(), "Continue Watching", Media("id", "movie"))
+        val requested = HomeFocusPolicy.requestRestore(focused)
+        assertTrue(HomeFocusPolicy.mayRestore(requested, requested.inputEpoch))
+        val moved = HomeFocusPolicy.afterDirectionalInput(requested)
+        assertFalse(HomeFocusPolicy.mayRestore(moved, requested.inputEpoch))
+        assertEquals("movie\u0000id", moved.mediaKey)
     }
 }
 
@@ -243,6 +271,10 @@ class BackAvailabilityPolicyTest {
         assertTrue(BackAvailabilityPolicy.consumes(AppState(route = Route.Sources(Media("movie", "movie")))))
         assertTrue(BackAvailabilityPolicy.consumes(AppState(route = Route.Player(Media("movie", "movie"), Source("stream", "Provider")))))
         assertFalse(BackAvailabilityPolicy.consumes(AppState(route = Route.Browse(Destination.Home))))
+    }
+
+    @Test fun `an empty Guide filter still owns Guide Back rather than legacy Live`() {
+        assertTrue(BackAvailabilityPolicy.consumes(AppState(route = Route.Guide())))
     }
 }
 

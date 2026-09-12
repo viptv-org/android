@@ -52,13 +52,15 @@ private const val GuideFiltersPerPage = 4
 
 /** Canonical five-row, two-hour EPG. Controller owns paging/cache/window state. */
 @Composable
-internal fun GuideScreen(state: AppState, initialChannel: LiveChannel, controller: AppController) {
+internal fun GuideScreen(state: AppState, initialChannel: LiveChannel?, controller: AppController) {
     val model = state.guideUi
     // `channels` is the server-selected 40-channel page. Never filter or page
     // it again in Compose: doing so loses server categories and cursor state.
-    val pageChannels = model.channels.ifEmpty { state.liveChannels.ifEmpty { listOf(initialChannel) } }
-    val schedules = model.schedulesByChannelId.ifEmpty { mapOf(initialChannel.id to state.guide) }
-    val selectedId = model.selectedChannelId ?: initialChannel.id
+    val pageChannels = model.channels.ifEmpty { state.liveChannels }
+    val schedules = model.schedulesByChannelId.ifEmpty {
+        initialChannel?.let { mapOf(it.id to state.guide) }.orEmpty()
+    }
+    val selectedId = model.selectedChannelId ?: initialChannel?.id
     val now = System.currentTimeMillis()
     val selectedIndex = pageChannels.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
     val firstRow = max(0, selectedIndex - 4)
@@ -93,7 +95,7 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel, controlle
         detail = null
     }
 
-    LaunchedEffect(initialChannel.id) { initialFocus.requestFocus() }
+    LaunchedEffect(initialChannel?.id, model.channelFilter) { initialFocus.requestFocus() }
     LaunchedEffect(filterItems.size) { filterPage = filterPage.coerceIn(0, filterPageCount - 1) }
     LaunchedEffect(filterPage, shownFilters.firstOrNull()?.key) {
         shownFilters.firstOrNull()?.let { filterFocus.getValue(it.key).requestFocus() }
@@ -155,6 +157,14 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel, controlle
                 },
                 onWatch = { controller.watchGuideChannel(channel) },
             )
+        }
+        if (pageChannels.isEmpty() && !state.loading) {
+            val empty = state.message ?: when (model.channelFilter) {
+                is LiveChannelFilter.Search -> "No matching US channels or current programmes. Try a channel name, section, or another title."
+                else -> "No channels are available for this filter."
+            }
+            Text(empty, color = GuideMuted, fontSize = 20.sp, textAlign = TextAlign.Center, modifier = Modifier.offset(360.dp, 350.dp).width(760.dp))
+            GuideButton("Try again", Modifier.offset(642.dp, 414.dp).width(196.dp).height(48.dp)) { controller.retryGuidePage() }
         }
         if (now in window until window + GuideWindowMillis) {
             val x = 432 + ((now - window).toFloat() / GuideWindowMillis * GuideWidth).toInt()

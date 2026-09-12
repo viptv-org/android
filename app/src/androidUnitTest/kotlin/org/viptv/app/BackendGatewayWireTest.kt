@@ -22,6 +22,27 @@ import kotlin.test.assertTrue
  */
 class BackendGatewayWireTest {
     @Test
+    fun `queue next keeps the prior episode as the management and exact resume target`() = runBlocking {
+        FixtureServer(1) { request ->
+            assertEquals("GET", request.method)
+            assertEquals("/api/profiles/profile/continue/page?limit=40", request.target)
+            FixtureResponse(
+                """{"items":[{
+                    "id":"episode-2","type":"series","name":"Fixture Show","queue_status":"next",
+                    "previous_episode":{"id":"episode-1","type":"series","name":"Fixture Show","position":995,"duration":1000,"source_addon_id":"iptv","source_fingerprint":"fingerprint"}
+                }]}""",
+            )
+        }.use { server ->
+            val item = VipTvHttpGateway(server.origin).queue("profile").single()
+            assertTrue(QueuePolicy.hasResolvedNext(item))
+            assertEquals("episode-1", QueuePolicy.manageTarget(item).id)
+            assertEquals(MediaCardAction.PlayQueuedNext, MediaCardPolicy.primary(resumeSurface = true, media = item))
+            assertTrue(QueuePolicy.canResume(item))
+            server.assertHealthy()
+        }
+    }
+
+    @Test
     fun `device poll distinguishes pending rate limit and unexpected failures`() = runBlocking {
         val attempt = AtomicInteger()
         FixtureServer(3) { request ->
