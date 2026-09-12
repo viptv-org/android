@@ -8,6 +8,7 @@ import coil.compose.AsyncImage
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
+import com.getair.video.PlaybackStatus
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
@@ -27,6 +28,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.Icon
@@ -36,6 +38,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -81,7 +88,7 @@ class MainActivity : ComponentActivity() {
             is Route.Browse -> Browse(state, route.destination, controller)
             is Route.Details -> Details(route.media, controller)
             is Route.Sources -> SourcePicker(route.media, state.sources, controller)
-            is Route.Player -> Player(route.media, state.playerChromeVisible, state.seekPreview, controller)
+            is Route.Player -> Player(route.media, state.playerChromeVisible, state.seekPreview, state.playbackTracks, controller)
             Route.Search -> SearchScreen(state, controller)
             Route.Settings -> SettingsScreen(state, controller)
             Route.Addons -> AddonsScreen(state, controller)
@@ -99,10 +106,15 @@ class MainActivity : ComponentActivity() {
 @Composable private fun Pairing(state: AppState, controller: AppController) = Box(Modifier.fillMaxSize()) {
     Image(painterResource(R.drawable.viptv_mark), contentDescription = "VIPTV", modifier = Modifier.offset(96.dp, 44.dp).width(42.dp).height(36.dp))
     Text("Sign in to VIPTV", color = White, fontSize = 52.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(96.dp, 170.dp))
-    Text("Visit this address, then enter the code shown below.", color = Muted, fontSize = 32.sp, modifier = Modifier.offset(96.dp, 260.dp))
+    Text(
+        "Visit this address, then enter the code shown below.",
+        color = Muted,
+        fontSize = 32.sp,
+        modifier = Modifier.offset(96.dp, 260.dp).width(640.dp).height(84.dp),
+    )
     Text(state.deviceCode?.verificationUri ?: "Preparing secure pairing…", color = White, fontSize = 28.sp, modifier = Modifier.offset(96.dp, 364.dp))
     Text(state.deviceCode?.userCode ?: "", color = White, fontSize = 44.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(96.dp, 450.dp))
-    state.deviceCode?.let { code -> PairingQr(code.qrUri ?: "${code.verificationUri}?code=${code.userCode}", Modifier.offset(886.dp, 184.dp)) }
+    state.deviceCode?.let { code -> PairingQr(code.verificationUriComplete ?: "${code.verificationUri}?code=${code.userCode}", Modifier.offset(886.dp, 184.dp)) }
     if (state.message != null) TvButton("Try again", controller::beginPairing, Modifier.offset(96.dp, 540.dp).width(170.dp).height(56.dp))
 }
 
@@ -121,10 +133,12 @@ private fun qrBitmap(value: String): Bitmap {
 }
 
 @Composable private fun ProfileChooser(state: AppState, controller: AppController) = Box(Modifier.fillMaxSize()) {
+    val firstProfileFocus = remember { FocusRequester() }
+    LaunchedEffect(state.profilePage, state.profiles) { if (state.profiles.drop(state.profilePage * 5).isNotEmpty()) firstProfileFocus.requestFocus() }
     Text(if (state.managingProfiles) "Manage profiles" else "Who's watching?", color = White, fontSize = 40.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.offset(100.dp, 146.dp).width(1080.dp))
     Row(Modifier.offset(y = 252.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(34.dp, Alignment.CenterHorizontally)) {
-        state.profiles.drop(state.profilePage * 5).take(5).forEach { profile ->
-            ProfileCard(profile, state.managingProfiles, controller)
+        state.profiles.drop(state.profilePage * 5).take(5).forEachIndexed { index, profile ->
+            ProfileCard(profile, state.managingProfiles, controller, if (index == 0) firstProfileFocus else null)
         }
     }
     Row(Modifier.offset(y = 530.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)) {
@@ -138,17 +152,23 @@ private fun qrBitmap(value: String): Bitmap {
     }
 }
 
-@Composable private fun ProfileCard(profile: Profile, managing: Boolean, controller: AppController) = Holdable(
-    onActivate = { if (managing) controller.editProfile(profile) else controller.chooseProfile(profile) },
-    onHold = null,
-    modifier = Modifier.width(178.dp).height(210.dp),
-) {
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+@Composable private fun ProfileCard(profile: Profile, managing: Boolean, controller: AppController, focusRequester: FocusRequester?) {
+    var focused by remember { mutableStateOf(false) }
+    Holdable(
+        onActivate = { if (managing) controller.editProfile(profile) else controller.chooseProfile(profile) },
+        onHold = null,
+        modifier = Modifier.width(178.dp).height(210.dp)
+            .then(if (focusRequester == null) Modifier else Modifier.focusRequester(focusRequester))
+            .onFocusChanged { focused = it.hasFocus }
+            .border(if (focused) 3.dp else 0.dp, White, RoundedCornerShape(12.dp)),
+    ) {
+        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.width(178.dp).height(178.dp).padding(9.dp).clip(RoundedCornerShape(12.dp)).background(avatarFallback(profile.name)), contentAlignment = Alignment.Center) {
             Text(profile.name.take(2).uppercase(), color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
             if (!profile.avatarUrl.isNullOrBlank()) AsyncImage(model = profile.avatarUrl, contentDescription = "${profile.name} avatar", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
-        Text(profile.name, color = White, fontSize = 22.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 3.dp))
+        Text(profile.name, color = if (focused) White else Muted, fontSize = 22.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 3.dp))
+        }
     }
 }
 
@@ -156,40 +176,70 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
     0 -> Color(0xFF3D4A5A); 1 -> Color(0xFF55435C); 2 -> Color(0xFF40584D); else -> Color(0xFF5A4D3D)
 }
 
-@Composable private fun Browse(state: AppState, destination: Destination, controller: AppController) = Row(Modifier.fillMaxSize()) {
-    Rail(destination, controller); Box(Modifier.weight(1f).fillMaxHeight()) {
+@Composable private fun Browse(state: AppState, destination: Destination, controller: AppController) = Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize()) {
+        val homeFocus = remember { FocusRequester() }
+        LaunchedEffect(destination, state.shelves) { if (destination == Destination.Home && state.shelves.firstOrNull()?.items?.isNotEmpty() == true) homeFocus.requestFocus() }
         val hero = state.shelves.firstOrNull()?.items?.firstOrNull()
         if (destination == Destination.Home && hero != null) HomeHero(hero, controller)
-        Column(Modifier.fillMaxSize().padding(start = 8.dp, top = if (destination == Destination.Home && hero != null) 466.dp else 46.dp, end = 84.dp)) {
-            Text(destination.label, color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
-            Text(state.selectedProfile?.name ?: "", color = Muted, modifier = Modifier.padding(top = 6.dp))
+        Column(
+            Modifier.fillMaxSize()
+                .padding(
+                    start = if (destination == Destination.Home && hero != null) 100.dp else 100.dp,
+                    top = if (destination == Destination.Home && hero != null) 466.dp else 46.dp,
+                    end = 84.dp,
+                )
+                .then(if (destination == Destination.Home && hero != null) Modifier.height(254.dp).clipToBounds() else Modifier),
+        ) {
+            if (destination != Destination.Home) {
+                Text(destination.label, color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
+                Text(state.selectedProfile?.name ?: "", color = Muted, modifier = Modifier.padding(top = 6.dp))
+            }
             if (destination == Destination.Live) {
                 state.liveChannels.forEach { channel -> TvButton(channel.name, { controller.openGuide(channel) }, Modifier.fillMaxWidth().height(64.dp).padding(top = 8.dp)) }
                 if (!state.loading && state.liveChannels.isEmpty()) Text("No channels are available for this filter.", color = Muted, modifier = Modifier.padding(top = 120.dp))
             } else {
                 val shelves = if (destination == Destination.Home) state.shelves else listOf(HomeShelf(destination.label, state.catalog.ifEmpty { state.shelves.flatMap(HomeShelf::items) }))
-                shelves.forEach { shelf -> Shelf(shelf, controller) }
+                shelves.forEachIndexed { index, shelf -> Shelf(shelf, controller, if (destination == Destination.Home && index == 0) homeFocus else null, if (destination == Destination.Home) 0.dp else 26.dp) }
                 if (!state.loading && shelves.isEmpty()) Text("Nothing is available here yet.", color = Muted, modifier = Modifier.padding(top = 120.dp))
             }
         }
     }
+    Rail(destination, controller)
 }
 
 @Composable private fun HomeHero(media: Media, controller: AppController) = Box(Modifier.fillMaxWidth().height(450.dp).background(Canvas)) {
-    if (!media.poster.isNullOrBlank()) AsyncImage(model = media.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-    Column(Modifier.padding(start = 8.dp, top = 128.dp).width(600.dp)) {
-        Text(if (media.type == "live") "LIVE NOW" else "FEATURED ${media.type.uppercase()}", color = Muted, fontSize = 18.sp)
-        Text(media.name, color = White, fontSize = 44.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 12.dp))
-        Text(media.description ?: "", color = Muted, fontSize = 19.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 18.dp))
-        Row(Modifier.padding(top = 26.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TvButton(if (media.positionMillis > 0 && media.type != "live") "Resume" else "Play", { if (media.positionMillis > 0 && media.type != "live") controller.chooseSources(media, resume = true) else controller.open(media) }, Modifier.width(144.dp).height(50.dp))
-            TvButton("My List", { controller.toggleMyList(media) }, Modifier.width(144.dp).height(50.dp))
-        }
+    val density = LocalDensity.current
+    val leftGradientEnd = with(density) { 760.dp.toPx() }
+    val bottomGradientStart = with(density) { 140.dp.toPx() }
+    if (!media.poster.isNullOrBlank()) {
+        AsyncImage(model = media.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+    }
+    // The server currently supplies landscape poster art only. These source-faithful
+    // overlays preserve readable hero copy until a dedicated backdrop field arrives.
+    Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Canvas.copy(alpha = .97f), Canvas.copy(alpha = .78f), Color.Transparent), endX = leftGradientEnd)))
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Canvas.copy(alpha = .18f), Canvas), startY = bottomGradientStart)))
+    Text(if (media.type == "live") "LIVE NOW" else if (media.positionMillis > 0) "CONTINUE WATCHING" else "FEATURED ${media.type.uppercase()}", color = Muted, fontSize = 18.sp, modifier = Modifier.offset(100.dp, 128.dp))
+    Text(media.name, color = White, fontSize = 44.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.offset(100.dp, 166.dp).width(600.dp))
+    Text(media.description ?: "", color = Muted, fontSize = 19.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.offset(100.dp, 228.dp).width(548.dp).height(80.dp))
+    Row(Modifier.offset(100.dp, 375.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        TvButton(if (media.positionMillis > 0 && media.type != "live") "Resume" else "Play", { if (media.positionMillis > 0 && media.type != "live") controller.chooseSources(media, resume = true) else controller.open(media) }, Modifier.width(144.dp).height(50.dp))
+        TvButton("My List", { controller.toggleMyList(media) }, Modifier.width(144.dp).height(50.dp))
     }
 }
 
-@Composable private fun Rail(selected: Destination, controller: AppController) = Column(Modifier.width(92.dp).fillMaxHeight().padding(top = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-    Destination.entries.forEach { destination -> TvButton("", { controller.navigate(destination) }, Modifier.size(60.dp).padding(vertical = 2.dp), selected = destination == selected) { RailIcon(destination, selected == destination) } }
+@Composable private fun Rail(selected: Destination, controller: AppController) = Column(Modifier.width(92.dp).fillMaxHeight().padding(top = 28.dp), horizontalAlignment = Alignment.End) {
+    Destination.entries.forEach { destination ->
+        var focused by remember(destination) { mutableStateOf(false) }
+        Holdable(
+            onActivate = { controller.navigate(destination) },
+            onHold = null,
+            modifier = Modifier.size(60.dp).offset(x = (-4).dp).padding(vertical = 2.dp)
+                .onFocusChanged { focused = it.hasFocus }
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (focused) White else Color.Transparent),
+        ) { RailIcon(destination, focused) }
+    }
 }
 
 @Composable private fun RailIcon(destination: Destination, selected: Boolean) {
@@ -205,53 +255,82 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
     Icon(image, contentDescription = destination.label, tint = if (selected) Canvas else White, modifier = Modifier.size(30.dp))
 }
 
-@Composable private fun Shelf(shelf: HomeShelf, controller: AppController) = Column(Modifier.padding(top = 26.dp)) {
+@Composable private fun Shelf(shelf: HomeShelf, controller: AppController, initialFocus: FocusRequester? = null, topPadding: androidx.compose.ui.unit.Dp = 26.dp) = Column(Modifier.padding(top = topPadding)) {
     Text(shelf.title, color = White, fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 10.dp))
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(24.dp)) { items(shelf.items, key = { it.type + it.id }) { media -> MediaCard(media, controller) } }
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(24.dp)) { itemsIndexed(shelf.items, key = { _, media -> media.type + media.id }) { index, media -> MediaCard(media, controller, if (index == 0) initialFocus else null) } }
 }
 
-@Composable private fun MediaCard(media: Media, controller: AppController) {
+@Composable private fun MediaCard(media: Media, controller: AppController, focusRequester: FocusRequester? = null) {
     val resumable = media.positionMillis > 0 && media.type != "live"
-    Holdable({ if (resumable) controller.chooseSources(media, resume = true) else controller.open(media) }, if (resumable) ({ controller.chooseSources(media) }) else null, Modifier.width(256.dp).height(200.dp).clip(RoundedCornerShape(8.dp)).background(Surface).padding(10.dp)) {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
-            Box(Modifier.fillMaxWidth().height(132.dp).background(Color(0xFF242628)), contentAlignment = Alignment.Center) {
+    var focused by remember { mutableStateOf(false) }
+    Holdable(
+        { if (resumable) controller.chooseSources(media, resume = true) else controller.open(media) },
+        if (resumable) ({ controller.chooseSources(media) }) else null,
+        Modifier.width(256.dp).height(200.dp).then(if (focusRequester == null) Modifier else Modifier.focusRequester(focusRequester))
+            .onFocusChanged { focused = it.hasFocus }.border(if (focused) 2.dp else 0.dp, White, RoundedCornerShape(8.dp)),
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxWidth().height(144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)), contentAlignment = Alignment.Center) {
                 Text(media.name.take(1), color = Muted, fontSize = 42.sp)
                 if (!media.poster.isNullOrBlank()) AsyncImage(model = media.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             }
-            Text(media.name, color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
-            Text(media.type, color = Muted, fontSize = 14.sp, maxLines = 1)
+            Text(media.name, color = if (focused) Color.White else White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
+            Text(media.type, color = Muted, fontSize = 14.sp, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
         }
     }
 }
 
-@Composable private fun Details(media: Media, controller: AppController) = Column(Modifier.fillMaxSize().padding(start = 100.dp, top = 70.dp, end = 120.dp)) {
-    Text(media.name, color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold); Text(media.type.uppercase(), color = Muted, modifier = Modifier.padding(top = 10.dp))
-    Text(media.description ?: "No description available.", color = Muted, fontSize = 20.sp, modifier = Modifier.padding(top = 40.dp).width(800.dp), maxLines = 4, overflow = TextOverflow.Ellipsis)
-    Row(Modifier.padding(top = 42.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        TvButton(if (media.positionMillis > 0) "Resume" else "Play", { controller.chooseSources(media, media.positionMillis > 0) })
-        TvButton("Choose source", { controller.chooseSources(media) })
-        TvButton("My List", { controller.toggleMyList(media) })
+@Composable private fun Details(media: Media, controller: AppController) = Box(Modifier.fillMaxSize().background(Canvas)) {
+    if (!media.poster.isNullOrBlank()) {
+        AsyncImage(model = media.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(620.dp))
+        Box(Modifier.fillMaxWidth().height(620.dp).background(Brush.verticalGradient(listOf(Canvas.copy(alpha = .32f), Canvas.copy(alpha = .90f), Canvas))))
     }
-    if (media.type == "series" && media.episodes.isNotEmpty()) {
-        Text("Episodes", color = White, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 46.dp))
-        LazyRow(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+    if (media.type == "series") {
+        Text(media.name, color = White, fontSize = 36.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.offset(112.dp, 74.dp).width(900.dp))
+        Text(media.type.uppercase(), color = Muted, fontSize = 18.sp, modifier = Modifier.offset(112.dp, 132.dp).width(706.dp))
+        Row(Modifier.offset(112.dp, 188.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            TvButton("Season ${media.season ?: 1}", { }, Modifier.width(256.dp).height(48.dp))
+            TvButton("My List", { controller.toggleMyList(media) }, Modifier.width(256.dp).height(48.dp))
+            TvButton("More info", { controller.open(media) }, Modifier.width(256.dp).height(48.dp))
+        }
+        Text("Episodes", color = White, fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End, modifier = Modifier.offset(976.dp, 198.dp).width(220.dp))
+        LazyRow(Modifier.offset(112.dp, 262.dp).width(1096.dp).height(330.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             items(media.episodes, key = { it.id }) { episode -> EpisodeCard(episode, controller) }
         }
+    } else {
+        Box(Modifier.offset(112.dp, 126.dp).width(236.dp).height(354.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)), contentAlignment = Alignment.Center) {
+            Text(media.name.take(1), color = Muted, fontSize = 42.sp)
+            if (!media.poster.isNullOrBlank()) AsyncImage(model = media.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        Column(Modifier.offset(380.dp, 126.dp).width(804.dp)) {
+            Text(media.name, color = White, fontSize = 46.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(media.type.uppercase(), color = Muted, fontSize = 18.sp, modifier = Modifier.padding(top = 18.dp).height(48.dp))
+            Text(media.description ?: "No description available.", color = Muted, fontSize = 20.sp, modifier = Modifier.padding(top = 28.dp).height(128.dp), maxLines = 4, overflow = TextOverflow.Ellipsis)
+            Row(Modifier.padding(top = 28.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                TvButton(if (media.positionMillis > 0) "Resume" else "Play", { controller.chooseSources(media, media.positionMillis > 0) }, Modifier.width(192.dp).height(56.dp))
+                TvButton("Choose source", { controller.chooseSources(media) }, Modifier.width(192.dp).height(56.dp))
+                TvButton("My List", { controller.toggleMyList(media) }, Modifier.width(192.dp).height(56.dp))
+            }
+        }
     }
 }
 
-@Composable private fun EpisodeCard(episode: Media, controller: AppController) = Holdable(
-    onActivate = { controller.chooseSources(episode) },
-    onHold = null,
-    modifier = Modifier.width(256.dp).height(200.dp).clip(RoundedCornerShape(8.dp)).background(Surface).padding(10.dp),
-) {
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
-        Box(Modifier.fillMaxWidth().height(132.dp).background(Color(0xFF242628)), contentAlignment = Alignment.Center) {
+@Composable private fun EpisodeCard(episode: Media, controller: AppController) {
+    var focused by remember { mutableStateOf(false) }
+    Holdable(
+        onActivate = { controller.chooseSources(episode) },
+        onHold = null,
+        modifier = Modifier.width(256.dp).height(330.dp).onFocusChanged { focused = it.hasFocus }.border(if (focused) 2.dp else 0.dp, White, RoundedCornerShape(8.dp)),
+    ) {
+        Column(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxWidth().height(144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)), contentAlignment = Alignment.Center) {
             Text("S${episode.season ?: 0} E${episode.episode ?: 0}", color = Muted, fontSize = 20.sp)
             if (!episode.poster.isNullOrBlank()) AsyncImage(model = episode.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
-        Text(episode.name.ifBlank { "Episode ${episode.episode ?: ""}" }, color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
-        Text("S${episode.season ?: 0} E${episode.episode ?: 0}", color = Muted, fontSize = 14.sp)
+        Text("S${episode.season ?: 0} E${episode.episode ?: 0}", color = Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp))
+        Text(episode.name.ifBlank { "Episode ${episode.episode ?: ""}" }, color = if (focused) Color.White else White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 12.dp))
+        Text(episode.description ?: "", color = Muted, fontSize = 16.sp, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp).height(94.dp))
+        }
     }
 }
 
@@ -271,30 +350,36 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
     }
 }
 
-@Composable private fun Player(media: Media, chromeVisible: Boolean, seekPreview: SeekPreview?, controller: AppController) = Box(
+@Composable private fun Player(media: Media, chromeVisible: Boolean, seekPreview: SeekPreview?, serverTracks: PlaybackTrackChoices, controller: AppController) = Box(
     Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent { event ->
         if (event.nativeKeyEvent.action == KeyEvent.ACTION_UP && event.nativeKeyEvent.keyCode != KeyEvent.KEYCODE_BACK) controller.showPlayerChrome()
         false
     },
 ) {
     val playback by controller.player.state.collectAsState()
-    val audioTracks by controller.player.audioTracks.collectAsState()
-    val subtitleTracks by controller.player.subtitleTracks.collectAsState()
     LaunchedEffect(media.type, media.id, playback.positionMillis, playback.isPlaying, playback.timeline?.durationMillis) {
-        controller.maybeAutoNext(media, playback.positionMillis, playback.timeline?.durationMillis, playback.isPlaying)
+        controller.maybeAutoNext(media, playback.positionMillis, playback.timeline?.durationMillis, playback.isPlaying, playback.status == PlaybackStatus.Ended)
     }
     AndroidView(factory = { SurfaceView(it).also(controller.player::attach) }, modifier = Modifier.fillMaxSize())
     if (chromeVisible) Column(Modifier.align(Alignment.BottomStart).padding(64.dp)) {
         Text(media.name, color = White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
         seekPreview?.let { Text("Seek preview: ${it.targetMillis / 1_000}s", color = Muted, modifier = Modifier.padding(top = 8.dp)) }
         Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (playback.timeline?.canSeek == true) TvButton("↶ 10", { controller.previewSeek(-10_000) })
-            TvButton(if (playback.isPlaying) "Pause" else "Play", { controller.showPlayerChrome(); if (playback.isPlaying) controller.player.pause() else controller.player.play() })
-            if (playback.timeline?.canSeek == true) TvButton("30 ↷", { controller.previewSeek(30_000) })
-            seekPreview?.let { TvButton("Seek", controller::commitSeek); TvButton("Cancel", controller::cancelSeek) }
-            if (audioTracks.isNotEmpty()) TvButton("Audio", { controller.showPlayerChrome(); val next = audioTracks.firstOrNull { it.id != playback.selectedAudioTrackId } ?: audioTracks.first(); controller.player.selectAudioTrack(next.id) })
-            if (subtitleTracks.isNotEmpty()) TvButton("Captions", { controller.showPlayerChrome(); val next = subtitleTracks.firstOrNull { it.id != playback.selectedSubtitleTrackId }; controller.player.selectSubtitleTrack(next?.id) })
-            if (media.type == "series") TvButton("Next episode", { controller.nextEpisode(media) })
+            if (media.type != "live") {
+                if (playback.timeline?.canSeek == true) TvButton("↶ 10", { controller.previewSeek(-10_000) })
+                TvButton(if (playback.isPlaying) "Pause" else "Play", { controller.showPlayerChrome(); if (playback.isPlaying) controller.player.pause() else controller.player.play() })
+                if (playback.timeline?.canSeek == true) TvButton("30 ↷", { controller.previewSeek(30_000) })
+                seekPreview?.let { TvButton("Seek", controller::commitSeek); TvButton("Cancel", controller::cancelSeek) }
+                if (media.type == "series") TvButton("Next episode", { controller.nextEpisode(media) })
+            }
+            val nextAudio = serverTracks.audio.firstOrNull { it.selectable && it.supported && !it.selected }
+                ?: serverTracks.audio.firstOrNull { it.selectable && it.supported }
+            nextAudio?.let { track -> TvButton("Audio", { controller.showPlayerChrome(); controller.selectAudioTrack(track) }) }
+            if (serverTracks.subtitlesSupported) {
+                val selectedSubtitle = serverTracks.subtitles.firstOrNull { it.selected }
+                val nextSubtitle = serverTracks.subtitles.firstOrNull { it.selectable && it.supported }
+                TvButton("Captions", { controller.showPlayerChrome(); controller.selectSubtitleTrack(if (selectedSubtitle == null) nextSubtitle else null) })
+            }
             TvButton("Exit", { controller.saveProgress(media); controller.back() })
         }
     }
@@ -304,7 +389,7 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
     var query by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().padding(100.dp)) {
         Text("Search", color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
-        TextField(value = query, onValueChange = { query = it }, label = { Text("Search movies and series") }, modifier = Modifier.width(520.dp).padding(top = 26.dp))
+        TextField(value = query, onValueChange = { query = it; controller.search(it) }, label = { Text("Search movies and series") }, modifier = Modifier.width(520.dp).padding(top = 26.dp))
         TvButton("Search", { controller.search(query.trim()) }, Modifier.padding(top = 16.dp))
         LazyRow(Modifier.padding(top = 30.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) { items(state.searchResults, key = { it.type + it.id }) { MediaCard(it, controller) } }
         if (query.isNotBlank() && !state.loading && state.searchResults.isEmpty()) Text("No results. Keep the search field focused to try another title.", color = Muted, modifier = Modifier.padding(top = 28.dp))
@@ -372,8 +457,25 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
     modifier: Modifier = Modifier.width(170.dp).height(56.dp),
     selected: Boolean = false,
     multiline: Boolean = false,
-    content: @Composable BoxScope.() -> Unit = { Text(label, color = if (selected) Canvas else White, fontWeight = FontWeight.Bold, maxLines = if (multiline) 4 else 1, overflow = TextOverflow.Ellipsis) },
-) = Holdable(onActivate, null, modifier.background(if (selected) White else Surface, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp), selected, content)
+    content: (@Composable BoxScope.() -> Unit)? = null,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val fill = when {
+        focused -> White
+        selected -> Color(0xFF303234)
+        else -> Surface
+    }
+    Holdable(
+        onActivate,
+        null,
+        modifier.onFocusChanged { focused = it.hasFocus }.background(fill, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp),
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (content == null) Text(label, color = if (focused) Canvas else White, fontWeight = FontWeight.Bold, maxLines = if (multiline) 4 else 1, overflow = TextOverflow.Ellipsis)
+            else content()
+        }
+    }
+}
 
 /** 700ms remote hold: exactly one action on release; hold suppresses ordinary activation. */
 @Composable private fun Holdable(onActivate: () -> Unit, onHold: (() -> Unit)?, modifier: Modifier, selected: Boolean = false, content: @Composable BoxScope.() -> Unit) {
