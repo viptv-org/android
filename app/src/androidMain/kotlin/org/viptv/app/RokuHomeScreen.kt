@@ -96,7 +96,7 @@ internal fun RokuHomeScreen(state: AppState, controller: AppController) {
         } else Box(Modifier.offset(92.dp,if(expanded)466.dp else 100.dp).width(1188.dp).height(if(expanded)254.dp else 620.dp).clip(androidx.compose.ui.graphics.RectangleShape)) {
             // The reference window is positioned by logical shelf, never by a scroll
             // container. Focus bring-into-view cannot displace this vertical canvas.
-            shelves.forEachIndexed { shelfIndex,shelf ->
+            shelves.withIndex().filter {it.index in row..(row+1)}.forEach { (shelfIndex,shelf) ->
                 key(shelf.title) {
                 Column(Modifier.offset(8.dp,((shelfIndex-row)*254+8).dp).width(1180.dp).height(240.dp)) {
                     Text(shelf.title.uppercase(),color=RokuWhite,fontSize=18.sp,fontWeight=FontWeight.Bold,modifier=Modifier.height(32.dp))
@@ -187,7 +187,7 @@ internal fun RokuArtworkCard(media:Media,modifier:Modifier=Modifier,onActivate:(
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.width(256.dp).height(144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)),contentAlignment=Alignment.Center) {
                 Text(media.name,color=RokuMuted,fontSize=19.sp,maxLines=3,textAlign=TextAlign.Center,modifier=Modifier.padding(12.dp))
-                AsyncImage(media.thumbnail?:media.backdrop?:media.poster,null,contentScale=if(media.type=="live")ContentScale.Fit else ContentScale.Crop,modifier=if(media.type=="live")Modifier.size(176.dp,100.dp)else Modifier.fillMaxSize())
+                AsyncImage(if(media.type=="live")media.poster else media.backdrop?.takeUnless {it==media.poster}?:media.thumbnail?:media.poster.takeIf {media.posterShape=="landscape"},null,contentScale=if(media.type=="live")ContentScale.Fit else ContentScale.Crop,modifier=if(media.type=="live")Modifier.size(176.dp,100.dp)else Modifier.fillMaxSize())
                 val duration=media.durationMillis
                 if(duration!=null&&duration>0&&media.positionMillis>0) {
                     Box(Modifier.offset(8.dp,134.dp).align(Alignment.TopStart).size(240.dp,6.dp).background(Color(0xFF4A4C4E)))

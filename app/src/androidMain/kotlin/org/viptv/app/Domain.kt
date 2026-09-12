@@ -28,6 +28,7 @@ data class Media(
     val credits: String? = null,
     val watched: Boolean = false,
     val imdbRating: String? = null,
+    val posterShape: String? = null,
 )
 
 data class Source(

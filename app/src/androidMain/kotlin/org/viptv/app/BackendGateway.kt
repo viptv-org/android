@@ -704,6 +704,7 @@ private fun JSONObject.media(): Media {
         genres = (optJSONArray("genres") ?: JSONArray()).let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf { value -> value.isNotBlank() && value != "null" } } },
         credits = displayString("credits") ?: listOfNotNull(displayString("director")?.let { "Director: $it" }, displayString("cast")?.let { "Cast: $it" }).joinToString("  ·  ").ifBlank { null },
         imdbRating = displayString("imdbRating", "imdb_rating", "rating"),
+        posterShape = displayString("posterShape", "poster_shape"),
         watched = optBoolean("watched") || optString("watch_state") == "watched",
     )
     val previous = optJSONObject("previous_episode")?.media()
