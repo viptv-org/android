@@ -36,6 +36,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.yield
 import java.net.URI
 
 private val SettingsCanvas = Color(0xFF101112)
@@ -94,8 +95,11 @@ fun SettingsScreen(
         if (choice != null || pendingRemoval != null) return@LaunchedEffect
         val origin = dialogOrigin ?: return@LaunchedEffect
         dialogOrigin = null
-        scrollState.scrollTo(origin.scrollOffset)
+        // Focus may request automatic bring-into-view. Let it settle first, then
+        // restore the captured viewport rather than only keeping the row visible.
         origin.focus.requestFocus()
+        yield()
+        scrollState.scrollTo(origin.scrollOffset)
     }
     Box(modifier.fillMaxSize().background(SettingsCanvas)) {
         Column(

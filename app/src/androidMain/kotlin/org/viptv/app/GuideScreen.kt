@@ -3,12 +3,15 @@ package org.viptv.app
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +21,7 @@ import android.view.KeyEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,33 +48,40 @@ private val GuideSurface = Color(0xFF202224)
 private val GuideMuted = Color(0xFFA6A8AA)
 private const val GuideWindowMillis = 7_200_000L
 private const val GuideWidth = 804f
+private const val GuideFiltersPerPage = 4
 
 /** Canonical five-row, two-hour EPG. Controller owns paging/cache/window state. */
 @Composable
 internal fun GuideScreen(state: AppState, initialChannel: LiveChannel, controller: AppController) {
     val model = state.guideUi
-    val allChannels = model?.channels?.ifEmpty { state.liveChannels } ?: state.liveChannels.ifEmpty { listOf(initialChannel) }
-    val schedules = model?.schedulesByChannelId ?: mapOf(initialChannel.id to state.guide)
-    val selectedId = model?.selectedChannelId ?: initialChannel.id
+    // `channels` is the server-selected 40-channel page. Never filter or page
+    // it again in Compose: doing so loses server categories and cursor state.
+    val pageChannels = model.channels.ifEmpty { state.liveChannels.ifEmpty { listOf(initialChannel) } }
+    val schedules = model.schedulesByChannelId.ifEmpty { mapOf(initialChannel.id to state.guide) }
+    val selectedId = model.selectedChannelId ?: initialChannel.id
     val now = System.currentTimeMillis()
-    val pageChannels = allChannels.drop((model?.page ?: 0) * GuidePolicy.PAGE_SIZE).take(GuidePolicy.PAGE_SIZE)
-    val categories = listOf("All", "Now") + pageChannels.mapNotNull(LiveChannel::category).distinct().take(2)
-    var filter by remember { mutableStateOf("All") }
-    val filteredChannels = pageChannels.filter { channel ->
-        when (filter) {
-            "All" -> true
-            "Now" -> schedules[channel.id]?.any { it.startMillis <= now && it.endMillis > now } == true
-            else -> channel.category == filter
-        }
-    }.ifEmpty { pageChannels }
-    val selectedIndex = filteredChannels.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
+    val selectedIndex = pageChannels.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
     val firstRow = max(0, selectedIndex - 4)
-    val visible = filteredChannels.drop(firstRow).take(5)
-    val window = model?.windowStartMillis ?: floorGuideWindow(System.currentTimeMillis())
-    val followsNow = model?.followsNow ?: true
+    val visible = pageChannels.drop(firstRow).take(5)
+    val window = model.windowStartMillis.takeIf { it > 0 } ?: floorGuideWindow(System.currentTimeMillis())
+    val followsNow = model.followsNow
     var detail by remember { mutableStateOf<Pair<LiveChannel, GuideProgramme>?>(null) }
     var detailOrigin by remember { mutableStateOf<GuideDetailOrigin?>(null) }
-    val initialFocus = remember(initialChannel.id) { FocusRequester() }
+    var searchOpen by remember { mutableStateOf(false) }
+    var filterPage by remember { mutableIntStateOf(0) }
+    val filterItems = buildList {
+        add(GuideFilterItem.Search)
+        add(GuideFilterItem.Value("all", "All US channels", LiveChannelFilter.AllUs))
+        add(GuideFilterItem.Value("mine", "My channels", LiveChannelFilter.MyChannels))
+        add(GuideFilterItem.Value("recent", "Recent", LiveChannelFilter.Recent))
+        model.categories.forEach { category ->
+            add(GuideFilterItem.Value("category:${category.id}", category.name, LiveChannelFilter.Category(category.id)))
+        }
+    }
+    val filterFocus = remember(filterItems.map { it.key }) { filterItems.associate { it.key to FocusRequester() } }
+    val initialFocus = filterFocus.getValue(GuideFilterItem.Search.key)
+    val filterPageCount = max(1, (filterItems.size + GuideFiltersPerPage - 1) / GuideFiltersPerPage)
+    val shownFilters = filterItems.drop(filterPage * GuideFiltersPerPage).take(GuideFiltersPerPage)
     val visibleCellKeys = visible.flatMap { channel ->
         guideCells(schedules[channel.id].orEmpty(), window).mapIndexed { index, cell ->
             guideCellKey(channel, cell.programme, index)
@@ -83,6 +94,13 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel, controlle
     }
 
     LaunchedEffect(initialChannel.id) { initialFocus.requestFocus() }
+    LaunchedEffect(filterItems.size) { filterPage = filterPage.coerceIn(0, filterPageCount - 1) }
+    LaunchedEffect(filterPage, shownFilters.firstOrNull()?.key) {
+        shownFilters.firstOrNull()?.let { filterFocus.getValue(it.key).requestFocus() }
+    }
+    LaunchedEffect(searchOpen) {
+        if (!searchOpen) filterFocus.getValue(GuideFilterItem.Search.key).requestFocus()
+    }
     LaunchedEffect(detail == null, cellFocus) {
         if (detail != null) return@LaunchedEffect
         val origin = detailOrigin ?: return@LaunchedEffect
@@ -92,14 +110,25 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel, controlle
 
     Box(Modifier.fillMaxSize().background(GuideCanvas)) {
         Text("Live TV", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(104.dp, 98.dp))
-        categories.forEachIndexed { index, label ->
-            GuideButton(label, Modifier.offset(104.dp, (166 + index * 52).dp).width(184.dp).height(42.dp).then(if (index == 0) Modifier.focusRequester(initialFocus) else Modifier), selected = filter == label) { filter = label }
+        shownFilters.forEachIndexed { index, item ->
+            GuideButton(
+                item.label,
+                Modifier.offset(104.dp, (166 + index * 52).dp).width(184.dp).height(42.dp).focusRequester(filterFocus.getValue(item.key)),
+                selected = item.matches(model.channelFilter),
+            ) {
+                when (item) {
+                    GuideFilterItem.Search -> searchOpen = true
+                    is GuideFilterItem.Value -> controller.setGuideFilter(item.filter)
+                }
+            }
         }
-        GuideButton("Now", Modifier.offset(104.dp, 390.dp).width(184.dp).height(42.dp), selected = followsNow) { controller.followGuideNow() }
-        GuideButton("Earlier hour", Modifier.offset(104.dp, 442.dp).width(184.dp).height(42.dp)) { controller.shiftGuideWindow(-1) }
-        GuideButton("Later hour", Modifier.offset(104.dp, 494.dp).width(184.dp).height(42.dp)) { controller.shiftGuideWindow(1) }
-        GuideButton("Previous page", Modifier.offset(104.dp, 546.dp).width(184.dp).height(42.dp)) { controller.changeGuidePage(-1) }
-        GuideButton("Next page", Modifier.offset(104.dp, 598.dp).width(184.dp).height(42.dp)) { controller.changeGuidePage(1) }
+        GuideButton("Now", Modifier.offset(104.dp, 442.dp).width(184.dp).height(42.dp), selected = followsNow) { controller.followGuideNow() }
+        GuideButton("Earlier hour", Modifier.offset(104.dp, 494.dp).width(184.dp).height(42.dp)) { controller.shiftGuideWindow(-1) }
+        GuideButton("Later hour", Modifier.offset(104.dp, 546.dp).width(184.dp).height(42.dp)) { controller.shiftGuideWindow(1) }
+        if (filterPage > 0) GuideButton("Prev", Modifier.offset(104.dp, 598.dp).width(88.dp).height(42.dp)) { filterPage-- }
+        if (filterPage + 1 < filterPageCount) GuideButton("More", Modifier.offset(200.dp, 598.dp).width(88.dp).height(42.dp)) { filterPage++ }
+        if (model.channelOffset > 0) GuideButton("Previous", Modifier.offset(104.dp, 650.dp).width(88.dp).height(42.dp)) { controller.changeGuidePage(-1) }
+        if (model.channelOffset + pageChannels.size < model.channelTotal) GuideButton("Next", Modifier.offset(200.dp, 650.dp).width(88.dp).height(42.dp)) { controller.changeGuidePage(1) }
 
         repeat(4) { index ->
             val hour = window + index * 1_800_000L
@@ -131,10 +160,15 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel, controlle
             val x = 432 + ((now - window).toFloat() / GuideWindowMillis * GuideWidth).toInt()
             Box(Modifier.offset(x.dp, 150.dp).width(2.dp).height(470.dp).background(Color(0x66FFFFFF)))
         }
-        Text("${if (followsNow) "Following now" else "Time shifted"} · ${visible.size} channels", color = GuideMuted, fontSize = 15.sp, modifier = Modifier.offset(432.dp, 650.dp).width(804.dp), textAlign = TextAlign.Center)
+        Text("${if (followsNow) "Following now" else "Time shifted"} · ${visible.size} channels${model.searchScope?.let { " · $it" }.orEmpty()}", color = GuideMuted, fontSize = 15.sp, modifier = Modifier.offset(432.dp, 650.dp).width(804.dp), textAlign = TextAlign.Center)
         detail?.let { (channel, programme) ->
             GuideDetail(channel, programme, onWatch = { controller.watchGuideChannel(channel) }, onClose = ::closeDetail)
         }
+        if (searchOpen) GuideSearchEntry(
+            initial = (model.channelFilter as? LiveChannelFilter.Search)?.query.orEmpty(),
+            onSubmit = { query -> controller.setGuideSearch(query); searchOpen = false },
+            onClose = { searchOpen = false },
+        )
     }
 }
 
@@ -184,6 +218,24 @@ private fun GuideCell(programme: GuideProgramme, selected: Boolean, modifier: Mo
 private data class GuideCellModel(val programme: GuideProgramme, val left: Float, val width: Float)
 private data class GuideDetailOrigin(val cellKey: String, val channelId: String)
 private fun guideCellKey(channel: LiveChannel, programme: GuideProgramme, index: Int) = "${channel.id}:${programme.startMillis}:${programme.endMillis}:$index"
+
+private sealed interface GuideFilterItem {
+    val key: String
+    val label: String
+
+    data object Search : GuideFilterItem {
+        override val key = "search"
+        override val label = "Search Live TV"
+    }
+
+    data class Value(override val key: String, override val label: String, val filter: LiveChannelFilter) : GuideFilterItem
+}
+
+private fun GuideFilterItem.matches(active: LiveChannelFilter): Boolean = when (this) {
+    GuideFilterItem.Search -> active is LiveChannelFilter.Search
+    is GuideFilterItem.Value -> filter == active
+}
+
 private fun guideCells(programmes: List<GuideProgramme>, start: Long): List<GuideCellModel> {
     val end = start + GuideWindowMillis
     val sorted = programmes.filter { it.endMillis > start && it.startMillis < end }.sortedBy(GuideProgramme::startMillis)
@@ -208,6 +260,65 @@ private fun GuideButton(label: String, modifier: Modifier, selected: Boolean = f
     Box(modifier.background(if (focused) Color.White else if (selected) Color(0xFF303234) else Color.Transparent, RoundedCornerShape(21.dp)).onFocusChanged { focused = it.hasFocus }.clickable(onClick = onActivate), contentAlignment = Alignment.Center) {
         Text(label, color = if (focused) GuideCanvas else Color.White, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
+}
+
+/** A separate, capped Guide text entry. Submitting delegates trim/filter policy to the controller. */
+@Composable
+private fun GuideSearchEntry(initial: String, onSubmit: (String) -> Unit, onClose: () -> Unit) {
+    var query by remember(initial) { mutableStateOf(initial.take(128)) }
+    val firstKey = remember { FocusRequester() }
+    val keys = remember { ("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789").map(Char::toString) + listOf("Space", "Delete", "Clear") }
+    fun edit(next: String) { query = next.take(128) }
+
+    BackHandler(onBack = onClose)
+    Box(
+        Modifier.fillMaxSize().background(Color(0xDC080909)).onPreviewKeyEvent { event ->
+            val native = event.nativeKeyEvent
+            if (native.keyCode == KeyEvent.KEYCODE_BACK) false
+            else if (native.action != KeyEvent.ACTION_DOWN) true
+            else when {
+                native.keyCode == KeyEvent.KEYCODE_DEL -> { edit(query.dropLast(1)); true }
+                native.unicodeChar in 32..126 -> { edit(query + native.unicodeChar.toChar()); true }
+                else -> false
+            }
+        },
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier.width(720.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF191B1D)).padding(32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Search Live TV", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            Text("Search US channels, sections, or a programme title.", color = GuideMuted, fontSize = 17.sp)
+            Box(Modifier.width(656.dp).height(44.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF303234)), contentAlignment = Alignment.CenterStart) {
+                Text(query.ifBlank { "Enter a channel or programme" }, color = if (query.isBlank()) GuideMuted else Color.White, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 16.dp))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                keys.chunked(7).forEachIndexed { row, entries ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        entries.forEachIndexed { column, key ->
+                            val index = row * 7 + column
+                            GuideButton(key, Modifier.width(if (key.length > 1) 116.dp else 72.dp).height(38.dp).then(if (index == 0) Modifier.focusRequester(firstKey) else Modifier)) {
+                                edit(
+                                    when (key) {
+                                        "Space" -> query + " "
+                                        "Delete" -> query.dropLast(1)
+                                        "Clear" -> ""
+                                        else -> query + key
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                GuideButton("Search", Modifier.width(180.dp).height(48.dp), onActivate = { onSubmit(query) })
+                GuideButton("Cancel", Modifier.width(180.dp).height(48.dp), onActivate = onClose)
+            }
+        }
+    }
+    LaunchedEffect(Unit) { firstKey.requestFocus() }
 }
 
 @Composable

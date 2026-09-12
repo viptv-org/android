@@ -56,6 +56,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private var continuationWasPlaying = false
     private var detailReturnDestination: Destination? = null
     private var guideGeneration = 0L
+    private var guideBrowseGeneration = 0L
     private var discoverGeneration = 0L
     private var managedRecoveryKey: String? = null
     /** Suppresses duplicate Media3 failure events while the one permitted same-source recovery is awaiting the server. */
@@ -136,6 +137,8 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }.onFailure(::fail)
     }
     fun chooseProfile(profile: Profile) = scope.launch {
+        guideBrowseGeneration++
+        guideGeneration++
         update(loading = true); runCatching { gateway.selectProfile(profile.id); gateway.home(profile.id) }.onSuccess { shelves ->
             _state.value = _state.value.copy(route = Route.Browse(Destination.Home), selectedProfile = profile, shelves = shelves, loading = false)
         }.onFailure(::fail)
@@ -684,7 +687,12 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 detailReturnDestination = null
                 _state.value = _state.value.copy(route = Route.Browse(destination), dialog = null, pinPrompt = null)
             }
-            is Route.Search, is Route.Settings, is Route.Addons, is Route.ProfileEditor, is Route.Guide -> _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
+            is Route.Guide -> {
+                guideBrowseGeneration++
+                guideGeneration++
+                _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
+            }
+            is Route.Search, is Route.Settings, is Route.Addons, is Route.ProfileEditor -> _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
             is Route.Browse -> if (route.destination != Destination.Home) {
                 if (route.destination == Destination.Discover) {
                     discoverJob?.cancel()
@@ -905,63 +913,92 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun openMyList() = scope.launch { update(loading = true); runCatching { gateway.favorites(requireProfile()) }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.MyList), favorites = it, catalog = it, loading = false) }.onFailure(::fail) }
     fun openQueue() = scope.launch { update(loading = true); runCatching { gateway.queue(requireProfile()) }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.Home), queue = it, loading = false) }.onFailure(::fail) }
     /** The Live rail enters the Guide directly; the list surface is reserved for a truthful empty state. */
-    fun openLive() = scope.launch {
-        update(loading = true)
-        runCatching { gateway.live() }.onSuccess { channels ->
-            val initial = LiveEntryPolicy.initialChannel(channels, _state.value.guideUi.selectedChannelId)
-            if (initial == null) {
-                _state.value = _state.value.copy(route = Route.Browse(Destination.Live), liveChannels = emptyList(), loading = false)
-            } else {
-                _state.value = _state.value.copy(liveChannels = channels, loading = false, message = null)
-                openGuide(initial)
-            }
-        }.onFailure(::fail)
-    }
-
-    /** Opens a 40-channel Guide page, then fills the selected five rows plus two look-ahead rows. */
-    fun openGuide(channel: LiveChannel) = scope.launch {
-        val generation = ++guideGeneration
-        val channels = runCatching { if (_state.value.liveChannels.isEmpty()) gateway.live() else _state.value.liveChannels }
-            .getOrElse { error -> fail(error); return@launch }
-            .let { available -> if (available.any { it.id == channel.id }) available else listOf(channel) + available }
-        val page = GuidePolicy.pageFor(channels, channel.id)
-        val now = System.currentTimeMillis()
+    fun openLive() {
         val prior = _state.value.guideUi
-        val guide = prior.copy(
-            channels = channels,
-            selectedChannelId = channel.id,
-            page = page,
-            windowStartMillis = prior.windowStartMillis.takeIf { it > 0 } ?: GuidePolicy.nowWindow(now),
-            followsNow = true,
-        )
-        _state.value = _state.value.copy(
-            route = Route.Guide(channel), liveChannels = channels, guideUi = guide,
-            guide = guide.schedulesByChannelId[channel.id].orEmpty(), loading = false, message = null,
-        )
-        refreshGuideRows(generation)
+        loadGuidePage(prior.channelFilter, offset = 0, preferredChannelId = prior.selectedChannelId)
     }
 
+    /** A Guide filter replaces the server page from zero. Search is validated before it reaches transport. */
+    fun setGuideFilter(filter: LiveChannelFilter) = loadGuidePage(filter, offset = 0)
+    fun setGuideSearch(query: String) {
+        val normalized = query.trim().take(128)
+        setGuideFilter(if (normalized.isBlank()) LiveChannelFilter.AllUs else LiveChannelFilter.Search(normalized))
+    }
+
+    private fun loadGuidePage(filter: LiveChannelFilter, offset: Int, preferredChannelId: String? = null) {
+        val browseGeneration = ++guideBrowseGeneration
+        scope.launch {
+            val prior = _state.value.guideUi
+            _state.value = _state.value.copy(loading = true, message = null)
+            try {
+                val (page, categories) = coroutineScope {
+                    val pageRequest = async { gateway.livePage(LiveBrowseRequest(filter, offset, GuidePolicy.PAGE_SIZE)) }
+                    val categoryRequest = async { runCatching { gateway.liveCategories() } }
+                    pageRequest.await() to categoryRequest.await().getOrElse { prior.categories }
+                }
+                if (browseGeneration != guideBrowseGeneration) return@launch
+                val initial = LiveEntryPolicy.initialChannel(page.channels, preferredChannelId ?: prior.selectedChannelId)
+                val guide = prior.copy(
+                    channels = page.channels,
+                    selectedChannelId = initial?.id,
+                    page = page.request.offset / GuidePolicy.PAGE_SIZE,
+                    channelOffset = page.request.offset,
+                    channelTotal = page.total,
+                    channelFilter = page.request.filter,
+                    categories = categories,
+                    searchScope = page.searchScope,
+                    windowStartMillis = prior.windowStartMillis.takeIf { it > 0 } ?: GuidePolicy.nowWindow(System.currentTimeMillis()),
+                    followsNow = true,
+                    loadingChannelIds = emptySet(),
+                )
+                if (initial == null) {
+                    _state.value = _state.value.copy(
+                        route = Route.Browse(Destination.Live),
+                        liveChannels = emptyList(),
+                        guideUi = guide,
+                        loading = false,
+                        message = "No matching US channels or current programmes. Try a channel name, section, or another title.",
+                    )
+                    return@launch
+                }
+                val scheduleGeneration = ++guideGeneration
+                _state.value = _state.value.copy(
+                    route = Route.Guide(initial),
+                    liveChannels = page.channels,
+                    guideUi = guide,
+                    guide = guide.schedulesByChannelId[initial.id].orEmpty(),
+                    loading = false,
+                    message = null,
+                )
+                refreshGuideRows(scheduleGeneration)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                if (browseGeneration == guideBrowseGeneration) fail(error)
+            }
+        }
+    }
+
+    /** Select within the loaded server page; filter and page transitions always go through `loadGuidePage`. */
+    fun openGuide(channel: LiveChannel) = selectGuideChannel(channel)
     fun selectGuideChannel(channel: LiveChannel) {
         val current = _state.value.guideUi
         if (current.selectedChannelId == channel.id) return
         val generation = ++guideGeneration
         val channels = if (current.channels.any { it.id == channel.id }) current.channels else listOf(channel) + current.channels
-        val guide = current.copy(channels = channels, selectedChannelId = channel.id, page = GuidePolicy.pageFor(channels, channel.id))
+        val guide = current.copy(channels = channels, selectedChannelId = channel.id)
         _state.value = _state.value.copy(route = Route.Guide(channel), guideUi = guide, guide = guide.schedulesByChannelId[channel.id].orEmpty(), message = null)
         scope.launch { refreshGuideRows(generation) }
     }
 
+    /** Server cursor pages remain 40 channels; never fabricate a page by slicing a partial result. */
     fun changeGuidePage(delta: Int) {
         val current = _state.value.guideUi
-        if (current.channels.isEmpty()) return
-        val maxPage = ((current.channels.size - 1).coerceAtLeast(0) / GuidePolicy.PAGE_SIZE)
-        val page = (current.page + delta).coerceIn(0, maxPage)
-        if (page == current.page) return
-        val first = current.channels[page * GuidePolicy.PAGE_SIZE]
-        val generation = ++guideGeneration
-        val guide = current.copy(page = page, selectedChannelId = first.id)
-        _state.value = _state.value.copy(route = Route.Guide(first), guideUi = guide, guide = guide.schedulesByChannelId[first.id].orEmpty())
-        scope.launch { refreshGuideRows(generation) }
+        if (delta == 0 || current.channelTotal <= 0) return
+        val maxOffset = ((current.channelTotal - 1) / GuidePolicy.PAGE_SIZE) * GuidePolicy.PAGE_SIZE
+        val target = (current.channelOffset + delta * GuidePolicy.PAGE_SIZE).coerceIn(0, maxOffset)
+        if (target == current.channelOffset) return
+        loadGuidePage(current.channelFilter, target)
     }
 
     fun shiftGuideWindow(hours: Int) {
@@ -980,8 +1017,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
 
     private suspend fun refreshGuideRows(generation: Long) {
         val before = _state.value.guideUi
-        val ids = GuidePolicy.visibleRows(before).plus(before.channels.drop(before.page * GuidePolicy.PAGE_SIZE + GuidePolicy.VISIBLE_ROWS).take(2))
-            .map(LiveChannel::id).distinct()
+        val ids = GuidePolicy.visibleAndLookAhead(before).map(LiveChannel::id).distinct()
         val now = System.currentTimeMillis()
         val valid = ids.filter { id -> guideScheduleCache[id]?.let { now < it.expiresAtMillis } == true }
         val missing = ids - valid.toSet()

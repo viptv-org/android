@@ -106,9 +106,9 @@ class PlaybackPolicyTest {
 
 class GuidePolicyTest {
     @Test fun `guide pages in forties and keeps five selected-neighbor rows`() {
-        val channels = (1..82).map { LiveChannel(it.toString(), "Channel $it") }
-        assertEquals(1, GuidePolicy.pageFor(channels, "41"))
-        val state = GuideUiState(channels = channels, page = 1, selectedChannelId = "45")
+        val channels = (41..80).map { LiveChannel(it.toString(), "Channel $it") }
+        assertEquals(1, GuidePolicy.pageFor((1..82).map { LiveChannel(it.toString(), "Channel $it") }, "41"))
+        val state = GuideUiState(channels = channels, page = 1, channelOffset = 40, selectedChannelId = "45")
         assertEquals(listOf("41", "42", "43", "44", "45"), GuidePolicy.visibleRows(state).map(LiveChannel::id))
     }
 

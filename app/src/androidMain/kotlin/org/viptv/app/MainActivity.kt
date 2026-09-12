@@ -91,7 +91,7 @@ class MainActivity : ComponentActivity() {
                     Rail(route.destination, controller)
                 }
             } else Browse(state, route.destination, controller)
-            is Route.Details -> Details(route.media, controller)
+            is Route.Details -> DetailsScreen(route.media, controller)
             is Route.Sources -> SourcePicker(route.media, state.sources, controller)
             is Route.Player -> PlaybackScreen(route.media, state.playerChromeVisible, state.seekPreview, state.playbackTracks, controller)
             Route.Search -> SearchScreen(state, controller)
@@ -294,63 +294,6 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
             }
             Text(media.name, color = if (focused) Color.White else White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
             Text(media.type, color = Muted, fontSize = 14.sp, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
-        }
-    }
-}
-
-@Composable private fun Details(media: Media, controller: AppController) = Box(Modifier.fillMaxSize().background(Canvas)) {
-    val initialFocus = remember { FocusRequester() }
-    LaunchedEffect(media.id, media.type) { initialFocus.requestFocus() }
-    if (!media.poster.isNullOrBlank()) {
-        AsyncImage(model = media.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(620.dp))
-        Box(Modifier.fillMaxWidth().height(620.dp).background(Brush.verticalGradient(listOf(Canvas.copy(alpha = .32f), Canvas.copy(alpha = .90f), Canvas))))
-    }
-    if (media.type == "series") {
-        Text(media.name, color = White, fontSize = 36.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.offset(112.dp, 74.dp).width(900.dp))
-        Text(media.type.uppercase(), color = Muted, fontSize = 18.sp, modifier = Modifier.offset(112.dp, 132.dp).width(706.dp))
-        Row(Modifier.offset(112.dp, 188.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            TvButton("Season ${media.season ?: 1}", { }, Modifier.width(256.dp).height(48.dp).focusRequester(initialFocus))
-            TvButton("My List", { controller.toggleMyList(media) }, Modifier.width(256.dp).height(48.dp))
-            TvButton("More info", { controller.open(media) }, Modifier.width(256.dp).height(48.dp))
-        }
-        Text("Episodes", color = White, fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End, modifier = Modifier.offset(976.dp, 198.dp).width(220.dp))
-        LazyRow(Modifier.offset(112.dp, 262.dp).width(1096.dp).height(330.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            items(media.episodes, key = { it.id }) { episode -> EpisodeCard(episode, controller) }
-        }
-    } else {
-        Box(Modifier.offset(112.dp, 126.dp).width(236.dp).height(354.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)), contentAlignment = Alignment.Center) {
-            Text(media.name.take(1), color = Muted, fontSize = 42.sp)
-            if (!media.poster.isNullOrBlank()) AsyncImage(model = media.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        }
-        Column(Modifier.offset(380.dp, 126.dp).width(804.dp)) {
-            Text(media.name, color = White, fontSize = 46.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(media.type.uppercase(), color = Muted, fontSize = 18.sp, modifier = Modifier.padding(top = 18.dp).height(48.dp))
-            Text(media.description ?: "No description available.", color = Muted, fontSize = 20.sp, modifier = Modifier.padding(top = 28.dp).height(128.dp), maxLines = 4, overflow = TextOverflow.Ellipsis)
-            Row(Modifier.padding(top = 28.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                TvButton(if (media.positionMillis > 0) "Resume" else "Play", { controller.chooseSources(media, media.positionMillis > 0) }, Modifier.width(192.dp).height(56.dp).focusRequester(initialFocus))
-                TvButton("Choose source", { controller.chooseSources(media) }, Modifier.width(192.dp).height(56.dp))
-                TvButton("My List", { controller.toggleMyList(media) }, Modifier.width(192.dp).height(56.dp))
-            }
-        }
-    }
-}
-
-@Composable private fun EpisodeCard(episode: Media, controller: AppController) {
-    var focused by remember { mutableStateOf(false) }
-    Holdable(
-        onActivate = { controller.chooseSources(episode) },
-        onHold = null,
-        modifier = Modifier.width(256.dp).height(330.dp).onFocusChanged { focused = it.hasFocus }
-            .then(if (focused) Modifier.border(2.dp, White, RoundedCornerShape(8.dp)) else Modifier),
-    ) {
-        Column(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxWidth().height(144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)), contentAlignment = Alignment.Center) {
-            Text("S${episode.season ?: 0} E${episode.episode ?: 0}", color = Muted, fontSize = 20.sp)
-            if (!episode.poster.isNullOrBlank()) AsyncImage(model = episode.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        }
-        Text("S${episode.season ?: 0} E${episode.episode ?: 0}", color = Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp))
-        Text(episode.episodeTitle ?: episode.name.ifBlank { "Episode ${episode.episode ?: ""}" }, color = if (focused) Color.White else White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 12.dp))
-        Text(episode.description ?: "", color = Muted, fontSize = 16.sp, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp).height(94.dp))
         }
     }
 }

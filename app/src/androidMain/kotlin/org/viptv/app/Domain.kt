@@ -352,10 +352,16 @@ data class LiveChannel(val id: String, val name: String, val logo: String? = nul
  * without making network decisions.
  */
 data class GuideUiState(
+    /** Exactly the server-selected 40-channel page, never a locally-filtered full catalogue. */
     val channels: List<LiveChannel> = emptyList(),
     val schedulesByChannelId: Map<String, List<GuideProgramme>> = emptyMap(),
     val selectedChannelId: String? = null,
     val page: Int = 0,
+    val channelOffset: Int = 0,
+    val channelTotal: Int = 0,
+    val channelFilter: LiveChannelFilter = LiveChannelFilter.AllUs,
+    val categories: List<LiveCategory> = emptyList(),
+    val searchScope: String? = null,
     val windowStartMillis: Long = 0,
     val followsNow: Boolean = true,
     val loadingChannelIds: Set<String> = emptySet(),
@@ -376,10 +382,15 @@ object GuidePolicy {
     fun nowWindow(nowMillis: Long): Long = nowMillis / HALF_HOUR_MILLIS * HALF_HOUR_MILLIS
     fun pageFor(channels: List<LiveChannel>, channelId: String): Int =
         (channels.indexOfFirst { it.id == channelId }.coerceAtLeast(0) / PAGE_SIZE)
+    /** `channels` is already the active server page; page is display metadata only. */
     fun visibleRows(state: GuideUiState): List<LiveChannel> {
-        val pageChannels = state.channels.drop(state.page * PAGE_SIZE).take(PAGE_SIZE)
-        val selected = pageChannels.indexOfFirst { it.id == state.selectedChannelId }.coerceAtLeast(0)
-        return pageChannels.drop((selected - (VISIBLE_ROWS - 1)).coerceAtLeast(0)).take(VISIBLE_ROWS)
+        val selected = state.channels.indexOfFirst { it.id == state.selectedChannelId }.coerceAtLeast(0)
+        return state.channels.drop((selected - (VISIBLE_ROWS - 1)).coerceAtLeast(0)).take(VISIBLE_ROWS)
+    }
+    fun visibleAndLookAhead(state: GuideUiState): List<LiveChannel> {
+        val selected = state.channels.indexOfFirst { it.id == state.selectedChannelId }.coerceAtLeast(0)
+        val start = (selected - (VISIBLE_ROWS - 1)).coerceAtLeast(0)
+        return state.channels.drop(start).take(VISIBLE_ROWS + 2)
     }
     fun shiftedWindow(windowStartMillis: Long, hours: Int, nowMillis: Long): Long =
         (windowStartMillis + hours * 60 * 60 * 1_000L).coerceIn(nowWindow(nowMillis), nowWindow(nowMillis) + MAX_AHEAD_MILLIS)
