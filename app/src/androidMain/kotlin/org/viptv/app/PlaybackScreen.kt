@@ -84,9 +84,16 @@ internal fun PlaybackScreen(
     var activeRepeatCode by remember { mutableIntStateOf(NativeKeyEvent.KEYCODE_UNKNOWN) }
     var commitJob by remember { mutableStateOf<Job?>(null) }
     var menu by remember { mutableStateOf<PlayerTrackMenu?>(null) }
+    var menuOrigin by remember { mutableStateOf<PlayerTrackMenu?>(null) }
     var trackNotice by remember { mutableStateOf<String?>(null) }
     val rootFocus = remember { FocusRequester() }
+    val timelineFocus = remember { FocusRequester() }
+    val audioFocus = remember { FocusRequester() }
+    val captionsFocus = remember { FocusRequester() }
+    val exitFocus = remember { FocusRequester() }
     val isLive = media.type == "live"
+    val audioAvailable = serverTracks.audio.any { it.selectable && it.supported }
+    val captionsAvailable = serverTracks.subtitlesSupported
     // Media3 reports position in the currently opened delivery segment. The
     // controller owns the title-relative offset for resume, progress and Next.
     val absolutePositionMillis = controller.absolutePositionMillis()
@@ -129,10 +136,27 @@ internal fun PlaybackScreen(
     // prevents the timer from hiding playback context under a track dialog.
     LaunchedEffect(menu) {
         controller.setPlayerMenuOpen(menu != null)
-        // A dialog removes its focused menu row on close. Always restore a
-        // persistent overlay owner so subsequent remote/media input is not
-        // delivered to the SurfaceView instead.
-        if (menu == null) rootFocus.requestFocus()
+    }
+    // The SurfaceView is the focus owner only when chrome is hidden.  A visible
+    // overlay must focus an actual control; otherwise a D-pad move keeps focus on
+    // the fullscreen root and directional search cannot reach the controls.
+    LaunchedEffect(chromeVisible, menu) {
+        when {
+            menu != null -> Unit // PlayerTrackDialog owns its initial choice focus.
+            chromeVisible -> {
+                when (menuOrigin) {
+                    PlayerTrackMenu.Audio -> if (audioAvailable) audioFocus.requestFocus() else if (!isLive) timelineFocus.requestFocus() else exitFocus.requestFocus()
+                    PlayerTrackMenu.Subtitles -> if (captionsAvailable) captionsFocus.requestFocus() else if (!isLive) timelineFocus.requestFocus() else exitFocus.requestFocus()
+                    null -> if (!isLive) timelineFocus.requestFocus() else when {
+                        audioAvailable -> audioFocus.requestFocus()
+                        captionsAvailable -> captionsFocus.requestFocus()
+                        else -> exitFocus.requestFocus()
+                    }
+                }
+                menuOrigin = null
+            }
+            else -> rootFocus.requestFocus()
+        }
     }
     // A route/session replacement can dispose this screen while its dialog is
     // open. Release timer ownership in that path too.
@@ -145,10 +169,13 @@ internal fun PlaybackScreen(
         if (trackNotice != null) trackNotice = null else menu = null
     }
 
+    val focusOwner = if (!chromeVisible && menu == null) {
+        Modifier.focusRequester(rootFocus).focusable()
+    } else Modifier
     Box(
         Modifier.fillMaxSize()
             .background(Color.Black)
-            .focusRequester(rootFocus)
+            .then(focusOwner)
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
                 val code = native.keyCode
@@ -159,7 +186,21 @@ internal fun PlaybackScreen(
                     commitJob?.cancel()
                     return@onPreviewKeyEvent false
                 }
-                if (native.action == NativeKeyEvent.ACTION_DOWN && code != NativeKeyEvent.KEYCODE_BACK) showChrome()
+                if (native.action == NativeKeyEvent.ACTION_DOWN && code != NativeKeyEvent.KEYCODE_BACK) {
+                    val wasHidden = !chromeVisible
+                    showChrome()
+                    // The first remote press reveals a usable overlay; it does
+                    // not also pause, seek, or move an invisible control.
+                    if (wasHidden && code in setOf(
+                            NativeKeyEvent.KEYCODE_DPAD_UP,
+                            NativeKeyEvent.KEYCODE_DPAD_DOWN,
+                            NativeKeyEvent.KEYCODE_DPAD_LEFT,
+                            NativeKeyEvent.KEYCODE_DPAD_RIGHT,
+                            NativeKeyEvent.KEYCODE_DPAD_CENTER,
+                            NativeKeyEvent.KEYCODE_ENTER,
+                        )
+                    ) return@onPreviewKeyEvent true
+                }
                 if (menu != null) return@onPreviewKeyEvent false
                 when (native.action) {
                     NativeKeyEvent.ACTION_DOWN -> when (code) {
@@ -216,6 +257,7 @@ internal fun PlaybackScreen(
                     durationMillis = titleDurationMillis,
                     preview = seekPreview,
                     modifier = Modifier.offset(64.dp, 572.dp),
+                    focusRequester = timelineFocus,
                     onFocused = { timelineFocused = it },
                     onActivate = { if (playback.isPlaying) controller.pausePlayback() else controller.resumePlayback() },
                 )
@@ -228,7 +270,10 @@ internal fun PlaybackScreen(
                 serverTracks = serverTracks,
                 controller = controller,
                 onSeek = { preview(it, if (it < 0) NativeKeyEvent.KEYCODE_MEDIA_REWIND else NativeKeyEvent.KEYCODE_MEDIA_FAST_FORWARD); releaseSeek() },
-                onMenu = { menu = it; trackNotice = null },
+                audioFocus = audioFocus,
+                captionsFocus = captionsFocus,
+                exitFocus = exitFocus,
+                onMenu = { selectedMenu -> menuOrigin = selectedMenu; menu = selectedMenu; trackNotice = null },
             )
         }
         menu?.let { activeMenu ->
@@ -247,12 +292,12 @@ internal fun PlaybackScreen(
 }
 
 @Composable
-private fun PlaybackTimeline(positionMillis: Long, durationMillis: Long?, preview: SeekPreview?, modifier: Modifier, onFocused: (Boolean) -> Unit, onActivate: () -> Unit) {
+private fun PlaybackTimeline(positionMillis: Long, durationMillis: Long?, preview: SeekPreview?, modifier: Modifier, focusRequester: FocusRequester, onFocused: (Boolean) -> Unit, onActivate: () -> Unit) {
     val shown = preview?.targetMillis ?: positionMillis
     val fraction = if ((durationMillis ?: 0) > 0) shown.toFloat() / durationMillis!!.toFloat() else 0f
     PlayerIconButton(
         label = "Playback position",
-        modifier = modifier.width(1152.dp).height(34.dp),
+        modifier = modifier.width(1152.dp).height(34.dp).focusRequester(focusRequester),
         onFocused = onFocused,
         onActivate = onActivate,
     ) { focused ->
@@ -265,7 +310,7 @@ private fun PlaybackTimeline(positionMillis: Long, durationMillis: Long?, previe
 }
 
 @Composable
-private fun PlayerControls(media: Media, isLive: Boolean, isPlaying: Boolean, canSeek: Boolean, serverTracks: PlaybackTrackChoices, controller: AppController, onSeek: (Long) -> Unit, onMenu: (PlayerTrackMenu) -> Unit) {
+private fun PlayerControls(media: Media, isLive: Boolean, isPlaying: Boolean, canSeek: Boolean, serverTracks: PlaybackTrackChoices, controller: AppController, onSeek: (Long) -> Unit, audioFocus: FocusRequester, captionsFocus: FocusRequester, exitFocus: FocusRequester, onMenu: (PlayerTrackMenu) -> Unit) {
     val audio = serverTracks.audio.any { it.selectable && it.supported }
     val captions = serverTracks.subtitlesSupported
     Box(Modifier.fillMaxSize()) {
@@ -275,11 +320,11 @@ private fun PlayerControls(media: Media, isLive: Boolean, isPlaying: Boolean, ca
             if (canSeek) PlayerIconButton("Forward 60 seconds", Modifier.offset(224.dp, 624.dp).size(64.dp), { onSeek(60_000) }) { PlayerGlyph(Icons.Default.FastForward, "Forward 60 seconds", it) }
             if (media.type == "series") PlayerIconButton("Next episode", Modifier.offset(304.dp, 624.dp).size(64.dp), { controller.nextEpisode(media) }) { PlayerGlyph(Icons.Default.SkipNext, "Next episode", it) }
         }
-        if (audio) PlayerIconButton("Audio", Modifier.offset(if (isLive) 608.dp else 992.dp, 624.dp).size(64.dp), { onMenu(PlayerTrackMenu.Audio) }) { PlayerGlyph(Icons.Default.VolumeUp, "Audio", it) }
-        if (captions) PlayerIconButton("Captions", Modifier.offset(if (isLive) 688.dp else 1072.dp, 624.dp).size(64.dp), { onMenu(PlayerTrackMenu.Subtitles) }) { PlayerGlyph(Icons.Default.ClosedCaption, "Captions", it) }
+        if (audio) PlayerIconButton("Audio", Modifier.offset(if (isLive) 608.dp else 992.dp, 624.dp).size(64.dp).focusRequester(audioFocus), { onMenu(PlayerTrackMenu.Audio) }) { PlayerGlyph(Icons.Default.VolumeUp, "Audio", it) }
+        if (captions) PlayerIconButton("Captions", Modifier.offset(if (isLive) 688.dp else 1072.dp, 624.dp).size(64.dp).focusRequester(captionsFocus), { onMenu(PlayerTrackMenu.Subtitles) }) { PlayerGlyph(Icons.Default.ClosedCaption, "Captions", it) }
         // Back owns final progress persistence and session stop as one ordered
         // transition. Calling saveProgress here races a second write with stop.
-        PlayerIconButton("Exit", Modifier.offset(1152.dp, 624.dp).size(64.dp), controller::exitPlayback) { PlayerGlyph(Icons.Default.Close, "Exit", it) }
+        PlayerIconButton("Exit", Modifier.offset(1152.dp, 624.dp).size(64.dp).focusRequester(exitFocus), controller::exitPlayback) { PlayerGlyph(Icons.Default.Close, "Exit", it) }
     }
 }
 
