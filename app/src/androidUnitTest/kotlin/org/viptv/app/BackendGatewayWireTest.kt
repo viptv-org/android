@@ -399,6 +399,63 @@ class BackendGatewayWireTest {
     }
 
     @Test
+    fun `live guide browse uses canonical US filters categories and forty channel pages`() = runBlocking {
+        FixtureServer(6) { request ->
+            val query = queryParameters(request.target)
+            when {
+                request.target.startsWith("/api/live/categories?") -> {
+                    assertEquals("us", query["view"])
+                    FixtureResponse("""{"total":2,"categories":[
+                        {"id":"section:News","name":"News","count":18},
+                        {"id":"section:Sports","name":"Sports","count":9}
+                    ]}""")
+                }
+                request.target.startsWith("/api/live?") -> {
+                    assertEquals("us", query["view"])
+                    assertEquals("40", query["limit"])
+                    when {
+                        query["collection"] == "favorites" -> assertEquals("40", query["offset"])
+                        query["collection"] == "recent" -> assertEquals("0", query["offset"])
+                        query["category"] == "section:News" -> assertEquals("0", query["offset"])
+                        query["search"] == "morning news" -> assertEquals("0", query["offset"])
+                        else -> {
+                            assertNull(query["collection"])
+                            assertNull(query["category"])
+                            assertNull(query["search"])
+                            assertEquals("0", query["offset"])
+                        }
+                    }
+                    FixtureResponse("""{
+                        "channels":[{"id":"channel-1","name":"Fixture Channel","logo":"/logo.png","section":"News"}],
+                        "total":81,
+                        "search_scope":"US channels, sections and currently airing programmes with available guide data"
+                    }""")
+                }
+                else -> error("Unexpected request ${request.target}")
+            }
+        }.use { server ->
+            val gateway = VipTvHttpGateway(server.origin)
+            val all = gateway.livePage(LiveBrowseRequest())
+            val mine = gateway.livePage(LiveBrowseRequest(LiveChannelFilter.MyChannels, offset = 40))
+            gateway.livePage(LiveBrowseRequest(LiveChannelFilter.Recent))
+            gateway.livePage(LiveBrowseRequest(LiveChannelFilter.Category("section:News")))
+            gateway.livePage(LiveBrowseRequest(LiveChannelFilter.Search("morning news")))
+            val categories = gateway.liveCategories()
+
+            assertEquals("News", all.channels.single().category)
+            assertEquals("/logo.png", all.channels.single().logo)
+            assertEquals(81, all.total)
+            assertEquals(1, all.nextOffset)
+            assertEquals(41, mine.nextOffset)
+            assertEquals(
+                listOf(LiveCategory("section:News", "News", 18), LiveCategory("section:Sports", "Sports", 9)),
+                categories,
+            )
+            server.assertHealthy()
+        }
+    }
+
+    @Test
     fun `addons consume the backend raw array response`() = runBlocking {
         FixtureServer(1) { request ->
             assertEquals("GET", request.method)

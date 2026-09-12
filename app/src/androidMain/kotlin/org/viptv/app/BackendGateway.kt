@@ -57,6 +57,13 @@ interface BackendGateway {
     suspend fun setQueueVisibility(profileId: String, media: Media, hidden: Boolean)
     suspend fun correctProgress(profileId: String, media: Media, action: String)
     suspend fun live(): List<LiveChannel>
+    /** Canonical EPG filter/page contract; legacy implementations may supply the all-channel list only. */
+    suspend fun livePage(request: LiveBrowseRequest): LiveBrowsePage {
+        val channels = live()
+        return LiveBrowsePage(channels, total = channels.size, request = request)
+    }
+    /** US guide categories are server-declared section IDs, never display-name guesses. */
+    suspend fun liveCategories(): List<LiveCategory> = emptyList()
     suspend fun guide(channelId: String): List<GuideProgramme>
     suspend fun preferences(profileId: String): PlaybackPreferences
     suspend fun savePreferences(profileId: String, preferences: PlaybackPreferences)
@@ -77,6 +84,52 @@ sealed interface DevicePollResult {
     data class Authorized(val session: DeviceSession) : DevicePollResult
     data object Pending : DevicePollResult
     data object RateLimited : DevicePollResult
+}
+
+/** One Guide filter is active at a time, matching the Roku EPG filter column. */
+sealed interface LiveChannelFilter {
+    data object AllUs : LiveChannelFilter
+    data object MyChannels : LiveChannelFilter
+    data object Recent : LiveChannelFilter
+    data class Category(val id: String) : LiveChannelFilter {
+        init { require(id.isNotBlank()) }
+    }
+    data class Search(val query: String) : LiveChannelFilter {
+        init {
+            require(query == query.trim() && query.isNotBlank())
+            require(query.length <= 128)
+        }
+    }
+}
+
+/** `/live?view=us` paging inputs. Offset stays zero-based and page size is bounded by Rust's 200-channel limit. */
+data class LiveBrowseRequest(
+    val filter: LiveChannelFilter = LiveChannelFilter.AllUs,
+    val offset: Int = 0,
+    val limit: Int = GuidePolicy.PAGE_SIZE,
+) {
+    init {
+        require(offset >= 0)
+        require(limit in 1..200)
+    }
+}
+
+data class LiveBrowsePage(
+    val channels: List<LiveChannel>,
+    val total: Int,
+    val request: LiveBrowseRequest,
+    val searchScope: String? = null,
+) {
+    val nextOffset: Int? get() = (request.offset + channels.size).takeIf { it < total }
+    val hasMore: Boolean get() = nextOffset != null
+}
+
+data class LiveCategory(val id: String, val name: String, val count: Int) {
+    init {
+        require(id.isNotBlank())
+        require(name.isNotBlank())
+        require(count >= 0)
+    }
 }
 
 /** A catalog identifier is only unique within an add-on and media type. */
@@ -402,6 +455,18 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         json("PUT", "/profiles/${enc(profileId)}/progress/correct", media.body().put("action", action))
     }
     override suspend fun live(): List<LiveChannel> = json("GET", "/live?view=us&limit=80").array("items", "channels").mapNotNull { it.optJSONObject()?.channel() }
+    override suspend fun livePage(request: LiveBrowseRequest): LiveBrowsePage {
+        val root = json("GET", livePath(request))
+        return LiveBrowsePage(
+            channels = root.array("channels", "items").mapNotNull { it.optJSONObject()?.channel() },
+            total = root.optInt("total", 0).coerceAtLeast(0),
+            request = request,
+            searchScope = root.optString("search_scope").ifBlank { null },
+        )
+    }
+    override suspend fun liveCategories(): List<LiveCategory> = json("GET", "/live/categories?view=us")
+        .array("categories")
+        .mapNotNull { it.optJSONObject()?.liveCategory() }
     override suspend fun guide(channelId: String): List<GuideProgramme> = json("GET", "/guide/${enc(channelId)}").array("programmes", "programs", "items").mapNotNull { it.optJSONObject()?.programme() }
     override suspend fun preferences(profileId: String): PlaybackPreferences = json("GET", "/profiles/${enc(profileId)}/preferences").preferences()
     override suspend fun savePreferences(profileId: String, preferences: PlaybackPreferences) {
@@ -554,6 +619,18 @@ private fun discoverPath(
             append("&extras=").append(URLEncoder.encode(encoded, "UTF-8"))
         }
 }
+private fun livePath(request: LiveBrowseRequest): String = buildString {
+    append("/live?view=us")
+    when (val filter = request.filter) {
+        LiveChannelFilter.AllUs -> Unit
+        LiveChannelFilter.MyChannels -> append("&collection=favorites")
+        LiveChannelFilter.Recent -> append("&collection=recent")
+        is LiveChannelFilter.Category -> append("&category=").append(URLEncoder.encode(filter.id, "UTF-8"))
+        is LiveChannelFilter.Search -> append("&search=").append(URLEncoder.encode(filter.query, "UTF-8"))
+    }
+    append("&offset=").append(request.offset)
+    append("&limit=").append(request.limit)
+}
 private sealed interface SearchAttempt<out T> {
     data class Value<T>(val value: T) : SearchAttempt<T>
     data object Failure : SearchAttempt<Nothing>
@@ -596,7 +673,18 @@ private fun JSONObject.headers(): Map<String, String> = keys().asSequence().asso
 private fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }
 private fun JSONObject.array(vararg keys: String): List<Any?> = (keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray()).let { array -> (0 until array.length()).map { index -> array.opt(index) } }
 private fun Any?.optJSONObject(): JSONObject? = this as? JSONObject
-private fun JSONObject.channel() = LiveChannel(get("id").toString(), optString("name", optString("title")), optString("logo").ifBlank { null }, optString("category").ifBlank { null })
+private fun JSONObject.channel() = LiveChannel(
+    id = get("id").toString(),
+    name = optString("name", optString("title")),
+    logo = optString("logo").ifBlank { null },
+    category = optString("section", optString("category")).ifBlank { null },
+)
+private fun JSONObject.liveCategory(): LiveCategory? {
+    val id = optString("id").trim()
+    val name = optString("name").trim()
+    if (id.isBlank() || name.isBlank()) return null
+    return LiveCategory(id, name, optInt("count").coerceAtLeast(0))
+}
 private fun JSONObject.programme() = GuideProgramme(optString("title", "No schedule available"), optLong("start", optLong("start_time")) * 1000, optLong("end", optLong("end_time")) * 1000, optString("description").ifBlank { null })
 private fun JSONObject.addon() = Addon(get("id").toString(), optString("name"), optString("manifest_url"), optBoolean("enabled", true))
 private fun Media.body() = JSONObject().put("id", id).put("type", type).put("name", name).putOpt("poster", poster).putOpt("series_id", seriesId).putOpt("season", season).putOpt("episode", episode).putOpt("source_addon_id", sourceAddonId).putOpt("source_fingerprint", sourceFingerprint).putOpt("duration", durationMillis?.let(::seconds))
