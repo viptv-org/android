@@ -228,7 +228,15 @@ internal class AndroidMedia3Backend(
                 val mediaSource = DefaultMediaSourceFactory(context)
                     .setDataSourceFactory(DefaultDataSource.Factory(context, httpFactory))
                     .createMediaSource(source.toMediaItem(resilientBufferConfig))
-                openingPlayer.setMediaSource(mediaSource)
+                // A server-managed VOD HLS playlist is dynamic but its title position is
+                // supplied by the launch request. Do not let Media3 choose the playlist's
+                // live-edge default: the controller applies an explicit direct resume after
+                // readiness, while managed delivery starts at this session's zero.
+                if (source.kindHint == PlaybackKind.OnDemand) {
+                    openingPlayer.setMediaSource(mediaSource, 0L)
+                } else {
+                    openingPlayer.setMediaSource(mediaSource)
+                }
                 openingPlayer.playWhenReady = playWhenReady
                 openingPlayer.prepare()
             } catch (_: Exception) {
