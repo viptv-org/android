@@ -25,7 +25,7 @@ jobs:
           java-version: '17'
       - uses: android-actions/setup-android@v3
       - name: Unit policy and debug APK
-        run: ./gradlew --no-daemon --max-workers=1 :app:testDebugUnitTest :app:assembleDebug
+        run: ./gradlew --no-daemon --max-workers=1 :testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:

@@ -88,7 +88,7 @@ class MainActivity : ComponentActivity() {
             is Route.Browse -> Browse(state, route.destination, controller)
             is Route.Details -> Details(route.media, controller)
             is Route.Sources -> SourcePicker(route.media, state.sources, controller)
-            is Route.Player -> Player(route.media, state.playerChromeVisible, state.seekPreview, state.playbackTracks, controller)
+            is Route.Player -> PlaybackScreen(route.media, state.playerChromeVisible, state.seekPreview, state.playbackTracks, controller)
             Route.Search -> SearchScreen(state, controller)
             Route.Settings -> SettingsScreen(state, controller)
             Route.Addons -> AddonsScreen(state, controller)
@@ -160,7 +160,7 @@ private fun qrBitmap(value: String): Bitmap {
         modifier = Modifier.width(178.dp).height(210.dp)
             .then(if (focusRequester == null) Modifier else Modifier.focusRequester(focusRequester))
             .onFocusChanged { focused = it.hasFocus }
-            .border(if (focused) 3.dp else 0.dp, White, RoundedCornerShape(12.dp)),
+            .then(if (focused) Modifier.border(3.dp, White, RoundedCornerShape(12.dp)) else Modifier),
     ) {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.width(178.dp).height(178.dp).padding(9.dp).clip(RoundedCornerShape(12.dp)).background(avatarFallback(profile.name)), contentAlignment = Alignment.Center) {
@@ -228,13 +228,13 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
     }
 }
 
-@Composable private fun Rail(selected: Destination, controller: AppController) = Column(Modifier.width(92.dp).fillMaxHeight().padding(top = 28.dp), horizontalAlignment = Alignment.End) {
+@Composable private fun Rail(selected: Destination, controller: AppController) = Column(Modifier.width(76.dp).fillMaxHeight().padding(top = 108.dp), horizontalAlignment = Alignment.End) {
     Destination.entries.forEach { destination ->
         var focused by remember(destination) { mutableStateOf(false) }
         Holdable(
             onActivate = { controller.navigate(destination) },
             onHold = null,
-            modifier = Modifier.size(60.dp).offset(x = (-4).dp).padding(vertical = 2.dp)
+            modifier = Modifier.size(60.dp).padding(vertical = 2.dp)
                 .onFocusChanged { focused = it.hasFocus }
                 .clip(RoundedCornerShape(12.dp))
                 .background(if (focused) White else Color.Transparent),
@@ -267,7 +267,8 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
         { if (resumable) controller.chooseSources(media, resume = true) else controller.open(media) },
         if (resumable) ({ controller.chooseSources(media) }) else null,
         Modifier.width(256.dp).height(200.dp).then(if (focusRequester == null) Modifier else Modifier.focusRequester(focusRequester))
-            .onFocusChanged { focused = it.hasFocus }.border(if (focused) 2.dp else 0.dp, White, RoundedCornerShape(8.dp)),
+            .onFocusChanged { focused = it.hasFocus }
+            .then(if (focused) Modifier.border(2.dp, White, RoundedCornerShape(8.dp)) else Modifier),
     ) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxWidth().height(144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)), contentAlignment = Alignment.Center) {
@@ -281,6 +282,8 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
 }
 
 @Composable private fun Details(media: Media, controller: AppController) = Box(Modifier.fillMaxSize().background(Canvas)) {
+    val initialFocus = remember { FocusRequester() }
+    LaunchedEffect(media.id, media.type) { initialFocus.requestFocus() }
     if (!media.poster.isNullOrBlank()) {
         AsyncImage(model = media.poster, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(620.dp))
         Box(Modifier.fillMaxWidth().height(620.dp).background(Brush.verticalGradient(listOf(Canvas.copy(alpha = .32f), Canvas.copy(alpha = .90f), Canvas))))
@@ -289,7 +292,7 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
         Text(media.name, color = White, fontSize = 36.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.offset(112.dp, 74.dp).width(900.dp))
         Text(media.type.uppercase(), color = Muted, fontSize = 18.sp, modifier = Modifier.offset(112.dp, 132.dp).width(706.dp))
         Row(Modifier.offset(112.dp, 188.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            TvButton("Season ${media.season ?: 1}", { }, Modifier.width(256.dp).height(48.dp))
+            TvButton("Season ${media.season ?: 1}", { }, Modifier.width(256.dp).height(48.dp).focusRequester(initialFocus))
             TvButton("My List", { controller.toggleMyList(media) }, Modifier.width(256.dp).height(48.dp))
             TvButton("More info", { controller.open(media) }, Modifier.width(256.dp).height(48.dp))
         }
@@ -307,7 +310,7 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
             Text(media.type.uppercase(), color = Muted, fontSize = 18.sp, modifier = Modifier.padding(top = 18.dp).height(48.dp))
             Text(media.description ?: "No description available.", color = Muted, fontSize = 20.sp, modifier = Modifier.padding(top = 28.dp).height(128.dp), maxLines = 4, overflow = TextOverflow.Ellipsis)
             Row(Modifier.padding(top = 28.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                TvButton(if (media.positionMillis > 0) "Resume" else "Play", { controller.chooseSources(media, media.positionMillis > 0) }, Modifier.width(192.dp).height(56.dp))
+                TvButton(if (media.positionMillis > 0) "Resume" else "Play", { controller.chooseSources(media, media.positionMillis > 0) }, Modifier.width(192.dp).height(56.dp).focusRequester(initialFocus))
                 TvButton("Choose source", { controller.chooseSources(media) }, Modifier.width(192.dp).height(56.dp))
                 TvButton("My List", { controller.toggleMyList(media) }, Modifier.width(192.dp).height(56.dp))
             }
@@ -320,7 +323,8 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
     Holdable(
         onActivate = { controller.chooseSources(episode) },
         onHold = null,
-        modifier = Modifier.width(256.dp).height(330.dp).onFocusChanged { focused = it.hasFocus }.border(if (focused) 2.dp else 0.dp, White, RoundedCornerShape(8.dp)),
+        modifier = Modifier.width(256.dp).height(330.dp).onFocusChanged { focused = it.hasFocus }
+            .then(if (focused) Modifier.border(2.dp, White, RoundedCornerShape(8.dp)) else Modifier),
     ) {
         Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().height(144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)), contentAlignment = Alignment.Center) {
@@ -334,79 +338,76 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
     }
 }
 
-@Composable private fun SourcePicker(media: Media, sources: List<Source>, controller: AppController) {
+@Composable private fun SourcePicker(media: Media, sources: List<Source>, controller: AppController) = Box(Modifier.fillMaxSize()) {
     var provider by remember(media.type, media.id) { mutableStateOf<String?>(null) }
+    val initialSourceFocus = remember { FocusRequester() }
     val providers = sources.map(Source::provider).distinct()
     val shown = sources.filter { provider == null || it.provider == provider }
-    Column(Modifier.fillMaxSize().padding(start = 100.dp, top = 54.dp, end = 84.dp)) {
-    Text("Choose a source", color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold); Text(media.name, color = Muted, modifier = Modifier.padding(top = 8.dp))
-    if (providers.isNotEmpty()) LazyRow(Modifier.padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    LaunchedEffect(provider, shown.map(Source::id)) { if (shown.isNotEmpty()) initialSourceFocus.requestFocus() }
+    Text("Choose a source", color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(100.dp, 64.dp))
+    Text(media.name, color = Muted, fontSize = 20.sp, modifier = Modifier.offset(100.dp, 119.dp))
+    if (providers.isNotEmpty()) LazyRow(Modifier.offset(100.dp, 166.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         item { TvButton("All providers", { provider = null }, selected = provider == null) }
         items(providers, key = { it }) { item -> TvButton(item, { provider = item }, selected = provider == item) }
     }
-    if (sources.isEmpty()) Text("Finding sources…\nSources appear here as they arrive.", color = Muted, modifier = Modifier.padding(top = 150.dp))
-    else if (shown.isEmpty()) Text("No sources from this provider. Choose another provider.", color = Muted, modifier = Modifier.padding(top = 80.dp))
-    shown.forEach { source -> TvButton(source.provider + "\n" + source.description, { controller.start(media, source) }, Modifier.fillMaxWidth().height(160.dp).padding(top = 16.dp), multiline = true) }
+    when {
+        sources.isEmpty() -> Text("Finding sources\nSources appear here as they arrive.", color = Muted, fontSize = 20.sp, modifier = Modifier.offset(100.dp, 380.dp))
+        shown.isEmpty() -> Text("No sources from this provider. Choose another provider.", color = Muted, fontSize = 20.sp, modifier = Modifier.offset(100.dp, 380.dp))
+        else -> Column(Modifier.offset(100.dp, 234.dp).width(1096.dp)) {
+            shown.take(2).forEachIndexed { index, source ->
+                SourceCard(source, controller, media, if (index == 0) initialSourceFocus else null)
+                if (index == 0 && shown.size > 1) Spacer(Modifier.height(16.dp))
+            }
+        }
     }
 }
 
-@Composable private fun Player(media: Media, chromeVisible: Boolean, seekPreview: SeekPreview?, serverTracks: PlaybackTrackChoices, controller: AppController) = Box(
-    Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent { event ->
-        if (event.nativeKeyEvent.action == KeyEvent.ACTION_UP && event.nativeKeyEvent.keyCode != KeyEvent.KEYCODE_BACK) controller.showPlayerChrome()
-        false
-    },
-) {
-    val playback by controller.player.state.collectAsState()
-    LaunchedEffect(media.type, media.id, playback.positionMillis, playback.isPlaying, playback.timeline?.durationMillis) {
-        controller.maybeAutoNext(media, playback.positionMillis, playback.timeline?.durationMillis, playback.isPlaying, playback.status == PlaybackStatus.Ended)
-    }
-    AndroidView(factory = { SurfaceView(it).also(controller.player::attach) }, modifier = Modifier.fillMaxSize())
-    if (chromeVisible) Column(Modifier.align(Alignment.BottomStart).padding(64.dp)) {
-        Text(media.name, color = White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-        if (media.type == "series" && media.season != null && media.episode != null) {
-            Text("S${media.season} E${media.episode}${media.episodeTitle?.let { " · $it" } ?: ""}", color = Muted, modifier = Modifier.padding(top = 6.dp))
-        }
-        seekPreview?.let { Text("Seek preview: ${it.targetMillis / 1_000}s", color = Muted, modifier = Modifier.padding(top = 8.dp)) }
-        Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (media.type != "live") {
-                if (playback.timeline?.canSeek == true) TvButton("↶ 10", { controller.previewSeek(-10_000) })
-                TvButton(if (playback.isPlaying) "Pause" else "Play", { controller.showPlayerChrome(); if (playback.isPlaying) controller.player.pause() else controller.player.play() })
-                if (playback.timeline?.canSeek == true) TvButton("30 ↷", { controller.previewSeek(30_000) })
-                seekPreview?.let { TvButton("Seek", controller::commitSeek); TvButton("Cancel", controller::cancelSeek) }
-                if (media.type == "series") TvButton("Next episode", { controller.nextEpisode(media) })
-            }
-            val nextAudio = serverTracks.audio.firstOrNull { it.selectable && it.supported && !it.selected }
-                ?: serverTracks.audio.firstOrNull { it.selectable && it.supported }
-            nextAudio?.let { track -> TvButton("Audio", { controller.showPlayerChrome(); controller.selectAudioTrack(track) }) }
-            if (serverTracks.subtitlesSupported) {
-                val selectedSubtitle = serverTracks.subtitles.firstOrNull { it.selected }
-                val nextSubtitle = serverTracks.subtitles.firstOrNull { it.selectable && it.supported }
-                TvButton("Captions", { controller.showPlayerChrome(); controller.selectSubtitleTrack(if (selectedSubtitle == null) nextSubtitle else null) })
-            }
-            TvButton("Exit", { controller.saveProgress(media); controller.back() })
+@Composable private fun SourceCard(source: Source, controller: AppController, media: Media, focusRequester: FocusRequester?) {
+    var focused by remember(source.id) { mutableStateOf(false) }
+    val foreground = if (focused) Canvas else White
+    val secondary = if (focused) Color(0xFF303234) else Muted
+    Holdable(
+        onActivate = { controller.start(media, source) },
+        onHold = null,
+        modifier = Modifier.width(1096.dp).height(216.dp)
+            .then(if (focusRequester == null) Modifier else Modifier.focusRequester(focusRequester))
+            .onFocusChanged { focused = it.hasFocus }
+            .background(if (focused) White else Surface, RoundedCornerShape(12.dp)),
+    ) {
+        Column(Modifier.fillMaxSize().padding(start = 20.dp, top = 10.dp, end = 20.dp)) {
+            Text(source.name, color = foreground, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(source.description.ifBlank { source.provider }, color = secondary, fontSize = 20.sp, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp).height(126.dp))
+            val facts = listOfNotNull(source.quality, source.audio, source.provider.takeIf { it.isNotBlank() }).joinToString("  •  ")
+            if (facts.isNotBlank()) Text(facts, color = secondary, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
         }
     }
 }
 
 @Composable private fun SearchScreen(state: AppState, controller: AppController) {
     var query by remember { mutableStateOf("") }
+    val queryFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { queryFocus.requestFocus() }
     Column(Modifier.fillMaxSize().padding(100.dp)) {
         Text("Search", color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
-        TextField(value = query, onValueChange = { query = it; controller.search(it) }, label = { Text("Search movies and series") }, modifier = Modifier.width(520.dp).padding(top = 26.dp))
+        TextField(value = query, onValueChange = { query = it; controller.search(it) }, label = { Text("Search movies and series") }, modifier = Modifier.width(520.dp).padding(top = 26.dp).focusRequester(queryFocus))
         TvButton("Search", { controller.search(query.trim()) }, Modifier.padding(top = 16.dp))
         LazyRow(Modifier.padding(top = 30.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) { items(state.searchResults, key = { it.type + it.id }) { MediaCard(it, controller) } }
         if (query.isNotBlank() && !state.loading && state.searchResults.isEmpty()) Text("No results. Keep the search field focused to try another title.", color = Muted, modifier = Modifier.padding(top = 28.dp))
     }
 }
 
-@Composable private fun SettingsScreen(state: AppState, controller: AppController) = Column(Modifier.fillMaxSize().padding(100.dp)) {
+@Composable private fun SettingsScreen(state: AppState, controller: AppController) {
+    val initialFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { initialFocus.requestFocus() }
+    Column(Modifier.fillMaxSize().padding(100.dp)) {
     Text("Settings", color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
-    TvButton("Addons", controller::openAddons, Modifier.padding(top = 28.dp))
+    TvButton("Addons", controller::openAddons, Modifier.padding(top = 28.dp).focusRequester(initialFocus))
     TvButton("Preferred audio: ${state.preferences.audioLanguage}", { controller.setPreference(state.preferences.copy(audioLanguage = if (state.preferences.audioLanguage == "en") "es" else "en")) }, Modifier.padding(top = 12.dp))
     TvButton("Subtitles: ${if (state.preferences.subtitlesEnabled) "On" else "Off"}", { controller.setPreference(state.preferences.copy(subtitlesEnabled = !state.preferences.subtitlesEnabled)) }, Modifier.padding(top = 12.dp))
     TvButton("Autoplay: ${if (state.preferences.autoplay) "On" else "Off"}", { controller.setPreference(state.preferences.copy(autoplay = !state.preferences.autoplay)) }, Modifier.padding(top = 12.dp))
     TvButton("Profiles", { controller.navigate(Destination.Profile) }, Modifier.padding(top = 12.dp))
     TvButton("Sign out", { controller.requestDialog(DialogKind.SignOut, "Sign out of VIPTV?") }, Modifier.padding(top = 12.dp))
+    }
 }
 
 @Composable private fun AddonsScreen(state: AppState, controller: AppController) = Column(Modifier.fillMaxSize().padding(100.dp)) {
@@ -426,12 +427,16 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
     }
 }
 
-@Composable private fun GuideScreen(channel: LiveChannel, entries: List<GuideProgramme>, controller: AppController) = Column(Modifier.fillMaxSize().padding(100.dp)) {
+@Composable private fun GuideScreen(channel: LiveChannel, entries: List<GuideProgramme>, controller: AppController) {
+    val watchFocus = remember { FocusRequester() }
+    LaunchedEffect(channel.id) { watchFocus.requestFocus() }
+    Column(Modifier.fillMaxSize().padding(100.dp)) {
     Text(channel.name, color = White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
     Text("Program guide", color = Muted, modifier = Modifier.padding(top = 8.dp))
     if (entries.isEmpty()) Text("No schedule available. This channel can still be watched.", color = Muted, modifier = Modifier.padding(top = 40.dp))
     entries.take(10).forEach { entry -> TvButton(entry.title, {}, Modifier.fillMaxWidth().height(56.dp).padding(top = 8.dp)) }
-    TvButton("Watch live", { controller.open(Media(channel.id, "live", channel.name)) }, Modifier.padding(top = 24.dp))
+    TvButton("Watch live", { controller.chooseSources(Media(channel.id, "live", channel.name)) }, Modifier.padding(top = 24.dp).focusRequester(watchFocus))
+    }
 }
 
 @Composable private fun PinDialog(prompt: PinPrompt, controller: AppController, modifier: Modifier = Modifier) {
@@ -484,7 +489,7 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
 @Composable private fun Holdable(onActivate: () -> Unit, onHold: (() -> Unit)?, modifier: Modifier, selected: Boolean = false, content: @Composable BoxScope.() -> Unit) {
     var downAt by remember { mutableLongStateOf(0L) }; var held by remember { mutableStateOf(false) }
     LaunchedEffect(downAt, onHold) { if (downAt != 0L && onHold != null) { delay(HoldPolicy.thresholdMillis); if (downAt != 0L) { held = true; onHold() } } }
-    Box(modifier = modifier.border(if (selected) 2.dp else 0.dp, White, RoundedCornerShape(12.dp)).focusable().clickable(onClick = onActivate).onPreviewKeyEvent { event ->
+    Box(modifier = modifier.then(if (selected) Modifier.border(2.dp, White, RoundedCornerShape(12.dp)) else Modifier).focusable().clickable(onClick = onActivate).onPreviewKeyEvent { event ->
         val key = event.nativeKeyEvent; if (key.keyCode != KeyEvent.KEYCODE_DPAD_CENTER && key.keyCode != KeyEvent.KEYCODE_ENTER) return@onPreviewKeyEvent false
         if (key.action == KeyEvent.ACTION_DOWN && downAt == 0L) { downAt = key.eventTime; held = false; true }
         else if (key.action == KeyEvent.ACTION_UP) { val doActivate = !held; downAt = 0L; if (doActivate) onActivate(); true } else true

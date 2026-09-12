@@ -29,6 +29,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private var nextEpisodeJob: Job? = null
     private var playerChromeJob: Job? = null
     private var heartbeatJob: Job? = null
+    private var progressJob: Job? = null
     private var playbackSessionId: String? = null
     private var afterParentUnlock: (suspend () -> Unit)? = null
     private var selectedAudioTrackIndex: Int? = null
@@ -90,7 +91,22 @@ class AppController(context: Context, private val origin: String = "https://vipt
         _state.value = _state.value.copy(route = Route.Browse(destination), loading = true, message = null)
         runCatching { when (destination) { Destination.Home -> gateway.home(requireProfile()); Destination.Discover, Destination.Search -> listOf(HomeShelf("Discover", gateway.discover())); Destination.MyList -> listOf(HomeShelf("My List", gateway.discover())); Destination.Live -> listOf(HomeShelf("Live TV", gateway.discover("live"))); Destination.Settings, Destination.Profile -> emptyList() } }.onSuccess { shelves -> _state.value = _state.value.copy(shelves = shelves, catalog = shelves.flatMap(HomeShelf::items), loading = false) }.onFailure(::fail)
     }
-    fun open(media: Media) = scope.launch { update(loading = true); runCatching { gateway.metadata(media) }.onSuccess { _state.value = _state.value.copy(route = Route.Details(it), loading = false) }.onFailure(::fail) }
+    fun open(media: Media) = scope.launch {
+        update(loading = true)
+        runCatching { gateway.metadata(media) }.onSuccess { metadata ->
+            // Catalog/history carries artwork and progress that sparse metadata
+            // responses may omit. Metadata may enrich it, never erase it.
+            val detail = metadata.copy(
+                poster = metadata.poster ?: media.poster,
+                description = metadata.description ?: media.description,
+                positionMillis = metadata.positionMillis.takeIf { it > 0 } ?: media.positionMillis,
+                durationMillis = metadata.durationMillis ?: media.durationMillis,
+                sourceAddonId = metadata.sourceAddonId ?: media.sourceAddonId,
+                sourceFingerprint = metadata.sourceFingerprint ?: media.sourceFingerprint,
+            )
+            _state.value = _state.value.copy(route = Route.Details(detail), loading = false)
+        }.onFailure(::fail)
+    }
     fun chooseSources(media: Media, resume: Boolean = false) {
         sourceDiscovery?.cancel()
         sourceDiscovery = scope.launch {
@@ -177,6 +193,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                     loading = false,
                 )
                 continuationRestore = null
+                startProgressPersistence(playbackMedia)
                 schedulePlayerChromeDismissal()
                 true
             }
@@ -273,7 +290,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
         when (val route = _state.value.route) {
             is Route.Player -> {
-                stopPlayback(); _state.value = _state.value.copy(route = Route.Details(route.media))
+                stopPlayback(route.media); _state.value = _state.value.copy(route = Route.Details(route.media))
             }
             is Route.Sources -> { sourceDiscovery?.cancel(); _state.value = _state.value.copy(route = Route.Details(route.media)) }
             is Route.Profiles -> if (_state.value.managingProfiles) _state.value = _state.value.copy(managingProfiles = false) else if (_state.value.selectedProfile != null) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null) else return false
@@ -283,7 +300,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
         return true
     }
-    fun saveProgress(media: Media) = scope.launch { _state.value.selectedProfile?.let { gateway.updateProgress(it.id, media, player.state.value.positionMillis) } }
+    fun saveProgress(media: Media) = scope.launch { persistProgress(media, player.state.value.positionMillis) }
     fun previewSeek(deltaMillis: Long) {
         val playback = player.state.value
         val timeline = playback.timeline ?: return
@@ -426,8 +443,8 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun dismissDialog() { _state.value = _state.value.copy(dialog = null) }
     fun submitPin(pin: String) = scope.launch { if (!pin.matches(Regex("\\d{4,8}"))) { update(message = "Enter a 4–8 digit parent PIN."); return@launch }; runCatching { gateway.unlockParent(pin) }.onSuccess { _state.value = _state.value.copy(pinPrompt = null, message = null); afterParentUnlock?.also { pending -> afterParentUnlock = null; pending() } }.onFailure { error -> _state.value = _state.value.copy(message = error.message ?: "Incorrect PIN. Try again.") } }
     fun cancelPin() { afterParentUnlock = null; _state.value = _state.value.copy(pinPrompt = null) }
-    fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback(); gateway.logout(); store.edit().clear().apply(); _state.value = AppState(route = Route.Pairing); beginPairing() } }
-    fun close() { pairingPoll?.cancel(); sourceDiscovery?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback(); player.close() }
+    fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback((_state.value.route as? Route.Player)?.media); gateway.logout(); store.edit().clear().apply(); _state.value = AppState(route = Route.Pairing); beginPairing() } }
+    fun close() { pairingPoll?.cancel(); sourceDiscovery?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
     private fun requireProfile() = checkNotNull(_state.value.selectedProfile).id
     private fun schedulePlayerChromeDismissal() {
         playerChromeJob?.cancel()
@@ -448,7 +465,25 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
         if (prior != null && prior != sessionId) scope.launch { runCatching { gateway.stopPlayback(prior) } }
     }
-    private fun stopPlayback() {
+    private fun startProgressPersistence(media: Media) {
+        progressJob?.cancel()
+        if (media.type == "live") return
+        progressJob = scope.launch {
+            while (isActive) {
+                delay(15_000)
+                persistProgress(media, player.state.value.positionMillis)
+            }
+        }
+    }
+    private suspend fun persistProgress(media: Media, positionMillis: Long) {
+        if (media.type != "live" && positionMillis > 0) {
+            _state.value.selectedProfile?.let { profile -> runCatching { gateway.updateProgress(profile.id, media, positionMillis) } }
+        }
+    }
+    private fun stopPlayback(media: Media? = null) {
+        val position = player.state.value.positionMillis
+        progressJob?.cancel()
+        media?.let { item -> scope.launch { persistProgress(item, position) } }
         player.stop()
         heartbeatJob?.cancel()
         playbackSessionId?.let { id -> scope.launch { runCatching { gateway.stopPlayback(id) } } }
