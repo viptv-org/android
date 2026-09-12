@@ -354,9 +354,11 @@ class AppController(context: Context, private val origin: String = "https://vipt
         val requestGeneration = ++playbackGeneration
         scope.launch {
             managedRecoveryKey = null
+            managedRecoveryInFlightKey = null
             sourceDiscovery?.cancel()
             if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
-            prepareAndStart(media, source, explicitResume, playWhenReady = true, resetTrackChoices = true, expectedGeneration = requestGeneration)
+            val started = prepareAndStart(media, source, explicitResume, playWhenReady = true, resetTrackChoices = true, expectedGeneration = requestGeneration)
+            if (!started && PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) showPlaybackRecovery(media, source)
         }
     }
 
@@ -409,7 +411,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 return false
             }
             if (launch.url.isBlank()) {
-                update(loading = false, message = "The selected source could not be prepared.")
+                if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) update(loading = false, message = "The selected source could not be prepared.")
                 false
             } else {
                 try {
@@ -424,6 +426,9 @@ class AppController(context: Context, private val origin: String = "https://vipt
                     )
                 } catch (error: Throwable) {
                     runCatching { gateway.stopPlayback(launch.sessionId) }
+                    // Opening crossed the native replacement boundary; the outgoing
+                    // lease can no longer be assumed healthy.
+                    if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) retirePlaybackSession()
                     throw error
                 }
                 if (!PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) {
@@ -436,7 +441,12 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 if (!launch.live && !SeekCommitPolicy.usesManagedReplacement(launch.mode) && launch.positionMillis > 0L && !player.seekTo(launch.positionMillis)) {
                     player.stop()
                     runCatching { gateway.stopPlayback(launch.sessionId) }
-                    update(loading = false, message = "This source cannot resume at the requested position. Choose another source.")
+                    // Direct seek failure occurs after native replacement, unlike a
+                    // gateway rejection above; retire the displaced lease too.
+                    if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) {
+                        retirePlaybackSession()
+                        update(loading = false, message = "This source cannot resume at the requested position. Choose another source.")
+                    }
                     return false
                 }
                 playbackTitleOffsetMillis = PlaybackTimelinePolicy.titleOffsetMillis(launch.mode, launch.positionMillis)
@@ -473,10 +483,10 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 true
             }
         } catch (error: CancellationException) {
-            update(loading = false)
+            if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) update(loading = false)
             throw error
         } catch (error: Throwable) {
-            fail(error)
+            if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) fail(error)
             false
         }
     }
@@ -484,6 +494,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
         if (event !is PlaybackEvent.Failed || _state.value.dialog?.kind == DialogKind.PlaybackRecovery) return
         val active = _state.value.route as? Route.Player ?: return
         val route = active.copy(media = snapshotPlaybackMedia(active))
+        retirePlaybackSession()
         val key = "${route.media.type}:${route.media.id}:${route.source.id}"
         if (managedRecoveryInFlightKey == key) return
         if (!ManagedRecoveryPolicy.shouldAttempt(
@@ -524,13 +535,18 @@ class AppController(context: Context, private val origin: String = "https://vipt
 
     /** Runtime failure has no automatic source fallback: users retain exact retry, source choice, or Back. */
     private fun showPlaybackRecovery(route: Route.Player) {
+        _state.value = _state.value.copy(route = route)
+        showPlaybackRecovery(route.media, route.source)
+    }
+
+    /** Source-picker failures retain its loaded rows; no native player session is retired until an actual player error. */
+    private fun showPlaybackRecovery(media: Media, source: Source) {
         _state.value = _state.value.copy(
-            route = route,
             dialog = DialogState(
                 kind = DialogKind.PlaybackRecovery,
                 title = "Playback unavailable",
-                media = route.media,
-                source = route.source,
+                media = media,
+                source = source,
             ),
             playerChromeVisible = true,
             loading = false,
@@ -549,16 +565,24 @@ class AppController(context: Context, private val origin: String = "https://vipt
     fun chooseAnotherSourceForRecovery() {
         val dialog = _state.value.dialog?.takeIf { it.kind == DialogKind.PlaybackRecovery } ?: return
         val media = dialog.media ?: return
-        stopPlayback(media)
-        _state.value = _state.value.copy(dialog = null, message = null)
-        chooseSources(media, resume = false)
+        when (val route = _state.value.route) {
+            is Route.Player -> {
+                stopPlayback(media)
+                _state.value = _state.value.copy(dialog = null, message = null)
+                chooseSources(media, resume = false)
+            }
+            is Route.Sources -> _state.value = _state.value.copy(dialog = null, message = null)
+            else -> Unit
+        }
     }
 
     fun backFromPlaybackRecovery() {
         val dialog = _state.value.dialog?.takeIf { it.kind == DialogKind.PlaybackRecovery } ?: return
-        val route = _state.value.route as? Route.Player ?: return
-        val media = dialog.media ?: snapshotPlaybackMedia(route)
-        exitPlayer(route, media)
+        when (val route = _state.value.route) {
+            is Route.Player -> exitPlayer(route, dialog.media ?: snapshotPlaybackMedia(route))
+            is Route.Sources -> _state.value = _state.value.copy(dialog = null, message = null)
+            else -> _state.value = _state.value.copy(dialog = null, message = null)
+        }
     }
 
     /** Controlled continuation is the only non-Resume automatic source path. */
@@ -880,7 +904,19 @@ class AppController(context: Context, private val origin: String = "https://vipt
     }
     fun openMyList() = scope.launch { update(loading = true); runCatching { gateway.favorites(requireProfile()) }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.MyList), favorites = it, catalog = it, loading = false) }.onFailure(::fail) }
     fun openQueue() = scope.launch { update(loading = true); runCatching { gateway.queue(requireProfile()) }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.Home), queue = it, loading = false) }.onFailure(::fail) }
-    fun openLive() = scope.launch { update(loading = true); runCatching { gateway.live() }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.Live), liveChannels = it, loading = false) }.onFailure(::fail) }
+    /** The Live rail enters the Guide directly; the list surface is reserved for a truthful empty state. */
+    fun openLive() = scope.launch {
+        update(loading = true)
+        runCatching { gateway.live() }.onSuccess { channels ->
+            val initial = LiveEntryPolicy.initialChannel(channels, _state.value.guideUi.selectedChannelId)
+            if (initial == null) {
+                _state.value = _state.value.copy(route = Route.Browse(Destination.Live), liveChannels = emptyList(), loading = false)
+            } else {
+                _state.value = _state.value.copy(liveChannels = channels, loading = false, message = null)
+                openGuide(initial)
+            }
+        }.onFailure(::fail)
+    }
 
     /** Opens a 40-channel Guide page, then fills the selected five rows plus two look-ahead rows. */
     fun openGuide(channel: LiveChannel) = scope.launch {
@@ -1053,6 +1089,14 @@ class AppController(context: Context, private val origin: String = "https://vipt
             if (PlayerChromePolicy.shouldAutoHide(_state.value.route is Route.Player, player.state.value.isPlaying, playerMenuOpen, _state.value.seekPreview != null)) _state.value = _state.value.copy(playerChromeVisible = false)
         }
     }
+    /** The native player has errored/replaced; stop heartbeat before exposing recovery actions. */
+    private fun retirePlaybackSession() {
+        heartbeatJob?.cancel()
+        val prior = playbackSessionId
+        playbackSessionId = null
+        prior?.let { id -> scope.launch { runCatching { gateway.stopPlayback(id) } } }
+    }
+
     private fun replacePlaybackSession(sessionId: String) {
         val prior = playbackSessionId
         heartbeatJob?.cancel()
@@ -1092,10 +1136,8 @@ class AppController(context: Context, private val origin: String = "https://vipt
         playbackTitleDurationMillis = null
         lastTrustedTitlePositionMillis = 0L
         managedPauseAnchorMillis = null
-        heartbeatJob?.cancel()
         playerMenuOpen = false
-        playbackSessionId?.let { id -> scope.launch { runCatching { gateway.stopPlayback(id) } } }
-        playbackSessionId = null
+        retirePlaybackSession()
     }
     private fun persist(session: DeviceSession) { store.edit().putString("access", session.accessToken).putString("refresh", session.refreshToken).apply() }
     private suspend fun guarded(pinTitle: String, action: suspend () -> Unit) {

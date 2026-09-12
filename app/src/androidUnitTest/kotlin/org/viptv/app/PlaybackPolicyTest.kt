@@ -256,3 +256,12 @@ class PlaybackRecoveryPolicyTest {
         assertEquals(Route.Details(snapshot), PlaybackRecoveryPolicy.returnRoute(PlaybackReturn.Details, snapshot))
     }
 }
+
+class LiveEntryPolicyTest {
+    @Test fun `Live rail restores the selected guide channel or falls back to first`() {
+        val channels = listOf(LiveChannel("one", "One"), LiveChannel("two", "Two"))
+        assertEquals(channels[1], LiveEntryPolicy.initialChannel(channels, "two"))
+        assertEquals(channels[0], LiveEntryPolicy.initialChannel(channels, "missing"))
+        assertEquals(null, LiveEntryPolicy.initialChannel(emptyList(), "two"))
+    }
+}

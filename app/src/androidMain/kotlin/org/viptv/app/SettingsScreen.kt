@@ -66,63 +66,91 @@ fun SettingsScreen(
     var installing by remember { mutableStateOf(false) }
     var manifestUrl by remember { mutableStateOf("") }
     var manifestError by remember { mutableStateOf<String?>(null) }
+    val scrollState = rememberScrollState()
     val profilesFocus = remember { FocusRequester() }
+    val subtitlesEnabledFocus = remember { FocusRequester() }
+    val audioFocus = remember { FocusRequester() }
+    val subtitlesFocus = remember { FocusRequester() }
+    val subtitleSizeFocus = remember { FocusRequester() }
+    val subtitleAppearanceFocus = remember { FocusRequester() }
+    val qualityFocus = remember { FocusRequester() }
+    val addonFocus = remember(addons.map { it.id }) { addons.associate { it.id to FocusRequester() } }
+    var dialogOrigin by remember { mutableStateOf<SettingsDialogOrigin?>(null) }
+
+    fun showChoice(origin: FocusRequester, dialog: SettingsChoice) {
+        dialogOrigin = SettingsDialogOrigin(origin, scrollState.value)
+        choice = dialog
+    }
+
+    fun showRemoval(origin: FocusRequester, addon: Addon) {
+        dialogOrigin = SettingsDialogOrigin(origin, scrollState.value)
+        pendingRemoval = addon
+    }
 
     LaunchedEffect(Unit) { profilesFocus.requestFocus() }
+    // A dialog temporarily owns focus. Restore the row and its viewport only
+    // when the final nested dialog (Manage add-on → Remove) has closed.
+    LaunchedEffect(choice != null, pendingRemoval != null) {
+        if (choice != null || pendingRemoval != null) return@LaunchedEffect
+        val origin = dialogOrigin ?: return@LaunchedEffect
+        dialogOrigin = null
+        scrollState.scrollTo(origin.scrollOffset)
+        origin.focus.requestFocus()
+    }
     Box(modifier.fillMaxSize().background(SettingsCanvas)) {
         Column(
             Modifier.fillMaxSize().padding(start = 100.dp, top = 54.dp, end = 84.dp, bottom = 48.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState),
         ) {
             Text("Settings", color = SettingsWhite, fontSize = 42.sp, fontWeight = FontWeight.Bold)
             SettingsHeading("Account")
-            SettingsAction("Profiles", onOpenProfiles, Modifier.focusRequester(profilesFocus))
+            SettingsAction("Profiles", onOpenProfiles, Modifier.fillMaxWidth().focusRequester(profilesFocus))
 
             SettingsHeading("Playback")
             SettingsAction("Autoplay next episode: ${onOff(preferences.autoplay)}", onActivate = {
                 onSavePreferences(preferences.copy(autoplay = !preferences.autoplay))
             })
             SettingsAction("Start with subtitles: ${onOff(preferences.subtitlesEnabled)}", onActivate = {
-                choice = SettingsChoice(
+                showChoice(subtitlesEnabledFocus, SettingsChoice(
                     "Start with subtitles",
                     listOf(
                         SettingOption("On") { onSavePreferences(preferences.copy(subtitlesEnabled = true)) },
                         SettingOption("Off") { onSavePreferences(preferences.copy(subtitlesEnabled = false)) },
                     ),
-                )
-            })
+                ))
+            }, Modifier.fillMaxWidth().focusRequester(subtitlesEnabledFocus))
             SettingsAction("Preferred audio: ${languageLabel(preferences.audioLanguage)}", onActivate = {
-                choice = languageChoice("Preferred audio") {
+                showChoice(audioFocus, languageChoice("Preferred audio") {
                     onSavePreferences(preferences.copy(audioLanguage = it))
-                }
-            })
+                })
+            }, Modifier.fillMaxWidth().focusRequester(audioFocus))
             SettingsAction("Preferred subtitles: ${languageLabel(preferences.subtitleLanguage)}", onActivate = {
-                choice = languageChoice("Preferred subtitles") {
+                showChoice(subtitlesFocus, languageChoice("Preferred subtitles") {
                     onSavePreferences(preferences.copy(subtitleLanguage = it))
-                }
-            })
+                })
+            }, Modifier.fillMaxWidth().focusRequester(subtitlesFocus))
             SettingsAction("Subtitle size: ${sizeLabel(preferences.subtitleSize)}", onActivate = {
-                choice = SettingsChoice(
+                showChoice(subtitleSizeFocus, SettingsChoice(
                     "Subtitle size",
                     listOf(
                         SettingOption("Small") { onSavePreferences(preferences.copy(subtitleSize = "small")) },
                         SettingOption("System default") { onSavePreferences(preferences.copy(subtitleSize = "normal")) },
                         SettingOption("Large") { onSavePreferences(preferences.copy(subtitleSize = "large")) },
                     ),
-                )
-            })
+                ))
+            }, Modifier.fillMaxWidth().focusRequester(subtitleSizeFocus))
             SettingsAction("Subtitle appearance: ${styleLabel(preferences.subtitleStyle)}", onActivate = {
-                choice = SettingsChoice(
+                showChoice(subtitleAppearanceFocus, SettingsChoice(
                     "Subtitle appearance",
                     listOf(
                         SettingOption("System default") { onSavePreferences(preferences.copy(subtitleStyle = "system")) },
                         SettingOption("Text with shadow") { onSavePreferences(preferences.copy(subtitleStyle = "shadow")) },
                         SettingOption("White text on black") { onSavePreferences(preferences.copy(subtitleStyle = "opaque")) },
                     ),
-                )
-            })
+                ))
+            }, Modifier.fillMaxWidth().focusRequester(subtitleAppearanceFocus))
             SettingsAction("Maximum quality: ${qualityLabel(preferences.quality)}", onActivate = {
-                choice = SettingsChoice(
+                showChoice(qualityFocus, SettingsChoice(
                     "Maximum quality",
                     listOf(
                         SettingOption("Auto") { onSavePreferences(preferences.copy(quality = "auto")) },
@@ -130,8 +158,8 @@ fun SettingsScreen(
                         SettingOption("720p") { onSavePreferences(preferences.copy(quality = "720p")) },
                         SettingOption("480p") { onSavePreferences(preferences.copy(quality = "480p")) },
                     ),
-                )
-            })
+                ))
+            }, Modifier.fillMaxWidth().focusRequester(qualityFocus))
             Text(
                 "Applies to your next playback. Manual track choices take priority.",
                 color = SettingsMuted,
@@ -169,16 +197,17 @@ fun SettingsScreen(
                 }
             }
             addons.forEach { addon ->
+                val focus = addonFocus.getValue(addon.id)
                 SettingsAction("${addon.name} · ${if (addon.enabled) "Enabled" else "Disabled"}", onActivate = {
-                    choice = SettingsChoice(
+                    showChoice(focus, SettingsChoice(
                         "Manage ${addon.name}",
                         listOf(
                             SettingOption(if (addon.enabled) "Disable" else "Enable") { onToggleAddon(addon) },
-                            SettingOption("Remove add-on") { pendingRemoval = addon },
+                            SettingOption("Remove add-on") { showRemoval(focus, addon) },
                             SettingOption("Cancel") {},
                         ),
-                    )
-                })
+                    ))
+                }, Modifier.fillMaxWidth().focusRequester(focus))
             }
 
             SettingsHeading("Server & About")
@@ -224,6 +253,7 @@ fun SettingsScreen(
 
 private data class SettingsChoice(val title: String, val options: List<SettingOption>)
 private data class SettingOption(val label: String, val action: () -> Unit)
+private data class SettingsDialogOrigin(val focus: FocusRequester, val scrollOffset: Int)
 
 @Composable
 private fun SettingsHeading(label: String) = Text(

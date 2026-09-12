@@ -361,6 +361,11 @@ data class GuideUiState(
     val loadingChannelIds: Set<String> = emptySet(),
 )
 
+object LiveEntryPolicy {
+    fun initialChannel(channels: List<LiveChannel>, rememberedId: String?): LiveChannel? =
+        channels.firstOrNull { it.id == rememberedId } ?: channels.firstOrNull()
+}
+
 object GuidePolicy {
     const val PAGE_SIZE = 40
     const val VISIBLE_ROWS = 5
