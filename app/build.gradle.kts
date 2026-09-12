@@ -16,6 +16,7 @@ kotlin {
             implementation(libs.androidx.compose.ui)
             implementation(libs.androidx.compose.foundation)
             implementation(libs.androidx.compose.material3)
+            implementation("androidx.compose.material:material-icons-extended")
             implementation(libs.androidx.lifecycle.runtime.compose)
             implementation(libs.kotlinx.coroutines.android)
             implementation("io.coil-kt:coil-compose:2.7.0")

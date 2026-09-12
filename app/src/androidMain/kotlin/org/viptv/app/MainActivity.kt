@@ -10,6 +10,15 @@ import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,6 +29,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -56,6 +66,7 @@ class MainActivity : ComponentActivity() {
     val controller = remember { AppController(context.applicationContext) }
     val state by controller.state.collectAsStateWithLifecycle()
     DisposableEffect(Unit) { onDispose(controller::close) }
+    BackHandler(enabled = controller.consumesBack()) { controller.handleBack() }
     // Scale density, rather than a rendered layer, so the logical frame measures to the viewport.
     // This keeps both coordinates and focus hit targets in the 1280×720 design space.
     val scale = minOf(maxWidth.value / 1280f, maxHeight.value / 720f)
@@ -87,10 +98,10 @@ class MainActivity : ComponentActivity() {
 
 @Composable private fun Pairing(state: AppState, controller: AppController) = Box(Modifier.fillMaxSize()) {
     Image(painterResource(R.drawable.viptv_mark), contentDescription = "VIPTV", modifier = Modifier.offset(96.dp, 44.dp).width(42.dp).height(36.dp))
-    Text("Sign in to VIPTV", color = White, fontSize = 44.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(96.dp, 170.dp))
-    Text("Visit this address, then enter the code shown below.", color = Muted, fontSize = 24.sp, modifier = Modifier.offset(96.dp, 260.dp))
-    Text(state.deviceCode?.verificationUri ?: "Preparing secure pairing…", color = White, fontSize = 22.sp, modifier = Modifier.offset(96.dp, 364.dp))
-    Text(state.deviceCode?.userCode ?: "", color = White, fontSize = 40.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(96.dp, 450.dp))
+    Text("Sign in to VIPTV", color = White, fontSize = 52.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(96.dp, 170.dp))
+    Text("Visit this address, then enter the code shown below.", color = Muted, fontSize = 32.sp, modifier = Modifier.offset(96.dp, 260.dp))
+    Text(state.deviceCode?.verificationUri ?: "Preparing secure pairing…", color = White, fontSize = 28.sp, modifier = Modifier.offset(96.dp, 364.dp))
+    Text(state.deviceCode?.userCode ?: "", color = White, fontSize = 44.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(96.dp, 450.dp))
     state.deviceCode?.let { code -> PairingQr(code.qrUri ?: "${code.verificationUri}?code=${code.userCode}", Modifier.offset(886.dp, 184.dp)) }
     if (state.message != null) TvButton("Try again", controller::beginPairing, Modifier.offset(96.dp, 540.dp).width(170.dp).height(56.dp))
 }
@@ -178,7 +189,20 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
 }
 
 @Composable private fun Rail(selected: Destination, controller: AppController) = Column(Modifier.width(92.dp).fillMaxHeight().padding(top = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-    Destination.entries.forEach { destination -> TvButton(destination.label.take(1), { controller.navigate(destination) }, Modifier.size(60.dp).padding(vertical = 2.dp), selected = destination == selected) }
+    Destination.entries.forEach { destination -> TvButton("", { controller.navigate(destination) }, Modifier.size(60.dp).padding(vertical = 2.dp), selected = destination == selected) { RailIcon(destination, selected == destination) } }
+}
+
+@Composable private fun RailIcon(destination: Destination, selected: Boolean) {
+    val image = when (destination) {
+        Destination.Profile -> Icons.Default.AccountCircle
+        Destination.Home -> Icons.Default.Home
+        Destination.Discover -> Icons.Default.Explore
+        Destination.Live -> Icons.Default.LiveTv
+        Destination.MyList -> Icons.Default.Favorite
+        Destination.Search -> Icons.Default.Search
+        Destination.Settings -> Icons.Default.Settings
+    }
+    Icon(image, contentDescription = destination.label, tint = if (selected) Canvas else White, modifier = Modifier.size(30.dp))
 }
 
 @Composable private fun Shelf(shelf: HomeShelf, controller: AppController) = Column(Modifier.padding(top = 26.dp)) {
@@ -342,9 +366,14 @@ private fun avatarFallback(name: String): Color = when ((name.fold(0) { hash, ch
     }
 }
 
-@Composable private fun TvButton(label: String, onActivate: () -> Unit, modifier: Modifier = Modifier.width(170.dp).height(56.dp), selected: Boolean = false, multiline: Boolean = false) = Holdable(onActivate, null, modifier.background(if (selected) White else Surface, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp), selected) {
-    Text(label, color = if (selected) Canvas else White, fontWeight = FontWeight.Bold, maxLines = if (multiline) 4 else 1, overflow = TextOverflow.Ellipsis)
-}
+@Composable private fun TvButton(
+    label: String,
+    onActivate: () -> Unit,
+    modifier: Modifier = Modifier.width(170.dp).height(56.dp),
+    selected: Boolean = false,
+    multiline: Boolean = false,
+    content: @Composable BoxScope.() -> Unit = { Text(label, color = if (selected) Canvas else White, fontWeight = FontWeight.Bold, maxLines = if (multiline) 4 else 1, overflow = TextOverflow.Ellipsis) },
+) = Holdable(onActivate, null, modifier.background(if (selected) White else Surface, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp), selected, content)
 
 /** 700ms remote hold: exactly one action on release; hold suppresses ordinary activation. */
 @Composable private fun Holdable(onActivate: () -> Unit, onHold: (() -> Unit)?, modifier: Modifier, selected: Boolean = false, content: @Composable BoxScope.() -> Unit) {

@@ -148,6 +148,12 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
     }
     fun back() { handleBack() }
+    fun consumesBack(): Boolean = when (_state.value.route) {
+        is Route.Player, is Route.Sources, is Route.Details, Route.Search, Route.Settings, Route.Addons, is Route.ProfileEditor, is Route.Guide -> true
+        is Route.Profiles -> _state.value.managingProfiles || _state.value.selectedProfile != null
+        is Route.Browse -> (_state.value.route as Route.Browse).destination != Destination.Home
+        Route.Pairing -> false
+    } || _state.value.dialog != null || _state.value.pinPrompt != null || _state.value.seekPreview != null
     /** Returns false only when Android should handle app exit at a root gate/page. */
     fun handleBack(): Boolean {
         if (_state.value.route is Route.Player && nextEpisodeJob?.isActive == true) {
