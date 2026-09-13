@@ -14,7 +14,7 @@ concurrency:
 jobs:
   review:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
@@ -25,6 +25,19 @@ jobs:
           java-version: '17'
           cache: gradle
       - uses: android-actions/setup-android@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - name: Native shared core toolchain
+        run: |
+          sdkmanager 'ndk;27.2.12479018'
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          cargo install cargo-ndk --version 4.1.2 --locked
+      - name: Build pinned shared core for JVM and Android
+        run: scripts/prepare-core.sh
       - name: Unit policy and debug APK
         run: ./gradlew --no-daemon --max-workers=1 :testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
       - name: Upload unit test evidence

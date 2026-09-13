@@ -13,3 +13,6 @@ qualification/artifacts/
 /corpus/**/__pycache__/
 /corpus/**/*.py[cod]
 /benchmark/output/
+
+/vendor/core/target/
+/app/src/androidMain/jniLibs/

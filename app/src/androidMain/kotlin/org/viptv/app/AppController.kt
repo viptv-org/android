@@ -1,6 +1,7 @@
 package org.viptv.app
 
 import android.content.Context
+import org.json.JSONObject
 import com.getair.video.AndroidMedia3BackendFactory
 import com.getair.video.AndroidMedia3VideoPlayer
 import com.getair.video.PlaybackKind
@@ -29,6 +30,10 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private val store = context.getSharedPreferences("viptv.auth", Context.MODE_PRIVATE)
     private val gateway = VipTvHttpGateway(origin, store.getString("access", null))
     private val scope = CoroutineScope(Job() + Dispatchers.Main.immediate)
+    private val coreSession = CoreSession(origin, store, scope, gateway::setAccessToken, ::renderSession)
+    private var pendingCoreAction: (() -> Unit)? = null
+    private var sessionRenderGeneration = 0L
+    private var keepProfilesOnIdentityRefresh = false
     private val _state = MutableStateFlow(AppState(loading = true))
     val state: StateFlow<AppState> = _state.asStateFlow()
     val player: AndroidMedia3VideoPlayer = AndroidMedia3BackendFactory(context).createAndroidPlayer()
@@ -70,7 +75,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
 
     init {
         scope.launch { player.events.collect(::onPlayerEvent) }
-        restore()
+        coreSession.begin()
     }
     fun beginPairing() = scope.launch {
         update(loading = true, message = null)
@@ -86,8 +91,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
             try {
                 when (val result = gateway.exchangeDeviceCode(code.code)) {
                     is DevicePollResult.Authorized -> {
-                        persist(result.session)
-                        loadProfiles(result.session.profileId)
+                        coreSession.adopt(result.session.coreJson)
                         return
                     }
                     DevicePollResult.Pending -> intervalSeconds = DevicePollPolicy.nextIntervalSeconds(code.intervalSeconds, intervalSeconds, rateLimited = false)
@@ -104,47 +108,55 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
         update(loading = false, message = "Pairing expired. Try again.")
     }
-    private fun restore() = scope.launch {
-        val refresh = store.getString("refresh", null)
-        if (refresh == null) { _state.value = AppState(route = Route.Pairing); beginPairing(); return@launch }
-        runCatching { gateway.refresh(refresh) }.onSuccess { persist(it); loadProfiles(it.profileId) }.onFailure { error ->
-            if (AuthSessionPolicy.discardStoredGrant((error as? GatewayError)?.status)) {
-                store.edit().clear().apply()
-                _state.value = AppState(route = Route.Pairing)
-                beginPairing()
-            } else {
-                // Keep a transiently unavailable grant intact. Pairing again
-                // would create needless device codes and orphan this session.
-                _state.value = AppState(
-                    route = Route.Pairing,
-                    message = "Could not restore your session. Check your connection and try again.",
-                )
+    fun retryAuthentication() { if (_state.value.route == Route.Pairing && !_state.value.sessionRestoring) beginPairing() else coreSession.retry() }
+    private suspend fun renderSession(view: org.viptv.core.wire.ViewModel) {
+        val generation = ++sessionRenderGeneration
+        val phase = view.phase.name
+        _state.value = _state.value.copy(sessionRestoring = phase != "PAIRING" && _state.value.route == Route.Pairing)
+        val profiles = view.identity?.profiles?.map(CoreModels::profileNormalized) ?: _state.value.profiles
+        when (phase) {
+            "READY" -> {
+                pendingCoreAction = null
+                val selected = view.selectedProfileId
+                val chosen = profiles.firstOrNull { it.id == selected }
+                if (keepProfilesOnIdentityRefresh) {
+                    keepProfilesOnIdentityRefresh = false
+                    _state.value = _state.value.copy(route = Route.Profiles, profiles = profiles, selectedProfile = chosen, loading = false)
+                    return
+                }
+                _state.value = _state.value.copy(profiles = profiles, selectedProfile = chosen, loading = chosen != null, message = null)
+                chosen?.let { profile -> scope.launch { loadHome(profile, generation) } }
             }
+            "PROFILES" -> { keepProfilesOnIdentityRefresh = false; _state.value = _state.value.copy(route = Route.Profiles, profiles = profiles, selectedProfile = null, loading = false, message = null) }
+            "PAIRING" -> { _state.value = AppState(route = Route.Pairing, sessionRestoring = false); beginPairing() }
+            "ERROR" -> {
+                val message = view.error ?: "Could not restore your session. Try again."
+                _state.value = _state.value.copy(loading = false, profiles = profiles, message = message)
+                if (view.errorStatus == 403) {
+                    afterParentUnlock = { pendingCoreAction?.invoke() ?: coreSession.retry() }
+                    _state.value = _state.value.copy(pinPrompt = PinPrompt("Enter parent PIN"))
+                }
+            }
+            else -> _state.value = _state.value.copy(loading = true, message = null)
         }
     }
-    /** Retries a retained refresh grant; starts device pairing only when none exists. */
-    fun retryAuthentication() { if (store.getString("refresh", null) == null) beginPairing() else restore() }
-    private suspend fun loadProfiles(selected: String?) {
-        val (profiles, current) = gateway.profiles(); val chosen = profiles.firstOrNull { it.id == (selected ?: current) }
-        _state.value = _state.value.copy(route = if (chosen == null) Route.Profiles else Route.Browse(Destination.Home), profiles = profiles, selectedProfile = chosen, loading = chosen != null)
-        chosen?.let { loadHome(it) }
-    }
-    private suspend fun loadHome(profile: Profile) {
+    private suspend fun loadHome(profile: Profile, generation: Long = sessionRenderGeneration) {
         runCatching { gateway.home(profile.id) }.onSuccess { shelves ->
+            if (generation != sessionRenderGeneration) return@onSuccess
             _state.value = _state.value.copy(
                 route = Route.Browse(Destination.Home),
                 selectedProfile = profile,
                 shelves = shelves,
                 loading = false,
             )
-        }.onFailure(::fail)
+        }.onFailure { if (generation == sessionRenderGeneration) fail(it) }
     }
-    fun chooseProfile(profile: Profile) = scope.launch {
+    private fun refreshProfileIdentity() { keepProfilesOnIdentityRefresh = true; coreSession.retry() }
+    fun chooseProfile(profile: Profile) {
         guideBrowseGeneration++
         guideGeneration++
-        update(loading = true); runCatching { gateway.selectProfile(profile.id); gateway.home(profile.id) }.onSuccess { shelves ->
-            _state.value = _state.value.copy(route = Route.Browse(Destination.Home), selectedProfile = profile, shelves = shelves, homeFocus = HomeFocusSnapshot(), loading = false)
-        }.onFailure(::fail)
+        pendingCoreAction = { coreSession.select(profile.id) }
+        coreSession.select(profile.id)
     }
     fun setProfilePage(page: Int) { _state.value = _state.value.copy(profilePage = page.coerceIn(0, ((_state.value.profiles.size - 1).coerceAtLeast(0)) / 5)) }
     fun openProfileManagement() { _state.value = _state.value.copy(managingProfiles = true); navigate(Destination.Profile) }
@@ -1334,10 +1346,11 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 }
                 val profiles = _state.value.profiles.filterNot { it.id == saved.id } + saved
                 _state.value = _state.value.copy(route = Route.Profiles, profiles = profiles, loading = false, message = "Profile saved.")
+                refreshProfileIdentity()
             }
         }
     }
-    fun deleteProfile(profile: Profile) = scope.launch { if (profile.primary) { update(message = "The primary profile cannot be deleted."); return@launch }; guarded("Enter parent PIN to manage profiles") { gateway.deleteProfile(profile); _state.value = _state.value.copy(route = Route.Profiles, profiles = _state.value.profiles.filterNot { it.id == profile.id }, selectedProfile = _state.value.selectedProfile?.takeIf { it.id != profile.id }, message = "Profile deleted.") } }
+    fun deleteProfile(profile: Profile) = scope.launch { if (profile.primary) { update(message = "The primary profile cannot be deleted."); return@launch }; guarded("Enter parent PIN to manage profiles") { gateway.deleteProfile(profile); _state.value = _state.value.copy(route = Route.Profiles, profiles = _state.value.profiles.filterNot { it.id == profile.id }, selectedProfile = _state.value.selectedProfile?.takeIf { it.id != profile.id }, message = "Profile deleted."); refreshProfileIdentity() } }
     fun requestDialog(kind: DialogKind, title: String, media: Media? = null, source: Source? = null) { _state.value = _state.value.copy(dialog = DialogState(kind, title, media, source)) }
     fun dismissDialog() {
         val restoresHomeFocus = _state.value.dialog?.kind in setOf(DialogKind.QueueManage, DialogKind.QueueRemoved)
@@ -1346,8 +1359,8 @@ class AppController(context: Context, private val origin: String = "https://vipt
     }
     fun submitPin(pin: String) = scope.launch { if (!pin.matches(Regex("\\d{4,8}"))) { update(message = "Enter a 4–8 digit parent PIN."); return@launch }; runCatching { gateway.unlockParent(pin) }.onSuccess { _state.value = _state.value.copy(pinPrompt = null, message = null); afterParentUnlock?.also { pending -> afterParentUnlock = null; pending() } }.onFailure { error -> _state.value = _state.value.copy(message = error.message ?: "Incorrect PIN. Try again.") } }
     fun cancelPin() { afterParentUnlock = null; _state.value = _state.value.copy(pinPrompt = null) }
-    fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback((_state.value.route as? Route.Player)?.media); gateway.logout(); store.edit().clear().apply(); _state.value = AppState(route = Route.Pairing); beginPairing() } }
-    fun close() { pairingPoll?.cancel(); sourceDiscovery?.cancel(); queueContinuationJob?.cancel(); discoverJob?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
+    fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback((_state.value.route as? Route.Player)?.media); pendingCoreAction = coreSession::signOut; coreSession.signOut() } }
+    fun close() { coreSession.close(); pairingPoll?.cancel(); sourceDiscovery?.cancel(); queueContinuationJob?.cancel(); discoverJob?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
     private data class GuideScheduleCache(val entries: List<GuideProgramme>, val expiresAtMillis: Long)
 
     private fun requireProfile() = checkNotNull(_state.value.selectedProfile).id
@@ -1408,7 +1421,6 @@ class AppController(context: Context, private val origin: String = "https://vipt
         playerMenuOpen = false
         retirePlaybackSession()
     }
-    private fun persist(session: DeviceSession) { store.edit().putString("access", session.accessToken).putString("refresh", session.refreshToken).apply() }
     private suspend fun guarded(pinTitle: String, action: suspend () -> Unit) {
         try { action() } catch (error: GatewayError) {
             if (error.status == 403 && (error.message.contains("PIN", true) || error.message.contains("Parent", true))) {

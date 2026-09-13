@@ -82,7 +82,7 @@ internal fun RokuHomeScreen(state: AppState, controller: AppController) {
         false
     }) {
         if (expanded && hero != null) {
-            RokuBackdrop(hero.backdrop)
+            RokuBackdrop(CoreModels.presentation(hero).heroImage)
             RokuLabel(if (shelves.firstOrNull()?.isQueueShelf == true) "CONTINUE WATCHING" else if (hero.type == "live") "LIVE NOW" else "FEATURED ${hero.type.uppercase()}",100,128,650,14,bold=true,color=Color(0xFFC5C6C7))
             RokuLabel(hero.name,100,166,600,44,bold=true,marquee=true)
             RokuLabel(hero.description.orEmpty(),100,228,548,20,lines=3,color=Color(0xFFD5D6D7))
@@ -90,7 +90,7 @@ internal fun RokuHomeScreen(state: AppState, controller: AppController) {
             val queue = shelves.firstOrNull()?.isQueueShelf == true
             Row(Modifier.offset(100.dp,375.dp), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 Holdable(onActivate={activate(hero,queue,true)}, onHold=when {queue&&QueuePolicy.canManage(hero)->{{controller.requestQueueManage(hero)}};HomeHoldPolicy.opensSourcesFromHero(false,hero)->{{controller.chooseSources(hero,origin=SourceReturn.Home)}};else->null}, modifier=Modifier.width(if(QueuePolicy.hasResolvedNext(hero))236.dp else 144.dp).height(50.dp).focusRequester(heroFocus).onPreviewKeyEvent { event -> if(event.nativeKeyEvent.action==KeyEvent.ACTION_DOWN&&event.nativeKeyEvent.keyCode==KeyEvent.KEYCODE_DPAD_DOWN) { requesters.firstOrNull()?.getOrNull(column)?.requestFocus();true } else if(event.nativeKeyEvent.action==KeyEvent.ACTION_DOWN&&event.nativeKeyEvent.keyCode==KeyEvent.KEYCODE_DPAD_LEFT) {railFocus.requestFocus();true} else false }.onFocusChanged { heroFocused=it.hasFocus; if(it.hasFocus) controller.recordHomeFocus(row,shelves[row].title,hero,HomeFocusSurface.Hero) }) {
-                    RokuHeroAction(when {hero.type=="live"->"Watch live";QueuePolicy.hasResolvedNext(hero)->"Play next episode";hero.positionMillis>0->"Resume";hero.type=="series"&&hero.episode==null->"Episodes";else->"Play"},heroFocused)
+                    RokuHeroAction(CoreModels.presentation(hero).primaryActionLabel,heroFocused)
                 }
                 TvButton(if(hero.type=="live")"Guide"else"Details",{if(hero.type=="live")controller.openGuide(LiveChannel(hero.id,hero.name,hero.poster))else controller.open(hero)},Modifier.width(if(QueuePolicy.hasResolvedNext(hero))236.dp else 144.dp).height(50.dp))
             }
@@ -234,20 +234,7 @@ internal fun RokuChoiceSheet(title:String,choices:List<Pair<String,()->Unit>>,on
 
 /** Exact ImagePolicy.brs allowlist: only public, credential-free artwork is resized. */
 private fun rokuPublicArtwork(original:String?,width:Int,height:Int,large:Boolean,logo:Boolean):String? {
-    if(original.isNullOrBlank())return original
-    var uri=original
-    if(uri.startsWith("https://wsrv.nl/?")) {
-        val encoded=uri.substringAfter('?').split('&').firstOrNull {it.startsWith("url=")}?.substringAfter('=')
-        if(encoded!=null) {
-            if(Regex("%(?![0-9a-fA-F]{2})").containsMatchIn(encoded))return original
-            uri=try {java.net.URLDecoder.decode(encoded,"UTF-8")}catch(_:IllegalArgumentException){return original}
-        }
-    }
-    val safe=Regex("^https://(image\\.tmdb\\.org|artworks\\.thetvdb\\.com|episodes\\.metahub\\.space|images\\.metahub\\.space|live\\.metahub\\.space|assets\\.fanart\\.tv|i\\.imgur\\.com)/[^?#@]+$")
-    if(!safe.matches(uri))return original
-    val tmdb=Regex("^https://image\\.tmdb\\.org/t/p/(w[0-9]+|original)/")
-    if(tmdb.containsMatchIn(uri))uri=tmdb.replace(uri,"https://image.tmdb.org/t/p/${if(width>1280)"original"else if(width>500)"w1280"else"w500"}/")
-    return "https://wsrv.nl/?url=${android.net.Uri.encode(uri)}&w=$width&h=$height&fit=${if(logo)"inside"else"cover"}&output=${if(logo)"png"else"jpg"}&q=${if(large)95 else 85}&we"
+    return CorePolicy.value("artworkUrl", org.json.JSONObject().putOpt("original", original).put("width", width).put("height", height).put("large", large).put("logo", logo)) as? String
 }
 
 @Composable

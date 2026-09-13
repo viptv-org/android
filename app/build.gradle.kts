@@ -2,6 +2,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
+    kotlin("plugin.serialization") version "2.1.10"
     id("org.jetbrains.kotlin.multiplatform")
     alias(libs.plugins.kotlin.compose)
 }
@@ -9,8 +10,15 @@ plugins {
 kotlin {
     androidTarget { compilerOptions.jvmTarget.set(JvmTarget.JVM_17) }
     sourceSets {
+        androidMain {
+            kotlin.srcDir("../vendor/core/generated/native-kotlin")
+            kotlin.srcDir("../vendor/core/generated/kotlin-wire")
+            kotlin.srcDir("../vendor/core/adapters/android/src/main/kotlin")
+        }
         androidMain.dependencies {
             implementation(project(":"))
+            implementation("net.java.dev.jna:jna:5.17.0@aar")
+            implementation(libs.kotlinx.serialization.json)
             implementation(libs.androidx.activity.compose)
             implementation(platform("androidx.compose:compose-bom:2025.04.01"))
             implementation(libs.androidx.compose.ui)
@@ -35,6 +43,10 @@ kotlin {
 }
 
 android {
+    sourceSets.getByName("main").jniLibs.srcDir("src/androidMain/jniLibs")
+    testOptions.unitTests.all {
+        it.systemProperty("jna.library.path", rootProject.file("vendor/core/target/debug").absolutePath)
+    }
     namespace = "org.viptv.app"
     compileSdk = 36
     defaultConfig {

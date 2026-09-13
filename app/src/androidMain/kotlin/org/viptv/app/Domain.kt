@@ -1,5 +1,7 @@
 package org.viptv.app
 
+import org.json.JSONObject
+
 data class Media(
     val id: String,
     val type: String,
@@ -31,6 +33,7 @@ data class Media(
     val posterShape: String? = null,
     val updatedAtMillis: Long? = null,
     val releasedAtMillis: Long? = null,
+    internal val coreItem: org.viptv.core.wire.MediaItem? = null,
 )
 
 /** Only artwork propagates across cached title occurrences; profile progress never does. */
@@ -55,15 +58,9 @@ data class Source(
 )
 
 object SourceDisplayPolicy {
-    private val opaqueProviderId = Regex("^[A-Za-z0-9._-]+:[0-9]+$")
-    /** Provider worker IDs are not meaningful metadata; prefer the server filename/title. */
-    fun title(source: Source): String = when {
-        source.name.isNotBlank() && !opaqueProviderId.matches(source.name) -> source.name
-        source.description.isNotBlank() -> source.description.lineSequence().first().take(180)
-        source.provider.isNotBlank() && !opaqueProviderId.matches(source.provider) -> source.provider
-        else -> "Source"
-    }
-    fun body(source: Source): String = source.description.ifBlank { source.provider.takeUnless(opaqueProviderId::matches).orEmpty() }
+    private fun display(source: Source): JSONObject = CorePolicy.value("sourceDisplay", JSONObject().put("name", source.name).put("description", source.description).put("provider", source.provider)) as JSONObject
+    fun title(source: Source): String = display(source).getString("title")
+    fun body(source: Source): String = display(source).getString("body")
 }
 
 sealed interface PlaybackIntent {
@@ -162,38 +159,21 @@ object HomeRefreshPolicy {
 
 /** Product policy from the design contract. The player adapter does not choose sources. */
 object PlaybackPolicy {
-    fun forResume(expectedIdentity: String?, discovered: List<Source>, positionMillis: Long = 0): PlaybackIntent =
-        expectedIdentity?.let { expected -> discovered.firstOrNull { ResumeIdentity.sourceIdentity(it) == expected } }
-            ?.let { PlaybackIntent.Open(it, positionMillis) } ?: PlaybackIntent.ChooseSource
+    fun forResume(expectedIdentity: String?, discovered: List<Source>, positionMillis: Long = 0): PlaybackIntent {
+        val id = CorePolicy.value("resume", JSONObject().putOpt("expectedIdentity", expectedIdentity).put("sources", CorePolicy.sources(discovered))) as? String
+        return discovered.firstOrNull { it.id == id }?.let { PlaybackIntent.Open(it, positionMillis) } ?: PlaybackIntent.ChooseSource
+    }
+    fun canAutoNext(media: Media, positionMillis: Long, durationMillis: Long?, playing: Boolean, seeking: Boolean, nextAvailable: Boolean, autoplay: Boolean = true): Boolean =
+        CorePolicy.value("autoNext", JSONObject().put("type", media.type).put("position", positionMillis / 1000.0).putOpt("duration", durationMillis?.let { it / 1000.0 }).put("playing", playing).put("seeking", seeking).put("nextAvailable", nextAvailable).put("autoplay", autoplay)) == true
 
-    fun canAutoNext(
-        media: Media,
-        positionMillis: Long,
-        durationMillis: Long?,
-        playing: Boolean,
-        seeking: Boolean,
-        nextAvailable: Boolean,
-        autoplay: Boolean = true,
-    ): Boolean = media.type == "series" && durationMillis != null && durationMillis > 10_000 && autoplay && playing && !seeking && nextAvailable &&
-        positionMillis >= durationMillis - 10_000
 }
 
 object ResumeIdentity {
     fun storageKey(profileId: String, media: Media): String = "source.$profileId.${media.type}.${media.id}"
     /** Stream job IDs and display names are unstable; both server-owned fields are required. */
     fun sourceIdentity(addonId: String?, fingerprint: String?): String? =
-        addonId?.takeIf(String::isNotBlank)?.let { addon -> fingerprint?.takeIf(String::isNotBlank)?.let { "$addon\u0000$it" } }
+        CorePolicy.value("sourceIdentity", JSONObject().putOpt("addonId", addonId).putOpt("fingerprint", fingerprint)) as? String
     fun sourceIdentity(source: Source): String? = sourceIdentity(source.addonId, source.fingerprint)
-}
-
-/**
- * Durable device grants are only discarded when the server has conclusively
- * rejected them.  A timeout, rate limit, or server fault must leave the saved
- * refresh token available for an explicit retry instead of forcing a new TV
- * pairing flow.
- */
-object AuthSessionPolicy {
-    fun discardStoredGrant(httpStatus: Int?): Boolean = httpStatus == 401
 }
 
 object DevicePollPolicy {
@@ -236,10 +216,8 @@ object ContinuationPolicy {
  */
 object ContinuationSourcePolicy {
     fun select(next: Media, outgoing: Source?, candidates: List<Source>): Source? {
-        val outgoingAddon = outgoing?.addonId?.takeIf(String::isNotBlank)
-        val rankedAddon = next.sourceAddonId?.takeIf(String::isNotBlank)
-        return outgoingAddon?.let { wanted -> candidates.firstOrNull { it.addonId == wanted } }
-            ?: rankedAddon?.let { wanted -> candidates.firstOrNull { it.addonId == wanted } }
+        val id = CorePolicy.value("continuationSource", JSONObject().putOpt("outgoingAddonId", outgoing?.addonId).putOpt("nextAddonId", next.sourceAddonId).put("sources", CorePolicy.sources(candidates))) as? String
+        return candidates.firstOrNull { it.id == id }
     }
 }
 
@@ -382,7 +360,7 @@ data class Profile(
     val setupComplete: Boolean = false,
 )
 data class DeviceCode(val code: String, val userCode: String, val verificationUri: String, val verificationUriComplete: String?, val qrUri: String?, val intervalSeconds: Long)
-data class DeviceSession(val accessToken: String, val refreshToken: String, val profileId: String?)
+data class DeviceSession(val accessToken: String, val refreshToken: String, val profileId: String?, val coreJson: String = "")
 /**
  * Home rows carry their role separately from server-provided display copy.
  * Queue controls follow this flag even when the row has just become empty.
@@ -545,6 +523,7 @@ data class PinPrompt(val title: String)
 data class SeekPreview(val targetMillis: Long)
 
 data class AppState(
+    val sessionRestoring: Boolean = true,
     val route: Route = Route.Pairing,
     val profiles: List<Profile> = emptyList(),
     val selectedProfile: Profile? = null,

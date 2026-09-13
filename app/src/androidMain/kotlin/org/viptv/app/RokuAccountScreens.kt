@@ -62,6 +62,10 @@ private val AccountSurface = Color(0xFF202224)
 @Composable internal fun Pairing(state: AppState, controller: AppController) {
     Box(Modifier.fillMaxSize().background(AccountCanvas)) {
         AccountMark()
+        if (state.sessionRestoring) {
+            if (!state.loading) TvButton("Try again", controller::retryAuthentication, Modifier.offset(520.dp, 450.dp).size(240.dp, 56.dp))
+            return@Box
+        }
         AccountText("Sign in to VIPTV",96,170,size=52)
         AccountText("Visit this address, then enter the code shown below.",96,260,640,32,lines=2)
         AccountText(state.deviceCode?.verificationUri ?: "Preparing secure pairing…",96,364,640,28,lines=2)

@@ -246,14 +246,7 @@ class PlaybackRequestPolicyTest {
     }
 }
 
-class AuthSessionPolicyTest {
-    @Test fun `only a conclusive unauthorized refresh drops the saved device grant`() {
-        assertTrue(AuthSessionPolicy.discardStoredGrant(401))
-        assertFalse(AuthSessionPolicy.discardStoredGrant(429))
-        assertFalse(AuthSessionPolicy.discardStoredGrant(500))
-        assertFalse(AuthSessionPolicy.discardStoredGrant(null))
-    }
-
+class DevicePollPolicyTest {
     @Test fun `device poll returns to the issued interval and backs off only on rate limit`() {
         assertEquals(5, DevicePollPolicy.nextIntervalSeconds(5, 20, rateLimited = false))
         assertEquals(10, DevicePollPolicy.nextIntervalSeconds(5, 5, rateLimited = true))
