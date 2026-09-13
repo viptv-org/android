@@ -35,6 +35,7 @@ jobs:
         run: |
           sdkmanager 'ndk;27.2.12479018'
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
           cargo install cargo-ndk --version 4.1.2 --locked
       - name: Build pinned shared core for JVM and Android
         run: scripts/prepare-core.sh
