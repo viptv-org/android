@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/core",
-  "revision": "888ff5a7041582b099644fdbdcc3a748a277b2d7",
+  "revision": "691c8f1fbaacc4f80c430dbc5db70bc62200f6bc",
   "files": {
     "Cargo.lock": "f3de677b20d74d0643a1182098092c803cdf0501c12091f1889f16b5c0594abd",
     "Cargo.toml": "df3ff9c6641713c277a9349e203b7c5479a7f999117408ff4102d1f959261609",
@@ -17,9 +17,9 @@
     "crates/viptv-core/src/domain.rs": "2b711935fa1855440f23610773456b25c6c3c43a74c7f84308b74e22df922968",
     "crates/viptv-core/src/dto.rs": "344e5bdd4a2c3a20f160d96c9674c60d160fb9a90c9db411f3b0c845f0a90e43",
     "crates/viptv-core/src/lib.rs": "e8becd3a518276358443b2010a2f3830c174eb6a203d5be9e613c80afbdb5003",
-    "crates/viptv-core/src/policy.rs": "dd4f6863fa5e5f27e0ef1ba9dc6636bb4fe014efd51f8e3cd169df4161a03323",
+    "crates/viptv-core/src/policy.rs": "1299c48f33f3dff24da99b054bdfc93063af85c971b915012bd60525875d2759",
     "crates/viptv-core/tests/contract.rs": "4f55ab314edc095e328456a9c94b9fd1549a22317ea03fc23baca0546f87034d",
-    "crates/viptv-core/tests/presentation.rs": "8e79a3e2334c9508225a84ed4c4a4ae642b92ebd531784a385b8c79ea5dfa73d",
+    "crates/viptv-core/tests/presentation.rs": "2ff097588d4ace7b6963eddca072a156ad418e46778fb723eac443fff9ee93c5",
     "generated/kotlin-wire/Wire.kt": "2cd2625dd1719ed8196ae12e99863ec184b57274d87e29c307c7616f0912bd6b",
     "generated/native-kotlin/uniffi/viptv_core/viptv_core.kt": "979f1fa256da2fc978fffdbe28b1f14c1ad95a966724add91e368c9d929b007f",
     "tests/bridge-vectors.json": "78e59179f9721b1cfc8fba70da92601d786df52e022705fdb465b7f231b2a4fd"
