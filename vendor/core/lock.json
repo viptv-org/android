@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/core",
-  "revision": "691c8f1fbaacc4f80c430dbc5db70bc62200f6bc",
+  "revision": "42413ef1e296a5798f41468f93386664de432f5c",
   "files": {
     "Cargo.lock": "f3de677b20d74d0643a1182098092c803cdf0501c12091f1889f16b5c0594abd",
     "Cargo.toml": "df3ff9c6641713c277a9349e203b7c5479a7f999117408ff4102d1f959261609",
@@ -12,13 +12,13 @@
     "crates/typegen/src/main.rs": "9fe8b424568abb059cb0b284e34680e902fa0c47ff261ed01e45e847a21c2d29",
     "crates/typegen/src/wire.rs": "06ae4cee755370467d72c43b2e938f5af0c16f6ddaacf08ca6e25629add8ce84",
     "crates/viptv-core/Cargo.toml": "29e3f9d695d201e1a97053cee07b5aafc78427d98a55b18df353844edb359775",
-    "crates/viptv-core/src/app.rs": "71e0cf175d45c5655336ea987fc1e69e3262d522284e55469ce88ee36872483d",
+    "crates/viptv-core/src/app.rs": "014ed1a962bed13fa16f14086d617ec0e80a4bb3af0b243f5271b25434010962",
     "crates/viptv-core/src/bin/uniffi-bindgen.rs": "f7a2dd11fb370e9595bdfa6c32fc41a9b67a60bbab06ec711cb7a03eb873ffa6",
     "crates/viptv-core/src/domain.rs": "2b711935fa1855440f23610773456b25c6c3c43a74c7f84308b74e22df922968",
     "crates/viptv-core/src/dto.rs": "344e5bdd4a2c3a20f160d96c9674c60d160fb9a90c9db411f3b0c845f0a90e43",
     "crates/viptv-core/src/lib.rs": "e8becd3a518276358443b2010a2f3830c174eb6a203d5be9e613c80afbdb5003",
     "crates/viptv-core/src/policy.rs": "1299c48f33f3dff24da99b054bdfc93063af85c971b915012bd60525875d2759",
-    "crates/viptv-core/tests/contract.rs": "4f55ab314edc095e328456a9c94b9fd1549a22317ea03fc23baca0546f87034d",
+    "crates/viptv-core/tests/contract.rs": "1c60aeb1f0574710e9cb8ac990f43f28bb5731b6e52a0166880d86c2133bbeed",
     "crates/viptv-core/tests/presentation.rs": "2ff097588d4ace7b6963eddca072a156ad418e46778fb723eac443fff9ee93c5",
     "generated/kotlin-wire/Wire.kt": "2cd2625dd1719ed8196ae12e99863ec184b57274d87e29c307c7616f0912bd6b",
     "generated/native-kotlin/uniffi/viptv_core/viptv_core.kt": "979f1fa256da2fc978fffdbe28b1f14c1ad95a966724add91e368c9d929b007f",

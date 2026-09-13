@@ -32,6 +32,8 @@ kotlin {
             implementation("com.squareup.okhttp3:okhttp:4.12.0")
         }
         androidUnitTest.dependencies {
+            // Android AAR supplies device JNI libraries; host tests need the JAR dispatch resources.
+            runtimeOnly("net.java.dev.jna:jna:5.17.0@jar")
             implementation(kotlin("test"))
             implementation(platform("androidx.compose:compose-bom:2025.04.01"))
             implementation(libs.androidx.compose.ui.test.junit4)
