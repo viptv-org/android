@@ -37,10 +37,14 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
           cargo install cargo-ndk --version 4.1.2 --locked
-      - name: Build pinned shared core for JVM and Android
-        run: scripts/prepare-core.sh
-      - name: Unit policy and debug APK
-        run: ./gradlew --no-daemon --max-workers=1 :testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
+      - name: Build pinned shared core for JVM tests
+        run: scripts/prepare-core.sh host
+      - name: Unit policy and native bridge
+        run: ./gradlew --no-daemon --max-workers=1 :testDebugUnitTest :app:testDebugUnitTest
+      - name: Build Android native libraries
+        run: scripts/prepare-core.sh android
+      - name: Assemble debug APK
+        run: ./gradlew --no-daemon --max-workers=1 :app:assembleDebug
       - name: Upload unit test evidence
         if: always()
         uses: actions/upload-artifact@v4

@@ -1,6 +1,6 @@
 # Native shared-core adoption — 2026-09-13
 
-CORE_REF pins 42413ef1e296a5798f41468f93386664de432f5c; DESIGN_REF pins e821c297de2e81b47a6a1b22ed8aa0522cdd04e5. The app now calls native Rust for session restoration/profile selection/sign-out, normalized responses and artwork/source/continuation/progress rules. Generated Kotlin codecs decode the shared DTOs. Hosted CI builds the exact pinned native source for JVM unit tests and three Android ABIs before the app APK.
+CORE_REF pins dd192cd09e3aac6810ec3cdd862119fb0646c82d; DESIGN_REF pins e821c297de2e81b47a6a1b22ed8aa0522cdd04e5. The app now calls native Rust for session restoration/profile selection/sign-out, normalized responses and artwork/source/continuation/progress rules. Generated Kotlin codecs decode the shared DTOs. Hosted CI builds the exact pinned native source for JVM unit tests and three Android ABIs before the app APK.
 
 Hosted run 34734502071 built the host and three Android native libraries and compiled Kotlin, then exposed a missing Linux JNA dispatch resource in JVM tests. The unit-test runtime now includes the host JAR alongside the app’s Android AAR; final hosted results will be recorded below. No local Gradle, emulator or new physical device acceptance is claimed. Earlier device measurements apply to their named historical revisions, not automatically to this migration.
 

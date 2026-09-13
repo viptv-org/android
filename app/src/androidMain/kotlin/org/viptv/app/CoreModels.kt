@@ -15,7 +15,8 @@ internal object CoreModels {
     fun mediaNormalized(item: MediaItem): Media = item.view()
     fun media(value: JSONObject): Media = CoreJson.decode<MediaItem>(normalize("media", value.toString(), "")).view()
     fun source(value: JSONObject): Source = CoreJson.decode<MediaSource>(normalize("source", value.toString(), "")).let {
-        Source(it.id, it.provider.orEmpty(), it.name, it.description.orEmpty(), it.sourceAddonId, it.sourceFingerprint, it.quality, it.audio)
+        val display = CoreJson.decode<org.viptv.core.wire.SourcePresentation>(normalize("sourceDisplay", CoreJson.encode(it), ""))
+        Source(it.id, it.provider.orEmpty(), display.title, display.body, it.sourceAddonId, it.sourceFingerprint, it.quality, it.audio)
     }
     fun catalog(value: JSONObject): DiscoverCatalog? {
         val item = CoreJson.decode<org.viptv.core.wire.Catalog>(normalize("catalog", value.toString(), ""))
