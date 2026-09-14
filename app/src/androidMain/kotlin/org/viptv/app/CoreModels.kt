@@ -4,6 +4,7 @@ import org.json.JSONObject
 import org.viptv.core.wire.CoreJson
 import org.viptv.core.wire.MediaItem
 import org.viptv.core.wire.MediaSource
+import org.viptv.core.wire.CardPresentation
 import org.viptv.core.wire.MediaPresentation
 import org.viptv.core.wire.MediaTrack
 import org.viptv.core.wire.PlaybackSession
@@ -37,6 +38,8 @@ internal object CoreModels {
             audioTracks = it.audioTracks.map(::track), subtitleTracks = it.subtitleTracks.map(::track), subtitlesSupported = it.subtitlesSupported)
     }
     private fun track(item: MediaTrack) = PlaybackTrack(item.inputIndex.toInt(), item.codec, item.language, item.languageStatus, item.title, item.selected, item.supported, item.selectable)
+    fun enrich(original: Media, metadata: Media): Media = CoreJson.decode<MediaItem>(normalize("enrichHome", JSONObject().put("original", JSONObject(original.normalizedJson())).put("metadata", JSONObject(metadata.normalizedJson())).toString(), "")).view()
+    fun card(media: Media, queue: Boolean = false): CardPresentation = CoreJson.decode(normalize("cardPresentation", JSONObject().put("item", JSONObject(media.normalizedJson())).put("context", if (queue) "queue" else "catalog").toString(), ""))
     fun presentation(media: Media): MediaPresentation = CoreJson.decode(normalize("presentation", media.normalizedJson(), ""))
     fun itemRequest(media: Media): JSONObject = JSONObject(normalize("itemRequest", media.normalizedJson(), ""))
 }
@@ -54,7 +57,7 @@ private fun MediaItem.view(): Media = Media(
 /** Copies carry current progress/artwork into the generated DTO without re-reading backend JSON. */
 internal fun Media.normalizedJson(): String {
     val item = coreItem ?: CoreJson.decode<MediaItem>(normalize("media", JSONObject().put("id", id).put("type", type).put("name", name).toString(), ""))
-    return CoreJson.encode(item.copy(id = id, type = org.viptv.core.wire.MediaKind.valueOf(type.uppercase()), name = name, title = name, poster = poster, background = backdrop, thumbnail = thumbnail,
+    return CoreJson.encode(item.copy(id = id, type = org.viptv.core.wire.MediaKind.valueOf(type.uppercase()), name = name, poster = poster, background = backdrop, thumbnail = thumbnail,
         position = positionMillis / 1000.0, duration = durationMillis?.let { it / 1000.0 }, season = season?.toDouble(), episode = episode?.toDouble(),
         seriesId = seriesId, sourceAddonId = sourceAddonId, sourceFingerprint = sourceFingerprint, queueStatus = queueStatus,
         previousEpisode = previousEpisode?.let { CoreJson.decode<MediaItem>(it.normalizedJson()) }, episodeTitle = episodeTitle, watched = watched, description = description, genres = genres, credits = credits, runtime = runtime, imdbRating = imdbRating, posterShape = posterShape))

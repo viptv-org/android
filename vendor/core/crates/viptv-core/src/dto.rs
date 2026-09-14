@@ -2,7 +2,7 @@
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-#[derive(Clone, Debug, Serialize, Deserialize, Facet)]
+#[derive(Clone, Debug, Serialize, Deserialize, Facet, PartialEq)]
 #[serde(untagged)]
 #[facet(untagged)]
 #[repr(C)]
@@ -61,6 +61,7 @@ pub struct MediaItem {
     pub poster: Option<String>,
     pub background: Option<String>,
     pub thumbnail: Option<String>,
+    pub title_logo: Option<String>,
     pub imdb_rating: Option<String>,
     pub credits: Option<String>,
     pub poster_shape: Option<String>,
@@ -155,6 +156,7 @@ pub struct MediaPresentation {
     pub hero_image: Option<String>,
     pub poster_image: Option<String>,
     pub episode_image: Option<String>,
+    pub title_logo: Option<String>,
     pub title: String,
     pub episode_label: String,
     pub progress: f64,
@@ -162,6 +164,20 @@ pub struct MediaPresentation {
     pub primary_action_label: String,
     pub resume_eligible: bool,
     pub can_auto_next: bool,
+}
+/// Complete shelf-card projection. Shells render these fields without selecting
+/// artwork, interpreting progress, or deciding continuation intent.
+#[derive(Clone, Debug, Serialize, Deserialize, Facet)]
+#[serde(rename_all = "camelCase")]
+#[facet(rename_all = "camelCase")]
+pub struct CardPresentation {
+    pub image: Option<String>,
+    pub image_role: String,
+    pub title: String,
+    pub subtitle: String,
+    pub progress: Option<f64>,
+    pub primary_action: String,
+    pub primary_action_label: String,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, Facet)]
 pub struct ApiRequest {

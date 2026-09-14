@@ -331,6 +331,18 @@ class AppController(context: Context, private val origin: String = "https://vipt
 
     private fun isCurrentDiscover(generation: Long): Boolean =
         generation == discoverGeneration && _state.value.route == Route.Browse(Destination.Discover)
+    /** Dispatch the core's card intent; Kotlin owns effects, not selection policy. */
+    fun activateCard(media: Media, queue: Boolean = false, origin: SourceReturn = sourceOrigin()) {
+        when (CoreModels.card(media, queue).primaryAction) {
+            "play" -> start(media)
+            "resume" -> chooseSources(media, true, origin)
+            "next" -> playQueuedNext(media)
+            "sources" -> chooseSources(media, origin = origin)
+            "episodes", "details" -> open(media)
+            else -> fail(IllegalStateException("This card action is unavailable."))
+        }
+    }
+
     fun open(media: Media) = scope.launch {
         val origin = (_state.value.route as? Route.Browse)?.destination
         update(loading = true)

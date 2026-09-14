@@ -54,6 +54,7 @@ internal fun RokuHomeScreen(state: AppState, controller: AppController) {
     val requesters = remember(shelves.map { it.title to it.items.map(Media::id) }) { shelves.map { shelf -> shelf.items.map { FocusRequester() } } }
     val horizontal = remember(requesters) {shelves.map {LazyListState()}}
     fun activate(media: Media, queue: Boolean, heroAction: Boolean = false) {
+        if (!heroAction) { controller.activateCard(media, queue, SourceReturn.Home); return }
         val action = MediaCardPolicy.primary(queue, media)
         when {
             action == MediaCardAction.PlayQueuedNext -> controller.playQueuedNext(media)
@@ -121,7 +122,7 @@ internal fun RokuHomeScreen(state: AppState, controller: AppController) {
                                         };true
                                     } else true
                                 } else false
-                            },onActivate={activate(media,shelf.isQueueShelf)},onHold=if(shelf.isQueueShelf){{controller.requestQueueManage(media)}}else null)
+                            },queue=shelf.isQueueShelf,onActivate={activate(media,shelf.isQueueShelf)},onHold=if(shelf.isQueueShelf){{controller.requestQueueManage(media)}}else null)
                         }
                     }
                 }
@@ -194,24 +195,25 @@ internal fun RokuLabel(text:String,x:Int,y:Int,width:Int,size:Int,lines:Int=1,bo
 }
 
 @Composable
-internal fun RokuArtworkCard(media:Media,modifier:Modifier=Modifier,onActivate:()->Unit,onHold:(()->Unit)?=null,height:Int=200) {
+internal fun RokuArtworkCard(media:Media,modifier:Modifier=Modifier,onActivate:()->Unit,onHold:(()->Unit)?=null,height:Int=200,queue:Boolean=false) {
     var focused by remember {mutableStateOf(false)}
-    val artwork=if(media.type=="live")media.poster else media.backdrop?.takeUnless {it==media.poster}?:media.thumbnail?:media.poster.takeIf {media.posterShape=="landscape"}
+    val display = remember(media, queue) { CoreModels.card(media, queue) }
+    val artwork = display.image
+    val logo = display.imageRole == "logo"
     var artworkReady by remember(artwork) {mutableStateOf(false)}
     Holdable(onActivate,onHold,modifier.width(256.dp).height(height.dp).onFocusChanged {focused=it.hasFocus}) {
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.width(256.dp).height(144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)),contentAlignment=Alignment.Center) {
-                if(!artworkReady) Text(media.name,color=RokuMuted,fontSize=19.sp,maxLines=3,textAlign=TextAlign.Center,modifier=Modifier.padding(12.dp))
-                RokuRemoteImage(artwork,if(media.type=="live")176 else 256,if(media.type=="live")100 else 144,logo=media.type=="live",onReady={artworkReady=true},onFailure={artworkReady=false},contentScale=if(media.type=="live")ContentScale.Fit else ContentScale.Crop,modifier=if(media.type=="live")Modifier.size(176.dp,100.dp)else Modifier.fillMaxSize())
-                val duration=media.durationMillis
-                if(duration!=null&&duration>0&&media.positionMillis>0) {
+                if(!artworkReady) Text(display.title,color=RokuMuted,fontSize=19.sp,maxLines=3,textAlign=TextAlign.Center,modifier=Modifier.padding(12.dp))
+                RokuRemoteImage(artwork,if(logo)176 else 256,if(logo)100 else 144,logo=logo,onReady={artworkReady=true},onFailure={artworkReady=false},contentScale=if(logo || display.imageRole == "poster")ContentScale.Fit else ContentScale.Crop,modifier=if(logo)Modifier.size(176.dp,100.dp)else Modifier.fillMaxSize())
+                display.progress?.let { progress ->
                     Box(Modifier.offset(8.dp,134.dp).align(Alignment.TopStart).size(240.dp,6.dp).background(Color(0xFF4A4C4E)))
-                    if(media.positionMillis>0)Box(Modifier.offset(8.dp,134.dp).align(Alignment.TopStart).size((240f*media.positionMillis.toFloat()/duration).coerceIn(6f,240f).dp,6.dp).background(RokuWhite,RoundedCornerShape(3.dp)))
+                    if(progress > 0) Box(Modifier.offset(8.dp,134.dp).align(Alignment.TopStart).size((240f * progress.toFloat()).coerceAtLeast(6f).dp,6.dp).background(RokuWhite,RoundedCornerShape(3.dp)))
                 }
             }
             AsyncImage(rokuAsset("ui-card-focus.png"),null,contentScale=ContentScale.FillBounds,modifier=Modifier.size(256.dp,144.dp).alpha(if(focused)1f else .35f))
-            RokuLabel(media.name,0,152,256,21,bold=true,marquee=focused)
-            RokuLabel(rokuContext(media).ifBlank {rokuFacts(media)},0,178,256,17,color=RokuMuted,marquee=focused)
+            RokuLabel(display.title,0,152,256,21,bold=true,marquee=focused)
+            RokuLabel(display.subtitle,0,178,256,17,color=RokuMuted,marquee=focused)
         }
     }
 }

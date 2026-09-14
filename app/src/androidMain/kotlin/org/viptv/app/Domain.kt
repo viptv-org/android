@@ -36,13 +36,8 @@ data class Media(
     internal val coreItem: org.viptv.core.wire.MediaItem? = null,
 )
 
-/** Only artwork propagates across cached title occurrences; profile progress never does. */
-internal fun Media.withArtworkFrom(other: Media): Media = copy(
-    poster = other.poster ?: poster,
-    backdrop = other.backdrop ?: backdrop,
-    thumbnail = other.thumbnail ?: thumbnail,
-    posterShape = other.posterShape ?: posterShape,
-)
+/** Rust enriches display metadata while retaining this occurrence's progress and identity. */
+internal fun Media.withArtworkFrom(other: Media): Media = CoreModels.enrich(this, other)
 
 data class Source(
     val id: String,

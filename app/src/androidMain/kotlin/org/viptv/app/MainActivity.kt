@@ -166,6 +166,6 @@ class MainActivity : ComponentActivity() {
                     true
                 }
             },
-            onActivate={controller.open(media)},onHold={controller.toggleMyList(media)})
+            onActivate={controller.activateCard(media)},onHold={controller.toggleMyList(media)})
     }
 }

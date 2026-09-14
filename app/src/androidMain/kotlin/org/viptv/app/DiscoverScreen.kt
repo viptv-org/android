@@ -57,7 +57,7 @@ internal fun DiscoverScreen(state:AppState,controller:AppController) {
         }
         val shown=ui.items.drop(localPage*8).take(8)
         LazyVerticalGrid(columns=GridCells.Fixed(4),modifier=Modifier.offset(100.dp,248.dp).size(1096.dp,412.dp),horizontalArrangement=Arrangement.spacedBy(24.dp),verticalArrangement=Arrangement.spacedBy(28.dp)) {
-            itemsIndexed(shown,key={index,item->"$index:${item.type}:${item.id}"}) {index,media->RokuArtworkCard(media,if(index==0)Modifier.focusRequester(initial)else Modifier,onActivate={controller.open(media)},height=192)}
+            itemsIndexed(shown,key={index,item->"$index:${item.type}:${item.id}"}) {index,media->RokuArtworkCard(media,if(index==0)Modifier.focusRequester(initial)else Modifier,onActivate={controller.activateCard(media)},height=192)}
         }
         if(ui.loading) RokuLabel("Loading…",250,360,780,24,align=androidx.compose.ui.text.style.TextAlign.Center)
         else if(ui.error!=null) {

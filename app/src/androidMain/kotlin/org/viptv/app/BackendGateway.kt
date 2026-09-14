@@ -320,18 +320,18 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         val seriesItems = series.await().map { item -> titleArtwork[item.type + "\u0000" + item.id]?.let(item::withArtworkFrom) ?: item }
         val known = (movieItems + seriesItems).associateBy { it.type + "\u0000" + it.id }
         val hydrationSlots = Semaphore(3)
-        suspend fun enrich(items: List<Media>): List<Media> = coroutineScope {
+        suspend fun enrich(items: List<Media>, fetchDetails: Boolean = false): List<Media> = coroutineScope {
             items.map { item -> async {
                 hydrationSlots.withPermit {
                     val lookup = item.copy(id = item.seriesId ?: item.id, type = if (item.type == "episode") "series" else item.type)
-                    val rich = known[lookup.type + "\u0000" + lookup.id] ?: try { metadata(lookup) }
+                    val rich = known[lookup.type + "\u0000" + lookup.id]?.takeUnless { fetchDetails } ?: try { metadata(lookup) }
                         catch (cancelled: CancellationException) { throw cancelled }
                         catch (_: Exception) { item }
-                    CoreModels.mediaNormalized(org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.MediaItem>(uniffi.viptv_core.normalize("enrichHome", JSONObject().put("original", JSONObject(item.normalizedJson())).put("metadata", JSONObject(rich.normalizedJson())).toString(), origin)))
+                    CoreModels.enrich(item, rich)
                 }
             } }.awaitAll()
         }
-        val richQueue = async { enrich(queue.await()) }
+        val richQueue = async { enrich(queue.await(), fetchDetails = true) }
         val richSaved = async { enrich(saved.await()) }
         listOf(
             HomeShelf("Continue Watching", richQueue.await(), isQueueShelf = true),
@@ -425,7 +425,7 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         val type = if (media.type == "episode") "series" else media.type
         val id = if (type == "series") media.seriesId ?: media.id else media.id
         val result = json("GET", "/meta/${enc(type)}/${enc(id)}").optJSONObject("meta")?.media() ?: media
-        titleArtwork[type + "\u0000" + id] = Media(id, type, poster = result.poster, backdrop = result.backdrop, thumbnail = result.thumbnail, posterShape = result.posterShape)
+        titleArtwork[type + "\u0000" + id] = result
         return result
     }
     override suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit): List<Source> {
@@ -481,7 +481,18 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
     }
     override suspend fun favorites(profileId: String): List<Media> = json("GET", "/profiles/${enc(profileId)}/favorites/page?limit=40").mediaArray("items")
     override suspend fun toggleFavorite(profileId: String, media: Media): Boolean = coreRequest("toggleFavorite", profileId, media).optBoolean("saved")
-    override suspend fun queue(profileId: String): List<Media> = json("GET", "/profiles/${enc(profileId)}/continue/page?limit=40").mediaArray("items")
+    override suspend fun queue(profileId: String): List<Media> = coroutineScope {
+        val items = json("GET", "/profiles/${enc(profileId)}/continue/page?limit=40").mediaArray("items")
+        val slots = Semaphore(3)
+        items.map { item -> async {
+            slots.withPermit {
+                val rich = try { metadata(item) }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { item }
+                CoreModels.enrich(item, rich)
+            }
+        } }.awaitAll()
+    }
     override suspend fun setQueueVisibility(profileId: String, media: Media, hidden: Boolean) {
         coreRequest("setQueueVisibility", profileId, media, JSONObject().put("hidden", hidden))
     }
