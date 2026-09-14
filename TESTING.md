@@ -135,3 +135,5 @@ Core pin advanced to `1388b17db29a6b0279af5f125cc1fafc76776459`, which avoids du
 ## Addon catalog namespaces — 2026-09-14
 
 Adopts core `9317bfeb8bcd172789535cc812d751dcfed81d39`, preserving all addon-defined catalog namespaces and their optional addon names. The Android catalog key adapter now uses the exact generated string type rather than converting a media enum. Core Rust unit/integration tests pass (42); import hash validation passes. Android Kotlin tests/APK compilation require the hosted app-review workflow; no local Gradle, emulator or device run was performed.
+
+Catalog response follow-up adopts core `a8ece4f10576b7ea72b6f2cf6c52ae7dd13dffe7`. Bounded real addon metadata checks confirm anime/anime.series return series, anime.movie/collection return movies, and exact metadata routes return child videos. The generated DiscoverPage adds optional unsupportedCount; this pin is compatible with existing native decoding. Core tests pass (43); Android host compilation for this exact revision remains pending CI.
