@@ -22,7 +22,7 @@ internal object CoreModels {
     fun catalog(value: JSONObject): DiscoverCatalog? {
         val item = CoreJson.decode<org.viptv.core.wire.Catalog>(normalize("catalog", value.toString(), ""))
         val addon = item.addonKey ?: return null
-        return DiscoverCatalog(CatalogKey(addon, item.type.name.lowercase(), item.id), item.name, item.supportsSearch, item.supportsSkip,
+        return DiscoverCatalog(CatalogKey(addon, item.type, item.id), item.name, item.supportsSearch, item.supportsSkip,
             item.extras.filterNot { it.name == "skip" }.map {
                 CatalogFilter(it.name, when (it.name) { "search" -> CatalogFilterKind.Search; "genre" -> CatalogFilterKind.Genre; else -> if (it.options.isEmpty()) CatalogFilterKind.FreeText else CatalogFilterKind.Choice },
                     it.required, it.options, it.defaultValue, it.optionsLimit?.toInt())
