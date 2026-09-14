@@ -38,6 +38,20 @@ class SharedCoreNativeTest {
         assertEquals("details", CoreModels.card(enriched).primaryAction)
     }
 
+    @Test fun imageFailureObservationsReachSharedPolicyWithoutChangingResume() {
+        val media = CoreModels.media(JSONObject("""{"id":"series:1:2","type":"episode","name":"Series","season":1,"episode":2,"position":42,"duration":120,"thumbnail":"https://images.example/missing.jpg","background":"https://images.example/landscape.jpg","poster":"https://images.example/poster.jpg"}"""))
+        val original = CoreModels.card(media, queue = true)
+        val failed = setOf("https://images.example/missing.jpg")
+        val fallback = CoreModels.card(media, queue = true, failedImages = failed)
+        assertEquals("https://images.example/landscape.jpg", fallback.image)
+        assertEquals("landscape", fallback.imageRole)
+        assertEquals(original.progress, fallback.progress)
+        assertEquals(original.primaryAction, fallback.primaryAction)
+        val empty = CoreModels.card(media, queue = true, failedImages = failed + "https://images.example/landscape.jpg")
+        assertNull(empty.image)
+        assertEquals("none", empty.imageRole)
+    }
+
     @Test fun liveCardUsesCoreLogoRoleAndDirectActivationWithoutProgress() {
         val live = CoreModels.media(JSONObject("""{"id":"station","type":"live","name":"World News","poster":"https://images.example/station.png","position":42,"duration":120}"""))
         val card = CoreModels.card(live)

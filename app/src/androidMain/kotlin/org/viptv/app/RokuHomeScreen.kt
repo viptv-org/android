@@ -197,7 +197,8 @@ internal fun RokuLabel(text:String,x:Int,y:Int,width:Int,size:Int,lines:Int=1,bo
 @Composable
 internal fun RokuArtworkCard(media:Media,modifier:Modifier=Modifier,onActivate:()->Unit,onHold:(()->Unit)?=null,height:Int=200,queue:Boolean=false) {
     var focused by remember {mutableStateOf(false)}
-    val display = remember(media, queue) { CoreModels.card(media, queue) }
+    var failedImages by remember(media.id, media.thumbnail, media.backdrop, media.poster, queue) { mutableStateOf(emptySet<String>()) }
+    val display = remember(media, queue, failedImages) { CoreModels.card(media, queue, failedImages) }
     val artwork = display.image
     val logo = display.imageRole == "logo"
     var artworkReady by remember(artwork) {mutableStateOf(false)}
@@ -205,7 +206,9 @@ internal fun RokuArtworkCard(media:Media,modifier:Modifier=Modifier,onActivate:(
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.width(256.dp).height(144.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF242628)),contentAlignment=Alignment.Center) {
                 if(!artworkReady) Text(display.title,color=RokuMuted,fontSize=19.sp,maxLines=3,textAlign=TextAlign.Center,modifier=Modifier.padding(12.dp))
-                RokuRemoteImage(artwork,if(logo)176 else 256,if(logo)100 else 144,logo=logo,onReady={artworkReady=true},onFailure={artworkReady=false},contentScale=if(logo)ContentScale.Fit else ContentScale.Crop,modifier=if(logo)Modifier.size(176.dp,100.dp)else Modifier.fillMaxSize())
+                key(artwork) {
+                    RokuRemoteImage(artwork,if(logo)176 else 256,if(logo)100 else 144,logo=logo,onReady={artworkReady=true},onFailure={artworkReady=false; artwork?.let { failedImages = failedImages + it }},contentScale=if(logo)ContentScale.Fit else ContentScale.Crop,modifier=if(logo)Modifier.size(176.dp,100.dp)else Modifier.fillMaxSize())
+                }
                 display.progress?.let { progress ->
                     Box(Modifier.offset(8.dp,134.dp).align(Alignment.TopStart).size(240.dp,6.dp).background(Color(0xFF4A4C4E)))
                     if(progress > 0) Box(Modifier.offset(8.dp,134.dp).align(Alignment.TopStart).size((240f * progress.toFloat()).coerceAtLeast(6f).dp,6.dp).background(RokuWhite,RoundedCornerShape(3.dp)))

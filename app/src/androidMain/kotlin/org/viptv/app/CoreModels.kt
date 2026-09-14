@@ -39,7 +39,7 @@ internal object CoreModels {
     }
     private fun track(item: MediaTrack) = PlaybackTrack(item.inputIndex.toInt(), item.codec, item.language, item.languageStatus, item.title, item.selected, item.supported, item.selectable)
     fun enrich(original: Media, metadata: Media): Media = CoreJson.decode<MediaItem>(normalize("enrichHome", JSONObject().put("original", JSONObject(original.normalizedJson())).put("metadata", JSONObject(metadata.normalizedJson())).toString(), "")).view()
-    fun card(media: Media, queue: Boolean = false): CardPresentation = CoreJson.decode(normalize("cardPresentation", JSONObject().put("item", JSONObject(media.normalizedJson())).put("context", if (queue) "queue" else "catalog").toString(), ""))
+    fun card(media: Media, queue: Boolean = false, failedImages: Set<String> = emptySet()): CardPresentation = CoreJson.decode(normalize("cardPresentation", JSONObject().put("item", JSONObject(media.normalizedJson())).put("context", if (queue) "queue" else "catalog").put("failedImages", org.json.JSONArray(failedImages.toList())).toString(), ""))
     fun presentation(media: Media): MediaPresentation = CoreJson.decode(normalize("presentation", media.normalizedJson(), ""))
     fun itemRequest(media: Media): JSONObject = JSONObject(normalize("itemRequest", media.normalizedJson(), ""))
 }
