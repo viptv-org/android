@@ -328,7 +328,7 @@ sealed interface Route {
     data class Browse(val destination: Destination) : Route
     data class Details(val media: Media) : Route
     data class Sources(val media: Media, val resume: Boolean = false, val origin: SourceReturn = SourceReturn.Details) : Route
-    data class Player(val media: Media, val source: Source, val returnDestination: PlaybackReturn = PlaybackReturn.Details) : Route
+    data class Player(val media: Media, val source: Source, val returnDestination: PlaybackReturn = PlaybackReturn.Details, val directOrigin: Route? = null) : Route
     data object Search : Route
     data object Settings : Route
     data object Addons : Route
@@ -504,6 +504,8 @@ object GuidePolicy {
 }
 /** Playback failures retain a title coordinate so every recovery action is explicit and deterministic. */
 object PlaybackRecoveryPolicy {
+    fun returnRoute(player: Route.Player, media: Media): Route = player.directOrigin ?: returnRoute(player.returnDestination, media)
+
     fun snapshot(media: Media, positionMillis: Long, durationMillis: Long?): Media = media.copy(
         positionMillis = positionMillis.coerceAtLeast(0),
         durationMillis = durationMillis ?: media.durationMillis,

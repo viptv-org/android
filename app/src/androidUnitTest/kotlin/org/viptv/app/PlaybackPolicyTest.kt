@@ -6,6 +6,17 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class PlaybackPolicyTest {
+    @Test fun `direct channel playback exits to its existing browse destination`() {
+        val media = Media("station", "live", "News")
+        val source = Source("station", "Live TV", channelId = "station")
+        for (destination in listOf(Destination.Home, Destination.MyList, Destination.Search)) {
+            val origin = Route.Browse(destination)
+            val player = Route.Player(media, source, directOrigin = origin)
+            assertEquals(origin, PlaybackRecoveryPolicy.returnRoute(player, media))
+            assertEquals(origin, PlaybackRecoveryPolicy.returnRoute(player.copy(media = media.copy(positionMillis = 5000)), media))
+        }
+    }
+
     @Test fun `resume only auto starts exact remembered source`() {
         val exact = Source("a", "Addon A", addonId = "addon", fingerprint = "release-a")
         val identity = ResumeIdentity.sourceIdentity(exact)

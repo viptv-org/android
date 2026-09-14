@@ -455,7 +455,9 @@ class AppController(context: Context, private val origin: String = "https://vipt
         resetTrackChoices: Boolean,
         generation: Long,
     ): Boolean {
-        val returnDestination = when (val current = _state.value.route) {
+        val current = _state.value.route
+        val directOrigin = if (current is Route.Player) current.directOrigin else current.takeIf { source.channelId != null }
+        val returnDestination = when (current) {
             is Route.Sources -> SourceReturnPolicy.playbackReturn(current.origin, current.resume)
             is Route.Player -> current.returnDestination
             else -> PlaybackReturn.Details
@@ -537,7 +539,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                     explicitResumeAwaitingCompletionKey = key
                 }
                 _state.value = _state.value.copy(
-                    route = Route.Player(playbackMedia, source, returnDestination),
+                    route = Route.Player(playbackMedia, source, returnDestination, directOrigin),
                     playerChromeVisible = true,
                     playbackTracks = PlaybackTrackChoices(launch.audioTracks, launch.subtitleTracks, launch.subtitlesSupported),
                     playbackDeliveryMode = launch.mode,
@@ -792,7 +794,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     private fun exitPlayer(route: Route.Player, media: Media) {
         stopPlayback(media)
         _state.value = _state.value.copy(
-            route = PlaybackRecoveryPolicy.returnRoute(route.returnDestination, media),
+            route = PlaybackRecoveryPolicy.returnRoute(route, media),
             dialog = null,
             message = null,
         )

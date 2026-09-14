@@ -51,7 +51,7 @@ class BackendGatewayWireTest {
             val body = JSONObject(request.body)
             assertEquals("station-1", body.getString("channel_id"))
             assertFalse(body.has("stream_id"))
-            FixtureResponse("""{"id":"live-session","url":"https://media.example/live.m3u8","format":"hls","mode":"direct","position":0,"live":true}""")
+            FixtureResponse("""{"id":"live-session","url":"/media/live-session/capability/index.m3u8","format":"hls","mode":"direct","position":0,"live":true}""")
         }.use { server ->
             val result = VipTvHttpGateway(server.origin).playback(
                 source = Source("station-1", "Live TV", "News", channelId = "station-1"),
