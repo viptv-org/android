@@ -123,3 +123,7 @@ Added native-boundary tests for exact episode artwork after enrichment, original
 ### Follow-up build repairs and bounded metadata
 
 Core pin advanced to `1388b17db29a6b0279af5f125cc1fafc76776459`, which avoids duplicating complete series data in shelf entries. Hosted run 34792828290 compiled Kotlin and exercised the native bridge; its new live HTTP fixture failed because it used an external media URL, correctly rejected by the shared same-origin media contract. That fixture now uses the real `/media/` shape. Direct live requests use `channel_id` instead of a fabricated stream identifier, and player exit/recovery retains the actual preceding route. Added coverage for direct live return to Home, My List and Search. The combined follow-up still requires a successful hosted run; no APK/device success is claimed here.
+
+### Hosted validation completed — b5e0b7a
+
+[Android app review 34793195338](https://github.com/viptv-org/android/actions/runs/34793195338) passed on `b5e0b7a2534b3eb1e9b91a5d437bf4f9277cce2b` with core `1388b17db29a6b0279af5f125cc1fafc76776459`. Downloaded unit XML evidence contains 89 tests across 22 files, with zero failures, errors or skips. The run compiled Kotlin, built the host Rust bridge and Android native libraries, assembled the debug APK and uploaded both test evidence and APK. This supersedes the pending hosted-build status for that exact revision above. No physical Android TV or emulator validation was performed for these changes.
