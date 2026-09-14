@@ -461,7 +461,7 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         subtitlesOff: Boolean,
     ): PlaybackLaunch {
         val body = JSONObject()
-            .put("stream_id", source.id)
+            .put(if (source.channelId != null) "channel_id" else "stream_id", source.channelId ?: source.id)
             .put("position", seconds(positionMillis))
             .put("capabilities", capabilities.toWireJson())
             .putOpt("audio_track_index", audioTrackIndex)

@@ -334,7 +334,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
     /** Dispatch the core's card intent; Kotlin owns effects, not selection policy. */
     fun activateCard(media: Media, queue: Boolean = false, origin: SourceReturn = sourceOrigin()) {
         when (CoreModels.card(media, queue).primaryAction) {
-            "play" -> start(media)
+            "play" -> start(media, Source(media.id, "Live TV", media.name, channelId = media.id))
             "resume" -> chooseSources(media, true, origin)
             "next" -> playQueuedNext(media)
             "sources" -> chooseSources(media, origin = origin)

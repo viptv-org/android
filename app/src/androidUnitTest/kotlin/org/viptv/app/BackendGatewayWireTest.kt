@@ -23,8 +23,9 @@ import kotlin.test.assertTrue
 class BackendGatewayWireTest {
     @Test
     fun `queue next keeps the prior episode as the management and exact resume target`() = runBlocking {
-        FixtureServer(1) { request ->
+        FixtureServer(2) { request ->
             assertEquals("GET", request.method)
+            if (request.target == "/api/meta/series/episode-2") return@FixtureServer FixtureResponse("""{"meta":{"id":"episode-2","type":"series","name":"Fixture Show","background":"https://images.example/series.jpg"}}""")
             assertEquals("/api/profiles/profile/continue/page?limit=40", request.target)
             FixtureResponse(
                 """{"items":[{
@@ -38,6 +39,26 @@ class BackendGatewayWireTest {
             assertEquals("episode-1", QueuePolicy.manageTarget(item).id)
             assertEquals(MediaCardAction.PlayQueuedNext, MediaCardPolicy.primary(resumeSurface = true, media = item))
             assertTrue(QueuePolicy.canResume(item))
+            server.assertHealthy()
+        }
+    }
+
+    @Test
+    fun `direct live playback sends a channel target without a stream id`() = runBlocking {
+        FixtureServer(1) { request ->
+            assertEquals("POST", request.method)
+            assertEquals("/api/playback", request.target)
+            val body = JSONObject(request.body)
+            assertEquals("station-1", body.getString("channel_id"))
+            assertFalse(body.has("stream_id"))
+            FixtureResponse("""{"id":"live-session","url":"https://media.example/live.m3u8","format":"hls","mode":"direct","position":0,"live":true}""")
+        }.use { server ->
+            val result = VipTvHttpGateway(server.origin).playback(
+                source = Source("station-1", "Live TV", "News", channelId = "station-1"),
+                positionMillis = 0,
+                capabilities = PlaybackClientCapabilities(maxWidth = 1920, maxHeight = 1080, h264 = true, hevc = false, hevcSdr = false, aac = true, directPlay = true),
+            )
+            assertTrue(result.live)
             server.assertHealthy()
         }
     }

@@ -50,6 +50,8 @@ data class Source(
     /** Safe server display facts; provider identity is kept separately for ranking. */
     val quality: String? = null,
     val audio: String? = null,
+    /** Direct live playback target; never serialized as a discovered stream identifier. */
+    val channelId: String? = null,
 )
 
 object SourceDisplayPolicy {
