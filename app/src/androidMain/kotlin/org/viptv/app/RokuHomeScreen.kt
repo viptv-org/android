@@ -164,7 +164,7 @@ internal fun rokuContext(media: Media): String = when (media.queueStatus) {
         media.positionMillis.takeIf { it > 0 }?.let { "Resume at ${rokuResumeTime(it)}" },
     ).joinToString("  ·  ")
 }
-private fun rokuResumeTime(millis: Long): String {
+internal fun rokuResumeTime(millis: Long): String {
     val seconds = millis / 1000
     return if (seconds >= 3600) "${seconds / 3600}:${((seconds / 60) % 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}"
     else "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"

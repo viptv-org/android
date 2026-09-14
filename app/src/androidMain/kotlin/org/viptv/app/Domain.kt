@@ -482,7 +482,6 @@ object LiveEntryPolicy {
 object GuidePolicy {
     const val PAGE_SIZE = 40
     const val VISIBLE_ROWS = 5
-    const val WINDOW_MILLIS = 2 * 60 * 60 * 1_000L
     private const val HALF_HOUR_MILLIS = 30 * 60 * 1_000L
     private const val MAX_AHEAD_MILLIS = 24 * 60 * 60 * 1_000L
 

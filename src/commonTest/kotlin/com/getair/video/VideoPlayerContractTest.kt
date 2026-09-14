@@ -85,15 +85,4 @@ class VideoPlayerContractTest {
             ).options.livePolicy,
         )
     }
-
-    @Test
-    fun liveOffsetAndBufferedAheadRemainIndependentFacts() {
-        val stats = PlaybackStatistics(
-            liveEdgeOffsetMillis = 10_000,
-            bufferedAheadMillis = 2_000,
-        )
-
-        assertEquals(10_000, stats.liveEdgeOffsetMillis)
-        assertEquals(2_000, stats.bufferedAheadMillis)
-    }
 }

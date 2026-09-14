@@ -990,7 +990,6 @@ class AppController(context: Context, private val origin: String = "https://vipt
         }
     }
     fun openMyList() = scope.launch { update(loading = true); runCatching { gateway.favorites(requireProfile()) }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.MyList), favorites = it, catalog = it, loading = false) }.onFailure(::fail) }
-    fun openQueue() = scope.launch { update(loading = true); runCatching { gateway.queue(requireProfile()) }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.Home), queue = it, loading = false) }.onFailure(::fail) }
     /** The Live rail enters the Guide directly; the list surface is reserved for a truthful empty state. */
     fun openLive() {
         val prior = _state.value.guideUi
@@ -1173,7 +1172,6 @@ class AppController(context: Context, private val origin: String = "https://vipt
             openSettings()
         }
     }
-    fun openAddons() = scope.launch { update(loading = true); runCatching { gateway.addons() }.onSuccess { addons -> _state.value = _state.value.copy(route = Route.Addons, addons = addons, loading = false) }.onFailure(::fail) }
     fun toggleMyList(media: Media) = scope.launch { guarded("Enter parent PIN") { val saved = gateway.toggleFavorite(requireProfile(), media); _state.value = _state.value.copy(message = if (saved) "Added to My List." else "Removed from My List.") } }
     fun requestQueueManage(media: Media) {
         val target = QueuePolicy.manageTarget(media)

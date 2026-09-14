@@ -40,7 +40,7 @@ import java.net.URI
     }
     val languages=listOf("English" to "en","Spanish" to "es","French" to "fr","German" to "de","Italian" to "it","Portuguese" to "pt","Japanese" to "ja","Korean" to "ko","Chinese" to "zh","Hindi" to "hi","Arabic" to "ar")
     val languageName={ value:String -> languages.firstOrNull {it.second==value}?.first ?: value }
-    Box(modifier.fillMaxSize().background(Color(0xFF101112))) {
+    Box(modifier.fillMaxSize().background(RokuCanvas)) {
         when(page) {
             "Addons" -> RokuAddons(addons,onInstallAddon,onToggleAddon,onRemoveAddon,{page="Settings"})
             "Playback preferences" -> SettingsRows(page,listOf(
@@ -73,11 +73,11 @@ import java.net.URI
     val focuses=remember(title,rows.size) {List(rows.size) {FocusRequester()}}
     var focusedIndex by remember(title) {mutableIntStateOf(0)}
     LaunchedEffect(title,modalOpen) {if(!modalOpen && rows.isNotEmpty()) focuses[focusedIndex.coerceIn(rows.indices)].requestFocus()}
-    Text(title,Modifier.offset(100.dp,54.dp).size(1096.dp,64.dp),color=Color(0xFFF5F5F5),fontSize=42.sp,fontWeight=FontWeight.Bold)
-    if(caption.isNotBlank()) Text(caption,Modifier.offset(100.dp,126.dp).width(1096.dp),color=Color(0xFFA6A8AA),fontSize=19.sp)
+    Text(title,Modifier.offset(100.dp,54.dp).size(1096.dp,64.dp),color=RokuWhite,fontSize=42.sp,fontWeight=FontWeight.Bold)
+    if(caption.isNotBlank()) Text(caption,Modifier.offset(100.dp,126.dp).width(1096.dp),color=RokuMuted,fontSize=19.sp)
     val listY=if(caption.isBlank()) 144 else 176
     rows.getOrNull(focusedIndex)?.let { row ->
-        Text(row.first,Modifier.offset(778.dp,(listY+8).dp).width(424.dp),color=Color(0xFFF5F5F5),fontSize=28.sp,fontWeight=FontWeight.Bold)
+        Text(row.first,Modifier.offset(778.dp,(listY+8).dp).width(424.dp),color=RokuWhite,fontSize=28.sp,fontWeight=FontWeight.Bold)
         Text(descriptions.getOrNull(focusedIndex).orEmpty(),Modifier.offset(778.dp,(listY+52).dp).size(424.dp,208.dp),color=Color(0xFFC5C6C7),fontSize=22.sp,maxLines=7)
     }
     LazyColumn(Modifier.offset(100.dp,listY.dp).size(536.dp,476.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -91,7 +91,7 @@ import java.net.URI
     var draft by remember {mutableStateOf("https://")}
     var selected by remember {mutableStateOf<Addon?>(null)}
     var removal by remember {mutableStateOf<Addon?>(null)}
-    Box(Modifier.fillMaxSize().background(Color(0xFF101112))) {
+    Box(Modifier.fillMaxSize().background(RokuCanvas)) {
         SettingsRows("Addons",listOf("Install addon" to {installing=true})+addons.map {addon->addon.name to {selected=addon}},"Shared by all profiles and devices on your account.",modalOpen=installing||selected!=null||removal!=null,descriptions=listOf("Enter a Stremio manifest URL.")+addons.map {if(it.enabled) "Enabled" else "Disabled"})
         if(installing) RokuTextEntry("Install addon manifest URL",error ?: "Enter the HTTPS add-on manifest URL.",draft,onDone={value->
             draft=value

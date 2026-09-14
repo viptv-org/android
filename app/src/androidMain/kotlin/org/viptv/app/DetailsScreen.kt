@@ -61,7 +61,7 @@ private fun RokuMovieDetails(media:Media,controller:AppController) {
         RokuLabel(rokuFacts(media),380,198,706,22,lines=2,color=RokuMuted)
         if(!media.description.isNullOrBlank()) Text(media.description.orEmpty(),color=Color(0xFFD5D6D7),fontSize=23.sp,lineHeight=33.sp,style=TextStyle(platformStyle=PlatformTextStyle(includeFontPadding=false),lineHeightStyle=LineHeightStyle(LineHeightStyle.Alignment.Top,LineHeightStyle.Trim.Both)),maxLines=4,overflow=TextOverflow.Ellipsis,onTextLayout={synopsisHeight=with(density){it.size.height.toDp().value.toInt()}},modifier=Modifier.offset(380.dp,276.dp).width(804.dp).heightIn(max=128.dp))
         Row(Modifier.offset(380.dp,(276+synopsisHeight+28).dp),horizontalArrangement=Arrangement.spacedBy(16.dp)) {
-            TvButton(if(media.positionMillis>0)"Resume at ${detailResumeTime(media.positionMillis)}"else"Choose source",{controller.chooseSources(media,media.positionMillis>0)},Modifier.size(192.dp,56.dp).focusRequester(first),onHold=if(media.positionMillis>0){{controller.chooseSources(media)}}else null)
+            TvButton(if(media.positionMillis>0)"Resume at ${rokuResumeTime(media.positionMillis)}"else"Choose source",{controller.chooseSources(media,media.positionMillis>0)},Modifier.size(192.dp,56.dp).focusRequester(first),onHold=if(media.positionMillis>0){{controller.chooseSources(media)}}else null)
             if(media.positionMillis>0)TvButton("Choose source",{controller.chooseSources(media)},Modifier.size(192.dp,56.dp))
             TvButton(if(saved)"Remove from My List"else"+ My List",{controller.toggleMyList(media)},Modifier.size(192.dp,56.dp))
             TvButton("More info",{info=true},Modifier.size(192.dp,56.dp).focusRequester(infoControl))
@@ -172,12 +172,6 @@ private fun RokuEpisode(episode:Media,controller:AppController,modifier:Modifier
             Text(episode.description.orEmpty(),fontSize=19.sp,lineHeight=28.sp,maxLines=4,overflow=TextOverflow.Ellipsis,color=if(focused)Color(0xFFC5C6C7)else RokuMuted,modifier=Modifier.offset(0.dp,226.dp).size(256.dp,94.dp))
         }
     }
-}
-
-
-private fun detailResumeTime(millis:Long):String {
-    val seconds=millis/1000
-    return if(seconds>=3600) "${seconds/3600}:${((seconds/60)%60).toString().padStart(2,'0')}:${(seconds%60).toString().padStart(2,'0')}" else "${seconds/60}:${(seconds%60).toString().padStart(2,'0')}"
 }
 
 @Composable

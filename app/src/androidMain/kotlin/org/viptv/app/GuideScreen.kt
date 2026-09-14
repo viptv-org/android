@@ -26,9 +26,6 @@ import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlin.math.min
 
-private val GuideCanvas = Color(0xFF101112)
-private val GuideSurface = Color(0xFF202224)
-private val GuideMuted = Color(0xFFA6A8AA)
 private const val GuideWindowMillis = 7_200_000L
 private const val GuideWidth = 804f
 
@@ -80,7 +77,7 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel?, controll
     LaunchedEffect(model.channelOffset) { if (endOfPage) { channels.lastOrNull()?.let(controller::selectGuideChannel); endOfPage = false } }
     LaunchedEffect(searchOpen) { if (!searchOpen) focus.requestFocus() }
     BackHandler(!searchOpen && guideOwnsFocus) { if (detail) detail = false else railFocus.requestFocus() }
-    Box(Modifier.fillMaxSize().background(GuideCanvas).onPreviewKeyEvent { event ->
+    Box(Modifier.fillMaxSize().background(RokuCanvas).onPreviewKeyEvent { event ->
         val key = event.nativeKeyEvent
         if (searchOpen) return@onPreviewKeyEvent false
         if (key.keyCode == KeyEvent.KEYCODE_BACK) {
@@ -132,14 +129,14 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel?, controll
         val firstMenu = max(0, menuIndex - 7)
         filters.drop(firstMenu).take(8).forEachIndexed { slot, item ->
             val selected = slot + firstMenu == menuIndex
-            Box(Modifier.offset(104.dp,(163 + slot * 48).dp).size(184.dp,42.dp).background(if (selected && menuFocus) Color(0xFFF5F5F5) else Color.Transparent).clickable { menuIndex = slot + firstMenu; applyFilter() }, contentAlignment = Alignment.CenterStart) {
-                Text(item.label, color = if (selected && menuFocus) GuideCanvas else if (selected) Color.White else GuideMuted, fontSize = 19.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp).width(172.dp))
+            Box(Modifier.offset(104.dp,(163 + slot * 48).dp).size(184.dp,42.dp).background(if (selected && menuFocus) RokuWhite else Color.Transparent).clickable { menuIndex = slot + firstMenu; applyFilter() }, contentAlignment = Alignment.CenterStart) {
+                Text(item.label, color = if (selected && menuFocus) RokuCanvas else if (selected) Color.White else RokuMuted, fontSize = 19.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp).width(172.dp))
             }
         }
         val first = max(0,row - 4)
         channels.drop(first).take(5).forEachIndexed { slot, item ->
             val y = 166 + slot * 91
-            Box(Modifier.offset(300.dp,y.dp).size(128.dp,87.dp).background(if (slot + first == row && !menuFocus) Color(0xFF303234) else GuideSurface))
+            Box(Modifier.offset(300.dp,y.dp).size(128.dp,87.dp).background(if (slot + first == row && !menuFocus) Color(0xFF303234) else RokuSurface))
             var logoFailed by remember(item.id, item.logo) { mutableStateOf(false) }
             if (!item.logo.isNullOrBlank() && !logoFailed) AsyncImage(item.logo, item.name, contentScale = ContentScale.Fit, onError = { logoFailed = true }, modifier = Modifier.offset(308.dp,(y+7).dp).size(112.dp,73.dp))
             else Text(item.name,color=Color.White,fontSize=16.sp,maxLines=3,textAlign=TextAlign.Center,modifier=Modifier.offset(308.dp,(y+16).dp).size(112.dp,60.dp))
@@ -149,21 +146,21 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel?, controll
                 val x = 432 + (cell.left * GuideWidth).toInt()
                 val width = max(1,(cell.width * GuideWidth).toInt()-3)
                 val selected = slot + first == row && anchor >= p.startMillis && anchor < p.endMillis && !menuFocus
-                Box(Modifier.offset(x.dp,y.dp).size(width.dp,87.dp).background(if(selected) Color(0xFFF5F5F5) else GuideSurface).clickable { controller.selectGuideChannel(item); anchor=p.startMillis; menuFocus=false; if(p.startMillis<=now) controller.watchGuideChannel(item) else detail=true }) {
+                Box(Modifier.offset(x.dp,y.dp).size(width.dp,87.dp).background(if(selected) RokuWhite else RokuSurface).clickable { controller.selectGuideChannel(item); anchor=p.startMillis; menuFocus=false; if(p.startMillis<=now) controller.watchGuideChannel(item) else detail=true }) {
                     if(selected) Box(Modifier.size(3.dp,87.dp).background(Color.White))
                     if(width>49) {
                         val missing = p.title == "No schedule available"
                         val hint = if(missing) { if(item.id in model.loadingChannelIds) "LOADING GUIDE…" else "LIVE CHANNEL" } else if(p.startMillis<=now && p.endMillis>now) "${(p.endMillis-now+59_999)/60_000} MIN LEFT" else p.displayTime ?: guideTime(p.startMillis)
-                        Text(hint,color=if(selected) Color(0xFF414548) else GuideMuted,fontSize=15.sp,maxLines=1,modifier=Modifier.offset(12.dp,10.dp).width((width-22).dp))
-                        Text(p.title,color=if(selected) GuideCanvas else Color(0xFFF5F5F5),fontSize=20.sp,maxLines=2,overflow=TextOverflow.Ellipsis,modifier=Modifier.offset(12.dp,38.dp).size((width-22).dp,48.dp))
+                        Text(hint,color=if(selected) Color(0xFF414548) else RokuMuted,fontSize=15.sp,maxLines=1,modifier=Modifier.offset(12.dp,10.dp).width((width-22).dp))
+                        Text(p.title,color=if(selected) RokuCanvas else RokuWhite,fontSize=20.sp,maxLines=2,overflow=TextOverflow.Ellipsis,modifier=Modifier.offset(12.dp,38.dp).size((width-22).dp,48.dp))
                     }
                 }
             }
         }
         if(now in window until window+GuideWindowMillis) Box(Modifier.offset((432+((now-window)*804/GuideWindowMillis).toInt()).dp,150.dp).size(2.dp,470.dp).background(Color(0x80FFFFFF)))
-        Text(if(channels.isEmpty()) "${model.channelTotal} channels" else "${model.channelOffset+row+1} / ${model.channelTotal}",color=GuideMuted,fontSize=18.sp,modifier=Modifier.offset(300.dp,639.dp).width(124.dp))
+        Text(if(channels.isEmpty()) "${model.channelTotal} channels" else "${model.channelOffset+row+1} / ${model.channelTotal}",color=RokuMuted,fontSize=18.sp,modifier=Modifier.offset(300.dp,639.dp).width(124.dp))
         Text(if(programme?.title=="No schedule available") channel?.name.orEmpty() else programme?.title.orEmpty(),color=Color.White,fontSize=26.sp,maxLines=1,modifier=Modifier.offset(432.dp,635.dp).size(804.dp,38.dp))
-        Text("OK  Watch / Details     *  Details     Replay  Now     Back  Sidebar",color=GuideMuted,fontSize=18.sp,modifier=Modifier.offset(112.dp,682.dp).width(1124.dp))
+        Text("OK  Watch / Details     *  Details     Replay  Now     Back  Sidebar",color=RokuMuted,fontSize=18.sp,modifier=Modifier.offset(112.dp,682.dp).width(1124.dp))
         if(channels.isEmpty()) Text(if(state.loading) "Loading channels…" else state.message ?: if(model.channelFilter is LiveChannelFilter.Search) "No matching US channels or current programmes. Try a channel name, section, or another title." else "No channels here yet. Choose another filter.",color=Color.White,fontSize=26.sp,modifier=Modifier.offset(450.dp,292.dp).size(770.dp,130.dp))
         if(detail && channel!=null && programme!=null) {
             Box(Modifier.fillMaxSize().background(Color(0xC7000000)))
@@ -178,8 +175,6 @@ internal fun GuideScreen(state: AppState, initialChannel: LiveChannel?, controll
 }
 
 private data class GuideCellModel(val programme: GuideProgramme, val left: Float, val width: Float)
-private data class GuideDetailOrigin(val cellKey: String, val channelId: String)
-private fun guideCellKey(channel: LiveChannel, programme: GuideProgramme, index: Int) = "${channel.id}:${programme.startMillis}:${programme.endMillis}:$index"
 
 private sealed interface GuideFilterItem {
     val key: String

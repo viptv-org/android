@@ -324,9 +324,7 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
             items.map { item -> async {
                 hydrationSlots.withPermit {
                     val lookup = item.copy(id = item.seriesId ?: item.id, type = if (item.type == "episode") "series" else item.type)
-                    val rich = known[lookup.type + "\u0000" + lookup.id]?.takeUnless { fetchDetails } ?: try { metadata(lookup) }
-                        catch (cancelled: CancellationException) { throw cancelled }
-                        catch (_: Exception) { item }
+                    val rich = known[lookup.type + "\u0000" + lookup.id]?.takeUnless { fetchDetails } ?: metadataOr(item, lookup)
                     CoreModels.enrich(item, rich)
                 }
             } }.awaitAll()
@@ -428,6 +426,14 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         titleArtwork[type + "\u0000" + id] = result
         return result
     }
+    /** A failed enrichment lookup must never discard the item the caller already has. */
+    private suspend fun metadataOr(fallback: Media, lookup: Media = fallback): Media = try {
+        metadata(lookup)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        fallback
+    }
     override suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit): List<Source> {
         val job = json("POST", "/streams", JSONObject().put("id", media.id).put("type", media.type).put("name", media.name).putOpt("series_id", media.seriesId).putOpt("season", media.season).putOpt("episode", media.episode))
         val id = job.getString("id")
@@ -486,9 +492,7 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
         val slots = Semaphore(3)
         items.map { item -> async {
             slots.withPermit {
-                val rich = try { metadata(item) }
-                    catch (cancelled: CancellationException) { throw cancelled }
-                    catch (_: Exception) { item }
+                val rich = metadataOr(item)
                 CoreModels.enrich(item, rich)
             }
         } }.awaitAll()

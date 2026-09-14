@@ -134,32 +134,32 @@ internal fun PlaybackScreen(media:Media,chromeVisible:Boolean,seekPreview:SeekPr
                 Text(media.name,color=Color.White,fontSize=26.sp,fontWeight=FontWeight.Bold,modifier=Modifier.offset(if(logo.isNullOrBlank()) 64.dp else 164.dp,42.dp).size(1018.dp,36.dp))
             } else {
                 PlayerAsset("viptv-mark.png",Modifier.offset(64.dp,40.dp).size(36.dp,32.dp))
-                Text(media.episodeTitle ?: media.name,color=Color(0xFFF5F5F5),fontSize=26.sp,fontWeight=FontWeight.Bold,maxLines=1,modifier=Modifier.offset(112.dp,36.dp).size(700.dp,40.dp))
+                Text(media.episodeTitle ?: media.name,color=RokuWhite,fontSize=26.sp,fontWeight=FontWeight.Bold,maxLines=1,modifier=Modifier.offset(112.dp,36.dp).size(700.dp,40.dp))
             }
             Text(if(buffering) "LOADING" else if(live) "● LIVE" else if(playback.isPlaying) "PLAYING" else "PAUSED",color=Color.White,fontSize=20.sp,fontWeight=FontWeight.Bold,textAlign=TextAlign.End,modifier=Modifier.offset(1048.dp,36.dp).size(168.dp,40.dp))
             Text(if(live) "ON NOW  ·  LIVE TV" else "NOW PLAYING",color=Color(0xFFC5C6C7),fontSize=18.sp,modifier=Modifier.offset(64.dp,460.dp).size(1100.dp,26.dp))
-            Text(if(live) programme?.title ?: media.name else media.name,color=Color(0xFFF5F5F5),fontSize=32.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.offset(64.dp,486.dp).width(1090.dp))
+            Text(if(live) programme?.title ?: media.name else media.name,color=RokuWhite,fontSize=32.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.offset(64.dp,486.dp).width(1090.dp))
             Text(playerContext(media,seekPreview),color=Color(0xFFBFC1C3),fontSize=20.sp,modifier=Modifier.offset(64.dp,524.dp).size(1152.dp,30.dp))
             if(!live) {
                 val fraction=if(duration>0) (position.toFloat()/duration).coerceIn(0f,1f) else 0f
                 val preview=if(duration>0) ((seekPreview?.targetMillis ?: position).toFloat()/duration).coerceIn(0f,1f) else 0f
                 Box(Modifier.offset(64.dp,572.dp).size(1152.dp,6.dp).clip(RoundedCornerShape(3.dp)).background(Color(0xFF5A5C5E)))
-                if(fraction>0) Box(Modifier.offset(64.dp,572.dp).size((1152*fraction).dp,6.dp).clip(RoundedCornerShape(3.dp)).background(Color(0xFFF5F5F5)))
-                if(seekPreview!=null) Box(Modifier.offset((64+1152*fraction-1).dp,569.dp).size(3.dp,10.dp).background(Color(0xFFA6A8AA)))
+                if(fraction>0) Box(Modifier.offset(64.dp,572.dp).size((1152*fraction).dp,6.dp).clip(RoundedCornerShape(3.dp)).background(RokuWhite))
+                if(seekPreview!=null) Box(Modifier.offset((64+1152*fraction-1).dp,569.dp).size(3.dp,10.dp).background(RokuMuted))
                 if(row==0 && duration>0) PlayerAsset("player-circle.png",Modifier.offset((64+1152*preview-8).dp,567.dp).size(16.dp))
             } else if(programme!=null) {
                 val fraction=((System.currentTimeMillis()-programme.startMillis).toFloat()/(programme.endMillis-programme.startMillis)).coerceIn(0f,1f)
                 Box(Modifier.offset(64.dp,572.dp).size(1152.dp,6.dp).background(Color(0xFF5A5C5E),RoundedCornerShape(3.dp)))
-                Box(Modifier.offset(64.dp,572.dp).size((1152*fraction).dp,6.dp).background(Color(0xFFF5F5F5),RoundedCornerShape(3.dp)))
+                Box(Modifier.offset(64.dp,572.dp).size((1152*fraction).dp,6.dp).background(RokuWhite,RoundedCornerShape(3.dp)))
             }
-            Text(if(live) if(programme!=null) "ON NOW" else "LIVE" else formatTime(seekPreview?.targetMillis ?: position),color=Color(0xFFF5F5F5),fontSize=20.sp,modifier=Modifier.offset(64.dp,584.dp).size(576.dp,32.dp))
-            Text(if(live) if(programme!=null) "${(programme.endMillis-System.currentTimeMillis()+59_999)/60_000} min left" else "Live broadcast" else formatTime(duration),color=Color(0xFFA6A8AA),fontSize=20.sp,textAlign=TextAlign.End,modifier=Modifier.offset(640.dp,584.dp).size(576.dp,32.dp))
+            Text(if(live) if(programme!=null) "ON NOW" else "LIVE" else formatTime(seekPreview?.targetMillis ?: position),color=RokuWhite,fontSize=20.sp,modifier=Modifier.offset(64.dp,584.dp).size(576.dp,32.dp))
+            Text(if(live) if(programme!=null) "${(programme.endMillis-System.currentTimeMillis()+59_999)/60_000} min left" else "Live broadcast" else formatTime(duration),color=RokuMuted,fontSize=20.sp,textAlign=TextAlign.End,modifier=Modifier.offset(640.dp,584.dp).size(576.dp,32.dp))
             order.forEach {index ->
                 val x=if(live) mapOf(3 to 64,4 to 608,5 to 1152).getValue(index) else listOf(64,144,224,992,1072,1152,304)[index]
                 val focused=row==1 && button==index && menu==null
                 val glyph=when(index) {0->"rewind";1->if(playback.isPlaying) "pause" else "play";2,6->"forward";3->"audio";4->"captions";else->"exit"}
-                Box(Modifier.offset(x.dp,624.dp).size(64.dp).background(if(focused) Color(0xFFF5F5F5) else Color.Transparent,RoundedCornerShape(12.dp)).clickable {row=1;button=index;activate(index)},contentAlignment=Alignment.Center) {
-                    PlayerAsset("ui-nav-player-$glyph.png",Modifier.size(28.dp),if(focused) Color(0xFF101112) else Color(0xFFF5F5F5),when(index) {0->"Rewind 10 seconds";1->if(playback.isPlaying) "Pause" else "Resume";2->"Forward 30 seconds";3->"Audio";4->"Captions";5->"Exit";else->"Next episode"})
+                Box(Modifier.offset(x.dp,624.dp).size(64.dp).background(if(focused) RokuWhite else Color.Transparent,RoundedCornerShape(12.dp)).clickable {row=1;button=index;activate(index)},contentAlignment=Alignment.Center) {
+                    PlayerAsset("ui-nav-player-$glyph.png",Modifier.size(28.dp),if(focused) RokuCanvas else RokuWhite,when(index) {0->"Rewind 10 seconds";1->if(playback.isPlaying) "Pause" else "Resume";2->"Forward 30 seconds";3->"Audio";4->"Captions";5->"Exit";else->"Next episode"})
                 }
             }
         }
@@ -206,15 +206,15 @@ private fun PlayerTrackDialog(menu:PlayerTrackMenu,tracks:List<PlaybackTrack>,ca
         };true}
     }.focusRequester(focus).focusable()) {
         Box(Modifier.offset(200.dp,panelTop.dp).size(880.dp,panelHeight.dp).background(Color(0xFF191B1D),RoundedCornerShape(12.dp)))
-        Text(if(menu==PlayerTrackMenu.Audio) "Audio tracks" else "Subtitles",color=Color(0xFFF5F5F5),fontSize=36.sp,fontWeight=FontWeight.Bold,modifier=Modifier.offset(244.dp,(panelTop+32).dp).size(792.dp,54.dp))
+        Text(if(menu==PlayerTrackMenu.Audio) "Audio tracks" else "Subtitles",color=RokuWhite,fontSize=36.sp,fontWeight=FontWeight.Bold,modifier=Modifier.offset(244.dp,(panelTop+32).dp).size(792.dp,54.dp))
         val first=max(0,selected-6)
         entries.drop(first).take(7).forEachIndexed {slot,entry ->
             val active=first+slot==selected
-            Box(Modifier.offset(244.dp,(panelTop+94+slot*62).dp).size(792.dp,52.dp).background(if(active) Color(0xFFF5F5F5) else Color.Transparent,RoundedCornerShape(10.dp)).clickable(onClick=entry.second),contentAlignment=Alignment.CenterStart) {
-                Text(entry.first,color=if(active) Color(0xFF101112) else Color(0xFFF5F5F5),fontSize=20.sp,maxLines=1,modifier=Modifier.padding(start=18.dp))
+            Box(Modifier.offset(244.dp,(panelTop+94+slot*62).dp).size(792.dp,52.dp).background(if(active) RokuWhite else Color.Transparent,RoundedCornerShape(10.dp)).clickable(onClick=entry.second),contentAlignment=Alignment.CenterStart) {
+                Text(entry.first,color=if(active) RokuCanvas else RokuWhite,fontSize=20.sp,maxLines=1,modifier=Modifier.padding(start=18.dp))
             }
         }
-        Text(notice ?: when { tracks.isEmpty() -> if(menu==PlayerTrackMenu.Audio) "This stream supplies no selectable audio tracks." else "This stream supplies no selectable subtitles."; menu==PlayerTrackMenu.Audio -> "Choose any available audio track. Language labels are informational."; !canDisable -> "Subtitles are unavailable for this output. Listed tracks cannot currently be displayed."; else -> "Select a supported text track. Image subtitles cannot be displayed." },color=Color(0xFFA6A8AA),fontSize=16.sp,maxLines=2,modifier=Modifier.offset(244.dp,(panelTop+panelHeight-50).dp).size(792.dp,44.dp))
+        Text(notice ?: when { tracks.isEmpty() -> if(menu==PlayerTrackMenu.Audio) "This stream supplies no selectable audio tracks." else "This stream supplies no selectable subtitles."; menu==PlayerTrackMenu.Audio -> "Choose any available audio track. Language labels are informational."; !canDisable -> "Subtitles are unavailable for this output. Listed tracks cannot currently be displayed."; else -> "Select a supported text track. Image subtitles cannot be displayed." },color=RokuMuted,fontSize=16.sp,maxLines=2,modifier=Modifier.offset(244.dp,(panelTop+panelHeight-50).dp).size(792.dp,44.dp))
     }
 }
 

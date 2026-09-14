@@ -179,11 +179,6 @@ class HomeQueuePolicyTest {
         assertTrue(HomeRefreshPolicy.accepts(responseGeneration = 8, currentGeneration = 8))
     }
 
-    @Test fun `queue row role is metadata rather than its display title`() {
-        assertTrue(HomeShelf("Localized queue label", emptyList(), isQueueShelf = true).isQueueShelf)
-        assertFalse(HomeShelf("Continue Watching", emptyList()).isQueueShelf)
-    }
-
     @Test fun `vertical Home move keeps card column and reaches the next shelf`() {
         val first = Media("first", "movie")
         val second = Media("second", "movie")

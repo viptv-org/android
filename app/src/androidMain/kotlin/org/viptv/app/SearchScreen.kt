@@ -43,15 +43,15 @@ internal fun SearchScreen(state: AppState, controller: AppController) {
     val scope = rememberCoroutineScope()
     val firstSection = state.searchSections.indexOfFirst { it.items.isNotEmpty() }
     fun focusResults() { if (hasResults) scope.launch { sectionsScroll.scrollToItem(firstSection); firstRowScroll.scrollToItem(0); withFrameNanos {}; resultFocus.requestFocus() } }
-    Box(Modifier.fillMaxSize().background(Color(0xFF101112))) {
+    Box(Modifier.fillMaxSize().background(RokuCanvas)) {
         Text("Search",color=Color.White,fontSize=44.sp,fontWeight=FontWeight.Bold,modifier=Modifier.offset(100.dp,54.dp))
-        Text(state.searchQuery.ifEmpty { "Search movies and shows" },color=Color(0xFFF5F5F5),fontSize=26.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.offset(100.dp,164.dp).size(304.dp,44.dp))
+        Text(state.searchQuery.ifEmpty { "Search movies and shows" },color=RokuWhite,fontSize=26.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.offset(100.dp,164.dp).size(304.dp,44.dp))
         SearchKeyboard(state.searchQuery,controller::search,Modifier.offset(96.dp,216.dp),onResults=::focusResults,firstFocus=fieldFocus)
-        Text("Type here or use a connected keyboard. Play/Pause opens results.",color=Color(0xFFA6A8AA),fontSize=20.sp,modifier=Modifier.offset(100.dp,572.dp).size(304.dp,64.dp))
+        Text("Type here or use a connected keyboard. Play/Pause opens results.",color=RokuMuted,fontSize=20.sp,modifier=Modifier.offset(100.dp,572.dp).size(304.dp,64.dp))
         LazyColumn(Modifier.offset(456.dp,164.dp).size(740.dp,484.dp).clipToBounds(),verticalArrangement=Arrangement.spacedBy(8.dp),state=sectionsScroll) {
             itemsIndexed(state.searchSections,key={index,section->"${section.source}:$index"}) { sectionIndex,section ->
                 Column(Modifier.height(236.dp)) {
-                    Text(section.source,color=Color(0xFFF5F5F5),fontSize=26.sp,fontWeight=FontWeight.Bold,modifier=Modifier.height(36.dp))
+                    Text(section.source,color=RokuWhite,fontSize=26.sp,fontWeight=FontWeight.Bold,modifier=Modifier.height(36.dp))
                     LazyRow(horizontalArrangement=Arrangement.spacedBy(20.dp),state=if(sectionIndex==firstSection) firstRowScroll else rememberLazyListState()) {
                         itemsIndexed(section.items,key={_,item->item.type+":"+item.id}) { index,item ->
                             Box(Modifier.onPreviewKeyEvent { event ->
@@ -62,7 +62,7 @@ internal fun SearchScreen(state: AppState, controller: AppController) {
                 }
             }
         }
-        Text(state.searchStatus,color=Color(0xFFA6A8AA),fontSize=20.sp,modifier=Modifier.offset(456.dp,660.dp).size(740.dp,36.dp))
+        Text(state.searchStatus,color=RokuMuted,fontSize=20.sp,modifier=Modifier.offset(456.dp,660.dp).size(740.dp,36.dp))
     }
 }
 
@@ -98,8 +98,8 @@ internal fun SearchKeyboard(value:String,onValueChange:(String)->Unit,modifier:M
                             if(event.nativeKeyEvent.action==KeyEvent.ACTION_DOWN && event.nativeKeyEvent.keyCode==KeyEvent.KEYCODE_DPAD_RIGHT && col==keys.lastIndex) { onResults(); true } else false
                         }) {
                         Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
-                            if(row==6) SearchKeyGlyph(label) else Text(if(uppercase) label.uppercase() else label,color=Color(0xFFF5F5F5),fontSize=20.sp,fontWeight=FontWeight.Bold)
-                            if(focused) Canvas(Modifier.matchParentSize()) { drawRoundRect(Color(0xFFF5F5F5),topLeft=Offset(-6.dp.toPx(),-7.dp.toPx()),size=Size(size.width+12.dp.toPx(),size.height+14.dp.toPx()),cornerRadius=CornerRadius(5.dp.toPx()),style=Stroke(1.5.dp.toPx())) }
+                            if(row==6) SearchKeyGlyph(label) else Text(if(uppercase) label.uppercase() else label,color=RokuWhite,fontSize=20.sp,fontWeight=FontWeight.Bold)
+                            if(focused) Canvas(Modifier.matchParentSize()) { drawRoundRect(RokuWhite,topLeft=Offset(-6.dp.toPx(),-7.dp.toPx()),size=Size(size.width+12.dp.toPx(),size.height+14.dp.toPx()),cornerRadius=CornerRadius(5.dp.toPx()),style=Stroke(1.5.dp.toPx())) }
                         }
                     }
                 }
@@ -111,7 +111,7 @@ internal fun SearchKeyboard(value:String,onValueChange:(String)->Unit,modifier:M
 @Composable
 private fun SearchKeyGlyph(label:String) {
     Canvas(Modifier.size(20.dp)) {
-        val ink=Color(0xFFF5F5F5)
+        val ink=RokuWhite
         val unit=size.width/20f
         fun line(x1:Float,y1:Float,x2:Float,y2:Float) = drawLine(ink,Offset(x1*unit,y1*unit),Offset(x2*unit,y2*unit),1.2f*unit)
         when(label) {
