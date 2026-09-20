@@ -15,12 +15,12 @@ from urllib.request import Request, urlopen
 CORPUS_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(CORPUS_DIR))
 
-from live_hls_server import (  # noqa: E402
+from live_hls_fixture import (  # noqa: E402
     FixtureConfigurationError,
     LiveHlsFixture,
-    LiveHlsFixtureServer,
     MAX_MANIFEST_BYTES,
 )
+from live_hls_server import LiveHlsFixtureServer  # noqa: E402
 
 
 class LiveHlsServerTest(unittest.TestCase):
