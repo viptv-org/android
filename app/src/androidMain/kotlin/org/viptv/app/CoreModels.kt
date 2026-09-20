@@ -26,7 +26,7 @@ internal object CoreModels {
             item.extras.filterNot { it.name == "skip" }.map {
                 CatalogFilter(it.name, when (it.name) { "search" -> CatalogFilterKind.Search; "genre" -> CatalogFilterKind.Genre; else -> if (it.options.isEmpty()) CatalogFilterKind.FreeText else CatalogFilterKind.Choice },
                     it.required, it.options, it.defaultValue, it.optionsLimit?.toInt())
-            })
+            }, item.addonName)
     }
     fun profileNormalized(item: org.viptv.core.wire.Profile): Profile {
         return Profile(item.id, item.name, item.avatar, item.kid == true, item.primary == true, item.avatarStyle.orEmpty(), item.avatarChoice?.toInt(), item.setupComplete == true)

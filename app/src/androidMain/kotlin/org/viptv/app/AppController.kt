@@ -192,7 +192,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
             try {
                 val catalogs = gateway.catalogs()
                 if (!isCurrentDiscover(generation)) return@launch
-                val catalog = catalogs.firstOrNull { it.key == previous.selectedCatalogKey && it.key.type == previous.selectedType }
+                val catalog = catalogs.firstOrNull { it.key == previous.selectedCatalogKey }
                     ?: DiscoverPolicy.firstCatalog(catalogs, previous.selectedType)
                 if (catalog == null) {
                     _state.value = _state.value.copy(discoverUi = DiscoverUiState(catalogs = catalogs, loading = false, error = "No catalogs are available."))
@@ -202,7 +202,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 _state.value = _state.value.copy(
                     discoverUi = previous.copy(
                         catalogs = catalogs,
-                        selectedType = catalog.key.type,
+                        selectedType = DiscoverPolicy.typeGroup(catalog.key.type),
                         selectedCatalogKey = catalog.key,
                         selectedFilters = filters,
                         loading = true,
@@ -228,7 +228,7 @@ class AppController(context: Context, private val origin: String = "https://vipt
 
     fun setDiscoverCatalog(key: CatalogKey) {
         val catalog = _state.value.discoverUi.catalogs.firstOrNull { it.key == key } ?: return
-        startDiscoverRequest(catalog, DiscoverPolicy.defaults(catalog), skip = 0, previousSkips = emptyList(), selectedType = catalog.key.type)
+        startDiscoverRequest(catalog, DiscoverPolicy.defaults(catalog), skip = 0, previousSkips = emptyList(), selectedType = DiscoverPolicy.typeGroup(catalog.key.type))
     }
 
     /** Search, genre, and extras all reset the forward-only server cursor. */

@@ -407,8 +407,23 @@ data class DiscoverUiState(
 )
 
 object DiscoverPolicy {
+    /** Canonical Stremio-style discover groups; addon namespaces fold into them. */
+    fun typeGroup(type: String): String = when {
+        type == "movie" -> "movie"
+        type == "series" -> "series"
+        type == "anime" || type.startsWith("anime.") -> "anime"
+        else -> "other"
+    }
+    fun groupLabel(group: String): String = when (group) {
+        "movie" -> "Movies"
+        "series" -> "Series"
+        "anime" -> "Anime"
+        else -> "Other"
+    }
     fun firstCatalog(catalogs: List<DiscoverCatalog>, type: String): DiscoverCatalog? =
-        catalogs.firstOrNull { it.key.type == type } ?: catalogs.firstOrNull()
+        catalogs.firstOrNull { it.key.type != "live" && typeGroup(it.key.type) == typeGroup(type) }
+            ?: catalogs.firstOrNull { it.key.type != "live" }
+            ?: catalogs.firstOrNull()
 
     /** Required declared filters use their server default or first allowed choice. */
     fun defaults(catalog: DiscoverCatalog): Map<String, String> = buildMap {

@@ -35,10 +35,10 @@ internal fun DiscoverScreen(state:AppState,controller:AppController) {
         RokuLabel(catalog?.name.orEmpty(),100,126,1096,18,color=RokuMuted)
         LazyRow(Modifier.offset(100.dp,178.dp).size(1096.dp,48.dp),horizontalArrangement=Arrangement.spacedBy(24.dp)) {
             item {
-                TvButton("${ui.selectedType.replaceFirstChar(Char::uppercase)}  ▾",{choose("Browse",ui.catalogs.map {it.key.type}.distinct().map {type->type.replaceFirstChar(Char::uppercase) to {controller.setDiscoverType(type)}})},Modifier.size(256.dp,48.dp).focusRequester(filterFocus))
+                TvButton("${DiscoverPolicy.groupLabel(DiscoverPolicy.typeGroup(ui.selectedType))}  ▾",{choose("Browse",ui.catalogs.filter {it.key.type!="live"}.map {DiscoverPolicy.typeGroup(it.key.type)}.distinct().map {group->DiscoverPolicy.groupLabel(group) to {controller.setDiscoverType(group)}})},Modifier.size(256.dp,48.dp).focusRequester(filterFocus))
             }
             item {
-                TvButton("${catalog?.name?:"Catalog"}  ▾",{choose("Catalogs",ui.catalogs.filter {it.key.type==ui.selectedType}.map {item->item.name to {controller.setDiscoverCatalog(item.key)}})},Modifier.size(256.dp,48.dp))
+                TvButton("${catalog?.let {item->if(item.addonName!=null) "${item.addonName} · ${item.name}" else item.name}?:"Catalog"}  ▾",{choose("Catalogs",ui.catalogs.filter {it.key.type!="live"&&DiscoverPolicy.typeGroup(it.key.type)==DiscoverPolicy.typeGroup(ui.selectedType)}.map {item->(if(item.addonName!=null) "${item.addonName} · ${item.name}" else item.name) to {controller.setDiscoverCatalog(item.key)}})},Modifier.size(256.dp,48.dp))
             }
             catalog?.let { selected ->
                 val filters=buildList {

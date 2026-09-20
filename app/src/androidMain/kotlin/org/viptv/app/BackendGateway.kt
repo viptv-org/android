@@ -164,6 +164,7 @@ data class DiscoverCatalog(
     val supportsSearch: Boolean,
     val supportsSkip: Boolean,
     val filters: List<CatalogFilter>,
+    val addonName: String? = null,
 )
 
 /** Query fields map exactly to the Rust `/discover` envelope. */
