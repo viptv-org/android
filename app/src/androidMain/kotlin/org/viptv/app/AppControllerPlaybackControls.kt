@@ -1,6 +1,6 @@
 package org.viptv.app
 
-import com.getair.video.PlaybackStatus
+import org.viptv.video.PlaybackStatus
 import kotlinx.coroutines.launch
 
 /** The Media3 adapter exposes session-relative HLS time; map it once to title time. */

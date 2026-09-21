@@ -1,9 +1,9 @@
 package org.viptv.app
 
-import com.getair.video.PlaybackKind
-import com.getair.video.PlaybackEvent
-import com.getair.video.PlaybackErrorCode
-import com.getair.video.PlaybackSource
+import org.viptv.video.PlaybackKind
+import org.viptv.video.PlaybackEvent
+import org.viptv.video.PlaybackErrorCode
+import org.viptv.video.PlaybackSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock

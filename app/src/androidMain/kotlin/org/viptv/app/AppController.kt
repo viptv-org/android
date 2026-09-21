@@ -1,8 +1,8 @@
 package org.viptv.app
 
 import android.content.Context
-import com.getair.video.AndroidMedia3BackendFactory
-import com.getair.video.AndroidMedia3VideoPlayer
+import org.viptv.video.AndroidMedia3BackendFactory
+import org.viptv.video.AndroidMedia3VideoPlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers

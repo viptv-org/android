@@ -1,6 +1,6 @@
 package org.viptv.app
 
-import com.getair.video.PlayerCapabilities
+import org.viptv.video.PlayerCapabilities
 import org.json.JSONObject
 
 /** `/live?view=us` paging inputs. Offset stays zero-based and page size is bounded by Rust's 200-channel limit. */

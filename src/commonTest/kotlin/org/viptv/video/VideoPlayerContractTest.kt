@@ -1,4 +1,4 @@
-package com.getair.video
+package org.viptv.video
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

@@ -1,4 +1,4 @@
-package com.getair.video
+package org.viptv.video
 
 import androidx.media3.common.PlaybackException
 import kotlin.test.Test

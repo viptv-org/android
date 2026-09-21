@@ -1,6 +1,6 @@
 @file:androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
 
-package com.getair.video
+package org.viptv.video
 
 import android.net.Uri
 import androidx.media3.common.C

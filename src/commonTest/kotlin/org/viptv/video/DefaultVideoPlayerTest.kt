@@ -1,4 +1,4 @@
-package com.getair.video
+package org.viptv.video
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow

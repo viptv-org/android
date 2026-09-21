@@ -1,4 +1,4 @@
-package com.getair.video
+package org.viptv.video
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope

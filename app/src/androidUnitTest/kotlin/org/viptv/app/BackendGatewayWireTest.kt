@@ -1,6 +1,6 @@
 package org.viptv.app
 
-import com.getair.video.PlayerCapabilities
+import org.viptv.video.PlayerCapabilities
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicInteger

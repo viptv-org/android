@@ -1,4 +1,4 @@
-package com.getair.video
+package org.viptv.video
 
 import android.os.SystemClock
 import android.util.Log
