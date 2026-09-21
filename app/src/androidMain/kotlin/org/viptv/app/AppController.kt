@@ -15,12 +15,14 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
-class AppController(context: Context, private val origin: String = "https://viptv.syek.tech") {
+class AppController(context: Context, private val origin: String) {
     private val store = context.getSharedPreferences("viptv.auth", Context.MODE_PRIVATE)
-    internal val gateway = VipTvHttpGateway(origin, store.getString("access", null))
+    internal val gateway = VipTvHttpGateway(origin, store.getString("access", null), ::refreshAccessToken)
     internal val scope = CoroutineScope(Job() + Dispatchers.Main.immediate)
     private val coreSession = CoreSession(origin, store, scope, gateway::setAccessToken, ::renderSession)
+    private val sessionRefreshMutex = Mutex()
     private var pendingCoreAction: (() -> Unit)? = null
     private var sessionRenderGeneration = 0L
     private var keepProfilesOnIdentityRefresh = false
@@ -156,6 +158,15 @@ class AppController(context: Context, private val origin: String = "https://vipt
 
     fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback((_state.value.route as? Route.Player)?.media); pendingCoreAction = coreSession::signOut; coreSession.signOut() } }
     fun close() { coreSession.close(); pairingPoll?.cancel(); sourceDiscovery?.cancel(); queueContinuationJob?.cancel(); discoverJob?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
+
+    /**
+     * The stored device grant belongs to the previous origin; an origin change
+     * wipes it so the replacement controller starts device pairing instead of
+     * replaying credentials against a different server.
+     */
+    fun wipeCredentialsForOriginChange() {
+        store.edit().remove("access").remove("refresh").remove("core.session").remove("token").remove("profile").commit()
+    }
     internal data class GuideScheduleCache(val entries: List<GuideProgramme>, val expiresAtMillis: Long)
 
     internal fun requireProfile() = checkNotNull(_state.value.selectedProfile).id
@@ -223,6 +234,26 @@ class AppController(context: Context, private val origin: String = "https://vipt
                 _state.value = _state.value.copy(pinPrompt = PinPrompt(pinTitle), loading = false)
             } else fail(error)
         } catch (error: Throwable) { fail(error) }
+    }
+    /**
+     * One coalesced imperative refresh for any authenticated 401: the mutex
+     * collapses concurrent expirations into a single rotation, the rotated
+     * tokens are persisted exactly as the core session's storage effect
+     * writes them, and the Rust session model adopts the new grant.
+     */
+    internal suspend fun refreshAccessToken(): String? = sessionRefreshMutex.withLock {
+        val refreshToken = store.getString("refresh", null) ?: return@withLock null
+        try {
+            val session = gateway.refresh(refreshToken)
+            store.edit()
+                .putString("core.session", session.coreJson)
+                .putString("access", session.accessToken)
+                .putString("refresh", session.refreshToken)
+                .commit()
+            coreSession.adopt(session.coreJson)
+            session.accessToken
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { null }
     }
     internal fun update(loading: Boolean = _state.value.loading, message: String? = _state.value.message) { _state.value = _state.value.copy(loading = loading, message = message) }
     internal fun fail(error: Throwable) {

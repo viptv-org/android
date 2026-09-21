@@ -24,7 +24,12 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /** HTTP adapter for the documented Rust /api contract. It owns credentials and never logs them. */
-class VipTvHttpGateway(private val origin: String, private var accessToken: String? = null) : BackendGateway {
+class VipTvHttpGateway(
+    private val origin: String,
+    private var accessToken: String? = null,
+    /** Coalesced session refresh for an authenticated 401; returns a fresh access token or null. */
+    private val onUnauthorized: (suspend () -> String?)? = null,
+) : BackendGateway {
     fun setAccessToken(value: String?) { accessToken = value }
     private val titleArtwork = java.util.concurrent.ConcurrentHashMap<String, Media>()
     private val client = OkHttpClient.Builder()
@@ -304,44 +309,74 @@ class VipTvHttpGateway(private val origin: String, private var accessToken: Stri
     private suspend fun json(method: String, path: String, body: JSONObject? = null): JSONObject = JSONObject(responseText(method, path, body))
     /** `/addons` is deliberately a raw JSON array in the Rust API. */
     private suspend fun jsonArray(method: String, path: String, body: JSONObject? = null): JSONArray = JSONArray(responseText(method, path, body))
+    private sealed interface CallResult
+    private class CallText(val text: String) : CallResult
+    private class CallFailure(val status: Int, val message: String) : CallResult
+
     /**
      * A cancellable OkHttp boundary works in Android and host-JVM wire tests,
      * including PATCH. Calls are bounded and cancelled with their coroutine.
      */
-    private suspend fun responseText(method: String, path: String, body: JSONObject? = null): String = suspendCancellableCoroutine { continuation ->
-        val request = Request.Builder()
-            .url(origin.trimEnd('/') + "/api" + path)
-            .header("Accept", "application/json")
-            .apply { accessToken?.let { header("Authorization", "Bearer $it") } }
-            .method(method, body?.toString()?.toRequestBody(JSON_MEDIA_TYPE))
-            .build()
-        val call = client.newCall(request)
-        continuation.invokeOnCancellation { call.cancel() }
-        call.enqueue(object : Callback {
-            override fun onFailure(call: Call, error: IOException) {
-                if (continuation.isActive) continuation.resumeWithException(error)
-            }
+    private suspend fun awaitResult(method: String, path: String, body: JSONObject?, bearer: String?): CallResult =
+        suspendCancellableCoroutine { continuation ->
+            val request = Request.Builder()
+                .url(origin.trimEnd('/') + "/api" + path)
+                .header("Accept", "application/json")
+                .apply { bearer?.let { header("Authorization", "Bearer $it") } }
+                .method(method, body?.toString()?.toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+            val call = client.newCall(request)
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, error: IOException) {
+                    if (continuation.isActive) continuation.resumeWithException(error)
+                }
 
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    val text = try {
-                        val source = it.body?.source()
-                        if (source != null && source.request(2L * 1024 * 1024 + 1)) throw IOException("Response exceeds the size limit")
-                        source?.readUtf8().orEmpty()
-                    } catch (_: IOException) {
-                        if (continuation.isActive) continuation.resumeWithException(IOException("Could not read server response"))
-                        return
-                    }
-                    if (!it.isSuccessful) {
-                        val message = runCatching { JSONObject(text.ifBlank { "{}" }).optString("error", "Request failed") }
-                            .getOrDefault("Request failed")
-                        if (continuation.isActive) continuation.resumeWithException(GatewayError(it.code, message))
-                    } else if (continuation.isActive) {
-                        continuation.resume(text)
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        val text = try {
+                            val source = it.body?.source()
+                            if (source != null && source.request(2L * 1024 * 1024 + 1)) throw IOException("Response exceeds the size limit")
+                            source?.readUtf8().orEmpty()
+                        } catch (_: IOException) {
+                            if (continuation.isActive) continuation.resumeWithException(IOException("Could not read server response"))
+                            return
+                        }
+                        if (!it.isSuccessful) {
+                            val message = runCatching { JSONObject(text.ifBlank { "{}" }).optString("error", "Request failed") }
+                                .getOrDefault("Request failed")
+                            if (continuation.isActive) continuation.resume(CallFailure(it.code, message))
+                        } else if (continuation.isActive) {
+                            continuation.resume(CallText(text))
+                        }
                     }
                 }
+            })
+        }
+
+    /**
+     * An authenticated 401 refreshes the session once and replays the request
+     * with the rotated bearer; auth endpoints treat 401 as protocol rather
+     * than expiry and never retry. Mirrors the TV client's single-refresh rule.
+     */
+    private suspend fun responseText(method: String, path: String, body: JSONObject? = null): String {
+        val bearer = accessToken
+        when (val first = awaitResult(method, path, body, bearer)) {
+            is CallText -> return first.text
+            is CallFailure -> {
+                val refresher = onUnauthorized
+                if (first.status == 401 && refresher != null && !path.startsWith("/auth/")) {
+                    val refreshed = refresher()
+                    if (refreshed != null && refreshed != bearer) {
+                        when (val retry = awaitResult(method, path, body, refreshed)) {
+                            is CallText -> return retry.text
+                            is CallFailure -> throw GatewayError(retry.status, retry.message)
+                        }
+                    }
+                }
+                throw GatewayError(first.status, first.message)
             }
-        })
+        }
     }
     private fun enc(value: String) = URLEncoder.encode(value, "UTF-8")
 

@@ -41,9 +41,18 @@ class MainActivity : ComponentActivity() {
 /** All presentation measures once in Roku's 1280 × 720 coordinate space. */
 @Composable private fun RokuApplication() {
     val context = LocalContext.current
-    val controller = remember { AppController(context.applicationContext) }
+    // The controller is keyed by the configured origin: saving a different
+    // server disposes the old session (dropping its device grant) and starts
+    // pairing against the new origin.
+    var serverOrigin by remember { mutableStateOf(ServerOrigin.load(context)) }
+    val controller = remember(serverOrigin) { AppController(context.applicationContext, serverOrigin) }
     val state by controller.state.collectAsStateWithLifecycle()
     DisposableEffect(controller) { onDispose(controller::close) }
+    val changeServer: (String) -> Unit = { origin ->
+        ServerOrigin.save(context, origin)
+        controller.wipeCredentialsForOriginChange()
+        serverOrigin = origin
+    }
     BackHandler(controller.consumesBack(state)) { controller.handleBack() }
     BoxWithConstraints(Modifier.fillMaxSize().background(RokuCanvas)) {
         val physicalDensity = LocalDensity.current
@@ -67,12 +76,13 @@ class MainActivity : ComponentActivity() {
                     is Route.Guide -> GuideScreen(state, route.channel, controller)
                     Route.Search -> SearchScreen(state, controller)
                     Route.Settings -> SettingsScreen(
-                        state.preferences, state.addons, state.serverAbout,
+                        state.preferences, state.addons, state.serverAbout, serverOrigin,
                         controller::setPreference, controller::installAddon,
                         controller::toggleAddon, controller::removeAddon,
                         { controller.navigate(Destination.Profile) },
                         { controller.requestDialog(DialogKind.SignOut,"Sign out of VIPTV?") },
                         onManageProfiles = controller::openProfileManagement,
+                        onServerChange = changeServer,
                     )
                     Route.Addons -> AddonsScreen(state, controller)
                 }

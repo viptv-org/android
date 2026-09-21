@@ -21,6 +21,7 @@ import java.net.URI
     preferences: PlaybackPreferences,
     addons: List<Addon>,
     serverAbout: ServerAbout?,
+    serverOrigin: String,
     onSavePreferences: (PlaybackPreferences) -> Unit,
     onInstallAddon: (String) -> Unit,
     onToggleAddon: (Addon) -> Unit,
@@ -29,12 +30,14 @@ import java.net.URI
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
     onManageProfiles: () -> Unit = onOpenProfiles,
+    onServerChange: (String) -> Unit = {},
 ) {
     val context=LocalContext.current
     val version=remember {runCatching {context.packageManager.getPackageInfo(context.packageName,0).versionName}.getOrNull() ?: "Unknown"}
     var page by remember { mutableStateOf("Settings") }
     var choice by remember { mutableStateOf<Pair<String,List<Pair<String,()->Unit>>>?>(null) }
-    BackHandler(enabled=page!="Settings" && choice==null) {page="Settings"}
+    var serverEntry by remember { mutableStateOf(false) }
+    BackHandler(enabled=page!="Settings" && choice==null && !serverEntry) {page="Settings"}
     fun choices(title:String,values:List<Pair<String,String>>,save:(String)->Unit) {
         choice=title to values.map { (label,value)->label to {choice=null;save(value)} }
     }
@@ -60,12 +63,30 @@ import java.net.URI
                 "Switch profile" to onOpenProfiles,
                 "Playback preferences" to {page="Playback preferences"},
                 "Manage profiles" to onManageProfiles,
+                "Server" to {serverEntry=true},
                 "About VIPTV" to {},
                 "Addons" to {page="Addons"},
                 "Sign out" to onSignOut,
-            ),descriptions=listOf("Choose who's watching.","Audio, subtitles and quality for this profile.","Add, rename, choose avatars or delete profiles.","Version $version\nhttps://viptv.syek.tech","Manage addons shared by your account.","Sign out of VIPTV on this TV."))
+            ),descriptions=listOf("Choose who's watching.","Audio, subtitles and quality for this profile.","Add, rename, choose avatars or delete profiles.",serverOrigin,"Version $version\n$serverOrigin","Manage addons shared by your account.","Sign out of VIPTV on this TV."))
         }
         choice?.let { (title,options)->RokuChoiceDialog(title,options,{choice=null}) }
+        if (serverEntry) RokuTextEntry(
+            "Server address",
+            "Enter a compatible VIPTV backend origin (https://host). Changing it signs this TV out and starts pairing against the new server.",
+            serverOrigin,
+            onDone = { value ->
+                val validated = ServerOrigin.validate(value)
+                if (validated == null) {
+                    serverEntry = false
+                    // Keep the entry open semantics simple: dismiss with a retry hint.
+                    choice = "Server address" to listOf("OK" to { choice = null })
+                    return@RokuTextEntry
+                }
+                serverEntry = false
+                if (validated != serverOrigin) onServerChange(validated)
+            },
+            onCancel = { serverEntry = false },
+        )
     }
 }
 
