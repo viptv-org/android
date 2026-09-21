@@ -134,8 +134,8 @@ private suspend fun AppController.refreshGuideRows(generation: Long) {
             batch.map { id -> async { id to runCatching { gateway.guide(id) } } }.awaitAll().forEach { (id, result) ->
                 val fetchedAt = System.currentTimeMillis()
                 guideScheduleCache[id] = result.fold(
-                    onSuccess = { GuideScheduleCache(it, fetchedAt + 300_000L) },
-                    onFailure = { GuideScheduleCache(emptyList(), fetchedAt + 60_000L) },
+                    onSuccess = { AppController.GuideScheduleCache(it, fetchedAt + 300_000L) },
+                    onFailure = { AppController.GuideScheduleCache(emptyList(), fetchedAt + 60_000L) },
                 )
             }
         }

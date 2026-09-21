@@ -1,10 +1,10 @@
-import androidx.media3.common.TrackGroup
 @file:androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
 
 package com.getair.video
 
 import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.common.TrackGroup
 
 internal data class TrackTarget(val type: Int, val group: TrackGroup, val trackIndex: Int)
 internal data class TrackSnapshot(

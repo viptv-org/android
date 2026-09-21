@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/core",
-  "revision": "ac2134cbd7307757ef779820e15d12741f98b976",
+  "revision": "89d2ec06deffd69537cf430e488080c0cee800e9",
   "files": {
     "Cargo.lock": "f3de677b20d74d0643a1182098092c803cdf0501c12091f1889f16b5c0594abd",
     "Cargo.toml": "df3ff9c6641713c277a9349e203b7c5479a7f999117408ff4102d1f959261609",
@@ -12,7 +12,7 @@
     "adapters/android/src/main/kotlin/tv/viptv/core/SmartCastTokenStore.kt": "6a23ed057ed334e8950187e0703ff32f020f7e991836df53f99d66ec9cdfb22c",
     "adapters/android/src/main/kotlin/tv/viptv/core/SmartCastTransport.kt": "fcf57196795a6204412eb57bb03bfa1aedf45eab931f91ca3a301827753b7f32",
     "crates/typegen/Cargo.toml": "351745098f80468d648e0a7a544b8556205e5fd5b591eeebae3d7c590463015f",
-    "crates/typegen/src/kotlin.rs": "1c3c6e811f65dd4578dfa6b95c412088a246b5a3d9d82f40b09479afd0a2d1a3",
+    "crates/typegen/src/kotlin.rs": "a25f6087a0aca2aad476f8b2dc8945ce7c63652d58d6750faa50c2305660f4f1",
     "crates/typegen/src/main.rs": "caed0ce20b2d3a7117b48c1e3d674682be33310414ade6abf137aa0e6afe834c",
     "crates/typegen/src/wire.rs": "fc82eb1419014a6abb3efba48115da6e50960d86b9cda725e19a33d0436ea5bd",
     "crates/viptv-core/Cargo.toml": "29e3f9d695d201e1a97053cee07b5aafc78427d98a55b18df353844edb359775",
@@ -44,7 +44,9 @@
     "crates/viptv-core/src/vizio/types.rs": "899f5f974569a6a00400029c5c90d425448a6b652c6fc8a07ba18dd446bf4af5",
     "crates/viptv-core/tests/contract.rs": "cbd4f90fb0a111837088f8d3e723757ffb45926269b9f4560a0a12e76fc819ac",
     "crates/viptv-core/tests/presentation.rs": "3acffa10bdd5c7bf1218d789c2a20cb43e246c44ae6734ad634a0818e57c734c",
-    "generated/kotlin-wire/Wire.kt": "b49d954c53d3ea25642bbaf71bbc55724496dd8b4f8b9bc38cc86349970812b3",
+    "generated/kotlin-wire/Wire.kt": "af840cef5c0f84191090e1db9832281aaee7d3a41dfb3b3d5a39e3d4c4c2baa2",
+    "generated/kotlin/build.gradle.kts": "7ab5aebab2a7f84b1150217762a7ff20bf5d974a9b5d31821ac22a9b10eb32fa",
+    "generated/kotlin/org/viptv/core/types/Types.kt": "2a86a4c8bd36458574e9dfc6c878e3046957236dcf72517b5a898027925e0fd9",
     "generated/native-kotlin/uniffi/viptv_core/viptv_core.kt": "cc1bfdf8a167237784f7296f10aa6a30d4462c11c6ff231168ce92de75f08043",
     "tests/bridge-vectors.json": "78e59179f9721b1cfc8fba70da92601d786df52e022705fdb465b7f231b2a4fd"
   }

@@ -116,6 +116,6 @@ internal fun AndroidMedia3Backend.createAnalyticsListener(callbackPlayer: ExoPla
             elapsedMs: Long,
         ) {
             if (callbackPlayer !== player || released) return
-            this@AndroidMedia3Backend.droppedVideoFrames += droppedFrames.coerceAtLeast(0).toLong()
+            droppedVideoFrames += droppedFrames.coerceAtLeast(0).toLong()
         }
     }

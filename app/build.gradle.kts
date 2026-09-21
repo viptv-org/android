@@ -12,6 +12,7 @@ kotlin {
     sourceSets {
         androidMain {
             kotlin.srcDir("../vendor/core/generated/native-kotlin")
+            kotlin.srcDir("../vendor/core/generated/kotlin")
             kotlin.srcDir("../vendor/core/generated/kotlin-wire")
             kotlin.srcDir("../vendor/core/adapters/android/src/main/kotlin")
         }

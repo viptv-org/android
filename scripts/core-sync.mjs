@@ -12,7 +12,7 @@ if(mode==='sync') {
  if(git(source,['status','--porcelain']).toString().trim())throw Error('Commit core before adoption');
  const revision=git(source,['rev-parse','HEAD']).toString().trim();
  const names=git(source,['ls-tree','-r','--name-only',revision]).toString().trim().split('\n').filter(p=>
- ['Cargo.toml','Cargo.lock','DESIGN_REF'].includes(p)||p.startsWith('crates/')||p.startsWith('tests/')||p.startsWith('generated/native-kotlin/')||p.startsWith('generated/kotlin-wire/')||p.startsWith('adapters/android/src/'));
+ ['Cargo.toml','Cargo.lock','DESIGN_REF'].includes(p)||p.startsWith('crates/')||p.startsWith('tests/')||p.startsWith('generated/kotlin/')||p.startsWith('generated/native-kotlin/')||p.startsWith('generated/kotlin-wire/')||p.startsWith('adapters/android/src/'));
  const imports=names.map(path=>({path,data:git(source,['show',`${revision}:${path}`])}));
  const previous=existsSync(resolve(dest,'lock.json'))?JSON.parse(readFileSync(resolve(dest,'lock.json'),'utf8')).files:{};
  const files={};
