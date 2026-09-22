@@ -6,10 +6,12 @@ case "$mode" in host|android|all) ;; *) echo 'Use host, android, or all' >&2; ex
 node scripts/core-sync.mjs check
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 # JVM tests run before slower ABI builds in CI; both compile the same source pin.
+# The provider feature compiles the shared addon/provider bridge so the fat
+# Kotlin bindings resolve (design LOCAL_MODE.md defers the Android UI itself).
 if [[ "$mode" == host || "$mode" == all ]]; then
-  cargo build --locked --manifest-path vendor/core/Cargo.toml -p viptv-core --features native --lib
+  cargo build --locked --manifest-path vendor/core/Cargo.toml -p viptv-core --features native,provider --lib
 fi
 if [[ "$mode" == android || "$mode" == all ]]; then
   cd vendor/core
-  cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 --platform 24 -o ../../app/src/androidMain/jniLibs build --locked -p viptv-core --features native --lib --release
+  cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 --platform 24 -o ../../app/src/androidMain/jniLibs build --locked -p viptv-core --features native,provider --lib --release
 fi
