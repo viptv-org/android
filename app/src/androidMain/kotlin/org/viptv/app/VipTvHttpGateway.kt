@@ -194,28 +194,61 @@ class VipTvHttpGateway(
         fallback
     }
     override suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit): List<Source> {
-        val job = json("POST", "/streams", JSONObject().put("id", media.id).put("type", media.type).put("name", media.name).putOpt("series_id", media.seriesId).putOpt("season", media.season).putOpt("episode", media.episode))
-        val id = job.getString("id")
-        var after = 0
-        val accumulated = LinkedHashMap<String, Source>()
-        // Match Roku's three-minute discovery budget: late providers may still
-        // contribute sources, but cancellation remains cooperative between polls.
-        repeat(120) {
-            val poll = json("GET", "/streams/${enc(id)}?after=$after")
-            val events = poll.optJSONArray("events") ?: JSONArray()
-            for (i in 0 until events.length()) {
-                val event = events.getJSONObject(i); after = maxOf(after, event.optInt("seq", after))
-                val streams = event.optJSONArray("streams") ?: JSONArray()
-                for (index in 0 until streams.length()) {
-                    val stream = streams.optJSONObject(index) ?: continue
-                    stream.source(event.optString("source").ifBlank { null }).also { source -> if (source.id.isNotBlank()) accumulated.putIfAbsent(source.id, source) }
-                }
-            }
-            onUpdate(accumulated.values.toList())
-            if (poll.optBoolean("done")) return accumulated.values.toList()
+        // The discovery request body, poll path, cursor, deduplication, budget
+        // and completion rules all come from the shared Rust core; this loop
+        // owns only transport, the update callback, cancellation and the fixed
+        // poll interval. Roku's three-minute discovery budget lives in Rust.
+        val request = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.ApiRequest>(
+            uniffi.viptv_core.normalize("request", JSONObject()
+                .put("operation", "sources")
+                .put("item", JSONObject(media.normalizedJson())).toString(), origin)
+        )
+        val id = json(request.method, request.path.removePrefix("/api"), request.body?.let { JSONObject(org.viptv.core.wire.CoreJson.encode(it)) }).getString("id")
+        var state = jsonStepState()
+        while (true) {
+            val poll = json("GET", pollPath(id, state))
+            val output = step(state, poll)
+            val accumulated = output.sources()
+            onUpdate(accumulated)
+            if (output.optBoolean("done")) return accumulated
+            state = output.getJSONObject("state")
             delay(1_500)
         }
-        return accumulated.values.toList()
+    }
+    private fun pollPath(id: String, state: JSONObject): String {
+        val request = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.ApiRequest>(
+            uniffi.viptv_core.normalize("request", JSONObject()
+                .put("operation", "sourcesPoll")
+                .put("id", id)
+                .put("after", state.optLong("after", 0L)).toString(), origin)
+        )
+        return request.path.removePrefix("/api")
+    }
+    private fun jsonStepState(): JSONObject = JSONObject().put("after", 0L).put("sources", JSONArray()).put("polls", 0L)
+    private fun step(state: JSONObject, poll: JSONObject): JSONObject {
+        val output = JSONObject(
+            uniffi.viptv_core.normalize(
+                "sourcesPollStep",
+                JSONObject().put("state", state).put("poll", poll).toString(),
+                origin,
+            )
+        )
+        return output.put("sources", output.optJSONArray("sources") ?: JSONArray())
+    }
+    private fun JSONObject.sources(): List<Source> {
+        val array = optJSONArray("sources") ?: return emptyList()
+        // The reducer's sources are already Rust-normalized: decode the wire
+        // type directly, with the display projection as the only second pass.
+        val result = ArrayList<Source>(array.length())
+        for (index in 0 until array.length()) {
+            array.optJSONObject(index) ?: continue
+            val normalized = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.MediaSource>(array.getJSONObject(index).toString())
+            val display = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.SourcePresentation>(
+                uniffi.viptv_core.normalize("sourceDisplay", org.viptv.core.wire.CoreJson.encode(normalized), "")
+            )
+            result.add(Source(normalized.id, normalized.provider.orEmpty(), display.title, display.body, normalized.sourceAddonId, normalized.sourceFingerprint, normalized.quality, normalized.audio))
+        }
+        return result
     }
     override suspend fun playback(
         source: Source,
