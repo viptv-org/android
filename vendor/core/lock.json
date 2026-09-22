@@ -1,9 +1,9 @@
 {
   "repository": "viptv-org/core",
-  "revision": "09345a3e400b3b0a1fc15fb28cb8bb0c990f36b6",
+  "revision": "be018809e7e8893352c7c57948e9537d6be9457d",
   "files": {
     "Cargo.lock": "8726d3f741b7e34afd2b11e0bc484d233345601ec7c0eaa18e459cd3daa203c4",
-    "Cargo.toml": "c5ff1bffb2695df2905d984e7d1d499a40f63b963e0827dacb20ed49b56a1e1f",
+    "Cargo.toml": "aaadafb7d7043ae4788352e5784c05398c9020647acea903cc0940a158a77845",
     "DESIGN_REF": "a3f3c1311ba84d578db7853e74348c48b7b2f6dbbc3ceb9b91f7a843cf1ce56c",
     "adapters/android/src/androidTest/kotlin/tv/viptv/core/HttpTransportTest.kt": "5b3d4b1af872a66ea8a077929d90e7f5f05c3fce965b2abe8c7b9fa034c7cf6d",
     "adapters/android/src/androidTest/kotlin/tv/viptv/core/SmartCastTransportTest.kt": "899be20d9e3e7e73ad60b7f95fd9da5acfa0766c23fdb69269bcd25e853e22f4",
