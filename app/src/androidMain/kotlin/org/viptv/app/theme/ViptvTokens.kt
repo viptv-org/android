@@ -46,6 +46,7 @@ object ViptvColor {
     val lineLinkHover = Color(0xCCFFFFFF)
     val lineKeycapTv = Color(0x47FFFFFF)
     val lineOnAccent = Color(0x2E000000)
+    val lineSelectedTv = Color(0x80FFFFFF)
     val fillTvUnfocused = Color(0x1FFFFFFF)
     val fillTvSelected = Color(0x29FFFFFF)
     val fillGlass = Color(0xF0202023)
@@ -67,13 +68,17 @@ object ViptvColor {
     val fillPopoverGlass = Color(0xF7161618)
     val fillDot = Color(0xFF3A3A3F)
     val fillDotOverArt = Color(0x73FFFFFF)
+    val fillTvSwitchOff = Color(0x33FFFFFF)
     val scrimSheet = Color(0x9E000000)
     val scrimDialog = Color(0x8C000000)
     val scrimTvPanel = Color(0x99000000)
     val scrimTvMenu = Color(0x8C000000)
     val scrimTvFullscreen = Color(0xF00B0B0C)
+    val scrimCardHover = Color(0x61000000)
+    val scrimCardPressed = Color(0x40000000)
     val skeletonGround = Color(0xFF17171A)
     val skeletonCard = Color(0xFF1E1E21)
+    val skeletonShimmer = Color(0x0AFFFFFF)
 }
 
 object ViptvDimen {
@@ -117,11 +122,14 @@ object ViptvDimen {
     val layoutPhoneNavBottom = 28.dp
     val layoutPhoneMinTarget = 44.dp
     val layoutPhoneBottomClearance = 140.dp
+    val layoutPhoneSheetTop = 150.dp
+    val layoutPhoneSheetBottom = 34.dp
     val layoutDesktopTitlebar = 40.dp
     val layoutDesktopRail = 84.dp
     val layoutDesktopDialogWidth = 460.dp
     val layoutDesktopDrawerWidth = 460.dp
     val layoutDesktopPopupWidth = 340.dp
+    val layoutDesktopPopoverWidth = 260.dp
     val layoutTvSafeX = 96.dp
     val layoutTvSafeY = 54.dp
     val layoutTvRailCollapsed = 144.dp
@@ -291,7 +299,25 @@ object ViptvDimen {
     val sizeSourceRowPhone = 76.dp
     val sizeSourceRowDesktop = 68.dp
     val sizeSourceRowTv = 104.dp
+    val sizeDividerPhone = 24.dp
+    val sizeDividerDesktop = 28.dp
+    val sizeDividerTv = 32.dp
+    val sizeBorderFocus = 1.5.dp
+    val sizeBorderStrong = 2.dp
+    val sizeBorderTvStrong = 3.dp
+    val sizeBlurGlass = 20.dp
+    val sizeBlurNotice = 16.dp
+    val sizeBlurBadge = 12.dp
+    val sizeTimelineHeight = 20.dp
+    val sizeTimelineKnob = 14.dp
+    val sizeTimelineMarker = 12.dp
+    val sizeTimelineBubble = 26.dp
+    val sizeTimelineTvHeight = 32.dp
+    val sizeTimelineTvTrackFocus = 10.dp
+    val sizeTimelineTvKnob = 32.dp
+    val sizeTimelineTvBubble = 56.dp
     val focusTvCaptionShift = 8.dp
+    val focusTvCaptionShiftProfile = 10.dp
 }
 
 data class ViptvTypeRole(val display: Boolean, val size: Float, val weight: FontWeight, val lineHeight: Float, val letterSpacingEm: Float)
@@ -325,6 +351,7 @@ object ViptvType {
     val desktopEyebrow = ViptvTypeRole(display = false, size = 12f, weight = FontWeight(700), lineHeight = 1.2f, letterSpacingEm = 0.06f)
     val desktopRailLabel = ViptvTypeRole(display = false, size = 11f, weight = FontWeight(600), lineHeight = 1f, letterSpacingEm = 0f)
     val desktopEmptyTitle = ViptvTypeRole(display = true, size = 26f, weight = FontWeight(700), lineHeight = 1.2f, letterSpacingEm = -0.01f)
+    val desktopMonogram = ViptvTypeRole(display = true, size = 30f, weight = FontWeight(800), lineHeight = 1f, letterSpacingEm = -0.02f)
     val tvScreenTitle = ViptvTypeRole(display = true, size = 56f, weight = FontWeight(700), lineHeight = 1.05f, letterSpacingEm = -0.02f)
     val tvPanelTitle = ViptvTypeRole(display = true, size = 44f, weight = FontWeight(700), lineHeight = 1.1f, letterSpacingEm = -0.01f)
     val tvSection = ViptvTypeRole(display = true, size = 32f, weight = FontWeight(650), lineHeight = 1.1f, letterSpacingEm = -0.01f)
@@ -350,4 +377,8 @@ object ViptvMotion {
     const val toastNotice = 5000L
     const val toastError = 4000L
     const val playerNotice = 4000L
+    const val spinner = 800L
+    const val shimmer = 1400L
+    const val pressedScaleRow = 0.99f
+    const val pressedScaleCard = 0.98f
 }
