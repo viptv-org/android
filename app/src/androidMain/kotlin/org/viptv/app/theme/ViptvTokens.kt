@@ -72,6 +72,7 @@ object ViptvColor {
     val fillGlassButton = Color(0x2EFFFFFF)
     val fillGrabber = Color(0xFF45454B)
     val fillIconDiscTv = Color(0x14FFFFFF)
+    val fillCueGlass = Color(0xF2161618)
     val scrimSheet = Color(0x9E000000)
     val scrimDialog = Color(0x8C000000)
     val scrimTvPanel = Color(0x99000000)
@@ -83,6 +84,12 @@ object ViptvColor {
     val skeletonGround = Color(0xFF17171A)
     val skeletonCard = Color(0xFF1E1E21)
     val skeletonShimmer = Color(0x0AFFFFFF)
+    val guideAiring = Color(0xFF26262A)
+    val guideEmpty = Color(0xFF1B1B1E)
+    val guideUpcomingText = Color(0xFFCFCDC8)
+    val guideAiringTv = Color(0x1CFFFFFF)
+    val guideUpcomingTv = Color(0x0BFFFFFF)
+    val guideEmptyTv = Color(0x0DFFFFFF)
 }
 
 object ViptvDimen {
@@ -314,6 +321,7 @@ object ViptvDimen {
     val sizeTileHoverPlayDisc = 48.dp
     val sizeTileSelectedRing = 3.dp
     val sizeTileHoverAction = 36.dp
+    val sizeTilePencilCue = 56.dp
     val sizeSourceRowPhone = 76.dp
     val sizeSourceRowDesktop = 68.dp
     val sizeSourceRowTv = 104.dp
@@ -346,6 +354,10 @@ object ViptvDimen {
     val sizeRadioDot = 10.dp
     val sizeScrollbarTvWidth = 6.dp
     val sizeScrollbarTvThumb = 160.dp
+    val sizeGuideBlockDesktop = 54.dp
+    val sizeGuideBlockTv = 88.dp
+    val sizeGuideBlockBar = 3.dp
+    val sizeGuideBlockBarTv = 5.dp
     val focusTvCaptionShift = 8.dp
     val focusTvCaptionShiftProfile = 10.dp
 }
