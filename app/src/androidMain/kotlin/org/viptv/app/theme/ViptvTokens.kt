@@ -69,6 +69,9 @@ object ViptvColor {
     val fillDot = Color(0xFF3A3A3F)
     val fillDotOverArt = Color(0x73FFFFFF)
     val fillTvSwitchOff = Color(0x33FFFFFF)
+    val fillGlassButton = Color(0x2EFFFFFF)
+    val fillGrabber = Color(0xFF45454B)
+    val fillIconDiscTv = Color(0x14FFFFFF)
     val scrimSheet = Color(0x9E000000)
     val scrimDialog = Color(0x8C000000)
     val scrimTvPanel = Color(0x99000000)
@@ -76,6 +79,7 @@ object ViptvColor {
     val scrimTvFullscreen = Color(0xF00B0B0C)
     val scrimCardHover = Color(0x61000000)
     val scrimCardPressed = Color(0x40000000)
+    val scrimCardActions = Color(0xD9000000)
     val skeletonGround = Color(0xFF17171A)
     val skeletonCard = Color(0xFF1E1E21)
     val skeletonShimmer = Color(0x0AFFFFFF)
@@ -138,6 +142,10 @@ object ViptvDimen {
     val layoutTvRowGap = 36.dp
     val layoutTvHeadingToRow = 22.dp
     val layoutTvArtToCaption = 16.dp
+    val layoutTvPanelPadTop = 64.dp
+    val layoutTvPanelPadRight = 96.dp
+    val layoutTvPanelPadBottom = 120.dp
+    val layoutTvPanelPadLeft = 64.dp
     val sizeButtonPhone = 54.dp
     val sizeButtonPhoneDetail = 58.dp
     val sizeButtonDesktop = 48.dp
@@ -180,6 +188,14 @@ object ViptvDimen {
     val sizeIconTvRound = 30.dp
     val sizeIconSmall = 16.dp
     val sizeIconAlert = 15.dp
+    val sizeIconXs = 14.dp
+    val sizeIconN2xs = 12.dp
+    val sizeIconLarge = 24.dp
+    val sizeIconTvLarge = 36.dp
+    val sizeIconTvSmall = 26.dp
+    val sizeIconTvXs = 20.dp
+    val sizeIconAlertTv = 24.dp
+    val sizeIconBannerTv = 34.dp
     val sizeSwitchWidth = 52.dp
     val sizeSwitchHeight = 32.dp
     val sizeSwitchKnob = 26.dp
@@ -235,6 +251,7 @@ object ViptvDimen {
     val sizeCaretWidth = 2.dp
     val sizeCaretHeight = 20.dp
     val sizeCaretTvWidth = 3.dp
+    val sizeCaretTvHeight = 34.dp
     val sizeKeyTv = 64.dp
     val sizeKeyTvRadius = 14.dp
     val sizeKeyTvKeypad = 80.dp
@@ -296,6 +313,7 @@ object ViptvDimen {
     val sizeTilePlayDisc = 44.dp
     val sizeTileHoverPlayDisc = 48.dp
     val sizeTileSelectedRing = 3.dp
+    val sizeTileHoverAction = 36.dp
     val sizeSourceRowPhone = 76.dp
     val sizeSourceRowDesktop = 68.dp
     val sizeSourceRowTv = 104.dp
@@ -316,6 +334,18 @@ object ViptvDimen {
     val sizeTimelineTvTrackFocus = 10.dp
     val sizeTimelineTvKnob = 32.dp
     val sizeTimelineTvBubble = 56.dp
+    val sizeBadgePhone = 26.dp
+    val sizeBadgeDesktop = 22.dp
+    val sizeBadgeTv = 32.dp
+    val sizeBadgeGlass = 22.dp
+    val sizeBadgeFeatured = 28.dp
+    val sizeBadgePill = 24.dp
+    val sizeBadgeTvPill = 30.dp
+    val sizeTagDefault = 18.dp
+    val sizeTagTv = 26.dp
+    val sizeRadioDot = 10.dp
+    val sizeScrollbarTvWidth = 6.dp
+    val sizeScrollbarTvThumb = 160.dp
     val focusTvCaptionShift = 8.dp
     val focusTvCaptionShiftProfile = 10.dp
 }
@@ -337,6 +367,8 @@ object ViptvType {
     val phoneNavLabel = ViptvTypeRole(display = false, size = 11f, weight = FontWeight(600), lineHeight = 1f, letterSpacingEm = 0.01f)
     val phoneButtonDetail = ViptvTypeRole(display = false, size = 18f, weight = FontWeight(700), lineHeight = 1f, letterSpacingEm = 0f)
     val phoneEmptyTitle = ViptvTypeRole(display = true, size = 22f, weight = FontWeight(700), lineHeight = 1.2f, letterSpacingEm = -0.01f)
+    val phoneDialogTitle = ViptvTypeRole(display = true, size = 24f, weight = FontWeight(700), lineHeight = 1.15f, letterSpacingEm = -0.02f)
+    val phoneGroupLabel = ViptvTypeRole(display = false, size = 12f, weight = FontWeight(700), lineHeight = 1.2f, letterSpacingEm = 0.08f)
     val desktopPageTitle = ViptvTypeRole(display = true, size = 40f, weight = FontWeight(700), lineHeight = 1.05f, letterSpacingEm = -0.02f)
     val desktopHeroTitle = ViptvTypeRole(display = true, size = 30f, weight = FontWeight(800), lineHeight = 1.05f, letterSpacingEm = -0.02f)
     val desktopDialogTitle = ViptvTypeRole(display = true, size = 24f, weight = FontWeight(700), lineHeight = 1.2f, letterSpacingEm = -0.01f)
@@ -352,6 +384,8 @@ object ViptvType {
     val desktopRailLabel = ViptvTypeRole(display = false, size = 11f, weight = FontWeight(600), lineHeight = 1f, letterSpacingEm = 0f)
     val desktopEmptyTitle = ViptvTypeRole(display = true, size = 26f, weight = FontWeight(700), lineHeight = 1.2f, letterSpacingEm = -0.01f)
     val desktopMonogram = ViptvTypeRole(display = true, size = 30f, weight = FontWeight(800), lineHeight = 1f, letterSpacingEm = -0.02f)
+    val desktopNavLabel = ViptvTypeRole(display = false, size = 11f, weight = FontWeight(700), lineHeight = 1.2f, letterSpacingEm = 0.08f)
+    val desktopKeycap = ViptvTypeRole(display = false, size = 11f, weight = FontWeight(600), lineHeight = 1f, letterSpacingEm = 0f)
     val tvScreenTitle = ViptvTypeRole(display = true, size = 56f, weight = FontWeight(700), lineHeight = 1.05f, letterSpacingEm = -0.02f)
     val tvPanelTitle = ViptvTypeRole(display = true, size = 44f, weight = FontWeight(700), lineHeight = 1.1f, letterSpacingEm = -0.01f)
     val tvSection = ViptvTypeRole(display = true, size = 32f, weight = FontWeight(650), lineHeight = 1.1f, letterSpacingEm = -0.01f)
@@ -369,6 +403,9 @@ object ViptvType {
     val tvFieldLarge = ViptvTypeRole(display = false, size = 34f, weight = FontWeight(600), lineHeight = 1.2f, letterSpacingEm = 0f)
     val tvEntry = ViptvTypeRole(display = false, size = 38f, weight = FontWeight(600), lineHeight = 1.2f, letterSpacingEm = 0f)
     val tvStatus = ViptvTypeRole(display = false, size = 20f, weight = FontWeight(700), lineHeight = 1.2f, letterSpacingEm = 0.1f)
+    val tvKeycap = ViptvTypeRole(display = false, size = 16f, weight = FontWeight(700), lineHeight = 1f, letterSpacingEm = 0f)
+    val tvListRow = ViptvTypeRole(display = false, size = 26f, weight = FontWeight(600), lineHeight = 1.3f, letterSpacingEm = 0f)
+    val tvDescriptionTitle = ViptvTypeRole(display = true, size = 40f, weight = FontWeight(700), lineHeight = 1.15f, letterSpacingEm = 0f)
 }
 
 object ViptvMotion {
