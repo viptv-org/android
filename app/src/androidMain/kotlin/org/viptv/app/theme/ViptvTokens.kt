@@ -116,6 +116,7 @@ object ViptvDimen {
     val sizeProgressPhone = 4.dp
     val sizeProgressDesktop = 4.dp
     val sizeProgressTv = 6.dp
+    val focusTvCaptionShift = 8.dp
 }
 
 data class ViptvTypeRole(val display: Boolean, val size: Float, val weight: FontWeight, val lineHeight: Float, val letterSpacingEm: Float)
@@ -161,6 +162,7 @@ object ViptvType {
 }
 
 object ViptvMotion {
+    const val focus = 150L
     const val pressedScale = 0.97f
     const val toastNotice = 5000L
     const val toastError = 4000L
