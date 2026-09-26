@@ -1,3 +1,19 @@
+# TV emulator desktop input correction — 2026-09-26
+
+The interactive TV AVD inherited `hw.keyboard=no` and `hw.screen=no-touch`
+from its device preset. ADB-injected D-pad tests bypassed those restrictions,
+so the earlier app-focus evidence did not qualify computer-keyboard or mouse
+input. The dedicated AVD now enables its keyboard, disables keyboard-lid
+emulation and exposes a multi-touch screen, retaining its TV image and D-pad.
+The cold restart preserved the real-server sign-in; the phone AVD was unchanged.
+
+Checks through the actual emulator windows, against the real VIPTV server:
+computer Right moved focus from Resume to Details; an actual mouse click opened
+title details; Extended Controls Back returned to Home and its Right button
+moved focus. This correction changes local emulator configuration, not the APK
+or shared product policy. The required configuration and input-path acceptance
+are now documented in `qualification/README.md`.
+
 # Native phone and TV design conversion — 2026-09-26
 
 AND-035 replaces the old Roku UI for Android. `DESIGN_REF` is

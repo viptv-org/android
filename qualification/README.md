@@ -13,6 +13,30 @@ adb -s emulator-5570 shell wm size 780x1688
 adb -s emulator-5570 shell wm density 320
 ```
 
+## Desktop keyboard, mouse and remote input
+
+The `tv_1080p` device preset can create an AVD with `hw.keyboard=no` and
+`hw.screen=no-touch`. That configuration rejects computer-keyboard input and
+mouse clicks even though `adb shell input` can still move the app's focus.
+For the dedicated interactive `viptv-design-tv` AVD, stop that emulator and set
+these entries in `~/.android/avd/viptv-design-tv.avd/config.ini`, then cold boot:
+
+```ini
+hw.keyboard=yes
+hw.keyboard.lid=no
+hw.screen=multi-touch
+hw.dPad=yes
+```
+
+Keep the television system image/UI mode. Do not edit the generated
+`hardware-qemu.ini`, wipe the AVD, or change an unrelated device. This allows
+mouse exploration while retaining the TV layout and remote navigation.
+
+Acceptance must include actual input through the emulator window: arrows and
+Enter, a mouse click on a visible control, and the Extended Controls D-pad.
+ADB-injected keys are useful for repeatable app tests but do not qualify host
+input forwarding. Check that sign-in survives the configuration restart.
+
 ## HTTPS fixtures and APK
 
 ```sh
