@@ -1,3 +1,16 @@
+# Native direct playback and phone sign-in — 2026-09-26
+
+AND-036 adds phone username/password sign-in with optional pairing, original-URL Media3 playback, source progress/errors/cancellation, provider identity filters, stateful My List actions and corrected native insets/TV hero behavior. Core is `2cfd963e5cf9178d93e8bbb7462bcccb92b152f3`; design is `fb7e662165da44a917504da23a73bf826f9e3a9c`.
+
+- Host and all three native ABI builds passed. Library/app suites passed **96 tests** (28 + 68). Final APK assembly and lint passed; 61 advisory warnings remain, with the existing three generated UniFFI baseline entries. Core/design integrity checks passed.
+- An isolated API 36 phone signed into the real Rust server using a native password form, selected its profile, displayed both configured addon provider groups, and changed the hero's library state immediately.
+- A 90-second H264/AAC original MP4 decoded through Media3 with required Cookie, User-Agent and Referer headers. The native player showed direct delivery and the full duration. Scrubbing reached the corresponding decoded frame while paused. Excluding the slider from Android's edge Back gesture fixed scrubbing from the start of the track.
+- Explicit exit released native audio and the backend lease. Backgrounding active playback and allowing the activity to stop released audio and returned to title details on foreground. Slow source selection displayed Opening source immediately; Back prevented late playback and left zero active sessions. An actual source HTTP 403 appeared in recovery instead of a generic failure.
+- Real-server phone/TV emulator updates retained their sessions. Their DNS resolver had become unreachable; restarting with explicit host-network DNS fixed connectivity without clearing data. The normal APK contains no fixture CA.
+- TV remote Down from the hero focused Continue Watching with its heading unchanged at y=700; the hero label remained at y=150. Down to the following shelf scrolled. Up to Continue Watching and then hero controls restored the full hero at those original bounds. Artwork scrolls with the hero. The TV library icon changed to checked immediately, and the temporary favorite was removed after verification.
+
+Private screenshots remain in ignored qualification/artifacts. The isolated MP4 establishes native direct decoding, seek and lifecycle behavior, not every provider/codec/HDR/DRM combination. Physical TV/phone, PiP and alternate subtitle rendering are not newly qualified by this pass. Backend production and server GPU evidence are recorded in the owning deployment notes.
+
 # TV emulator desktop input correction — 2026-09-26
 
 The interactive TV AVD inherited `hw.keyboard=no` and `hw.screen=no-touch`

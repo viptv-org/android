@@ -40,6 +40,8 @@ private enum class TrackMenu { Audio, Subtitles }
     val tv = LocalTv.current
     val playback by controller.player.state.collectAsState()
     val videoTracks by controller.player.videoTracks.collectAsState()
+    val nativeAudio by controller.player.audioTracks.collectAsState()
+    val nativeSubtitles by controller.player.subtitleTracks.collectAsState()
     val app by controller.state.collectAsState()
     val scope = rememberCoroutineScope()
     val activity = LocalActivity.current
@@ -85,9 +87,10 @@ private enum class TrackMenu { Audio, Subtitles }
         controller.setPlayerMenuOpen(menu != null || info)
         if (tv && menu == null && !info) { withFrameNanos {}; runCatching { focus.requestFocus() } }
     }
-    DisposableEffect(controller) {
+    DisposableEffect(controller, media.id) {
         onDispose {
             seekJob?.cancel(); controller.setPlayerMenuOpen(false)
+            if (activity?.isChangingConfigurations != true) controller.playerSurfaceDisposed(media)
             if (!tv && activity?.isChangingConfigurations == false) {
                 activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 WindowCompat.getInsetsController(activity.window, activity.window.decorView).show(WindowInsetsCompat.Type.systemBars())
@@ -172,7 +175,8 @@ private enum class TrackMenu { Audio, Subtitles }
                         onValueChange = { value -> controller.previewSeek((duration * value).toLong() - (controller.state.value.seekPreview?.targetMillis ?: controller.absolutePositionMillis())) },
                         onValueChangeFinished = { controller.commitSeek() },
                         enabled = duration > 0 && playback.timeline?.canSeek == true,
-                        modifier = Modifier.height(32.dp),
+                        // Scrubbing from the start/end must not trigger Android's edge Back gesture.
+                        modifier = Modifier.height(32.dp).systemGestureExclusion(),
                         thumb = { Box(Modifier.size(12.dp).clip(CircleShape).background(C.textPrimary)) },
                         track = { ProgressLine(if (duration > 0) displayPosition.toFloat() / duration else 0f) },
                         colors = SliderDefaults.colors(thumbColor = C.textPrimary, activeTrackColor = LocalAccent.current, inactiveTrackColor = C.lineStrong))
@@ -204,7 +208,11 @@ private enum class TrackMenu { Audio, Subtitles }
             }
         }
         if (buffering) CircularProgressIndicator(Modifier.align(Alignment.Center).size(measure(64, 44)), color = LocalAccent.current)
-        menu?.let { kind -> TrackPanel(kind, if (kind == TrackMenu.Audio) serverTracks.audio else serverTracks.subtitles, kind == TrackMenu.Subtitles && serverTracks.subtitlesSupported,
+        val nativeTracks = if (app.playbackDeliveryMode == "direct") PlaybackTrackChoices(
+            nativeAudio.mapIndexed { index, track -> PlaybackTrack(index, language = track.language, title = track.label, selected = track.id == playback.selectedAudioTrackId, supported = true, selectable = true, nativeId = track.id) },
+            nativeSubtitles.mapIndexed { index, track -> PlaybackTrack(index, language = track.language, title = track.label, selected = track.id == playback.selectedSubtitleTrackId, supported = true, selectable = true, nativeId = track.id) },
+            subtitlesSupported = true) else serverTracks
+        menu?.let { kind -> TrackPanel(kind, if (kind == TrackMenu.Audio) nativeTracks.audio else nativeTracks.subtitles, kind == TrackMenu.Subtitles && nativeTracks.subtitlesSupported,
             onChoose = { track -> if (kind == TrackMenu.Audio && track != null) controller.selectAudioTrack(track) else controller.selectSubtitleTrack(track); menu = null },
             onClose = { menu = null }) }
         if (info) FullInfo("Playback info", "Decoder · Media3\nDelivery · " + app.playbackDeliveryMode + "\nMedia · " + (playback.timeline?.kind?.name ?: "Unknown"), { info = false })

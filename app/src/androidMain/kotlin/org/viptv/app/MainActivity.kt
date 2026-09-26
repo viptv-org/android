@@ -35,6 +35,11 @@ import kotlinx.coroutines.delay
 import org.viptv.app.theme.ViptvColor as C
 
 class MainActivity : ComponentActivity() {
+    private lateinit var model: ViptvModel
+    override fun onStop() {
+        if (::model.isInitialized && !isChangingConfigurations && !isInPictureInPictureMode) model.controller.stopForBackground()
+        super.onStop()
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (BuildConfig.DEBUG) intent.getStringExtra("preview-origin")?.let { value ->
@@ -51,7 +56,7 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightNavigationBars = false
             if (television) hide(WindowInsetsCompat.Type.systemBars())
         }
-        val model = ViewModelProvider(this)[ViptvModel::class.java]
+        model = ViewModelProvider(this)[ViptvModel::class.java]
         setContent { CompositionLocalProvider(LocalTv provides television) { ViptvApplication(model) } }
     }
 }
@@ -142,9 +147,9 @@ private fun Route.screenKey(): String = when (this) {
             if (!tv && tab) PhoneNavigation(route, controller, Modifier.align(Alignment.BottomCenter))
             if (tv && browse) TelevisionRail(state, controller, railOpen, { railOpen = it }, rail, initial, focusMemory)
             if (state.loading && route !is Route.Player && route != Route.Pairing) {
-                CircularProgressIndicator(Modifier.align(Alignment.TopEnd).padding(measure(40, 16)).size(measure(32, 22)), color = LocalAccent.current, strokeWidth = measure(4, 2))
+                CircularProgressIndicator(Modifier.align(Alignment.TopEnd).then(if (tv) Modifier else Modifier.statusBarsPadding()).padding(measure(40, 16)).size(measure(32, 22)), color = LocalAccent.current, strokeWidth = measure(4, 2))
             }
-            state.message?.let { message ->
+            state.message?.takeUnless { route == Route.Pairing && !tv && !state.pairingRequested }?.let { message ->
                 var visible by remember(message) { mutableStateOf(true) }
                 LaunchedEffect(message) { delay(5000); visible = false }
                 if (visible) Box(Modifier.align(if (tv) Alignment.TopCenter else Alignment.BottomCenter)

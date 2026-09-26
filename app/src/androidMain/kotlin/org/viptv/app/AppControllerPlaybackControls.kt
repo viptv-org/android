@@ -14,7 +14,7 @@ internal fun AppController.absolutePositionMillis(): Long {
         candidate
     }
 }
-internal fun AppController.titleDurationMillis(): Long? = playbackTitleDurationMillis ?: player.state.value.timeline?.durationMillis
+internal fun AppController.titleDurationMillis(): Long? = if (_state.value.playbackDeliveryMode == "direct") player.state.value.timeline?.durationMillis ?: playbackTitleDurationMillis else playbackTitleDurationMillis ?: player.state.value.timeline?.durationMillis
 
 /** Pause captures title time before Media3's rolling window can advance. */
 internal fun AppController.pausePlayback() {
@@ -61,7 +61,7 @@ internal fun AppController.previewSeek(deltaMillis: Long) {
     val playback = player.state.value
     val timeline = playback.timeline ?: return
     val base = _state.value.seekPreview?.targetMillis ?: absolutePositionMillis()
-    val range = timeline.seekableRange
+    val range = timeline.seekableRange.takeUnless { SeekCommitPolicy.usesManagedReplacement(_state.value.playbackDeliveryMode) }
     val rangeStart = range?.startMillis?.let { PlaybackTimelinePolicy.absolutePositionMillis(it, playbackTitleOffsetMillis) }
     val rangeEnd = range?.endMillis?.let { PlaybackTimelinePolicy.absolutePositionMillis(it, playbackTitleOffsetMillis) }
     SeekPolicy.target(base, deltaMillis, titleDurationMillis(), rangeStart, rangeEnd)?.let { target ->
@@ -76,7 +76,7 @@ internal fun AppController.commitSeek() {
         if (player.seekTo(PlaybackTimelinePolicy.segmentPositionMillis(target, playbackTitleOffsetMillis))) {
             _state.value = _state.value.copy(seekPreview = null)
             showPlayerChrome()
-        }
+        } else _state.value = _state.value.copy(seekPreview = null, message = "This source cannot seek to that position.")
         return
     }
     val wasPlaying = player.state.value.isPlaying
@@ -102,6 +102,7 @@ internal fun AppController.cancelSeek() { _state.value = _state.value.copy(seekP
 /** Server-managed selection replaces the playback session; native track IDs are output-local. */
 internal fun AppController.selectAudioTrack(track: PlaybackTrack) {
     if (!track.selectable || !track.supported) return
+    track.nativeId?.let { player.selectAudioTrack(it); return }
     val route = _state.value.route as? Route.Player ?: return
     val priorAudio = selectedAudioTrackIndex
     selectedAudioTrackIndex = track.inputIndex
@@ -110,6 +111,7 @@ internal fun AppController.selectAudioTrack(track: PlaybackTrack) {
 
 internal fun AppController.selectSubtitleTrack(track: PlaybackTrack?) {
     val route = _state.value.route as? Route.Player ?: return
+    if (_state.value.playbackDeliveryMode == "direct") { player.selectSubtitleTrack(track?.nativeId); return }
     if (track != null && (!track.selectable || !track.supported)) return
     val priorSubtitle = selectedSubtitleTrackIndex
     val priorSubtitlesOff = subtitlesOff

@@ -1,6 +1,7 @@
 package org.viptv.app
 
 interface BackendGateway {
+    suspend fun signIn(username: String, password: String, deviceName: String): DeviceSession
     suspend fun startDevicePairing(deviceName: String): DeviceCode
     suspend fun exchangeDeviceCode(code: String): DevicePollResult
     suspend fun refresh(refreshToken: String): DeviceSession

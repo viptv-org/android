@@ -10,7 +10,7 @@ import time
 import xml.etree.ElementTree as ET
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--serial", choices=["emulator-5570", "emulator-5572"], default="emulator-5570")
+parser.add_argument("--serial", choices=["emulator-5570", "emulator-5572", "emulator-5574"], default="emulator-5570")
 parser.add_argument("action", choices=["snapshot", "tap", "key", "swipe", "texts", "wait"])
 parser.add_argument("value", nargs="*", default=[])
 args = parser.parse_args()

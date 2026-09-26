@@ -12,6 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -33,7 +35,6 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
 @Composable internal fun HomeScreen(state: AppState, controller: AppController) {
     val tv = LocalTv.current
     val list = rememberLazyListState()
-    val heroVisible by remember { derivedStateOf { list.firstVisibleItemIndex == 0 } }
     val shelves = state.shelves.filter { it.items.isNotEmpty() }
     val queue = shelves.firstOrNull { it.isQueueShelf }
     val firstShelf = shelves.firstOrNull()
@@ -41,22 +42,27 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
     val hero = if (tv && state.homeFocus.shelfIndex == 0) firstShelf?.items?.firstOrNull { HomeFocusPolicy.mediaKey(it) == state.homeFocus.mediaKey } ?: featured.firstOrNull() else featured.firstOrNull()
     val initial = LocalContentFocus.current
     val rail = LocalRailFocus.current
+    LaunchedEffect(state.homeFocus.surface, state.homeFocus.shelfIndex, tv) {
+        if (tv && (state.homeFocus.surface == HomeFocusSurface.Hero || state.homeFocus.shelfIndex == 0)) list.scrollToItem(0)
+    }
     LaunchedEffect(state.homeFocus.restoreRequest, tv) {
         if (tv && state.homeFocus.mediaKey != null && state.homeFocus.surface == HomeFocusSurface.Card) {
             val row = shelves.indexOfFirst { it.id == state.homeFocus.shelfTitle }
-            if (row >= 0) list.scrollToItem(row + 1)
+            if (row >= 0) list.scrollToItem(if (row == 0) 0 else row + 1)
         }
     }
     Box(Modifier.fillMaxSize()) {
-        if (tv && heroVisible) hero?.let { HeroBackdrop(it) }
-        LazyColumn(state = list, modifier = Modifier.fillMaxSize().padding(bottom = measure(54, 0)).onPreviewKeyEvent {
+        LazyColumn(state = list, modifier = Modifier.fillMaxSize().onPreviewKeyEvent {
             if (it.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) controller.recordHomeDirectionalInput()
             false
-        }, contentPadding = PaddingValues(start = measure(192, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(0, 164)),
+        }, contentPadding = PaddingValues(start = measure(0, 16), end = measure(0, 16), top = 0.dp, bottom = measure(54, 164)),
             verticalArrangement = Arrangement.spacedBy(measure(36, 20))) {
             item(key = "featured") {
                 if (tv) {
-                    if (hero != null) TelevisionHero(hero, firstShelf?.isQueueShelf == true, state, controller, initial, rail)
+                    if (hero != null) Box(Modifier.fillMaxWidth().height(664.dp)) {
+                        HeroBackdrop(hero)
+                        Box(Modifier.padding(start = 192.dp, end = 96.dp, top = 54.dp)) { TelevisionHero(hero, firstShelf?.isQueueShelf == true, state, controller, initial, rail) }
+                    }
                     else EmptyState(if (state.homeLoading) "Starting VIPTV…" else "Your library is ready", "Browse Discover to find something to watch.", "home", Modifier.height(540.dp))
                 } else {
                     Row(Modifier.fillMaxWidth().padding(bottom = 20.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -68,7 +74,7 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
                     if (featured.isEmpty()) EmptyState(if (state.homeLoading) "Finding your next watch" else "Your library is empty", "Browse Discover to find movies and series.", "home")
                     else {
                         val pager = rememberPagerState(pageCount = { featured.size })
-                        HorizontalPager(pager, pageSpacing = 16.dp, key = { featured[it].id }) { index -> PhoneHero(featured[index], controller) }
+                        HorizontalPager(pager, pageSpacing = 16.dp, key = { featured[it].id }) { index -> PhoneHero(featured[index], state, controller) }
                         if (featured.size > 1) Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.Center) {
                             repeat(featured.size) { index -> Box(Modifier.padding(horizontal = 3.dp).size(if (pager.currentPage == index) 18.dp else 6.dp, 6.dp).clip(CircleShape).background(if (pager.currentPage == index) C.textPrimary else C.fillDot)) }
                         }
@@ -76,7 +82,7 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
                 }
             }
             itemsIndexed(shelves, key = { _, shelf -> shelf.id }) { row, shelf ->
-                ShelfRow(shelf, row, state, controller)
+                Box(Modifier.padding(start = measure(192, 0), end = measure(96, 0))) { ShelfRow(shelf, row, state, controller) }
             }
         }
     }
@@ -86,6 +92,7 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
     val presentation = remember(media) { CoreModels.presentation(media) }
     val ground = LocalGround.current
     Box(Modifier.fillMaxWidth().height(950.dp)) {
+        Artwork(presentation.heroImage, null, Modifier.fillMaxSize().blur(72.dp).alpha(.6f))
         Artwork(presentation.heroImage, null, Modifier.align(Alignment.TopEnd).width(1120.dp).height(720.dp))
         Box(Modifier.matchParentSize().background(Brush.horizontalGradient(listOf(ground, ground.copy(alpha = .92f), Color.Transparent))))
         Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Transparent, ground), startY = 440f)))
@@ -94,7 +101,7 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
 
 @Composable private fun TelevisionHero(media: Media, queue: Boolean, state: AppState, controller: AppController, initial: FocusRequester, rail: FocusRequester) {
     val hero = remember(media) { CoreModels.presentation(media) }
-    val saved = state.favorites.any { it.id == media.id }
+    val saved = state.favorites.any { it.id == media.id && it.type == media.type }
     LaunchedEffect(media.id) { if (state.homeFocus.mediaKey == null || state.homeFocus.surface == HomeFocusSurface.Hero) { withFrameNanos {}; runCatching { initial.requestFocus() } } }
     Box(Modifier.fillMaxWidth().height(610.dp)) {
         VText(if (queue) "CONTINUE WATCHING" else if (media.type == "live") "LIVE NOW" else "FEATURED", 20, Modifier.offset(y = 96.dp), C.textSecondary, bold = true)
@@ -107,7 +114,7 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
         }
         VText(mediaFacts(media), 22, Modifier.offset(y = 336.dp).width(950.dp), C.textSecondary, lines = 1)
         VText(media.description.orEmpty(), 26, Modifier.offset(y = 394.dp).width(760.dp), C.textBody, lines = 2)
-        Row(Modifier.offset(y = 496.dp), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+        Row(Modifier.offset(y = 496.dp).onFocusChanged { if (it.hasFocus) controller.recordHomeFocus(0, state.shelves.firstOrNull()?.id.orEmpty(), media, HomeFocusSurface.Hero) }.focusGroup(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             AppButton(hero.primaryActionLabel, { controller.activateHero(media, queue) }, Modifier.width(228.dp).focusRequester(initial).focusProperties { left = rail },
                 "play", onHold = { controller.chooseSources(media, origin = SourceReturn.Home) },
                 onFocused = { controller.recordHomeFocus(0, state.shelves.firstOrNull()?.id.orEmpty(), media, HomeFocusSurface.Hero) })
@@ -117,7 +124,8 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
     }
 }
 
-@Composable private fun PhoneHero(media: Media, controller: AppController) {
+@Composable private fun PhoneHero(media: Media, state: AppState, controller: AppController) {
+    val saved = state.favorites.any { it.id == media.id && it.type == media.type }
     val hero = remember(media) { CoreModels.presentation(media) }
     Box(Modifier.fillMaxWidth().height(410.dp).clip(RoundedCornerShape(28.dp)).background(C.surfaceN1)) {
         Artwork(hero.heroImage, media.name, Modifier.fillMaxWidth().height(270.dp))
@@ -132,7 +140,7 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
             VText(media.description.orEmpty(), 15, color = C.textBody, lines = 2)
             Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppButton(hero.primaryActionLabel, { controller.activateHero(media, false) }, Modifier.weight(1f), "play", primary = true)
-                AppIconButton("plus", "Add to My List", { controller.toggleMyList(media) })
+                AppIconButton(if (saved) "check" else "plus", if (saved) "Remove from My List" else "Add to My List", { controller.toggleMyList(media) })
             }
         }
     }

@@ -67,3 +67,5 @@ Snapshots include PNG and accessibility XML under ignored `qualification/artifac
 The media fixture is a 12-second local H.264/AAC HLS test pattern. A decoded frame proves native surface/codec integration for that fixture; server-reported alternate tracks and live metadata are synthetic. It does not qualify real live sources, HDR, DRM, subtitles rendering, hardware decoders, managed remux/transcode or store delivery. Record those separately in `TESTING.md`.
 
 When done, stop playback and terminate only the owned fixture processes and test emulator serials. Return any changed font scale to 1.0. No screenshots or secrets belong in Git.
+
+When an emulator reports unknown-host errors while the host resolves the same public API, start it with explicit reachable DNS servers (`-dns-server`, using the host network's configured resolvers). Preserve its AVD data and origin. The API 36 phone/TV acceptance restart retained their real-server sessions; do not clear credentials to repair DNS.

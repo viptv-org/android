@@ -175,7 +175,7 @@ fn playback_urls_are_capability_paths_or_original_sources() {
     let direct: Value = serde_json::from_str(
         &normalize(
             "playback".into(),
-            json!({"id":"s","url":"https://provider.test/stream.mkv","authorization":{"cookie":"session=1","user_agent":"VIPTV Desktop"}}).to_string(),
+            json!({"id":"s","url":"https://provider.test/stream.mkv","authorization":{"cookie":"session=1","user_agent":"VIPTV Desktop","headers":{"Referer":"https://provider.test/watch","X-Stream":"opaque","Host":"wrong.test","Bad":"value\\r\\nInjected: yes"}}}).to_string(),
             "https://example.test".into()
         )
         .unwrap(),
@@ -184,6 +184,11 @@ fn playback_urls_are_capability_paths_or_original_sources() {
     assert_eq!(direct["url"], "https://provider.test/stream.mkv");
     assert_eq!(direct["authorization"]["cookie"], "session=1");
     assert_eq!(direct["authorization"]["userAgent"], "VIPTV Desktop");
+    assert_eq!(
+        direct["authorization"]["headers"]["Referer"],
+        "https://provider.test/watch"
+    );
+    assert!(direct["authorization"]["headers"].get("Host").is_none());
     assert_eq!(
         normalize(
             "container".into(),
@@ -448,4 +453,30 @@ fn stream_discovery_requests_and_polling_steps_share_one_policy() {
         normalize("sourcesPollStep".into(), json!({}).to_string(), "".into()).is_err(),
         "a missing poll page is invalid input"
     );
+}
+#[test]
+fn raw_json_deserialization_preserves_all_value_kinds() {
+    use serde::Deserialize;
+    use viptv_core::dto::JsonValue;
+
+    let wire = r#"[null,true,false,-1,18446744073709551615,1.25,"映画 Café 🎬",[],{},[[false,{"id":"x"}]]]"#;
+    let expected = JsonValue::Array(vec![
+        JsonValue::Null,
+        JsonValue::Boolean(true),
+        JsonValue::Boolean(false),
+        JsonValue::Number(-1.0),
+        JsonValue::Number(u64::MAX as f64),
+        JsonValue::Number(1.25),
+        JsonValue::String("映画 Café 🎬".into()),
+        JsonValue::Array(vec![]),
+        JsonValue::Object(Default::default()),
+        JsonValue::Array(vec![JsonValue::Array(vec![
+            JsonValue::Boolean(false),
+            JsonValue::Object([("id".into(), JsonValue::String("x".into()))].into()),
+        ])]),
+    ]);
+    let value: serde_json::Value = serde_json::from_str(wire).unwrap();
+    assert_eq!(serde_json::from_str::<JsonValue>(wire).unwrap(), expected);
+    assert_eq!(JsonValue::deserialize(&value).unwrap(), expected);
+    assert_eq!(JsonValue::deserialize(value).unwrap(), expected);
 }

@@ -78,24 +78,40 @@ internal fun AppController.chooseSources(media: Media, resume: Boolean = false, 
     val previous = _state.value.route
     val returnRoute = (previous as? Route.Sources)?.backRoute ?: previous.takeUnless { it is Route.Player }
     val route = Route.Sources(media, resume, origin, returnRoute)
+    val profile = _state.value.selectedProfile?.id
+    val beforeStart = playbackGeneration
+    fun ownsResults(): Boolean {
+        val active = _state.value.route
+        val item = when (active) { is Route.Sources -> active.media; is Route.Player -> active.media; else -> null }
+        return _state.value.selectedProfile?.id == profile && item != null && item.id == media.id && item.type == media.type
+    }
     sourceDiscovery?.cancel()
     sourceDiscovery = scope.launch {
         if (origin == SourceReturn.Home) detailReturnDestination = Destination.Home
         _state.value = _state.value.copy(route = route, sources = emptyList(), loading = true, sourceLoading = true, message = null)
-        runCatching { gateway.sources(media) { arriving ->
-            val route = _state.value.route
-            if (route is Route.Sources && route.media.type == media.type && route.media.id == media.id) _state.value = _state.value.copy(sources = arriving)
-        } }.onSuccess { discovered ->
-        _state.value = _state.value.copy(sourceLoading = false)
-        val savedIdentity = ResumeIdentity.sourceIdentity(media.sourceAddonId, media.sourceFingerprint)
-        val exact = if (resume) discovered.firstOrNull { ResumeIdentity.sourceIdentity(it) == savedIdentity } else null
-        if (exact != null) start(media, exact, explicitResume = true) else {
-            _state.value = _state.value.copy(
-                route = route, sources = discovered, loading = false,
-                message = when { discovered.isEmpty() -> "No sources found. Choose another title or try again."; resume && savedIdentity == null -> "Choose a source to resume. Your prior source cannot be verified."; resume -> "Your previous source is unavailable. Choose a source."; else -> null },
-            )
+        try {
+            val discovered = gateway.sources(media) { arriving ->
+                if (ownsResults()) _state.value = _state.value.copy(sources = arriving)
+            }
+            if (!ownsResults()) return@launch
+            _state.value = _state.value.copy(sources = discovered, sourceLoading = false,
+                loading = _state.value.preparingSourceId != null)
+            if (_state.value.route !is Route.Sources || playbackGeneration != beforeStart) return@launch
+            val savedIdentity = ResumeIdentity.sourceIdentity(media.sourceAddonId, media.sourceFingerprint)
+            val exact = if (resume) discovered.firstOrNull { ResumeIdentity.sourceIdentity(it) == savedIdentity } else null
+            if (exact != null) start(media, exact, explicitResume = true)
+            else if (discovered.isEmpty() || resume) update(message = when {
+                discovered.isEmpty() -> "No sources found. Choose another title or try again."
+                savedIdentity == null -> "Choose a source to resume. Your prior source cannot be verified."
+                else -> "Your previous source is unavailable. Choose a source."
+            })
+        } catch (error: CancellationException) { throw error }
+        catch (error: Throwable) {
+            if (ownsResults()) {
+                _state.value = _state.value.copy(sourceLoading = false)
+                if (_state.value.route is Route.Sources && _state.value.preparingSourceId == null) fail(error)
+            }
         }
-    }.onFailure { error -> if (error !is CancellationException) { _state.value = _state.value.copy(sourceLoading = false); fail(error) } }
     }
 }
 private fun AppController.sourceOrigin(): SourceReturn = when (_state.value.route) {
@@ -156,7 +172,19 @@ internal fun AppController.installAddon(manifestUrl: String) = scope.launch {
         openSettings()
     }
 }
-internal fun AppController.toggleMyList(media: Media) = scope.launch { guarded("Enter parent PIN") { val saved = gateway.toggleFavorite(requireProfile(), media); _state.value = _state.value.copy(message = if (saved) "Added to My List." else "Removed from My List.") } }
+internal fun AppController.toggleMyList(media: Media) = scope.launch {
+    val profile = requireProfile()
+    guarded("Enter parent PIN") {
+        val saved = gateway.toggleFavorite(profile, media)
+        if (_state.value.selectedProfile?.id == profile) {
+            libraryRevision++
+            val favorites = _state.value.favorites.filterNot { it.id == media.id && it.type == media.type }.let { if (saved) it + media else it }
+            _state.value = _state.value.copy(favorites = favorites,
+                shelves = _state.value.shelves.map { if (it.id == "My List") it.copy(items = favorites) else it },
+                message = if (saved) "Added to My List." else "Removed from My List.")
+        }
+    }
+}
 
 internal fun AppController.correctEpisode(media: Media, watched: Boolean) = scope.launch { guarded("Enter parent PIN") { gateway.correctProgress(requireProfile(), media, if (watched) "watched" else "unwatched"); _state.value = _state.value.copy(message = if (watched) "Marked watched." else "Marked unwatched.") } }
 internal fun AppController.setPreference(preferences: PlaybackPreferences) = scope.launch { guarded("Enter parent PIN") { gateway.savePreferences(requireProfile(), preferences); _state.value = _state.value.copy(preferences = preferences, message = "Applies to your next playback. Manual track choices take priority.") } }

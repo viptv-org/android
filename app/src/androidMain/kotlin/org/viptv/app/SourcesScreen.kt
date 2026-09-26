@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -19,10 +20,11 @@ import org.viptv.app.theme.ViptvColor as C
     var provider by remember(media.id) { mutableStateOf<String?>(null) }
     var quality by remember(media.id) { mutableStateOf<String?>(null) }
     var picker by remember { mutableStateOf(false) }
-    val shown = sources.filter { (provider == null || it.provider == provider) && (quality == null || it.quality == quality) }
+    val groups = remember(sources) { sources.associateWith { SourceDisplayPolicy.providerKey(it) to SourceDisplayPolicy.providerLabel(it) } }
+    val shown = sources.filter { (provider == null || groups[it]?.first == provider) && (quality == null || it.quality == quality) }
     val first = remember(media.id, provider, quality) { FocusRequester() }
     var claimed by remember(media.id, provider, quality) { mutableStateOf(false) }
-    val providerLabels = sources.associate { it.provider to SourceDisplayPolicy.title(it).lineSequence().first() }
+    val providerLabels = groups.values.associate { it.first to it.second }
     Box(Modifier.fillMaxSize()) {
         if (tv) {
             HeroBackdrop(media)
@@ -47,6 +49,7 @@ import org.viptv.app.theme.ViptvColor as C
         else LazyColumn(Modifier.fillMaxWidth().then(if (tv) Modifier.weight(1f) else Modifier.heightIn(max = 440.dp)), verticalArrangement = Arrangement.spacedBy(measure(14, 12)), contentPadding = PaddingValues(4.dp)) {
             itemsIndexed(shown, key = { _, source -> source.id }) { index, source ->
                 var focused by remember(source.id) { mutableStateOf(false) }
+                val opening = state.preparingSourceId == source.id
                 val foreground = if (tv && focused) C.onLight else C.textPrimary
                 Holdable({ controller.start(media, source) }, { controller.requestDialog(DialogKind.SourceDetails, "Source details", source = source) },
                     Modifier.fillMaxWidth().height(measure(104, 86)).then(if (index == 0 && tv) Modifier.focusRequester(first) else Modifier)
@@ -60,14 +63,16 @@ import org.viptv.app.theme.ViptvColor as C
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             if (index == 0) VText("BEST MATCH", if (tv) 18 else 10, color = if (tv && focused) C.textOnLightAccent else LocalAccent.current, bold = true)
                             VText(SourceDisplayPolicy.title(source).replace('\n', ' '), if (tv) 26 else 15, color = foreground, bold = true, lines = 1)
-                            VText(SourceDisplayPolicy.body(source).replace('\n', ' '), if (tv) 20 else 12, color = if (tv && focused) C.textOnLightSecondary else C.textSecondary, lines = 1)
+                            VText(if (opening) "Opening source…" else SourceDisplayPolicy.body(source).replace('\n', ' '), if (tv) 20 else 12, color = if (tv && focused) C.textOnLightSecondary else C.textSecondary, lines = 1)
                         }
-                        if (tv) VIcon("play", color = foreground)
+                        if (opening) CircularProgressIndicator(Modifier.size(measure(28, 24)), color = foreground, strokeWidth = 3.dp)
+                        else if (tv) VIcon("play", color = foreground)
                         else Holdable({ controller.requestDialog(DialogKind.SourceDetails, "Source details", source = source) }, modifier = Modifier.size(44.dp)) { VIcon("more", "Source details", Modifier.size(18.dp)) }
                     }
                 }
             }
         }
+        if (state.preparingSourceId != null) VText("Opening your selected source. Back cancels.", if (tv) 20 else 13, Modifier.padding(top = 12.dp), C.textSecondary)
         if (state.sourceLoading && shown.isNotEmpty()) VText("Still checking sources…", if (tv) 20 else 13, Modifier.padding(top = 12.dp), C.textTertiary)
         LaunchedEffect(shown.isNotEmpty(), picker) {
             if (tv && shown.isNotEmpty() && !claimed && !picker) { withFrameNanos {}; runCatching { first.requestFocus() }; claimed = true }
@@ -122,5 +127,5 @@ import org.viptv.app.theme.ViptvColor as C
             else -> add("Done" to dismiss)
         }
     }
-    ChoiceDialog(dialog.title, options, dismiss)
+    ChoiceDialog(dialog.title, options, dismiss, description = dialog.detail)
 }

@@ -141,6 +141,7 @@ data class PlaybackClientCapabilities(
         .put("hevc_sdr", hevcSdr)
         .put("aac", aac)
         .put("direct_play", directPlay)
+        .put("direct_urls", true)
 }
 
 /** Complete server-owned delivery facts. The controller decides the UX; it never guesses from a URL. */
@@ -158,7 +159,7 @@ data class PlaybackLaunch(
     val audioTracks: List<PlaybackTrack> = emptyList(),
     val subtitleTracks: List<PlaybackTrack> = emptyList(),
     val subtitlesSupported: Boolean = false,
-)
+) { override fun toString() = "PlaybackLaunch(mode=$mode, format=$format, credentials=<redacted>)" }
 
 /** Input-stream track facts: index is server/ffprobe input index, never output order. */
 data class PlaybackTrack(
@@ -170,4 +171,5 @@ data class PlaybackTrack(
     val selected: Boolean = false,
     val supported: Boolean = false,
     val selectable: Boolean = false,
+    val nativeId: String? = null,
 )

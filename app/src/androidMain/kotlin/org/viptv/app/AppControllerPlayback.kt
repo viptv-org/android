@@ -9,11 +9,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 
 internal fun AppController.start(media: Media, source: Source, explicitResume: Boolean = false) {
+    if (_state.value.preparingSourceId != null) return
+    playbackStartJob?.cancel()
     val requestGeneration = ++playbackGeneration
-    scope.launch {
+    _state.value = _state.value.copy(preparingSourceId = source.id, loading = true, message = null)
+    playbackStartJob = scope.launch {
         managedRecoveryKey = null
         managedRecoveryInFlightKey = null
-        sourceDiscovery?.cancel()
         if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
         val started = prepareAndStart(media, source, explicitResume, playWhenReady = true, resetTrackChoices = true, expectedGeneration = requestGeneration)
         if (!started && PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) showPlaybackRecovery(media, source)
@@ -62,7 +64,7 @@ private suspend fun AppController.prepareAndStartLocked(
     val requestedAudio = if (resetTrackChoices) null else selectedAudioTrackIndex
     val requestedSubtitle = if (resetTrackChoices) null else selectedSubtitleTrackIndex
     val requestedSubtitlesOff = if (resetTrackChoices) false else subtitlesOff
-    update(loading = true, message = null)
+    _state.value = _state.value.copy(preparingSourceId = source.id, loading = true, message = null)
     return try {
         val launch = gateway.playback(
             source = source,
@@ -73,8 +75,12 @@ private suspend fun AppController.prepareAndStartLocked(
             subtitlesOff = requestedSubtitlesOff,
         )
         if (!PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) {
-            runCatching { gateway.stopPlayback(launch.sessionId) }
+            discardPreparedLease(launch.sessionId)
             return false
+        }
+        if (launch.mode != "direct") {
+            discardPreparedLease(launch.sessionId)
+            throw GatewayError(409, "This server did not honor native direct playback. Update the server and try again.")
         }
         if (launch.url.isBlank()) {
             if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) update(loading = false, message = "The selected source could not be prepared.")
@@ -84,35 +90,28 @@ private suspend fun AppController.prepareAndStartLocked(
                 player.open(
                     PlaybackSource(
                         launch.url,
+                        mimeType = when (launch.format) { "hls" -> "application/x-mpegURL"; "dash" -> "application/dash+xml"; else -> null },
                         headers = launch.headers,
+                        startPositionMillis = if (launch.live) 0 else launch.positionMillis,
+                        options = org.viptv.video.PlaybackOptions(
+                            preferredAudioLanguage = _state.value.preferences.audioLanguage.takeIf { it.isNotBlank() },
+                            preferredSubtitleLanguage = _state.value.preferences.subtitleLanguage.takeIf { it.isNotBlank() },
+                            subtitlesEnabled = _state.value.preferences.subtitlesEnabled),
                         title = media.name,
                         kindHint = if (launch.live || media.type == "live") PlaybackKind.Live else PlaybackKind.OnDemand,
                     ),
                     playWhenReady = playWhenReady,
                 )
             } catch (error: Throwable) {
-                runCatching { gateway.stopPlayback(launch.sessionId) }
+                discardPreparedLease(launch.sessionId)
                 // Opening crossed the native replacement boundary; the outgoing
                 // lease can no longer be assumed healthy.
-                if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) retirePlaybackSession()
+                if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) { player.stop(); retirePlaybackSession() }
                 throw error
             }
             if (!PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) {
                 player.stop()
-                runCatching { gateway.stopPlayback(launch.sessionId) }
-                return false
-            }
-            // Direct delivery uses the title clock locally. Server-managed
-            // remux/transcode delivery starts a new segment at launch.position.
-            if (!launch.live && !SeekCommitPolicy.usesManagedReplacement(launch.mode) && launch.positionMillis > 0L && !player.seekTo(launch.positionMillis)) {
-                player.stop()
-                runCatching { gateway.stopPlayback(launch.sessionId) }
-                // Direct seek failure occurs after native replacement, unlike a
-                // gateway rejection above; retire the displaced lease too.
-                if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) {
-                    retirePlaybackSession()
-                    update(loading = false, message = "This source cannot resume at the requested position. Choose another source.")
-                }
+                discardPreparedLease(launch.sessionId)
                 return false
             }
             playbackTitleOffsetMillis = PlaybackTimelinePolicy.titleOffsetMillis(launch.mode, launch.positionMillis)
@@ -142,6 +141,7 @@ private suspend fun AppController.prepareAndStartLocked(
                 playbackDeliveryMode = launch.mode,
                 dialog = null,
                 loading = false,
+                preparingSourceId = null,
             )
             continuationRestore = null
             startProgressPersistence(playbackMedia)
@@ -152,13 +152,16 @@ private suspend fun AppController.prepareAndStartLocked(
         if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) update(loading = false)
         throw error
     } catch (error: Throwable) {
-        if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) fail(error)
+        if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) update(loading = false, message = playbackFailureMessage(error))
         false
+    } finally {
+        if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) _state.value = _state.value.copy(preparingSourceId = null)
     }
 }
 internal fun AppController.onPlayerEvent(event: PlaybackEvent) {
     if (event !is PlaybackEvent.Failed || _state.value.dialog?.kind == DialogKind.PlaybackRecovery) return
     val active = _state.value.route as? Route.Player ?: return
+    _state.value = _state.value.copy(message = event.error.message)
     val route = active.copy(media = snapshotPlaybackMedia(active))
     retirePlaybackSession()
     val key = "${route.media.type}:${route.media.id}:${route.source.id}"
@@ -213,6 +216,7 @@ private fun AppController.showPlaybackRecovery(media: Media, source: Source) {
             title = "Playback unavailable",
             media = media,
             source = source,
+            detail = _state.value.message ?: "The selected source could not be opened on this device.",
         ),
         playerChromeVisible = true,
         loading = false,
@@ -237,7 +241,7 @@ internal fun AppController.chooseAnotherSourceForRecovery() {
             _state.value = _state.value.copy(dialog = null, message = null)
             chooseSources(media, resume = false)
         }
-        is Route.Sources -> _state.value = _state.value.copy(dialog = null, message = null)
+        is Route.Sources -> { _state.value = _state.value.copy(dialog = null, message = null); chooseSources(media, origin = route.origin) }
         else -> Unit
     }
 }
@@ -249,4 +253,19 @@ internal fun AppController.backFromPlaybackRecovery() {
         is Route.Sources -> _state.value = _state.value.copy(dialog = null, message = null)
         else -> _state.value = _state.value.copy(dialog = null, message = null)
     }
+}
+
+internal fun playbackFailureMessage(error: Throwable): String = when (error) {
+    is org.viptv.video.PlaybackFailure -> error.error.message
+    is GatewayError -> {
+        val safe = error.message.take(240).takeUnless { it.contains(Regex("(?i)https?://|bearer |authorization|cookie[=:]|password[=:]")) }
+        (safe ?: "The server could not prepare this source.") + " (HTTP " + error.status + ")"
+    }
+    is java.io.IOException -> "Could not reach the source or server. Check the connection and try another source."
+    else -> "The selected source could not start on this device. Try another source."
+}
+
+/** Cleanup outlives a cancelled opening coroutine, but remains bounded. */
+private fun AppController.discardPreparedLease(sessionId: String) {
+    scope.launch { kotlinx.coroutines.withTimeoutOrNull(5000) { runCatching { gateway.stopPlayback(sessionId) } } }
 }

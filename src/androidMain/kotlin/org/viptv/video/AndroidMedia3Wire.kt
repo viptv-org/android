@@ -53,7 +53,11 @@ internal fun shouldRecoverMedia3BehindLiveWindow(
     kindHint != PlaybackKind.OnDemand &&
     !recoveryInProgress
 
-internal fun PlaybackException.toAirError(): PlaybackError = media3ErrorCodeToAir(errorCode)
+internal fun PlaybackException.toAirError(): PlaybackError {
+    val http = generateSequence<Throwable>(this) { it.cause }.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()
+    if (http != null) return PlaybackError(PlaybackErrorCode.Network, "The source returned HTTP ${http.responseCode}. Try another provider or check its access settings.", recoverable = true)
+    return media3ErrorCodeToAir(errorCode)
+}
 
 internal fun media3ErrorCodeToAir(errorCode: Int): PlaybackError = when (errorCode) {
     PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
@@ -94,7 +98,7 @@ internal fun media3ErrorCodeToAir(errorCode: Int): PlaybackError = when (errorCo
         "Media3 cannot access the media source",
         recoverable = false,
     )
-    else -> PlaybackError(PlaybackErrorCode.Internal, "Media3 playback failed", recoverable = false)
+    else -> PlaybackError(PlaybackErrorCode.Internal, "Media3 could not open this source (error $errorCode).", recoverable = false)
 }
 
 internal fun media3Timeline(

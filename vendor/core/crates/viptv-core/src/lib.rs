@@ -68,7 +68,7 @@ pub fn normalize(kind: String, input: String, origin: String) -> Result<String, 
         return Err(CoreError::InvalidInput);
     }
     let value = serde_json::from_str(&input).map_err(|_| CoreError::InvalidInput)?;
-    let normalized = domain::normalize_value(&kind, &value, &origin)?;
+    let normalized = domain::normalize_owned(&kind, value, &origin)?;
     validate_normalized(&kind, &normalized)?;
     serde_json::to_string(&normalized).map_err(|_| CoreError::InvalidInput)
 }
@@ -92,6 +92,14 @@ pub fn vizio_response(status: u16, body: String, allow_statusless: bool) -> Stri
 pub fn vizio_discovery_candidates(subnet: String) -> String {
     let result = vizio::discovery_candidates(&subnet);
     serde_json::to_string(&result).expect("SmartCast discovery results are serializable")
+}
+
+/// The display name from a SmartCast deviceinfo response, or `null` when the
+/// answering host is not a Vizio television. Direct-probe discovery uses
+/// this after connecting to each candidate from `vizio_discovery_candidates`.
+#[cfg_attr(feature = "native", uniffi::export)]
+pub fn vizio_deviceinfo_name(body: String) -> Option<String> {
+    vizio::deviceinfo_name(&body)
 }
 
 /// Report whether this target can execute SmartCast directly or needs a LAN bridge.
@@ -207,9 +215,12 @@ pub fn wasm_normalize(
 #[cfg(feature = "native")]
 uniffi::setup_scaffolding!();
 
+// Keep serde validation out of the WASI caller's BrightScript label budget.
+#[cfg_attr(target_os = "wasi", inline(never))]
 fn validate_normalized(kind: &str, v: &serde_json::Value) -> Result<(), CoreError> {
+    #[cfg_attr(target_os = "wasi", inline(never))]
     fn check<T: serde::de::DeserializeOwned>(v: &serde_json::Value) -> Result<(), CoreError> {
-        serde_json::from_value::<T>(v.clone())
+        T::deserialize(v)
             .map(|_| ())
             .map_err(|_| CoreError::InvalidInput)
     }

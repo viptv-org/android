@@ -17,6 +17,49 @@ import kotlin.test.assertTrue
  */
 class BackendGatewayWireTest {
 
+    @Test fun `native password sign in uses one endpoint and keeps secrets out of descriptions`() = runBlocking {
+        FixtureServer(1) { request ->
+            assertEquals("/api/auth/device/login", request.target)
+            val body = JSONObject(request.body)
+            assertEquals("viewer", body.getString("username"))
+            assertEquals("test-password", body.getString("password"))
+            assertEquals("VIPTV Android", body.getString("device_name"))
+            FixtureResponse("""{"session_id":"native","account_id":"1","access_token":"test-access","refresh_token":"test-refresh","profile_id":null,"expires_in":900}""")
+        }.use { server ->
+            val session = VipTvHttpGateway(server.origin).signIn(" viewer ", "test-password", "VIPTV Android")
+            assertEquals("test-access", session.accessToken)
+            assertNull(session.profileId)
+            assertFalse(session.toString().contains("test-access"))
+            server.assertHealthy()
+        }
+    }
+
+    @Test fun `native playback requests the original URL and preserves required source headers`() = runBlocking {
+        FixtureServer(1) { request ->
+            val body = JSONObject(request.body)
+            assertTrue(body.getJSONObject("capabilities").getBoolean("direct_urls"))
+            assertEquals(125.0, body.getDouble("position"))
+            FixtureResponse("""{"id":"native-media","url":"http://provider.test/video.mkv","mode":"direct","format":"file","position":125,"authorization":{"cookie":"fixture-cookie","user_agent":"Native Fixture","headers":{"Referer":"https://provider.test/watch"}}}""")
+        }.use { server ->
+            val launch = VipTvHttpGateway(server.origin).playback(Source("movie", "IPTV"), 125_000,
+                PlaybackClientCapabilities(1920, 1080, true, false, false, true, true))
+            assertEquals("http://provider.test/video.mkv", launch.url)
+            assertEquals("fixture-cookie", launch.headers["Cookie"])
+            assertEquals("Native Fixture", launch.headers["User-Agent"])
+            assertEquals("https://provider.test/watch", launch.headers["Referer"])
+            assertFalse(launch.toString().contains("fixture-cookie"))
+            server.assertHealthy()
+        }
+    }
+
+    @Test fun `empty provider IDs retain independent addon and IPTV groups`() {
+        val first = CoreModels.source(JSONObject("""{"id":"a","source_name":"IPTV One","source_addon_id":"iptv:1"}"""))
+        val second = CoreModels.source(JSONObject("""{"id":"b","source_name":"Stremio Addon","source_addon_id":"addon:4"}"""))
+        assertFalse(SourceDisplayPolicy.providerKey(first) == SourceDisplayPolicy.providerKey(second))
+        assertEquals("IPTV One", SourceDisplayPolicy.providerLabel(first))
+        assertEquals("Stremio Addon", SourceDisplayPolicy.providerLabel(second))
+    }
+
     @Test
     fun `direct live playback sends a channel target without a stream id`() = runBlocking {
         FixtureServer(1) { request ->

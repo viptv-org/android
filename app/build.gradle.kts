@@ -107,7 +107,7 @@ if (fixtureCa.isPresent) {
             certificate.copyTo(output.resolve("raw/viptv_fixture_ca.pem"), overwrite = true)
             output.resolve("xml/network_security_config.xml").writeText("""
                 <network-security-config>
-                  <base-config cleartextTrafficPermitted="false"><trust-anchors><certificates src="system" /></trust-anchors></base-config>
+                  <base-config cleartextTrafficPermitted="true"><trust-anchors><certificates src="system" /></trust-anchors></base-config>
                   <debug-overrides><trust-anchors><certificates src="@raw/viptv_fixture_ca" /></trust-anchors></debug-overrides>
                 </network-security-config>
             """.trimIndent())

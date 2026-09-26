@@ -11,6 +11,7 @@ class PlaybackSource(
     externalSubtitles: List<ExternalSubtitleSource> = emptyList(),
     val kindHint: PlaybackKind? = null,
     val options: PlaybackOptions = PlaybackOptions(),
+    val startPositionMillis: Long = 0,
 ) {
     val headers: Map<String, String> = headers.toMap()
     val externalSubtitles: List<ExternalSubtitleSource> = externalSubtitles.toList()
@@ -28,6 +29,9 @@ enum class LivePlaybackPolicy { LowLatency, Balanced, Resilient }
 
 data class PlaybackOptions(
     val livePolicy: LivePlaybackPolicy = LivePlaybackPolicy.Balanced,
+    val preferredAudioLanguage: String? = null,
+    val preferredSubtitleLanguage: String? = null,
+    val subtitlesEnabled: Boolean? = null,
 )
 
 data class ExternalSubtitleSource(

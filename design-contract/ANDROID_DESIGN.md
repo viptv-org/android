@@ -41,8 +41,8 @@ addons, parent PIN and sign-out. Use one shared component family for actions,
 fields, media cards, rows, sheets and progress. Phone sheets become TV side
 panels; no duplicate product policy or network stack is introduced.
 
-The existing device-pairing sign-in remains available on phones through an
-Open sign-in page action and manual/QR code. Do not invent password endpoints.
+Phones default to native username/password sign-in as specified in AND-036 below.
+Device-code sign-in remains an optional alternative; TV keeps QR/device pairing.
 OLED/accent preferences are local display settings. Watch on TV is not claimed
 until native discovery/pairing is separately implemented and tested.
 
@@ -67,3 +67,48 @@ Run host/native unit tests and build the debug APK after the integrated UI is
 implemented. Record emulator remote/touch and actual media evidence separately
 from compilation and fixture tests. Physical HDR/DRM, decoder compatibility,
 signing/store publication and production deployment remain separate gates.
+
+## AND-036 — Native sign-in, direct playback and interaction corrections
+
+Owner requested on 2026-09-26. This supersedes the phone pairing-only exception
+in AND-035; implementations record adoption and measured evidence separately.
+
+- Phone sign-in provides Username and masked Password fields, a Sign in action,
+  inline authentication/loading feedback, and an optional Use device code action.
+  The server validates credentials through its existing bounded password verifier
+  and issues the same revocable device grant as pairing. Passwords remain transient
+  and never enter saved state, logs or URLs. TV continues to offer its QR/code.
+- Android phone and TV request original-URL playback. Media3 fetches the original
+  stream with its explicit source headers and owns decoding, tracks and VOD seeks.
+  The API connection stays HTTPS; provider-authorized HTTP media is allowed.
+  Direct mode must not start an FFmpeg/transcode job or wait for server probing.
+  Unsupported streams expose the actual safe error and an explicit source choice;
+  no automatic alternate source or silent server transcode is introduced.
+- Selecting a source immediately marks that row as Opening, shows a spinner and
+  prevents duplicate starts. Cancel/Back invalidates preparation; late completions
+  cannot play audio or replace the current page. Preparation/decoder/network errors
+  show safe actionable details and retain Retry, Choose another source and Back.
+- Leaving the player or backgrounding the app stops native playback and releases
+  the server lease. Rotation and an open player menu preserve the active session.
+  VOD resume and seek use the native title clock and full available title range.
+- Provider filtering lists every normalized source provider, including Stremio
+  addons and IPTV providers. Missing provider IDs must never merge unrelated rows;
+  shared Rust supplies stable group identity/display facts. All providers resets
+  the filter, and arrivals add groups without stealing focus.
+- Both hero + actions reflect current My List membership (+ / check), including
+  immediately after a toggle and across refreshed shelves/profile changes.
+- Phone Home starts at its system top inset without an extra top spacer. Global
+  progress indicators stay inside the system safe area, including status bars.
+- The first Continue Watching row can receive and move focus while the complete hero remains visible. Vertical scrolling begins at the next shelf; returning to Continue Watching or hero controls restores the top.
+- TV Home art belongs to the scrolling hero, with the design's blurred ambient
+  fill and readable scrims. It scrolls away with the hero. Returning focus to a
+  hero action reveals the complete hero, not just the action row. Shelf focus
+  continues to reveal the full selected card and caption without scale changes.
+
+Acceptance includes native password success/failure and optional pairing; every
+provider group including blank provider IDs; immediate/cancelled/failed source
+starts; real original-URL MP4/MKV/HLS playback with source headers; nonzero resume,
+forward/back seeks and clock stability; exit/background audio silence; phone
+rotation; stateful membership; safe insets; TV scroll-away and full-hero restore.
+Production promotion requires tested immutable artifacts and verification of the
+running backend/transcoder plus served TV asset hashes; Git push is not a deploy.

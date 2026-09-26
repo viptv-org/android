@@ -20,6 +20,9 @@ import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.google.zxing.BarcodeFormat
@@ -29,6 +32,7 @@ import org.viptv.app.theme.ViptvColor as C
 
 @Composable internal fun Pairing(state: AppState, controller: AppController, model: ViptvModel) {
     val tv = LocalTv.current
+    if (!tv && !state.sessionRestoring && !state.pairingRequested) { PhoneSignIn(state, controller, model); return }
     val context = LocalContext.current
     var server by remember { mutableStateOf(false) }
     val first = remember { FocusRequester() }
@@ -38,10 +42,14 @@ import org.viptv.app.theme.ViptvColor as C
             VText("VIPTV", if (tv) 40 else 26, display = true)
             Spacer(Modifier.height(measure(160, 96)))
             if (state.sessionRestoring) {
-                VText("Starting VIPTV…", if (tv) 56 else 34, display = true)
+                VText(if (state.loading) "Starting VIPTV…" else "Could not connect", if (tv) 56 else 34, display = true)
                 Spacer(Modifier.height(24.dp))
                 if (state.loading) CircularProgressIndicator(color = LocalAccent.current)
-                else AppButton("Try again", controller::retryAuthentication, Modifier.focusRequester(first))
+                else {
+                    VText(state.message ?: "Your saved session is retained. Check your connection and try again.", if (tv) 26 else 16, color = C.textSecondary)
+                    Spacer(Modifier.height(24.dp))
+                    AppButton("Try again", controller::retryAuthentication, Modifier.focusRequester(first))
+                }
             } else {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(measure(160, 0))) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(measure(30, 22))) {
@@ -55,6 +63,7 @@ import org.viptv.app.theme.ViptvColor as C
                         }, Modifier.fillMaxWidth(), primary = true)
                         if (state.message != null) AppButton("Try again", controller::retryAuthentication, Modifier.focusRequester(first))
                         AppButton("Change server", { server = true }, Modifier.then(if (state.message == null) Modifier.focusRequester(first) else Modifier), icon = "settings")
+                        if (!tv) AppButton("Use username and password", controller::usePasswordSignIn, Modifier.fillMaxWidth())
                     }
                     if (tv) state.deviceCode?.let { code ->
                         val data = code.verificationUriComplete ?: code.verificationUri + "?code=" + code.userCode
@@ -73,6 +82,38 @@ import org.viptv.app.theme.ViptvColor as C
         }
         if (server) ServerAddressEntry(model) { server = false }
     }
+}
+
+@Composable private fun PhoneSignIn(state: AppState, controller: AppController, model: ViptvModel) {
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var server by remember { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    fun submit() {
+        if (state.loading) return
+        val supplied = password; password = ""
+        keyboard?.hide(); focus.clearFocus()
+        controller.signIn(username, supplied)
+    }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().navigationBarsPadding().padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        VText("VIPTV", 26, display = true)
+        Spacer(Modifier.height(56.dp))
+        VText("Sign in to VIPTV", 34, display = true)
+        VText("Your shows, channels and progress. All in one place.", 16, color = C.textSecondary)
+        Spacer(Modifier.height(4.dp))
+        AppField(username, { username = it.take(128) }, "Username")
+        AppField(password, { password = it.take(256) }, "Password", secret = true, keyboardType = KeyboardType.Password, onSubmit = ::submit)
+        state.message?.let { VText(it, 14, color = C.statusDanger) }
+        if (state.loading) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            CircularProgressIndicator(Modifier.size(22.dp), color = LocalAccent.current, strokeWidth = 2.dp)
+            VText("Signing in…", 15, color = C.textSecondary)
+        }
+        AppButton(if (state.loading) "Signing in…" else "Sign in", ::submit, Modifier.fillMaxWidth(), primary = true)
+        AppButton("Use device code", { password = ""; keyboard?.hide(); controller.beginPairing() }, Modifier.fillMaxWidth())
+        AppButton("Change server", { password = ""; server = true }, Modifier.fillMaxWidth(), icon = "settings")
+    }
+    if (server) ServerAddressEntry(model) { server = false }
 }
 
 @Composable internal fun ServerAddressEntry(model: ViptvModel, onClose: () -> Unit) {

@@ -62,6 +62,7 @@ internal fun AppController.restoreContinuation(message: String?) {
 
 /** Player state triggers a bounded request; the server decides whether a successor exists. */
 internal fun AppController.maybeAutoNext(media: Media, positionMillis: Long, durationMillis: Long?, playing: Boolean, ended: Boolean) {
+    if (_state.value.seekPreview != null) return
     val key = "${media.type}.${media.id}"
     if (explicitResumeAwaitingCompletionKey == key && !ended) return
     if (explicitResumeAwaitingCompletionKey == key && ended) explicitResumeAwaitingCompletionKey = null

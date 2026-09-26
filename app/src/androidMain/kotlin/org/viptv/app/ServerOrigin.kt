@@ -19,10 +19,10 @@ internal object ServerOrigin {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, origin).commit()
     }
 
-    /** Accepts a bare http(s) origin with an optional port and no path, query or credentials. */
+    /** Accepts a bare HTTPS origin with an optional port and no path, query or credentials. */
     fun validate(value: String): String? {
         val trimmed = value.trim().trimEnd('/')
-        val match = Regex("^https?://(\\[[0-9a-fA-F:.]+]|[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?)(:[0-9]{1,5})?$").find(trimmed) ?: return null
+        val match = Regex("^https://(\\[[0-9a-fA-F:.]+]|[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?)(:[0-9]{1,5})?$").find(trimmed) ?: return null
         if (".." in trimmed) return null
         val port = match.groupValues[2].takeIf { it.isNotEmpty() }?.removePrefix(":")?.toIntOrNull() ?: return match.value
         if (port !in 1..65535) return null

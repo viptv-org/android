@@ -20,6 +20,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 class AppController(context: Context, private val origin: String) {
+    private val television = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
     private val store = context.getSharedPreferences("viptv.auth", Context.MODE_PRIVATE)
     internal val gateway = VipTvHttpGateway(origin, store.getString("access", null), ::refreshAccessToken)
     internal val scope = CoroutineScope(Job() + Dispatchers.Main.immediate)
@@ -38,10 +39,13 @@ class AppController(context: Context, private val origin: String) {
     val player: AndroidMedia3VideoPlayer get() = playerDelegate.value
     internal var homeJob: Job? = null
     private var pairingPoll: Job? = null
+    private var loginJob: Job? = null
+    internal var playbackStartJob: Job? = null
     internal var sourceDiscovery: Job? = null
     internal var queueContinuationJob: Job? = null
     /** Last queue/Home refresh wins over any earlier response racing Undo. */
     internal var homeRefreshGeneration = 0L
+    internal var libraryRevision = 0L
     internal var discoverJob: Job? = null
     internal var searchJob: Job? = null
     internal var nextEpisodeJob: Job? = null
@@ -82,11 +86,35 @@ class AppController(context: Context, private val origin: String) {
         coreSession.begin()
     }
     fun beginPairing() = scope.launch {
-        update(loading = true, message = null)
-        runCatching { gateway.startDevicePairing("VIPTV Android TV") }.onSuccess { code ->
+        loginJob?.cancel(); pairingPoll?.cancel()
+        _state.value = _state.value.copy(pairingRequested = true, deviceCode = null, loading = true, message = null)
+        runCatching { gateway.startDevicePairing(if (television) "VIPTV Android TV" else "VIPTV Android") }.onSuccess { code ->
             _state.value = _state.value.copy(route = Route.Pairing, deviceCode = code, loading = false)
             pairingPoll?.cancel(); pairingPoll = launch { pollPairing(code) }
         }.onFailure { fail(it) }
+    }
+    fun usePasswordSignIn() {
+        pairingPoll?.cancel(); loginJob?.cancel()
+        _state.value = _state.value.copy(pairingRequested = false, deviceCode = null, loading = false, message = null)
+    }
+    fun signIn(username: String, password: String) {
+        if (username.isBlank() || password.isEmpty()) { update(message = "Enter your username and password."); return }
+        loginJob?.cancel(); pairingPoll?.cancel()
+        update(loading = true, message = null)
+        loginJob = scope.launch {
+            try {
+                val session = gateway.signIn(username, password, if (television) "VIPTV Android TV" else "VIPTV Android")
+                coreSession.adopt(session.coreJson)
+            } catch (error: CancellationException) { throw error }
+            catch (error: Throwable) {
+                update(loading = false, message = when ((error as? GatewayError)?.status) {
+                    401 -> "The username or password is incorrect."
+                    429 -> "Too many attempts. Please try again shortly."
+                    404 -> "This server needs the native sign-in update. You can use a device code for now."
+                    else -> "Could not sign in. Check the server and your connection, then try again."
+                })
+            }
+        }
     }
     private suspend fun pollPairing(code: DeviceCode) {
         var intervalSeconds = code.intervalSeconds.coerceAtLeast(1)
@@ -112,7 +140,7 @@ class AppController(context: Context, private val origin: String) {
         }
         update(loading = false, message = "Pairing expired. Try again.")
     }
-    fun retryAuthentication() { if (_state.value.route == Route.Pairing && !_state.value.sessionRestoring) beginPairing() else coreSession.retry() }
+    fun retryAuthentication() { if (_state.value.route == Route.Pairing && !_state.value.sessionRestoring) { if (television || _state.value.pairingRequested) beginPairing() else usePasswordSignIn() } else coreSession.retry() }
     private suspend fun renderSession(view: org.viptv.core.wire.ViewModel) {
         val generation = ++sessionRenderGeneration
         val phase = view.phase.name
@@ -135,7 +163,7 @@ class AppController(context: Context, private val origin: String) {
                 chosen?.let { profile -> scope.launch { loadHome(profile, generation, enter) } }
             }
             "PROFILES" -> { keepProfilesOnIdentityRefresh = false; _state.value = _state.value.copy(route = Route.Profiles, profiles = profiles, selectedProfile = null, loading = false, message = null) }
-            "PAIRING" -> { _state.value = AppState(route = Route.Pairing, sessionRestoring = false); beginPairing() }
+            "PAIRING" -> { _state.value = AppState(route = Route.Pairing, sessionRestoring = false); if (television) beginPairing() }
             "ERROR" -> {
                 val message = view.error ?: "Could not restore your session. Try again."
                 _state.value = _state.value.copy(loading = false, profiles = if (keepProfilesOnIdentityRefresh) _state.value.profiles else profiles, message = message)
@@ -152,14 +180,15 @@ class AppController(context: Context, private val origin: String) {
         if (homeJob !== job) homeJob?.cancel()
         homeJob = job
         val refresh = ++homeRefreshGeneration
+        val library = libraryRevision
         _state.value = _state.value.copy(homeLoading = true)
         if (enter) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), selectedProfile = profile, loading = false)
         runCatching { gateway.home(profile.id) { shelves ->
             if (generation == sessionRenderGeneration && refresh == homeRefreshGeneration && _state.value.selectedProfile?.id == profile.id) {
                 _state.value = _state.value.copy(
-                    shelves = shelves,
+                    shelves = if (library == libraryRevision) shelves else shelves.map { if (it.id == "My List") it.copy(items = _state.value.favorites) else it },
                     queue = shelves.firstOrNull { it.isQueueShelf }?.items.orEmpty(),
-                    favorites = shelves.firstOrNull { it.title == "My List" }?.items.orEmpty(),
+                    favorites = if (library == libraryRevision) shelves.firstOrNull { it.id == "My List" }?.items.orEmpty() else _state.value.favorites,
                     loading = if (_state.value.route == Route.Browse(Destination.Home)) false else _state.value.loading,
                 )
             }
@@ -185,7 +214,7 @@ class AppController(context: Context, private val origin: String) {
 
     fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback((_state.value.route as? Route.Player)?.media); pendingCoreAction = coreSession::signOut; coreSession.signOut() } }
     fun close() {
-        coreSession.close(); homeJob?.cancel(); detailJob?.cancel(); pairingPoll?.cancel(); sourceDiscovery?.cancel()
+        loginJob?.cancel(); playbackStartJob?.cancel(); coreSession.close(); homeJob?.cancel(); detailJob?.cancel(); pairingPoll?.cancel(); sourceDiscovery?.cancel()
         queueContinuationJob?.cancel(); discoverJob?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel()
         if (playerDelegate.isInitialized()) { stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
         scope.launch { delay(5000); scope.cancel() }
@@ -246,13 +275,14 @@ class AppController(context: Context, private val origin: String) {
         }
     }
     internal fun stopPlayback(media: Media? = null) {
-        if (!playerDelegate.isInitialized()) return
         invalidatePlaybackPreparation()
+        if (!playerDelegate.isInitialized()) return
         val position = absolutePositionMillis()
         val profileId = _state.value.selectedProfile?.id
         progressJob?.cancel()
         media?.let { item -> scope.launch { persistProgress(profileId, item, position) } }
         player.stop()
+        player.detachSurface()
         playbackTitleOffsetMillis = 0L
         playbackTitleDurationMillis = null
         lastTrustedTitlePositionMillis = 0L
@@ -274,7 +304,8 @@ class AppController(context: Context, private val origin: String) {
      * tokens are persisted exactly as the core session's storage effect
      * writes them, and the Rust session model adopts the new grant.
      */
-    internal suspend fun refreshAccessToken(): String? = sessionRefreshMutex.withLock {
+    internal suspend fun refreshAccessToken(rejectedToken: String?): String? = sessionRefreshMutex.withLock {
+        store.getString("access", null)?.takeIf { it != rejectedToken }?.let { return@withLock it }
         val refreshToken = store.getString("refresh", null) ?: return@withLock null
         try {
             val session = gateway.refresh(refreshToken)

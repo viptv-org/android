@@ -180,10 +180,16 @@ internal class AndroidMedia3Backend(
                 // live-edge default: the controller applies an explicit direct resume after
                 // readiness, while managed delivery starts at this session's zero.
                 if (source.kindHint == PlaybackKind.OnDemand) {
-                    openingPlayer.setMediaSource(mediaSource, 0L)
+                    openingPlayer.setMediaSource(mediaSource, source.startPositionMillis.coerceAtLeast(0))
                 } else {
                     openingPlayer.setMediaSource(mediaSource)
                 }
+                openingPlayer.trackSelectionParameters = openingPlayer.trackSelectionParameters.buildUpon()
+                    .clearOverrides()
+                    .setPreferredAudioLanguage(source.options.preferredAudioLanguage)
+                    .setPreferredTextLanguage(source.options.preferredSubtitleLanguage)
+                    .apply { source.options.subtitlesEnabled?.let { setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_TEXT, !it) } }
+                    .build()
                 openingPlayer.playWhenReady = playWhenReady
                 openingPlayer.prepare()
             } catch (_: Exception) {

@@ -7,7 +7,7 @@ The initial import was derived from `air-tv/video` at `57551ec48d63c81d407e09821
 ## Scope
 
 - Android API 24+ phones and Android TV. Native TV mode selects the remote layout; phones retain touch, system text entry and rotation.
-- `:app` device pairing/refresh, profiles, Home/Discover/source picker, exact-source Resume, and Media3 direct playback.
+- `:app` phone username/password sign-in, TV device pairing/refresh, profiles, Home/Discover/source picker, exact-source Resume, and Media3 direct playback.
 - Media3 playback, headers, external subtitles, track selection, live/DVR semantics, and runtime capability reporting.
 - No desktop, Apple, browser, JavaScript, WebAssembly, MPV, AVFoundation, package publishing, or inherited automation.
 
@@ -41,7 +41,7 @@ Hosted `app-review.yml` also builds the pinned native core for host tests and al
 
 ## Design and native preview
 
-`DESIGN_REF` pins AND-035 and the current shared visual system. The generated tokens, local Onest/Bricolage fonts and licensed Lucide assets are checked by `scripts/design-sync.mjs`; never edit generated files. To adopt a new committed design:
+`DESIGN_REF` pins AND-036 and the current shared visual system. The generated tokens, local Onest/Bricolage fonts and licensed Lucide assets are checked by `scripts/design-sync.mjs`; never edit generated files. To adopt a new committed design:
 
 ```sh
 node scripts/design-sync.mjs sync ../design <full-commit-sha>

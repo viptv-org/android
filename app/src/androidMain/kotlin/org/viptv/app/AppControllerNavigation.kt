@@ -4,6 +4,11 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 internal fun AppController.navigate(destination: Destination) = scope.launch {
+    sourceDiscovery?.cancel()
+    if (_state.value.route is Route.Player || _state.value.preparingSourceId != null) {
+        val media = (_state.value.route as? Route.Player)?.media
+        stopPlayback(media)
+    }
     detailGeneration++; detailJob?.cancel()
     if (destination != Destination.Search) searchJob?.cancel()
     if (destination != Destination.Live) { guideBrowseGeneration++; guideGeneration++ }
@@ -25,7 +30,22 @@ internal fun AppController.navigate(destination: Destination) = scope.launch {
 }
 
 /** Invalidates an in-flight source/playback request before a user leaves its surface. */
-internal fun AppController.invalidatePlaybackPreparation() { playbackGeneration++ }
+internal fun AppController.invalidatePlaybackPreparation() {
+    playbackGeneration++; playbackStartJob?.cancel(); playbackStartJob = null
+    _state.value = _state.value.copy(preparingSourceId = null, loading = if (_state.value.preparingSourceId != null) false else _state.value.loading)
+}
+
+/** Native audio belongs to the visible player, never a hidden activity or old route. */
+internal fun AppController.stopForBackground() {
+    nextEpisodeJob?.cancel(); queueContinuationJob?.cancel()
+    val route = _state.value.route as? Route.Player
+    if (route != null) exitPlayer(route, snapshotPlaybackMedia(route))
+    else stopPlayback(continuationRestore?.media)
+    continuationRestore = null
+}
+internal fun AppController.playerSurfaceDisposed(media: Media) {
+    if (_state.value.route !is Route.Player && continuationRestore == null) stopPlayback(media)
+}
 
 internal fun AppController.back() { handleBack() }
 internal fun AppController.consumesBack(state: AppState = _state.value): Boolean = BackAvailabilityPolicy.consumes(state)

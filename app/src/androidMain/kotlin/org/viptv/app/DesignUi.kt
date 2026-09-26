@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -265,11 +266,12 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
     }
 }
 
-@Composable internal fun AppField(value: String, onChange: (String) -> Unit, label: String, modifier: Modifier = Modifier, secret: Boolean = false, singleLine: Boolean = true) {
+@Composable internal fun AppField(value: String, onChange: (String) -> Unit, label: String, modifier: Modifier = Modifier, secret: Boolean = false, singleLine: Boolean = true, keyboardType: KeyboardType = if (secret) KeyboardType.NumberPassword else KeyboardType.Text, onSubmit: (() -> Unit)? = null) {
     OutlinedTextField(value, onChange, modifier.fillMaxWidth(), label = { VText(label, if (LocalTv.current) 22 else 14) },
         singleLine = singleLine, textStyle = TextStyle(fontFamily = Onest, fontSize = (if (LocalTv.current) 28 else 16).sp, color = C.textPrimary),
         visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = if (secret) KeyboardType.NumberPassword else KeyboardType.Text),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = if (onSubmit == null) ImeAction.Default else ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onSubmit?.invoke() }),
         shape = RoundedCornerShape(measure(20, 16)))
 }
 
@@ -297,10 +299,11 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
     }
 }
 
-@Composable internal fun ChoiceDialog(title: String, options: List<Pair<String, () -> Unit>>, onDismiss: () -> Unit) {
+@Composable internal fun ChoiceDialog(title: String, options: List<Pair<String, () -> Unit>>, onDismiss: () -> Unit, description: String? = null) {
     val first = remember(title) { FocusRequester() }
     val tv = LocalTv.current
     AppOverlay(title, onDismiss) {
+        if (!description.isNullOrBlank()) VText(description, if (tv) 24 else 15, Modifier.padding(bottom = measure(28, 20)), C.textSecondary)
         androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = measure(820, (options.size * 64).coerceAtMost(480))), verticalArrangement = Arrangement.spacedBy(measure(12, 10))) {
             items(options.size) { index -> AppButton(options[index].first, options[index].second, Modifier.fillMaxWidth().then(if (index == 0 && tv) Modifier.focusRequester(first) else Modifier)) }
         }

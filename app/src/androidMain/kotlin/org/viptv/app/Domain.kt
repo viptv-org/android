@@ -54,12 +54,16 @@ data class Source(
     val channelId: String? = null,
     /** These safe display fields were already projected by shared Rust. */
     val displayResolved: Boolean = false,
+    val providerKey: String = "",
+    val providerLabel: String = "",
 )
 
 object SourceDisplayPolicy {
-    private fun display(source: Source): JSONObject = CorePolicy.value("sourceDisplay", JSONObject().put("name", source.name).put("description", source.description).put("provider", source.provider)) as JSONObject
+    private fun display(source: Source): JSONObject = CorePolicy.value("sourceDisplay", JSONObject().put("name", source.name).put("description", source.description).put("provider", source.provider).putOpt("sourceAddonId", source.addonId)) as JSONObject
     fun title(source: Source): String = if (source.displayResolved) source.name else display(source).getString("title")
     fun body(source: Source): String = if (source.displayResolved) source.description else display(source).getString("body")
+    fun providerKey(source: Source): String = source.providerKey.ifBlank { display(source).getString("providerKey") }
+    fun providerLabel(source: Source): String = source.providerLabel.ifBlank { display(source).getString("providerLabel") }
 }
 
 data class Profile(
@@ -74,8 +78,8 @@ data class Profile(
     /** The server only accepts this mutation as true, and never on create. */
     val setupComplete: Boolean = false,
 )
-data class DeviceCode(val code: String, val userCode: String, val verificationUri: String, val verificationUriComplete: String?, val qrUri: String?, val intervalSeconds: Long)
-data class DeviceSession(val accessToken: String, val refreshToken: String, val profileId: String?, val coreJson: String = "")
+data class DeviceCode(val code: String, val userCode: String, val verificationUri: String, val verificationUriComplete: String?, val qrUri: String?, val intervalSeconds: Long) { override fun toString() = "DeviceCode(<redacted>)" }
+data class DeviceSession(val accessToken: String, val refreshToken: String, val profileId: String?, val coreJson: String = "") { override fun toString() = "DeviceSession(<redacted>)" }
 /**
  * Home rows carry their role separately from server-provided display copy.
  * Queue controls follow this flag even when the row has just become empty.
@@ -109,7 +113,7 @@ data class GuideProgramme(
 data class LiveChannel(val id: String, val name: String, val logo: String? = null, val category: String? = null)
 
 enum class DialogKind { QueueManage, QueueRemoved, MyListManage, EpisodeManage, SourceDetails, LiveManage, DeleteProfile, SignOut, NextUnavailable, PlaybackRecovery }
-data class DialogState(val kind: DialogKind, val title: String, val media: Media? = null, val source: Source? = null, val profile: Profile? = null)
+data class DialogState(val kind: DialogKind, val title: String, val media: Media? = null, val source: Source? = null, val profile: Profile? = null, val detail: String? = null)
 data class PinPrompt(val title: String)
 data class SeekPreview(val targetMillis: Long)
 
@@ -154,5 +158,7 @@ data class AppState(
     val loading: Boolean = false,
     val homeLoading: Boolean = false,
     val sourceLoading: Boolean = false,
+    val preparingSourceId: String? = null,
+    val pairingRequested: Boolean = false,
     val message: String? = null,
 )

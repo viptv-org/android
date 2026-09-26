@@ -29,7 +29,7 @@ class VipTvHttpGateway(
     private val origin: String,
     private var accessToken: String? = null,
     /** Coalesced session refresh for an authenticated 401; returns a fresh access token or null. */
-    private val onUnauthorized: (suspend () -> String?)? = null,
+    private val onUnauthorized: (suspend (String?) -> String?)? = null,
 ) : BackendGateway {
     fun setAccessToken(value: String?) { accessToken = value }
     private val titleArtwork = java.util.concurrent.ConcurrentHashMap<String, Media>()
@@ -39,6 +39,8 @@ class VipTvHttpGateway(
         .readTimeout(20, TimeUnit.SECONDS)
         .callTimeout(30, TimeUnit.SECONDS)
         .build()
+    override suspend fun signIn(username: String, password: String, deviceName: String): DeviceSession = session(
+        json("POST", "/auth/device/login", JSONObject().put("username", username.trim()).put("password", password).put("device_name", deviceName)))
     override suspend fun startDevicePairing(deviceName: String): DeviceCode = json("POST", "/auth/device/code", JSONObject().put("device_name", deviceName)).let {
         DeviceCode(it.getString("device_code"), it.getString("user_code"), it.getString("verification_uri"), it.optString("verification_uri_complete").ifBlank { null }, it.optString("qr_uri").ifBlank { null }, it.optLong("interval", 5))
     }
@@ -243,7 +245,7 @@ class VipTvHttpGateway(
             val display = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.SourcePresentation>(
                 uniffi.viptv_core.normalize("sourceDisplay", org.viptv.core.wire.CoreJson.encode(normalized), "")
             )
-            result.add(Source(normalized.id, normalized.provider.orEmpty(), display.title, display.body, normalized.sourceAddonId, normalized.sourceFingerprint, normalized.quality, normalized.audio, displayResolved = true))
+            result.add(Source(normalized.id, normalized.provider.orEmpty(), display.title, display.body, normalized.sourceAddonId, normalized.sourceFingerprint, normalized.quality, normalized.audio, displayResolved = true, providerKey = display.providerKey, providerLabel = display.providerLabel))
         }
         return result
     }
@@ -329,7 +331,7 @@ class VipTvHttpGateway(
     override suspend fun logout() { json("POST", "/auth/logout", JSONObject()) }
     private fun session(value: JSONObject): DeviceSession {
         val token = value.getString("access_token"); accessToken = token
-        return DeviceSession(token, value.getString("refresh_token"), value.opt("profile_id")?.toString(), uniffi.viptv_core.normalize("tokens", value.toString(), origin))
+        return DeviceSession(token, value.getString("refresh_token"), value.opt("profile_id")?.takeUnless { it == JSONObject.NULL }?.toString(), uniffi.viptv_core.normalize("tokens", value.toString(), origin))
     }
     private suspend fun coreRequest(operation: String, profileId: String, media: Media, values: JSONObject = JSONObject()): JSONObject {
         values.put("operation", operation).put("profileId", profileId).put("item", JSONObject(media.normalizedJson()))
@@ -352,6 +354,7 @@ class VipTvHttpGateway(
             val request = Request.Builder()
                 .url(origin.trimEnd('/') + "/api" + path)
                 .header("Accept", "application/json")
+                .apply { if (path == "/auth/device/login") header("Origin", origin) }
                 .apply { bearer?.let { header("Authorization", "Bearer $it") } }
                 .method(method, body?.toString()?.toRequestBody(JSON_MEDIA_TYPE))
                 .build()
@@ -396,7 +399,7 @@ class VipTvHttpGateway(
             is CallFailure -> {
                 val refresher = onUnauthorized
                 if (first.status == 401 && refresher != null && !path.startsWith("/auth/")) {
-                    val refreshed = refresher()
+                    val refreshed = refresher(bearer)
                     if (refreshed != null && refreshed != bearer) {
                         when (val retry = awaitResult(method, path, body, refreshed)) {
                             is CallText -> return retry.text
