@@ -149,7 +149,10 @@ object PlaybackReturnPolicy {
 
 /** Playback failures retain a title coordinate so every recovery action is explicit and deterministic. */
 object PlaybackRecoveryPolicy {
-    fun returnRoute(player: Route.Player, media: Media): Route = player.directOrigin ?: returnRoute(player.returnDestination, media)
+    fun returnRoute(player: Route.Player, media: Media): Route = player.directOrigin ?: when (player.returnDestination) {
+        PlaybackReturn.Sources -> player.sourceRoute?.copy(media = media) ?: Route.Sources(media)
+        PlaybackReturn.Details -> (player.sourceRoute?.backRoute as? Route.Details) ?: Route.Details(media)
+    }
 
     fun snapshot(media: Media, positionMillis: Long, durationMillis: Long?): Media = media.copy(
         positionMillis = positionMillis.coerceAtLeast(0),

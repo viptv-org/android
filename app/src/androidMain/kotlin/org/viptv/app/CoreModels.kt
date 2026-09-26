@@ -17,7 +17,7 @@ internal object CoreModels {
     fun media(value: JSONObject): Media = CoreJson.decode<MediaItem>(normalize("media", value.toString(), "")).view()
     fun source(value: JSONObject): Source = CoreJson.decode<MediaSource>(normalize("source", value.toString(), "")).let {
         val display = CoreJson.decode<org.viptv.core.wire.SourcePresentation>(normalize("sourceDisplay", CoreJson.encode(it), ""))
-        Source(it.id, it.provider.orEmpty(), display.title, display.body, it.sourceAddonId, it.sourceFingerprint, it.quality, it.audio)
+        Source(it.id, it.provider.orEmpty(), display.title, display.body, it.sourceAddonId, it.sourceFingerprint, it.quality, it.audio, displayResolved = true)
     }
     fun catalog(value: JSONObject): DiscoverCatalog? {
         val item = CoreJson.decode<org.viptv.core.wire.Catalog>(normalize("catalog", value.toString(), ""))
@@ -41,6 +41,12 @@ internal object CoreModels {
     fun enrich(original: Media, metadata: Media): Media = CoreJson.decode<MediaItem>(normalize("enrichHome", JSONObject().put("original", JSONObject(original.normalizedJson())).put("metadata", JSONObject(metadata.normalizedJson())).toString(), "")).view()
     fun card(media: Media, queue: Boolean = false, failedImages: Set<String> = emptySet()): CardPresentation = CoreJson.decode(normalize("cardPresentation", JSONObject().put("item", JSONObject(media.normalizedJson())).put("context", if (queue) "queue" else "catalog").put("failedImages", org.json.JSONArray(failedImages.toList())).toString(), ""))
     fun presentation(media: Media): MediaPresentation = CoreJson.decode(normalize("presentation", media.normalizedJson(), ""))
+    fun initialEpisode(media: Media): Media? {
+        val input = JSONObject().put("episodes", org.json.JSONArray().also { array -> media.episodes.forEach { array.put(JSONObject(it.normalizedJson())) } })
+            .put("original", JSONObject(media.normalizedJson())).put("now", System.currentTimeMillis())
+        val result = normalize("initialEpisode", input.toString(), "")
+        return if (result == "null") null else CoreJson.decode<MediaItem>(result).view()
+    }
     fun itemRequest(media: Media): JSONObject = JSONObject(normalize("itemRequest", media.normalizedJson(), ""))
 }
 

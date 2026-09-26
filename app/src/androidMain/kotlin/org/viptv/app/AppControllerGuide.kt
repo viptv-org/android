@@ -104,6 +104,26 @@ internal fun AppController.changeGuidePage(delta: Int) {
     loadGuidePage(current.channelFilter, target)
 }
 
+internal fun AppController.appendGuidePage() {
+    val current = _state.value.guideUi
+    val offset = current.channelOffset + current.channels.size
+    if (_state.value.loading || offset >= current.channelTotal || _state.value.route !is Route.Guide) return
+    val generation = guideBrowseGeneration
+    _state.value = _state.value.copy(loading = true)
+    scope.launch {
+        try {
+            val page = gateway.livePage(LiveBrowseRequest(current.channelFilter, offset))
+            if (generation != guideBrowseGeneration || _state.value.route !is Route.Guide) return@launch
+            val latest = _state.value.guideUi
+            _state.value = _state.value.copy(loading = false, guideUi = latest.copy(
+                channels = (latest.channels + page.channels).distinctBy { it.id },
+                channelTotal = if (page.channels.isEmpty()) offset else page.total,
+            ))
+        } catch (error: CancellationException) { throw error }
+        catch (_: Exception) { if (generation == guideBrowseGeneration) _state.value = _state.value.copy(loading = false, message = "Couldn't load more channels.") }
+    }
+}
+
 internal fun AppController.shiftGuideWindow(hours: Int) {
     val current = _state.value.guideUi
     if (current.windowStartMillis == 0L) return
@@ -116,7 +136,7 @@ internal fun AppController.followGuideNow() {
     _state.value = _state.value.copy(guideUi = current.copy(windowStartMillis = GuidePolicy.nowWindow(System.currentTimeMillis()), followsNow = true))
 }
 
-internal fun AppController.watchGuideChannel(channel: LiveChannel) = chooseSources(Media(channel.id, "live", channel.name))
+internal fun AppController.watchGuideChannel(channel: LiveChannel) = activateCard(Media(channel.id, "live", channel.name))
 
 private suspend fun AppController.refreshGuideRows(generation: Long) {
     val before = _state.value.guideUi

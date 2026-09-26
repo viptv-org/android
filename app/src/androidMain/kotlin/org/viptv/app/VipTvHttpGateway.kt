@@ -8,6 +8,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.sync.withLock
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -57,48 +58,56 @@ class VipTvHttpGateway(
         return (0 until array.length()).map { index -> array.getJSONObject(index).profile() } to root.opt("profile_id")?.toString()
     }
     override suspend fun selectProfile(profileId: String) { json("POST", "/auth/profile", JSONObject().put("profile_id", profileId)) }
-    override suspend fun home(profileId: String): List<HomeShelf> = coroutineScope {
-        suspend fun optionalFeed(load: suspend () -> List<Media>): List<Media> = try { load() }
-        catch (cancelled: CancellationException) { throw cancelled }
-        catch (error: GatewayError) { if (error.status == 401 || error.status == 403) throw error else emptyList() }
-        catch (_: java.io.IOException) { emptyList() }
-        val catalogList = async { catalogs() }
-        suspend fun catalogFeed(type: String): List<Media> {
-            val catalog = catalogList.await().firstOrNull { it.key.type == type } ?: return emptyList()
-            return json("GET", "/discover?type=${enc(type)}&addon_id=${enc(catalog.key.addonId)}&catalog=${enc(catalog.key.id)}&skip=0").mediaArray("metas", "items", "rows")
+    override suspend fun home(profileId: String, onUpdate: (List<HomeShelf>) -> Unit): List<HomeShelf> = coroutineScope {
+        val rows = java.util.TreeMap<Int, HomeShelf>()
+        val publisher = kotlinx.coroutines.sync.Mutex()
+        suspend fun publish(order: Int, shelf: HomeShelf) = publisher.withLock {
+            rows[order] = shelf
+            onUpdate(rows.values.filter { it.items.isNotEmpty() })
         }
-        suspend fun channels(path: String): List<Media> = json("GET", path).liveChannels().map(LiveChannel::asMedia)
-        val queue = async { optionalFeed { json("GET", "/profiles/${enc(profileId)}/continue/page?limit=13").mediaArray("items", "rows", "metas") } }
-        val recent = async { optionalFeed { channels("/live?view=us&collection=recent&limit=24") } }
-        val movies = async { optionalFeed { catalogFeed("movie") } }
-        val series = async { optionalFeed { catalogFeed("series") } }
-        val live = async { optionalFeed { channels("/live?view=us&offset=0&limit=12&search=") } }
-        val saved = async { optionalFeed { json("GET", "/profiles/${enc(profileId)}/favorites/page?limit=13&exclude_live=true").mediaArray("items", "rows", "metas") } }
-        val favoriteChannels = async { optionalFeed { channels("/live?view=us&collection=favorites&limit=24") } }
-        val movieItems = movies.await().map { item -> titleArtwork[item.type + "\u0000" + item.id]?.let(item::withArtworkFrom) ?: item }
-        val seriesItems = series.await().map { item -> titleArtwork[item.type + "\u0000" + item.id]?.let(item::withArtworkFrom) ?: item }
-        val known = (movieItems + seriesItems).associateBy { it.type + "\u0000" + it.id }
-        val hydrationSlots = Semaphore(3)
-        suspend fun enrich(items: List<Media>, fetchDetails: Boolean = false): List<Media> = coroutineScope {
-            items.map { item -> async {
-                hydrationSlots.withPermit {
+        suspend fun optional(load: suspend () -> List<Media>): List<Media> = try { load() }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: GatewayError) { if (error.status in listOf(401, 403)) throw error else emptyList() }
+        catch (_: IOException) { emptyList() }
+        val catalogList = async {
+            try { catalogs() }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: GatewayError) { if (error.status in listOf(401, 403)) throw error else emptyList() }
+            catch (_: IOException) { emptyList() }
+        }
+        val metadata = mutableMapOf<String, kotlinx.coroutines.Deferred<Media>>()
+        val metadataLock = kotlinx.coroutines.sync.Mutex()
+        val hydration = Semaphore(3)
+        suspend fun hydrate(items: List<Media>, order: Int, title: String, queue: Boolean) {
+            val enriched = items.toMutableList()
+            publish(order, HomeShelf(title, items, queue))
+            items.mapIndexed { index, item -> async {
+                if (item.type != "live") {
                     val lookup = item.copy(id = item.seriesId ?: item.id, type = if (item.type == "episode") "series" else item.type)
-                    val rich = known[lookup.type + "\u0000" + lookup.id]?.takeUnless { fetchDetails } ?: metadataOr(item, lookup)
-                    CoreModels.enrich(item, rich)
+                    val key = lookup.type + ":" + lookup.id
+                    val pending = metadataLock.withLock { metadata.getOrPut(key) { async { hydration.withPermit { metadataOr(item, lookup) } } } }
+                    enriched[index] = CoreModels.enrich(item, pending.await())
+                    publish(order, HomeShelf(title, enriched.toList(), queue))
                 }
             } }.awaitAll()
         }
-        val richQueue = async { enrich(queue.await(), fetchDetails = true) }
-        val richSaved = async { enrich(saved.await()) }
-        listOf(
-            HomeShelf("Continue Watching", richQueue.await(), isQueueShelf = true),
-            HomeShelf("Recently Watched Live TV", recent.await()),
-            HomeShelf("Trending Movies", movieItems),
-            HomeShelf("Popular Series", seriesItems),
-            HomeShelf("Live Now", live.await()),
-            HomeShelf("My List", richSaved.await()),
-            HomeShelf("Favorite Channels", favoriteChannels.await()),
-        ).filter { it.items.isNotEmpty() }
+        val queue = async { hydrate(optional { json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray("items") }, 0, "Continue watching", true) }
+        val recent = async {
+            publish(1, HomeShelf("Recently watched live TV", optional { json("GET", "/live?view=us&collection=recent&limit=24").liveChannels().map(LiveChannel::asMedia) }))
+        }
+        val saved = async { hydrate(optional { favorites(profileId) }, 1000, "My List", false) }
+        val live = async { publish(1001, HomeShelf("Live now", optional { this@VipTvHttpGateway.live().map(LiveChannel::asMedia) })) }
+        val catalogs = catalogList.await().filter { catalog ->
+            catalog.key.type != "live" && catalog.filters.none { it.required && DiscoverPolicy.defaults(catalog)[it.name].isNullOrBlank() }
+        }
+        val catalogGate = Semaphore(3)
+        catalogs.mapIndexed { index, catalog -> async {
+            val items = optional { catalogGate.withPermit { discover(DiscoverPolicy.request(catalog, DiscoverPolicy.defaults(catalog), 0)).items } }
+            val title = listOfNotNull(catalog.addonName, catalog.name).joinToString(" · ")
+            publish(index + 2, HomeShelf(title, items, id = catalog.key.stableId))
+        } }.awaitAll()
+        queue.await(); recent.await(); saved.await(); live.await()
+        rows.values.filter { it.items.isNotEmpty() }
     }
     override suspend fun discover(type: String, search: String?): List<Media> = json("GET", discoverPath(type, search = search)).mediaArray("metas", "items", "rows")
     override suspend fun catalogs(): List<DiscoverCatalog> = jsonArray("GET", "/catalogs")
@@ -128,52 +137,38 @@ class VipTvHttpGateway(
             hasMore = hasMore,
         )
     }
-    override suspend fun search(query: String): SearchResults {
+    override suspend fun search(query: String, onUpdate: (SearchResults) -> Unit): SearchResults {
         val term = query.trim()
-        if (term.isEmpty()) return SearchResults(emptyList(), partialFailure = false)
-        val gate = Semaphore(3)
+        if (term.isEmpty()) return SearchResults(emptyList(), false)
         return coroutineScope {
-            // Live search starts independently: a failed catalog index must not
-            // suppress the user's live matches.
-            val catalogIndex = async { attempt { gate.withPermit { jsonArray("GET", "/catalogs") } } }
-            val liveSearch = async { attempt { gate.withPermit {
-                val live = json("GET", "/live?view=us&limit=80&search=${enc(term)}")
-                    .liveChannels().map(LiveChannel::asMedia)
-                    .distinctBy { it.id }
-                    .take(24)
-                SearchSection("Live TV", live)
-            } } }
-            var partialFailure = false
-            val catalogs = when (val result = catalogIndex.await()) {
-                is SearchAttempt.Value -> result.value.objects()
-                    .mapNotNull { it.discoverCatalog() }
-                    .filter { it.supportsSearch && it.key.type != "live" }
-                    .take(128)
-                SearchAttempt.Failure -> {
-                    partialFailure = true
-                    emptyList()
+            val gate = Semaphore(6)
+            val publisher = kotlinx.coroutines.sync.Mutex()
+            val completed = java.util.TreeMap<Int, SearchSection>()
+            var partial = false
+            suspend fun publish(index: Int, result: SearchAttempt<SearchSection>) = publisher.withLock {
+                when (result) {
+                    is SearchAttempt.Value -> if (result.value.items.isNotEmpty()) completed[index] = result.value
+                    SearchAttempt.Failure -> partial = true
                 }
+                onUpdate(SearchResults(completed.values.toList(), partial))
             }
-            val catalogResults = catalogs.map { catalog -> async {
-                catalog to attempt { gate.withPermit {
-                    val items = json("GET", discoverPath(catalog.key.type, catalog.key.id, catalog.key.addonId, search = term))
-                        .mediaArray("metas", "items", "rows")
-                        .distinctBy { "${it.type}\u0000${it.id}" }
-                        .take(24)
-                    SearchSection(catalog.name, items)
-                } }
+            val liveRequest = async {
+                publish(128, attempt {
+                    SearchSection("Live TV", json("GET", "/live?view=us&limit=80&search=" + enc(term)).liveChannels().map(LiveChannel::asMedia).distinctBy { it.id }.take(24))
+                })
+            }
+            val catalogs = when (val result = attempt { catalogs() }) {
+                is SearchAttempt.Value -> result.value.filter { it.supportsSearch && it.key.type != "live" }.take(128)
+                SearchAttempt.Failure -> { partial = true; emptyList() }
+            }
+            catalogs.mapIndexed { index, catalog -> async {
+                publish(index, attempt { gate.withPermit {
+                    val items = discover(DiscoverPolicy.request(catalog, DiscoverPolicy.defaults(catalog) + ("search" to term), 0)).items
+                    SearchSection(catalog.name, items.distinctBy { HomeFocusPolicy.mediaKey(it) }.take(24))
+                } })
             } }.awaitAll()
-            val sections = buildList {
-                for ((_, result) in catalogResults) when (result) {
-                    is SearchAttempt.Value -> if (result.value.items.isNotEmpty()) add(result.value)
-                    SearchAttempt.Failure -> partialFailure = true
-                }
-                when (val result = liveSearch.await()) {
-                    is SearchAttempt.Value -> result.value.takeIf { it.items.isNotEmpty() }?.let(::add)
-                    SearchAttempt.Failure -> partialFailure = true
-                }
-            }
-            SearchResults(sections, partialFailure)
+            liveRequest.await()
+            SearchResults(completed.values.toList(), partial)
         }
     }
     override suspend fun seriesProgress(profileId: String, seriesId: String): List<Media> =
@@ -181,6 +176,8 @@ class VipTvHttpGateway(
     override suspend fun metadata(media: Media): Media {
         val type = if (media.type == "episode") "series" else media.type
         val id = if (type == "series") media.seriesId ?: media.id else media.id
+        titleArtwork[type + "\u0000" + id]?.let { return it }
+        if (titleArtwork.size >= 256) titleArtwork.keys.firstOrNull()?.let { titleArtwork.remove(it) }
         val result = json("GET", "/meta/${enc(type)}/${enc(id)}").optJSONObject("meta")?.media() ?: media
         titleArtwork[type + "\u0000" + id] = result
         return result
@@ -246,7 +243,7 @@ class VipTvHttpGateway(
             val display = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.SourcePresentation>(
                 uniffi.viptv_core.normalize("sourceDisplay", org.viptv.core.wire.CoreJson.encode(normalized), "")
             )
-            result.add(Source(normalized.id, normalized.provider.orEmpty(), display.title, display.body, normalized.sourceAddonId, normalized.sourceFingerprint, normalized.quality, normalized.audio))
+            result.add(Source(normalized.id, normalized.provider.orEmpty(), display.title, display.body, normalized.sourceAddonId, normalized.sourceFingerprint, normalized.quality, normalized.audio, displayResolved = true))
         }
         return result
     }

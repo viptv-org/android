@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`viptv-org/android` contains the Android/Android TV playback module and the `:app` VIPTV Android TV application. The application pins the shared design contract at `DESIGN_REF`; the playback module gives it one session-scoped player, explicit source opening, live/DVR facts, track lists, track selection, subtitles, and capability facts. The implementation adapts AndroidX Media3.
+`viptv-org/android` contains the Android/Android TV playback module and the `:app` VIPTV native phone and Android TV application. The application pins the shared design contract at `DESIGN_REF`; the playback module gives it one session-scoped player, explicit source opening, live/DVR facts, track lists, track selection, subtitles, and capability facts. The implementation adapts AndroidX Media3.
 
 ## Product seam
 
@@ -10,10 +10,10 @@ The application and the design repository own screens, focus, remote-button hand
 
 ## Media behavior
 
-- Android API 24+; Android TV is a first-class target. Compose renders all TV screens in a 1280×720 logical frame, uniformly scaled to the device viewport.
+- Android API 24+ phones and TV. AND-035 supersedes the old Roku reconstruction: Compose renders TV in a 1920×1080 logical frame, uniformly scaled to the viewport; phones use native density, system font scaling, touch and keyboard insets.
 - Preserve request headers and external subtitle sources.
 - Model audio, subtitle, and video tracks independently.
-- A non-seekable live stream never offers seeking. A DVR stream exposes only its current seekable range. On-demand media exposes its duration and seekability.
+- The native viewing UI omits pause, seek and next controls for all live channels. The playback adapter still reports live/DVR range facts independently. On-demand media exposes its duration and seekability.
 - Capability reporting is runtime/device-specific. Codec, HDR, DRM, and UHD support are never inferred from dependency presence.
 - A new source replaces the current session. Stale native callbacks cannot update the replacement session.
 
@@ -29,7 +29,7 @@ The Android unit suite covers the product-policy seam: exact-source Resume, fina
 
 The application now provides device pairing/token refresh, profile selection and edit/create/delete routes, parent PIN retry, Home shelves, Discover/Search, My List, queue removal/Undo, explicit incremental and cancellable source discovery, exact-identity Resume, Media3 playback, Live/Guide, preferences, addon enable/remove and sign-out. The controller maps `parent_required` errors into a masked PIN prompt, retains the attempted action in memory, and replays it only after the server grants the current session authority. PIN values are neither logged nor persisted.
 
-The native app must still be checked on an Android TV before any feature-parity or media capability claim. In particular: spatial focus/rail restoration, artwork loading, full series/season/episode metadata rendering, source arrival while focused, player overlay auto-hide and first/second Back behavior, track dialogs, server-managed seek replacement, controlled Next source selection/cancellation, live guide timing, profile avatar asset grid, decoder/DRM/HDR, and physical remote/media keys. The hosted review workflow runs on main pushes, pull requests and manual dispatch. It uses one Gradle worker, runs library/app tests, assembles a debug APK and uploads test XML plus a review APK. It does not substitute for Android TV acceptance; current device and build evidence is recorded in TESTING.md.
+Native API 36 phone/TV emulator observations are recorded in the current TESTING.md entry. Physical Android TV and phone acceptance remains required before broad media/device parity claims. In particular: spatial focus/rail restoration, artwork loading, full series/season/episode metadata rendering, source arrival while focused, player overlay auto-hide and first/second Back behavior, track dialogs, server-managed seek replacement, controlled Next source selection/cancellation, live guide timing, profile avatar asset grid, decoder/DRM/HDR, and physical remote/media keys. The hosted review workflow runs on main pushes, pull requests and manual dispatch. It uses one Gradle worker, runs library/app tests, assembles a debug APK and uploads test XML plus a review APK. It does not substitute for Android TV acceptance; current device and build evidence is recorded in TESTING.md.
 
 ## App modules and interfaces
 

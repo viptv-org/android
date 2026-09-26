@@ -402,8 +402,8 @@ object ViptvDimen {
     val sizePlayerOverlayTopTv = 150.dp
     val sizePlayerBottomTv = 130.dp
     val sizePlayerSeekRoomTv = 52.dp
-    val focusTvCaptionShift = 8.dp
-    val focusTvCaptionShiftProfile = 10.dp
+    val focusTvCaptionShift = 0.dp
+    val focusTvCaptionShiftProfile = 0.dp
 }
 
 data class ViptvTypeRole(val display: Boolean, val size: Float, val weight: FontWeight, val lineHeight: Float, val letterSpacingEm: Float)

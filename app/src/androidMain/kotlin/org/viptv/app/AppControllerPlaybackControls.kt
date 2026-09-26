@@ -148,6 +148,10 @@ internal fun AppController.showPlayerChrome() {
     _state.value = _state.value.copy(playerChromeVisible = true)
     schedulePlayerChromeDismissal()
 }
+internal fun AppController.hidePlayerChrome() {
+    playerChromeJob?.cancel()
+    if (_state.value.route is Route.Player && !playerMenuOpen) _state.value = _state.value.copy(playerChromeVisible = false)
+}
 /** Local track dialogs report ownership so the seven-second timer cannot hide their context. */
 internal fun AppController.setPlayerMenuOpen(open: Boolean) {
     playerMenuOpen = open

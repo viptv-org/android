@@ -43,8 +43,8 @@ jobs:
         run: ./gradlew --no-daemon --max-workers=1 :testDebugUnitTest :app:testDebugUnitTest
       - name: Build Android native libraries
         run: scripts/prepare-core.sh android
-      - name: Assemble debug APK
-        run: ./gradlew --no-daemon --max-workers=1 :app:assembleDebug
+      - name: Assemble and lint debug APK
+        run: ./gradlew --no-daemon --max-workers=1 :app:assembleDebug :app:lintDebug
       - name: Upload unit test evidence
         if: always()
         uses: actions/upload-artifact@v4

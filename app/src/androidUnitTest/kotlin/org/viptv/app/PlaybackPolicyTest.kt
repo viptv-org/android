@@ -312,6 +312,17 @@ class BackAvailabilityPolicyTest {
 }
 
 class PlaybackRecoveryPolicyTest {
+    @Test fun `episode playback retains the source picker and parent series on exit`() {
+        val episode = Media("episode-9", "episode", name = "Episode 9", seriesId = "series", season = 2, episode = 9)
+        val parent = Route.Details(Media("series", "series", name = "The series"))
+        val picker = Route.Sources(episode, backRoute = parent)
+        val source = Source("stream", "Provider", "Stream")
+        val player = Route.Player(episode, source, PlaybackReturn.Sources, sourceRoute = picker)
+        val updated = episode.copy(positionMillis = 5000)
+        assertEquals(picker.copy(media = updated), PlaybackRecoveryPolicy.returnRoute(player, updated))
+        assertEquals(parent, PlaybackRecoveryPolicy.returnRoute(player.copy(returnDestination = PlaybackReturn.Details), updated))
+    }
+
     @Test fun `recovery preserves the current title coordinate for retry source choice and Back`() {
         val playing = Media("movie", "movie", positionMillis = 10_000, durationMillis = 120_000)
         val snapshot = PlaybackRecoveryPolicy.snapshot(playing, positionMillis = 78_500, durationMillis = 120_000)

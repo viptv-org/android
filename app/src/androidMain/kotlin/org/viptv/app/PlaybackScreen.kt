@@ -1,228 +1,244 @@
 package org.viptv.app
 
+import androidx.activity.compose.LocalActivity
+import android.content.pm.ActivityInfo
 import android.view.KeyEvent
 import android.view.SurfaceView
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
+import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.focus.*
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import coil.compose.AsyncImage
-import org.viptv.video.PlaybackStatus
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.max
+import org.viptv.video.PlaybackStatus
+import org.viptv.app.theme.ViptvColor as C
 
-private enum class PlayerTrackMenu { Audio, Subtitles }
+private enum class TrackMenu { Audio, Subtitles }
 
-/** PlayerOverlay's two remote rows, with media/session policy delegated to the controller. */
-@Composable
-internal fun PlaybackScreen(media:Media,chromeVisible:Boolean,seekPreview:SeekPreview?,serverTracks:PlaybackTrackChoices,controller:AppController) {
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable internal fun PlaybackScreen(media: Media, chromeVisible: Boolean, seekPreview: SeekPreview?, serverTracks: PlaybackTrackChoices, controller: AppController) {
+    val tv = LocalTv.current
     val playback by controller.player.state.collectAsState()
+    val videoTracks by controller.player.videoTracks.collectAsState()
     val app by controller.state.collectAsState()
-    val scope=rememberCoroutineScope()
-    val live=media.type=="live"
-    var row by remember(media.id) { mutableIntStateOf(if(live) 1 else 0) }
-    var button by remember(media.id) { mutableIntStateOf(if(live) 3 else 1) }
-    var scrubKey by remember { mutableIntStateOf(KeyEvent.KEYCODE_UNKNOWN) }
-    var repeats by remember { mutableIntStateOf(0) }
-    var justCommittedSeek by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val activity = LocalActivity.current
+    val live = media.type == "live"
+    val position = controller.absolutePositionMillis()
+    val duration = controller.titleDurationMillis() ?: playback.timeline?.durationMillis ?: 0
+    val hasNext = media.seriesId != null && media.season != null && !live
+    val order = if (live) listOf(3, 4, 5) else if (hasNext) listOf(0, 1, 2, 6, 3, 4, 5) else listOf(0, 1, 2, 3, 4, 5)
+    var row by remember(media.id) { mutableIntStateOf(1) }
+    var button by remember(media.id) { mutableIntStateOf(if (live) 3 else 1) }
+    var seekKey by remember { mutableIntStateOf(0) }
+    var repeat by remember { mutableIntStateOf(0) }
+    var activateOnRelease by remember { mutableStateOf(false) }
     var seekJob by remember { mutableStateOf<Job?>(null) }
-    var menu by remember { mutableStateOf<PlayerTrackMenu?>(null) }
-    var notice by remember { mutableStateOf<String?>(null) }
-    val focus=remember { FocusRequester() }
-    val position=controller.absolutePositionMillis()
-    val duration=controller.titleDurationMillis() ?: playback.timeline?.durationMillis ?: 0
-    val next=media.type=="series" && !live
-    val order=if(live) listOf(3,4,5) else if(next) listOf(0,1,2,6,3,4,5) else listOf(0,1,2,3,4,5)
-    fun cancelSeek() { seekJob?.cancel(); controller.cancelSeek(); scrubKey=KeyEvent.KEYCODE_UNKNOWN; repeats=0 }
-    fun seek(delta:Long,key:Int) {
-        if(live || duration<=0) return
+    var menu by remember { mutableStateOf<TrackMenu?>(null) }
+    var info by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
+    val buffering = playback.status == PlaybackStatus.Opening || playback.isBuffering
+    val shown = chromeVisible || buffering
+    fun cancelSeek() { seekJob?.cancel(); controller.cancelSeek(); seekKey = 0; repeat = 0 }
+    fun seek(delta: Long, key: Int) {
+        if (live || duration <= 0) return
         seekJob?.cancel()
-        repeats=if(scrubKey==key) repeats+1 else 0
-        scrubKey=key
-        val multiplier=when { repeats>=15->60;repeats>=9->15;repeats>=5->6;repeats>=2->3;else->1 }
-        controller.previewSeek(delta*multiplier);row=0
+        repeat = if (seekKey == key) repeat + 1 else 0; seekKey = key
+        val multiplier = when { repeat >= 15 -> 60; repeat >= 9 -> 15; repeat >= 5 -> 6; repeat >= 2 -> 3; else -> 1 }
+        controller.previewSeek(delta * multiplier); row = 0
     }
-    fun release() { scrubKey=KeyEvent.KEYCODE_UNKNOWN;repeats=0;seekJob?.cancel();seekJob=scope.launch {delay(800);if(controller.state.value.seekPreview!=null) {justCommittedSeek=true;controller.commitSeek()}} }
-    fun toggle() { cancelSeek();if(!live) {if(playback.isPlaying) controller.pausePlayback() else controller.resumePlayback()} }
-    fun activate(index:Int) {
-        when(index) {
-            0->{seek(-10_000,KeyEvent.KEYCODE_DPAD_CENTER);release()}
-            1->toggle()
-            2->{seek(30_000,KeyEvent.KEYCODE_DPAD_CENTER);release()}
-            3->{cancelSeek();menu=PlayerTrackMenu.Audio;notice=null}
-            4->{cancelSeek();menu=PlayerTrackMenu.Subtitles;notice=null}
-            5->controller.exitPlayback()
-            6->controller.nextEpisode(media)
+    fun releaseSeek() { seekKey = 0; repeat = 0; seekJob?.cancel(); seekJob = scope.launch { delay(800); if (controller.state.value.seekPreview != null) controller.commitSeek() } }
+    fun toggle() { cancelSeek(); if (!live) { if (playback.isPlaying) controller.pausePlayback() else controller.resumePlayback() } }
+    fun activate(index: Int) {
+        when (index) {
+            0 -> { seek(-10_000, KeyEvent.KEYCODE_DPAD_CENTER); releaseSeek() }
+            1 -> toggle()
+            2 -> { seek(30_000, KeyEvent.KEYCODE_DPAD_CENTER); releaseSeek() }
+            3 -> { cancelSeek(); menu = TrackMenu.Audio }
+            4 -> { cancelSeek(); menu = TrackMenu.Subtitles }
+            5 -> controller.exitPlayback()
+            6 -> controller.nextEpisode(media)
         }
     }
-    LaunchedEffect(media.id,position,duration,playback.isPlaying,playback.status) {controller.maybeAutoNext(media,position,duration.takeIf {it>0},playback.isPlaying,playback.status==PlaybackStatus.Ended)}
-    LaunchedEffect(menu) {controller.setPlayerMenuOpen(menu!=null);if(menu==null) focus.requestFocus()}
-    DisposableEffect(controller) {onDispose {seekJob?.cancel();controller.setPlayerMenuOpen(false)}}
-    BackHandler(menu!=null) {if(notice!=null) notice=null else menu=null}
-    val buffering=playback.status==PlaybackStatus.Opening || playback.isBuffering
-    val shown=chromeVisible || buffering
-    Box(Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent {event ->
-        val key=event.nativeKeyEvent;val code=key.keyCode
-        if(code==KeyEvent.KEYCODE_BACK) {
-            seekJob?.cancel()
-            if(menu!=null) {if(key.action==KeyEvent.ACTION_UP) {if(notice!=null) notice=null else menu=null};return@onPreviewKeyEvent true}
-            return@onPreviewKeyEvent false
+    LaunchedEffect(media.id, position, duration, playback.isPlaying, playback.status) { controller.maybeAutoNext(media, position, duration.takeIf { it > 0 }, playback.isPlaying, playback.status == PlaybackStatus.Ended) }
+    LaunchedEffect(menu, info) {
+        controller.setPlayerMenuOpen(menu != null || info)
+        if (tv && menu == null && !info) { withFrameNanos {}; runCatching { focus.requestFocus() } }
+    }
+    DisposableEffect(controller) {
+        onDispose {
+            seekJob?.cancel(); controller.setPlayerMenuOpen(false)
+            if (!tv && activity?.isChangingConfigurations == false) {
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                WindowCompat.getInsetsController(activity.window, activity.window.decorView).show(WindowInsetsCompat.Type.systemBars())
+            }
         }
-        if(menu!=null) return@onPreviewKeyEvent false
-        if(key.action==KeyEvent.ACTION_UP) {if(code==scrubKey) release();return@onPreviewKeyEvent true}
-        if(key.action!=KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+    }
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent { event ->
+        if (!tv || menu != null || info) return@onPreviewKeyEvent false
+        val key = event.nativeKeyEvent; val code = key.keyCode
+        if (code == KeyEvent.KEYCODE_BACK) { seekJob?.cancel(); return@onPreviewKeyEvent false }
+        if (key.action == KeyEvent.ACTION_UP) {
+            if (code == seekKey) releaseSeek()
+            if ((code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER) && activateOnRelease) {
+                activateOnRelease = false
+                if (seekPreview != null && row == 0) { seekJob?.cancel(); controller.commitSeek() }
+                else if (shown) { if (row == 0) toggle() else activate(button) }
+            }
+            return@onPreviewKeyEvent true
+        }
+        if (key.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
         controller.showPlayerChrome()
-        if(code !in listOf(KeyEvent.KEYCODE_DPAD_CENTER,KeyEvent.KEYCODE_ENTER,KeyEvent.KEYCODE_DPAD_LEFT,KeyEvent.KEYCODE_DPAD_RIGHT,KeyEvent.KEYCODE_MEDIA_REWIND,KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)) justCommittedSeek=false
-        when(code) {
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> if(key.repeatCount==0) toggle()
-            KeyEvent.KEYCODE_MEDIA_PLAY -> if(!live && key.repeatCount==0) controller.resumePlayback()
-            KeyEvent.KEYCODE_MEDIA_PAUSE -> if(!live && key.repeatCount==0) controller.pausePlayback()
-            KeyEvent.KEYCODE_DPAD_DOWN -> {cancelSeek();row=1}
-            KeyEvent.KEYCODE_DPAD_UP -> if(!live) row=0
-            KeyEvent.KEYCODE_DPAD_LEFT,KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                val left=code==KeyEvent.KEYCODE_DPAD_LEFT
-                if(!shown && !live) row=0
-                if(row==1) {val current=order.indexOf(button).coerceAtLeast(0);button=order[(current+if(left) order.size-1 else 1)%order.size]}
-                else seek(if(left) -10_000 else 10_000,code)
+        when (code) {
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> if (key.repeatCount == 0) toggle()
+            KeyEvent.KEYCODE_MEDIA_PLAY -> if (!live && key.repeatCount == 0) controller.resumePlayback()
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> if (!live && key.repeatCount == 0) controller.pausePlayback()
+            KeyEvent.KEYCODE_DPAD_DOWN -> { cancelSeek(); row = 1 }
+            KeyEvent.KEYCODE_DPAD_UP -> if (!live) row = 0
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                val left = code == KeyEvent.KEYCODE_DPAD_LEFT
+                if (row == 1 || live) {
+                    val index = order.indexOf(button).coerceAtLeast(0)
+                    button = order[(index + if (left) order.size - 1 else 1) % order.size]
+                } else seek(if (left) -10_000 else 10_000, code)
             }
-            KeyEvent.KEYCODE_MEDIA_REWIND -> seek(-60_000,code)
-            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> seek(60_000,code)
-            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {seek(-10_000,code)}
-            KeyEvent.KEYCODE_INFO,KeyEvent.KEYCODE_MENU -> {cancelSeek();row=1;button=3}
-            KeyEvent.KEYCODE_DPAD_CENTER,KeyEvent.KEYCODE_ENTER -> if(key.repeatCount==0) {
-                if(seekPreview!=null && row==0) {seekJob?.cancel();justCommittedSeek=true;controller.commitSeek()}
-                else if(justCommittedSeek) justCommittedSeek=false
-                else if(shown) {if(row==0) toggle() else activate(button)}
-            }
+            KeyEvent.KEYCODE_MEDIA_REWIND -> seek(-60_000, code)
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> seek(60_000, code)
+            KeyEvent.KEYCODE_MEDIA_NEXT -> if (hasNext && key.repeatCount == 0) controller.nextEpisode(media)
+            KeyEvent.KEYCODE_INFO, KeyEvent.KEYCODE_MENU -> { cancelSeek(); row = 1; button = 3 }
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> if (key.repeatCount == 0) activateOnRelease = true
             else -> return@onPreviewKeyEvent false
+        }; true
+    }.then(if (tv) Modifier.focusRequester(focus).focusable() else Modifier)) {
+        val portrait = !tv && maxHeight > maxWidth
+        LaunchedEffect(portrait) {
+            if (!tv && activity != null) WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                if (portrait) show(WindowInsetsCompat.Type.systemBars()) else hide(WindowInsetsCompat.Type.systemBars())
+            }
         }
-        true
-    }.focusRequester(focus).focusable()) {
-        AndroidView(factory={SurfaceView(it).also(controller.player::attach)},modifier=Modifier.fillMaxSize())
-        if(shown) {
-            PlayerAsset("player-gradient-top.png",Modifier.size(1280.dp,210.dp))
-            PlayerAsset("player-gradient-bottom.png",Modifier.offset(y=382.dp).size(1280.dp,338.dp))
-            val liveChannel=app.liveChannels.firstOrNull {it.id==media.id} ?: app.guideUi.channels.firstOrNull {it.id==media.id}
-            val programme=(app.guideUi.schedulesByChannelId[media.id] ?: app.guide).firstOrNull {it.startMillis<=System.currentTimeMillis() && it.endMillis>System.currentTimeMillis()}
-            if(live) {
-                val logo=liveChannel?.logo ?: media.poster
-                if(!logo.isNullOrBlank()) {
-                    Box(Modifier.offset(64.dp,34.dp).size(84.dp,56.dp).background(Color(0xE8242628),RoundedCornerShape(12.dp)))
-                    AsyncImage(logo,liveChannel?.name,contentScale=ContentScale.Fit,modifier=Modifier.offset(72.dp,40.dp).size(68.dp,48.dp))
+        val track = videoTracks.firstOrNull { it.id == playback.selectedVideoTrackId } ?: videoTracks.firstOrNull()
+        val aspect = if ((track?.width ?: 0) > 0 && (track?.height ?: 0) > 0) track!!.width!!.toFloat() / track.height!! else 16f / 9
+        val videoModifier = Modifier.align(Alignment.Center).then(
+            if (maxWidth / maxHeight > aspect) Modifier.fillMaxHeight().aspectRatio(aspect)
+            else Modifier.fillMaxWidth().aspectRatio(aspect))
+        AndroidView(factory = { SurfaceView(it).also { view -> view.keepScreenOn = true; controller.player.attach(view) } }, modifier = videoModifier)
+        Box(Modifier.matchParentSize().pointerInput(chromeVisible) { detectTapGestures {
+            if (chromeVisible) controller.hidePlayerChrome() else controller.showPlayerChrome()
+        } })
+        if (shown) {
+            if (!portrait) Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .6f), Color.Transparent, Color.Black.copy(alpha = .85f)))))
+            Row(Modifier.align(Alignment.TopStart).fillMaxWidth().then(if (tv) Modifier.padding(96.dp, 76.dp) else Modifier.statusBarsPadding().padding(16.dp)), verticalAlignment = Alignment.CenterVertically) {
+                if (!tv) { AppIconButton("back", "Back", controller::exitPlayback, Modifier.size(44.dp)); Spacer(Modifier.width(12.dp)) }
+                Column(Modifier.weight(1f)) {
+                    VText(media.name, if (tv) 24 else 17, bold = true, lines = 1)
+                    if (!tv && media.season != null) VText("S" + media.season + " · E" + media.episode + " · " + media.episodeTitle.orEmpty(), 13, color = C.textSecondary, lines = 1)
                 }
-                Text(media.name,color=Color.White,fontSize=26.sp,fontWeight=FontWeight.Bold,modifier=Modifier.offset(if(logo.isNullOrBlank()) 64.dp else 164.dp,42.dp).size(1018.dp,36.dp))
-            } else {
-                PlayerAsset("viptv-mark.png",Modifier.offset(64.dp,40.dp).size(36.dp,32.dp))
-                Text(media.episodeTitle ?: media.name,color=RokuWhite,fontSize=26.sp,fontWeight=FontWeight.Bold,maxLines=1,modifier=Modifier.offset(112.dp,36.dp).size(700.dp,40.dp))
+                VText(if (live) "● LIVE" else if (buffering) "BUFFERING" else if (playback.isPlaying) "PLAYING" else "PAUSED", if (tv) 20 else 11, color = if (live) C.statusLive else C.textPrimary, bold = true)
             }
-            Text(if(buffering) "LOADING" else if(live) "● LIVE" else if(playback.isPlaying) "PLAYING" else "PAUSED",color=Color.White,fontSize=20.sp,fontWeight=FontWeight.Bold,textAlign=TextAlign.End,modifier=Modifier.offset(1048.dp,36.dp).size(168.dp,40.dp))
-            Text(if(live) "ON NOW  ·  LIVE TV" else "NOW PLAYING",color=Color(0xFFC5C6C7),fontSize=18.sp,modifier=Modifier.offset(64.dp,460.dp).size(1100.dp,26.dp))
-            Text(if(live) programme?.title ?: media.name else media.name,color=RokuWhite,fontSize=32.sp,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.offset(64.dp,486.dp).width(1090.dp))
-            Text(playerContext(media,seekPreview),color=Color(0xFFBFC1C3),fontSize=20.sp,modifier=Modifier.offset(64.dp,524.dp).size(1152.dp,30.dp))
-            if(!live) {
-                val fraction=if(duration>0) (position.toFloat()/duration).coerceIn(0f,1f) else 0f
-                val preview=if(duration>0) ((seekPreview?.targetMillis ?: position).toFloat()/duration).coerceIn(0f,1f) else 0f
-                Box(Modifier.offset(64.dp,572.dp).size(1152.dp,6.dp).clip(RoundedCornerShape(3.dp)).background(Color(0xFF5A5C5E)))
-                if(fraction>0) Box(Modifier.offset(64.dp,572.dp).size((1152*fraction).dp,6.dp).clip(RoundedCornerShape(3.dp)).background(RokuWhite))
-                if(seekPreview!=null) Box(Modifier.offset((64+1152*fraction-1).dp,569.dp).size(3.dp,10.dp).background(RokuMuted))
-                if(row==0 && duration>0) PlayerAsset("player-circle.png",Modifier.offset((64+1152*preview-8).dp,567.dp).size(16.dp))
-            } else if(programme!=null) {
-                val fraction=((System.currentTimeMillis()-programme.startMillis).toFloat()/(programme.endMillis-programme.startMillis)).coerceIn(0f,1f)
-                Box(Modifier.offset(64.dp,572.dp).size(1152.dp,6.dp).background(Color(0xFF5A5C5E),RoundedCornerShape(3.dp)))
-                Box(Modifier.offset(64.dp,572.dp).size((1152*fraction).dp,6.dp).background(RokuWhite,RoundedCornerShape(3.dp)))
-            }
-            Text(if(live) if(programme!=null) "ON NOW" else "LIVE" else formatTime(seekPreview?.targetMillis ?: position),color=RokuWhite,fontSize=20.sp,modifier=Modifier.offset(64.dp,584.dp).size(576.dp,32.dp))
-            Text(if(live) if(programme!=null) "${(programme.endMillis-System.currentTimeMillis()+59_999)/60_000} min left" else "Live broadcast" else formatTime(duration),color=RokuMuted,fontSize=20.sp,textAlign=TextAlign.End,modifier=Modifier.offset(640.dp,584.dp).size(576.dp,32.dp))
-            order.forEach {index ->
-                val x=if(live) mapOf(3 to 64,4 to 608,5 to 1152).getValue(index) else listOf(64,144,224,992,1072,1152,304)[index]
-                val focused=row==1 && button==index && menu==null
-                val glyph=when(index) {0->"rewind";1->if(playback.isPlaying) "pause" else "play";2,6->"forward";3->"audio";4->"captions";else->"exit"}
-                Box(Modifier.offset(x.dp,624.dp).size(64.dp).background(if(focused) RokuWhite else Color.Transparent,RoundedCornerShape(12.dp)).clickable {row=1;button=index;activate(index)},contentAlignment=Alignment.Center) {
-                    PlayerAsset("ui-nav-player-$glyph.png",Modifier.size(28.dp),if(focused) RokuCanvas else RokuWhite,when(index) {0->"Rewind 10 seconds";1->if(playback.isPlaying) "Pause" else "Resume";2->"Forward 30 seconds";3->"Audio";4->"Captions";5->"Exit";else->"Next episode"})
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().then(if (tv) Modifier.padding(horizontal = 96.dp, vertical = 96.dp) else Modifier.navigationBarsPadding().padding(horizontal = 20.dp, vertical = 24.dp))) {
+                if (tv) {
+                    VText(if (live) "LIVE TV" else "NOW PLAYING", 20, color = C.textSecondary, bold = true)
+                    if (media.season != null) VText("S" + media.season + " · E" + media.episode + " · " + media.episodeTitle.orEmpty(), 26, Modifier.padding(top = 18.dp), lines = 1)
+                    VText(media.name, 56, Modifier.padding(top = 18.dp, bottom = 32.dp), display = true, lines = 1)
+                }
+                if (!live) {
+                    val displayPosition = seekPreview?.targetMillis ?: position
+                    if (tv) {
+                        ProgressLine(if (duration > 0) displayPosition.toFloat() / duration else 0f, Modifier.padding(vertical = 14.dp))
+                        if (row == 0) VText(if (seekPreview != null) "Seeking to " + formatTime(displayPosition) else "Use left or right to seek", 20, color = C.textSecondary)
+                    } else Slider(
+                        value = if (duration > 0) (displayPosition.toFloat() / duration).coerceIn(0f, 1f) else 0f,
+                        onValueChange = { value -> controller.previewSeek((duration * value).toLong() - (controller.state.value.seekPreview?.targetMillis ?: controller.absolutePositionMillis())) },
+                        onValueChangeFinished = { controller.commitSeek() },
+                        enabled = duration > 0 && playback.timeline?.canSeek == true,
+                        modifier = Modifier.height(32.dp),
+                        thumb = { Box(Modifier.size(12.dp).clip(CircleShape).background(C.textPrimary)) },
+                        track = { ProgressLine(if (duration > 0) displayPosition.toFloat() / duration else 0f) },
+                        colors = SliderDefaults.colors(thumbColor = C.textPrimary, activeTrackColor = LocalAccent.current, inactiveTrackColor = C.lineStrong))
+                    Row(Modifier.fillMaxWidth().padding(bottom = measure(32, 20)), horizontalArrangement = Arrangement.SpaceBetween) {
+                        VText(formatTime(displayPosition), if (tv) 22 else 13, bold = true)
+                        VText(formatTime(duration), if (tv) 22 else 13, color = C.textSecondary)
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = if (tv) Arrangement.spacedBy(18.dp) else Arrangement.SpaceEvenly) {
+                    if (!live) {
+                        PlayerControl("back10", "Back 10 seconds", tv && row == 1 && button == 0, { activate(0) })
+                        PlayerControl(if (playback.isPlaying) "pause" else "play", if (playback.isPlaying) "Pause" else "Play", tv && row == 1 && button == 1, { activate(1) }, primary = !tv)
+                        PlayerControl("forward30", "Forward 30 seconds", tv && row == 1 && button == 2, { activate(2) })
+                        if (hasNext) PlayerControl("next", "Next episode", tv && row == 1 && button == 6, { activate(6) })
+                    }
+                    if (tv) Spacer(Modifier.weight(1f))
+                    if (tv || live) {
+                        PlayerControl("audio", "Audio", tv && row == 1 && button == 3, { activate(3) })
+                        PlayerControl("captions", "Subtitles", tv && row == 1 && button == 4, { activate(4) })
+                        PlayerControl("exit", "Exit player", tv && row == 1 && button == 5, { activate(5) })
+                    }
+                }
+                if (!tv && !live) Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    AppIconButton("audio", "Audio", { activate(3) }, Modifier.size(44.dp))
+                    AppIconButton("captions", "Subtitles", { activate(4) }, Modifier.size(44.dp))
+                    AppIconButton("info", "Playback info", { info = true }, Modifier.size(44.dp))
+                    AppIconButton("expand", "Fullscreen", { activity?.requestedOrientation = if (portrait) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT }, Modifier.size(44.dp))
                 }
             }
         }
-        if(buffering) RokuSpinner(Modifier.offset(610.dp,330.dp).size(60.dp))
-        menu?.let {active ->
-            PlayerTrackDialog(active,if(active==PlayerTrackMenu.Audio) serverTracks.audio else serverTracks.subtitles,active==PlayerTrackMenu.Subtitles && serverTracks.subtitlesSupported,notice,
-                onAudio={controller.selectAudioTrack(it);menu=null},onText={controller.selectSubtitleTrack(it);menu=null},onUnavailable={notice="This track is not supported on this TV."},onClose={menu=null})
-        }
+        if (buffering) CircularProgressIndicator(Modifier.align(Alignment.Center).size(measure(64, 44)), color = LocalAccent.current)
+        menu?.let { kind -> TrackPanel(kind, if (kind == TrackMenu.Audio) serverTracks.audio else serverTracks.subtitles, kind == TrackMenu.Subtitles && serverTracks.subtitlesSupported,
+            onChoose = { track -> if (kind == TrackMenu.Audio && track != null) controller.selectAudioTrack(track) else controller.selectSubtitleTrack(track); menu = null },
+            onClose = { menu = null }) }
+        if (info) FullInfo("Playback info", "Decoder · Media3\nDelivery · " + app.playbackDeliveryMode + "\nMedia · " + (playback.timeline?.kind?.name ?: "Unknown"), { info = false })
     }
 }
 
-@Composable
-private fun PlayerAsset(name:String,modifier:Modifier,tint:Color?=null,description:String?=null) {
-    AsyncImage("file:///android_asset/roku/images/$name",description,contentScale=ContentScale.FillBounds,colorFilter=tint?.let { ColorFilter.tint(it) },modifier=modifier)
+@Composable private fun PlayerControl(icon: String, label: String, focused: Boolean, onClick: () -> Unit, primary: Boolean = false) {
+    val tv = LocalTv.current
+    Box(Modifier.size(measure(72, if (primary) 54 else 44)).clip(CircleShape)
+        .background(if (focused) C.textPrimary else if (primary) LocalAccent.current else C.surfaceN3)
+        .clickable(onClick = onClick).semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
+        VIcon(icon, modifier = Modifier.size(measure(32, 24)), color = if (focused || primary) C.onLight else C.textPrimary)
+    }
 }
 
-@Composable
-private fun PlayerTrackDialog(menu:PlayerTrackMenu,tracks:List<PlaybackTrack>,canDisable:Boolean,notice:String?,onAudio:(PlaybackTrack)->Unit,onText:(PlaybackTrack?)->Unit,onUnavailable:()->Unit,onClose:()->Unit) {
-    var page by remember(menu) {mutableIntStateOf(0)}
-    var selected by remember(menu,page) {mutableIntStateOf(0)}
-    val focus=remember {FocusRequester()}
-    val pageCount=max(1,(tracks.size+4)/5)
-    val entries=buildList<Pair<String,()->Unit>> {
-        if(canDisable) add("Off" to {onText(null)})
-        tracks.drop(page.coerceIn(0,pageCount-1)*5).take(5).forEach {track ->
-            val name=track.title.ifBlank {track.language ?: "Track ${track.inputIndex+1}"}
-            add((if(!track.selectable || !track.supported) "Unavailable · $name" else if(track.selected) "Playing · $name" else name) to {if(!track.selectable || !track.supported) onUnavailable() else if(menu==PlayerTrackMenu.Audio) onAudio(track) else onText(track)})
-        }
-        if(page+1<pageCount) add("More tracks" to {page++})
-        if(page>0) add("Previous tracks" to {page--})
-        add("Back to player" to onClose)
-    }
-    val panelHeight=146+minOf(entries.size,7)*62
-    val panelTop=(720-panelHeight)/2
-    LaunchedEffect(menu,page) {focus.requestFocus()}
-    Box(Modifier.fillMaxSize().background(Color(0xDC080909)).onPreviewKeyEvent {event ->
-        val key=event.nativeKeyEvent
-        if(key.keyCode==KeyEvent.KEYCODE_BACK) false
-        else if(key.action!=KeyEvent.ACTION_DOWN) true
-        else {when(key.keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP->selected=(selected-1).coerceAtLeast(0)
-            KeyEvent.KEYCODE_DPAD_DOWN->selected=(selected+1).coerceAtMost(entries.lastIndex)
-            KeyEvent.KEYCODE_DPAD_CENTER,KeyEvent.KEYCODE_ENTER->if(key.repeatCount==0) entries[selected.coerceAtMost(entries.lastIndex)].second()
-        };true}
-    }.focusRequester(focus).focusable()) {
-        Box(Modifier.offset(200.dp,panelTop.dp).size(880.dp,panelHeight.dp).background(Color(0xFF191B1D),RoundedCornerShape(12.dp)))
-        Text(if(menu==PlayerTrackMenu.Audio) "Audio tracks" else "Subtitles",color=RokuWhite,fontSize=36.sp,fontWeight=FontWeight.Bold,modifier=Modifier.offset(244.dp,(panelTop+32).dp).size(792.dp,54.dp))
-        val first=max(0,selected-6)
-        entries.drop(first).take(7).forEachIndexed {slot,entry ->
-            val active=first+slot==selected
-            Box(Modifier.offset(244.dp,(panelTop+94+slot*62).dp).size(792.dp,52.dp).background(if(active) RokuWhite else Color.Transparent,RoundedCornerShape(10.dp)).clickable(onClick=entry.second),contentAlignment=Alignment.CenterStart) {
-                Text(entry.first,color=if(active) RokuCanvas else RokuWhite,fontSize=20.sp,maxLines=1,modifier=Modifier.padding(start=18.dp))
+@Composable private fun TrackPanel(kind: TrackMenu, tracks: List<PlaybackTrack>, off: Boolean, onChoose: (PlaybackTrack?) -> Unit, onClose: () -> Unit) {
+    val tv = LocalTv.current
+    val entries = if (off) listOf<PlaybackTrack?>(null) + tracks else tracks
+    val selected = entries.indexOfFirst { it?.selected == true }.coerceAtLeast(0)
+    val list = rememberLazyListState()
+    val focus = remember { FocusRequester() }
+    var notice by remember { mutableStateOf<String?>(null) }
+    AppOverlay(if (kind == TrackMenu.Audio) "Audio" else "Subtitles", onClose) {
+        if (entries.isEmpty()) EmptyState("No selectable tracks", "This stream supplies no available tracks.", if (kind == TrackMenu.Audio) "audio" else "captions")
+        else LazyColumn(state = list, modifier = Modifier.heightIn(max = measure(800, 480)), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            itemsIndexed(entries) { index, track ->
+                val unavailable = track != null && (!track.selectable || !track.supported)
+                val label = track?.title?.ifBlank { track.language ?: "Track " + (track.inputIndex + 1) } ?: "Off"
+                AppButton((if (track?.selected == true) "✓ " else "") + label + if (unavailable) " · Unavailable" else "", {
+                    if (unavailable) notice = "This track is not supported on this device." else onChoose(track)
+                }, Modifier.fillMaxWidth().then(if (index == selected && tv) Modifier.focusRequester(focus) else Modifier), selected = track?.selected == true)
             }
         }
-        Text(notice ?: when { tracks.isEmpty() -> if(menu==PlayerTrackMenu.Audio) "This stream supplies no selectable audio tracks." else "This stream supplies no selectable subtitles."; menu==PlayerTrackMenu.Audio -> "Choose any available audio track. Language labels are informational."; !canDisable -> "Subtitles are unavailable for this output. Listed tracks cannot currently be displayed."; else -> "Select a supported text track. Image subtitles cannot be displayed." },color=RokuMuted,fontSize=16.sp,maxLines=2,modifier=Modifier.offset(244.dp,(panelTop+panelHeight-50).dp).size(792.dp,44.dp))
+        notice?.let { VText(it, if (tv) 22 else 14, Modifier.padding(top = 20.dp), C.textSecondary) }
+        LaunchedEffect(kind) { if (tv && entries.isNotEmpty()) { list.scrollToItem(selected); withFrameNanos {}; runCatching { focus.requestFocus() } } }
     }
-}
-
-private fun formatTime(millis:Long):String {
-    val total=max(0,millis/1000);val h=total/3600;val m=total%3600/60;val s=total%60
-    return if(h>0) "%d:%02d:%02d".format(h,m,s) else "%d:%02d".format(m,s)
-}
-private fun playerContext(media:Media,seek:SeekPreview?):String = if(seek!=null) "Seeking to ${formatTime(seek.targetMillis)}…" else buildString {
-    media.season?.let {append("Season $it")};media.episode?.let {if(isNotEmpty()) append(" · ");append("Episode $it")}
-    media.episodeTitle?.takeIf {it!=media.name}?.let {if(isNotEmpty()) append(" · ");append(it)}
 }

@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -28,7 +30,13 @@ class AppController(context: Context, private val origin: String) {
     private var keepProfilesOnIdentityRefresh = false
     internal val _state = MutableStateFlow(AppState(loading = true))
     val state: StateFlow<AppState> = _state.asStateFlow()
-    val player: AndroidMedia3VideoPlayer = AndroidMedia3BackendFactory(context).createAndroidPlayer()
+    private val playerDelegate = lazy {
+        AndroidMedia3BackendFactory(context).createAndroidPlayer().also { instance ->
+            scope.launch { instance.events.collect(::onPlayerEvent) }
+        }
+    }
+    val player: AndroidMedia3VideoPlayer get() = playerDelegate.value
+    internal var homeJob: Job? = null
     private var pairingPoll: Job? = null
     internal var sourceDiscovery: Job? = null
     internal var queueContinuationJob: Job? = null
@@ -55,6 +63,9 @@ class AppController(context: Context, private val origin: String) {
     internal var continuationRestore: Route.Player? = null
     internal var continuationWasPlaying = false
     internal var detailReturnDestination: Destination? = null
+    internal var detailReturnRoute: Route? = null
+    internal var detailJob: Job? = null
+    internal var detailGeneration = 0L
     internal var guideGeneration = 0L
     internal var guideBrowseGeneration = 0L
     internal var discoverGeneration = 0L
@@ -68,7 +79,6 @@ class AppController(context: Context, private val origin: String) {
     internal var autoNextMediaKey: String? = null
 
     init {
-        scope.launch { player.events.collect(::onPlayerEvent) }
         coreSession.begin()
     }
     fun beginPairing() = scope.launch {
@@ -118,14 +128,17 @@ class AppController(context: Context, private val origin: String) {
                     _state.value = _state.value.copy(route = Route.Profiles, profiles = profiles, selectedProfile = chosen, loading = false)
                     return
                 }
-                _state.value = _state.value.copy(profiles = profiles, selectedProfile = chosen, loading = chosen != null, message = null)
-                chosen?.let { profile -> scope.launch { loadHome(profile, generation) } }
+                val changed = chosen?.id != _state.value.selectedProfile?.id
+                val enter = changed || _state.value.route == Route.Pairing || _state.value.route == Route.Profiles
+                if (changed) _state.value = _state.value.copy(shelves = emptyList(), favorites = emptyList(), queue = emptyList(), discoverUi = DiscoverUiState(), searchQuery = "", searchResults = emptyList(), searchSections = emptyList(), guideUi = GuideUiState(), homeFocus = HomeFocusSnapshot())
+                _state.value = _state.value.copy(profiles = profiles, selectedProfile = chosen, loading = false, message = null)
+                chosen?.let { profile -> scope.launch { loadHome(profile, generation, enter) } }
             }
             "PROFILES" -> { keepProfilesOnIdentityRefresh = false; _state.value = _state.value.copy(route = Route.Profiles, profiles = profiles, selectedProfile = null, loading = false, message = null) }
             "PAIRING" -> { _state.value = AppState(route = Route.Pairing, sessionRestoring = false); beginPairing() }
             "ERROR" -> {
                 val message = view.error ?: "Could not restore your session. Try again."
-                _state.value = _state.value.copy(loading = false, profiles = profiles, message = message)
+                _state.value = _state.value.copy(loading = false, profiles = if (keepProfilesOnIdentityRefresh) _state.value.profiles else profiles, message = message)
                 if (view.errorStatus == 403) {
                     afterParentUnlock = { pendingCoreAction?.invoke() ?: coreSession.retry() }
                     _state.value = _state.value.copy(pinPrompt = PinPrompt("Enter parent PIN"))
@@ -134,19 +147,33 @@ class AppController(context: Context, private val origin: String) {
             else -> _state.value = _state.value.copy(loading = true, message = null)
         }
     }
-    private suspend fun loadHome(profile: Profile, generation: Long = sessionRenderGeneration) {
-        runCatching { gateway.home(profile.id) }.onSuccess { shelves ->
-            if (generation != sessionRenderGeneration) return@onSuccess
-            _state.value = _state.value.copy(
-                route = Route.Browse(Destination.Home),
-                selectedProfile = profile,
-                shelves = shelves,
-                loading = false,
-            )
-        }.onFailure { if (generation == sessionRenderGeneration) fail(it) }
+    internal suspend fun loadHome(profile: Profile, generation: Long = sessionRenderGeneration, enter: Boolean = false) {
+        val job = currentCoroutineContext()[Job]
+        if (homeJob !== job) homeJob?.cancel()
+        homeJob = job
+        val refresh = ++homeRefreshGeneration
+        _state.value = _state.value.copy(homeLoading = true)
+        if (enter) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), selectedProfile = profile, loading = false)
+        runCatching { gateway.home(profile.id) { shelves ->
+            if (generation == sessionRenderGeneration && refresh == homeRefreshGeneration && _state.value.selectedProfile?.id == profile.id) {
+                _state.value = _state.value.copy(
+                    shelves = shelves,
+                    queue = shelves.firstOrNull { it.isQueueShelf }?.items.orEmpty(),
+                    favorites = shelves.firstOrNull { it.title == "My List" }?.items.orEmpty(),
+                    loading = if (_state.value.route == Route.Browse(Destination.Home)) false else _state.value.loading,
+                )
+            }
+        } }.onFailure { if (generation == sessionRenderGeneration && refresh == homeRefreshGeneration && it !is CancellationException) fail(it) }
+        if (generation == sessionRenderGeneration && refresh == homeRefreshGeneration) _state.value = _state.value.copy(homeLoading = false)
     }
     internal fun refreshProfileIdentity() { keepProfilesOnIdentityRefresh = true; coreSession.retry() }
     fun chooseProfile(profile: Profile) {
+        keepProfilesOnIdentityRefresh = false
+        homeJob?.cancel()
+        homeRefreshGeneration++
+        detailGeneration++; detailJob?.cancel()
+        searchJob?.cancel(); discoverJob?.cancel(); sourceDiscovery?.cancel()
+        cancelPendingQueueContinuation()
         guideBrowseGeneration++
         guideGeneration++
         pendingCoreAction = { coreSession.select(profile.id) }
@@ -157,7 +184,12 @@ class AppController(context: Context, private val origin: String) {
     fun toggleProfileManagement() { _state.value = _state.value.copy(managingProfiles = !_state.value.managingProfiles) }
 
     fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback((_state.value.route as? Route.Player)?.media); pendingCoreAction = coreSession::signOut; coreSession.signOut() } }
-    fun close() { coreSession.close(); pairingPoll?.cancel(); sourceDiscovery?.cancel(); queueContinuationJob?.cancel(); discoverJob?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel(); stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
+    fun close() {
+        coreSession.close(); homeJob?.cancel(); detailJob?.cancel(); pairingPoll?.cancel(); sourceDiscovery?.cancel()
+        queueContinuationJob?.cancel(); discoverJob?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel()
+        if (playerDelegate.isInitialized()) { stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
+        scope.launch { delay(5000); scope.cancel() }
+    }
 
     /**
      * The stored device grant belongs to the previous origin; an origin change
@@ -214,6 +246,7 @@ class AppController(context: Context, private val origin: String) {
         }
     }
     internal fun stopPlayback(media: Media? = null) {
+        if (!playerDelegate.isInitialized()) return
         invalidatePlaybackPreparation()
         val position = absolutePositionMillis()
         val profileId = _state.value.selectedProfile?.id

@@ -1,181 +1,243 @@
 package org.viptv.app
 
+import android.app.Application
+import android.content.res.Configuration
 import android.os.Bundle
+import android.content.pm.ActivityInfo
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.focus.*
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.*
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
+import org.viptv.app.theme.ViptvColor as C
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { RokuApplication() }
+        if (BuildConfig.DEBUG) intent.getStringExtra("preview-origin")?.let { value ->
+            ServerOrigin.validate(value)?.takeIf { it != ServerOrigin.load(this) }?.let { origin ->
+                getSharedPreferences("viptv.auth", MODE_PRIVATE).edit().clear().commit()
+                ServerOrigin.save(this, origin)
+            }
+        }
+        val television = (resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION
+        if (television) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        enableEdgeToEdge()
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+            if (television) hide(WindowInsetsCompat.Type.systemBars())
+        }
+        val model = ViewModelProvider(this)[ViptvModel::class.java]
+        setContent { CompositionLocalProvider(LocalTv provides television) { ViptvApplication(model) } }
     }
 }
 
-/** All presentation measures once in Roku's 1280 × 720 coordinate space. */
-@Composable private fun RokuApplication() {
-    val context = LocalContext.current
-    // The controller is keyed by the configured origin: saving a different
-    // server disposes the old session (dropping its device grant) and starts
-    // pairing against the new origin.
-    var serverOrigin by remember { mutableStateOf(ServerOrigin.load(context)) }
-    val controller = remember(serverOrigin) { AppController(context.applicationContext, serverOrigin) }
-    val state by controller.state.collectAsStateWithLifecycle()
-    DisposableEffect(controller) { onDispose(controller::close) }
-    val changeServer: (String) -> Unit = { origin ->
-        ServerOrigin.save(context, origin)
-        controller.wipeCredentialsForOriginChange()
-        serverOrigin = origin
+/** Keep credentials, requests and playback alive across phone rotation. */
+class ViptvModel(application: Application) : AndroidViewModel(application) {
+    private val preferences = application.getSharedPreferences("viptv.display", 0)
+    var oled by mutableStateOf(preferences.getBoolean("oled", false)); private set
+    var accent by mutableStateOf(Color(preferences.getInt("accent", 0xFFF5C542.toInt()))); private set
+    var origin by mutableStateOf(ServerOrigin.load(application)); private set
+    var controller by mutableStateOf(AppController(application, origin)); private set
+    fun updateOled(value: Boolean) { oled = value; preferences.edit().putBoolean("oled", value).apply() }
+    fun updateAccent(value: Color) { accent = value; preferences.edit().putInt("accent", value.toArgb()).apply() }
+    fun changeOrigin(value: String) {
+        if (value == origin) return
+        controller.wipeCredentialsForOriginChange(); controller.close()
+        ServerOrigin.save(getApplication(), value); origin = value
+        controller = AppController(getApplication(), value)
     }
+    override fun onCleared() { controller.close() }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable private fun ViptvApplication(model: ViptvModel) {
+    val controller = model.controller
+    val state by controller.state.collectAsStateWithLifecycle()
+    val tv = LocalTv.current
+    ViptvTheme(model.oled, model.accent) {
+        BoxWithConstraints(Modifier.fillMaxSize().background(LocalGround.current)) {
+            if (tv) {
+                val density = LocalDensity.current
+                val scale = minOf(maxWidth.value / 1920f, maxHeight.value / 1080f)
+                CompositionLocalProvider(LocalDensity provides Density(density.density * scale, 1f), LocalBringIntoViewSpec provides VisibleFocusScroll) {
+                    Box(Modifier.requiredSize(1920.dp, 1080.dp).align(Alignment.Center)) { ApplicationShell(state, controller, model) }
+                }
+            } else ApplicationShell(state, controller, model)
+        }
+    }
+}
+
+private fun Route.screenKey(): String = when (this) {
+    is Route.Browse -> "browse:" + destination.name
+    is Route.Details -> "detail:" + media.id
+    is Route.Player -> "player:" + media.id
+    is Route.Sources -> "sources:" + media.id
+    is Route.ProfileEditor -> "profile:" + profile?.id
+    is Route.Guide -> "guide"
+    else -> javaClass.simpleName
+}
+
+@Composable private fun ApplicationShell(state: AppState, controller: AppController, model: ViptvModel) {
+    val tv = LocalTv.current
+    val route = state.route
+    val key = route.screenKey()
+    val saved = rememberSaveableStateHolder()
+    val rail = remember { FocusRequester() }
+    val initial = remember(key) { FocusRequester() }
+    val focusMemory = remember(key) { FocusMemory() }
+    var railOpen by remember { mutableStateOf(false) }
+    val browse = route is Route.Browse || route is Route.Guide || route == Route.Search || route == Route.Settings || route == Route.Addons || route is Route.Details
+    val tab = route is Route.Browse || route is Route.Guide
     BackHandler(controller.consumesBack(state)) { controller.handleBack() }
-    BoxWithConstraints(Modifier.fillMaxSize().background(RokuCanvas)) {
-        val physicalDensity = LocalDensity.current
-        val scale = minOf(maxWidth.value / 1280f, maxHeight.value / 720f)
-        val railFocus = remember { FocusRequester() }
-        CompositionLocalProvider(LocalDensity provides Density(physicalDensity.density * scale, 1f), LocalRokuRailFocus provides railFocus) {
-            Box(Modifier.requiredSize(1280.dp,720.dp).align(Alignment.Center).clipToBounds()) {
-                val route = state.route
-                when (route) {
-                    Route.Pairing -> Pairing(state, controller)
-                    Route.Profiles -> ProfileChooser(state, controller)
-                    is Route.ProfileEditor -> ProfileEditor(route.profile, controller)
-                    is Route.Browse -> when (route.destination) {
-                        Destination.Home -> RokuHomeScreen(state, controller)
-                        Destination.Discover -> DiscoverScreen(state, controller)
-                        else -> RokuCollection(state, route.destination, controller)
-                    }
-                    is Route.Details -> DetailsScreen(route.media, controller)
-                    is Route.Sources -> SourcePicker(route.media, state.sources, controller)
-                    is Route.Player -> PlaybackScreen(route.media, state.playerChromeVisible, state.seekPreview, state.playbackTracks, controller)
-                    is Route.Guide -> GuideScreen(state, route.channel, controller)
-                    Route.Search -> SearchScreen(state, controller)
-                    Route.Settings -> SettingsScreen(
-                        state.preferences, state.addons, state.serverAbout, serverOrigin,
-                        controller::setPreference, controller::installAddon,
-                        controller::toggleAddon, controller::removeAddon,
-                        { controller.navigate(Destination.Profile) },
-                        { controller.requestDialog(DialogKind.SignOut,"Sign out of VIPTV?") },
-                        onManageProfiles = controller::openProfileManagement,
-                        onServerChange = changeServer,
-                    )
-                    Route.Addons -> AddonsScreen(state, controller)
-                }
-                if (route is Route.Browse || route is Route.Guide || route is Route.Details || route is Route.Sources || route == Route.Search || route == Route.Settings || route == Route.Addons) RokuRail(state,controller)
-                if (state.loading && route !is Route.Sources && route !is Route.Player && route !is Route.Guide) {
-                    Box(Modifier.fillMaxSize().background(RokuCanvas.copy(alpha=.78f))) {
-                        RokuSpinner(Modifier.offset(610.dp,330.dp).size(60.dp))
-                        Text("Loading",color=RokuWhite,fontSize=20.sp,textAlign=TextAlign.Center,modifier=Modifier.offset(280.dp,414.dp).width(720.dp))
+    BackHandler(tv && railOpen) { railOpen = false; runCatching { (focusMemory.target ?: initial).requestFocus() } }
+    CompositionLocalProvider(LocalRailFocus provides rail, LocalContentFocus provides initial, LocalFocusMemory provides focusMemory, LocalCloseRail provides { railOpen = false }) {
+        Box(Modifier.fillMaxSize()) {
+            val insets = if (tv || route is Route.Player || route is Route.Details) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+            saved.SaveableStateProvider(key) {
+                Box(Modifier.fillMaxSize().then(insets)) {
+                    when (route) {
+                        Route.Pairing -> Pairing(state, controller, model)
+                        Route.Profiles -> ProfileChooser(state, controller)
+                        is Route.ProfileEditor -> ProfileEditor(route.profile, controller)
+                        is Route.Browse -> when (route.destination) {
+                            Destination.Home -> HomeScreen(state, controller)
+                            Destination.Discover -> DiscoverScreen(state, controller)
+                            else -> LibraryScreen(state, controller)
+                        }
+                        is Route.Details -> DetailsScreen(route.media, controller)
+                        is Route.Sources -> SourcePicker(route.media, state.sources, controller)
+                        is Route.Player -> PlaybackScreen(route.media, state.playerChromeVisible, state.seekPreview, state.playbackTracks, controller)
+                        is Route.Guide -> GuideScreen(state, route.channel, controller)
+                        Route.Search -> SearchScreen(state, controller)
+                        Route.Settings -> SettingsScreen(state, controller, model)
+                        Route.Addons -> AddonsScreen(state, controller)
                     }
                 }
-                state.message?.let { message -> RokuNotice(message) }
-                state.dialog?.let { ActionDialog(it,controller) }
-                state.pinPrompt?.let { PinDialog(it,controller) }
+            }
+            if (!tv && tab) PhoneNavigation(route, controller, Modifier.align(Alignment.BottomCenter))
+            if (tv && browse) TelevisionRail(state, controller, railOpen, { railOpen = it }, rail, initial, focusMemory)
+            if (state.loading && route !is Route.Player && route != Route.Pairing) {
+                CircularProgressIndicator(Modifier.align(Alignment.TopEnd).padding(measure(40, 16)).size(measure(32, 22)), color = LocalAccent.current, strokeWidth = measure(4, 2))
+            }
+            state.message?.let { message ->
+                var visible by remember(message) { mutableStateOf(true) }
+                LaunchedEffect(message) { delay(5000); visible = false }
+                if (visible) Box(Modifier.align(if (tv) Alignment.TopCenter else Alignment.BottomCenter)
+                    .padding(horizontal = measure(64, 16), vertical = measure(32, if (tab) 116 else 40))
+                    .widthIn(max = measure(660, 440)).clip(RoundedCornerShape(20.dp)).background(C.surfaceN3).padding(measure(24, 16))) {
+                    VText(message, if (tv) 22 else 14, lines = 3)
+                }
+            }
+            state.dialog?.let { ActionDialog(it, controller) }
+            state.pinPrompt?.let { PinDialog(it, controller) }
+        }
+    }
+}
+
+private val navItems = listOf(
+    Triple(Destination.Search, "search", 202), Triple(Destination.Home, "home", 282),
+    Triple(Destination.Discover, "discover", 360), Triple(Destination.Live, "live", 440),
+    Triple(Destination.MyList, "list", 516), Triple(Destination.Settings, "settings", 978),
+)
+private fun destination(route: Route) = when (route) {
+    is Route.Browse -> route.destination
+    is Route.Guide -> Destination.Live
+    Route.Search -> Destination.Search
+    Route.Settings, Route.Addons -> Destination.Settings
+    else -> Destination.Home
+}
+
+@Composable private fun TelevisionRail(state: AppState, controller: AppController, expanded: Boolean, onExpanded: (Boolean) -> Unit, rail: FocusRequester, initial: FocusRequester, memory: FocusMemory) {
+    val current = destination(state.route)
+    val profileTarget = remember { FocusRequester() }
+    val targets = remember { navItems.associate { it.first to FocusRequester() } }
+    Box(Modifier.fillMaxSize()) {
+        if (expanded) {
+            Box(Modifier.fillMaxSize().background(C.scrimTvMenu))
+            Box(Modifier.width(520.dp).fillMaxHeight().background(Brush.horizontalGradient(listOf(LocalGround.current, LocalGround.current.copy(alpha = .98f), Color.Transparent))))
+        }
+        var profileFocused by remember { mutableStateOf(false) }
+        Holdable({ onExpanded(false); controller.navigate(Destination.Profile) }, modifier = Modifier.offset(40.dp, 48.dp)
+            .focusRequester(profileTarget).focusProperties { up = FocusRequester.Cancel; down = targets.getValue(Destination.Search); left = FocusRequester.Cancel; right = memory.target ?: initial }
+            .size(if (expanded) 376.dp else 64.dp, 68.dp).onFocusChanged { profileFocused = it.isFocused; if (it.isFocused) onExpanded(true) }
+            .clip(CircleShape).background(if (profileFocused) C.textPrimary else Color.Transparent), rememberFocus = false) {
+            Row(Modifier.fillMaxSize().padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                ProfileAvatar(state.selectedProfile, Modifier.size(56.dp).clip(CircleShape))
+                if (expanded) Column(Modifier.padding(start = 24.dp)) {
+                    VText(state.selectedProfile?.name ?: "Profile", 26, color = if (profileFocused) C.onLight else C.textPrimary, bold = true)
+                    VText("Switch profile", 20, color = if (profileFocused) C.textOnLightSecondary else C.textSecondary)
+                }
+            }
+        }
+        navItems.forEachIndexed { index, (item, icon, y) ->
+            var focused by remember(item) { mutableStateOf(false) }
+            Holdable({ onExpanded(false); controller.navigate(item) }, modifier = Modifier.offset(40.dp, (y - 20).dp)
+                .focusRequester(targets.getValue(item)).focusProperties {
+                    up = if (index == 0) profileTarget else targets.getValue(navItems[index - 1].first)
+                    down = if (index == navItems.lastIndex) FocusRequester.Cancel else targets.getValue(navItems[index + 1].first)
+                    left = FocusRequester.Cancel
+                }
+                .size(if (expanded) 376.dp else 64.dp, 64.dp)
+                .then(if (current == item) Modifier.focusRequester(rail) else Modifier)
+                .onFocusChanged { focused = it.isFocused; if (it.isFocused) onExpanded(true) }
+                .onPreviewKeyEvent { event ->
+                    if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                        if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) { onExpanded(false); runCatching { (memory.target ?: initial).requestFocus() } }
+                        true
+                    } else false
+                }.clip(CircleShape).background(if (focused) C.textPrimary else if (!expanded && current == item) C.surfaceN3 else Color.Transparent), rememberFocus = false) {
+                Row(Modifier.fillMaxSize().padding(start = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    VIcon(icon, item.label, Modifier.size(24.dp), if (focused) C.onLight else if (current == item) C.textPrimary else C.textSecondary)
+                    if (expanded) VText(item.label, 26, Modifier.padding(start = 40.dp), if (focused) C.onLight else C.textPrimary, bold = focused || current == item)
+                }
             }
         }
     }
 }
 
-@Composable private fun RokuNotice(message:String) {
-    var visible by remember(message) { mutableStateOf(true) }
-    LaunchedEffect(message) { delay(5000); visible=false }
-    if (visible) Box(Modifier.offset(320.dp,42.dp).size(640.dp,100.dp).background(RokuSurface,RoundedCornerShape(12.dp)).padding(28.dp,18.dp)) {
-        Text(message,color=RokuWhite,fontSize=19.sp,maxLines=2)
-    }
-}
-
-@Composable private fun RokuRail(state:AppState,controller:AppController) {
-    AsyncImage(rokuAsset("viptv-mark.png"),"viptv",Modifier.offset(32.dp,29.dp).size(36.dp,31.dp))
-    val names=listOf("", "ui-nav-home.png","ui-nav-discover.png","ui-nav-tv.png","ui-nav-list.png","ui-nav-search.png","ui-nav-settings.png")
-    val selectedDestination = when(val route=state.route) {
-        is Route.Browse -> route.destination
-        is Route.Guide -> Destination.Live
-        Route.Search -> Destination.Search
-        Route.Settings, Route.Addons -> Destination.Settings
-        else -> Destination.Home
-    }
-    val railFocus=LocalRokuRailFocus.current
-    Destination.entries.forEachIndexed { index,destination ->
-        var focused by remember { mutableStateOf(false) }
-        Holdable({ controller.navigate(destination) },null,
-            Modifier.offset(21.dp,(108+74*index).dp).size(60.dp)
-                .then(if(destination==selectedDestination)Modifier.focusRequester(railFocus)else Modifier)
-                .onPreviewKeyEvent { event ->
-                    if(event.nativeKeyEvent.keyCode==KeyEvent.KEYCODE_DPAD_RIGHT && state.route==Route.Browse(Destination.Home)) {
-                        if(event.nativeKeyEvent.action==KeyEvent.ACTION_DOWN)controller.restoreHomeFocus()
-                        true
-                    } else false
-                }
-                .onFocusChanged { focused=it.isFocused }
-                .clip(RoundedCornerShape(12.dp))
-                .background(if(focused) RokuWhite else androidx.compose.ui.graphics.Color.Transparent),
-        ) {
-            if (destination==Destination.Profile) {
-                var avatarReady by remember(state.selectedProfile?.avatarUrl) {mutableStateOf(false)}
-                Box(Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(if(avatarReady) androidx.compose.ui.graphics.Color.Transparent else RokuSurface),contentAlignment=Alignment.Center) {
-                    if(!avatarReady) Text(state.selectedProfile?.name?.take(1)?.uppercase().orEmpty(),color=RokuWhite,fontSize=18.sp)
-                    state.selectedProfile?.avatarUrl?.let { AsyncImage(it,"Profile",Modifier.fillMaxSize(),onSuccess={avatarReady=true},onError={avatarReady=false},contentScale=ContentScale.Fit) }
-                }
-            } else AsyncImage(rokuAsset(names[index]),destination.label,Modifier.size(30.dp),colorFilter=ColorFilter.tint(if(focused)RokuCanvas else RokuMuted))
-        }
-    }
-}
-
-@Composable private fun RokuCollection(state:AppState,destination:Destination,controller:AppController) {
-    val items=if(destination==Destination.MyList)state.favorites else state.catalog
-    var selected by remember(destination) { mutableIntStateOf(0) }
-    val page=selected/8
-    val focus=remember(items,page) { List(8) { FocusRequester() } }
-    LaunchedEffect(items,page) { if(items.isNotEmpty()) focus[selected%8].requestFocus() }
-    Text(destination.label,color=RokuWhite,fontSize=44.sp,fontWeight=FontWeight.Bold,modifier=Modifier.offset(100.dp,54.dp))
-    if(items.isEmpty()) Text("Nothing here yet",color=RokuMuted,fontSize=24.sp,textAlign=TextAlign.Center,modifier=Modifier.offset(250.dp,304.dp).width(780.dp))
-    items.drop(page*8).take(8).forEachIndexed { index,media ->
-        val absolute=page*8+index
-        RokuArtworkCard(media,Modifier.offset((100+(index%4)*280).dp,(198+(index/4)*220).dp).size(256.dp,200.dp)
-            .focusRequester(focus[index]).onFocusChanged { if(it.isFocused) selected=absolute }
-            .onPreviewKeyEvent { event ->
-                val key=event.nativeKeyEvent
-                val delta=when(key.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_DOWN -> 4
-                    KeyEvent.KEYCODE_DPAD_UP -> -4
-                    KeyEvent.KEYCODE_DPAD_RIGHT -> 1
-                    KeyEvent.KEYCODE_DPAD_LEFT -> if(index%4==0) 0 else -1
-                    else -> 0
-                }
-                if(delta==0) false else {
-                    if(key.action==KeyEvent.ACTION_DOWN) {
-                        val target=(absolute+delta).coerceIn(0,items.lastIndex)
-                        selected=target
-                        if(target/8==page)focus[target%8].requestFocus()
+@Composable private fun PhoneNavigation(route: Route, controller: AppController, modifier: Modifier) {
+    val current = destination(route)
+    Box(modifier.fillMaxWidth().height(150.dp).background(Brush.verticalGradient(listOf(Color.Transparent, LocalGround.current)))) {
+        Row(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 16.dp).height(64.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.weight(1f).fillMaxHeight().clip(CircleShape).background(C.fillGlass).border(1.dp, C.lineOutline, CircleShape).padding(5.dp)) {
+                listOf(Destination.Home to "home", Destination.Discover to "discover", Destination.Live to "live", Destination.MyList to "list").forEach { (item, icon) ->
+                    val active = item == current
+                    Holdable({ controller.navigate(item) }, modifier = Modifier.weight(1f).fillMaxHeight().clip(CircleShape).background(if (active) C.textPrimary else Color.Transparent)) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            VIcon(icon, modifier = Modifier.size(22.dp), color = if (active) C.onLight else C.textSecondary)
+                            VText(if (item == Destination.Live) "Live" else item.label, 10, color = if (active) C.onLight else C.textSecondary, lines = 1)
+                        }
                     }
-                    true
                 }
-            },
-            onActivate={controller.activateCard(media)},onHold={controller.toggleMyList(media)})
+            }
+            Holdable({ controller.navigate(Destination.Search) }, modifier = Modifier.size(64.dp).clip(CircleShape).background(C.fillGlass).border(1.dp, C.lineOutline, CircleShape)) {
+                VIcon("search", "Search", Modifier.size(26.dp))
+            }
+        }
     }
 }

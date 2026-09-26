@@ -6,11 +6,11 @@ interface BackendGateway {
     suspend fun refresh(refreshToken: String): DeviceSession
     suspend fun profiles(): Pair<List<Profile>, String?>
     suspend fun selectProfile(profileId: String)
-    suspend fun home(profileId: String): List<HomeShelf>
+    suspend fun home(profileId: String, onUpdate: (List<HomeShelf>) -> Unit = {}): List<HomeShelf>
     suspend fun discover(type: String = "movie", search: String? = null): List<Media>
     suspend fun catalogs(): List<DiscoverCatalog>
     suspend fun discover(request: CatalogDiscoverRequest): DiscoverPage
-    suspend fun search(query: String): SearchResults
+    suspend fun search(query: String, onUpdate: (SearchResults) -> Unit = {}): SearchResults
     suspend fun metadata(media: Media): Media
     suspend fun seriesProgress(profileId: String, seriesId: String): List<Media> = emptyList()
     suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit = {}): List<Source>

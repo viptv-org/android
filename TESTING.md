@@ -1,3 +1,54 @@
+# Native phone and TV design conversion — 2026-09-26
+
+AND-035 replaces the old Roku UI for Android. `DESIGN_REF` is
+`5b1ca1ba1bbccb98c6228362e767e580f94b0865`; `CORE_REF` remains
+`be018809e7e8893352c7c57948e9537d6be9457d`. This entry describes the
+native conversion on `refactor/open-source`, not the historical candidates below.
+
+## Automated checks
+
+- Host core and arm64-v8a, armeabi-v7a, x86_64 native builds passed.
+- Library/app unit suites: **93 tests, zero failures/errors/skips** (28 + 65).
+- New regressions cover progressive independent search results, queue publication
+  before optional metadata, per-title metadata coalescing, parent series/source
+  return routes, minimal focus scrolling, safe identity-read connection recovery,
+  and avoiding repeated source display projection.
+- Debug APK assembly and Android lint passed. Lint retains 60 advisory warnings
+  (dependency/version, KTX/style and existing library warnings). Its three-entry
+  baseline is limited to generated UniFFI Cleaner calls: that generated code probes
+  the API by reflection and falls back to JNA below API 33. No application errors
+  are suppressed. Native runtime behavior on API 24–32 is not newly certified.
+- Pinned core/design integrity, all 624 referenced avatar files, design validation,
+  fixture syntax and patch whitespace checks passed.
+
+## Native emulator observations
+
+Dedicated API 36 x86_64 emulators: phone `viptv-design-phone` at 390×844dp
+(780×1688px, density 320), TV `viptv-design-tv` at 1920×1080px. Input and
+screenshots used ADB/UiAutomator against loopback HTTPS fixtures; no production
+account/history or physical device was modified. Private captures live only in
+ignored `qualification/artifacts`.
+
+| Surface | Observed result |
+| --- | --- |
+| Pairing and profiles | Phone pairing approval enters chooser; parent PIN is masked and unlock resumes the selected profile. Caption taps and TV OK enter Home without restarting; the twelve-profile TV fixture pages with D-pad controls. Avatar picker displays the correct packaged characters. Create/select/edit/delete and an idle identity refresh were exercised. |
+| Home | TV hero and equal-size actions remain in the initial viewport. Queue publishes before optional enrichment. Compact shelves scroll horizontally; long catalogues reveal the selected image and caption. |
+| Navigation | D-pad Home → Settings → sidebar → Home restores focus. Collapsed/expanded sidebar icon bounds match. Phone tabs, header profile and Back remain operable. |
+| Discover and Search | Phone portrait grid and type filters, system keyboard and dismissal passed. TV physical-key input retains the full fast query; asynchronous groups stay at the top while typing. D-pad can reach the final movie result; empty Discover focuses its retry action and can return to the rail. |
+| Series | Phone series hero and vertical episode list render. TV season 2 and episode 10 are reachable; source dismissal restores that season and exact episode. |
+| Sources and menus | Source list/quality controls, explicit selection, details and dismissal render at native phone or scaled TV density. A six-second TV hold opened its action menu before release (observed at 3.17s); release did not activate the menu action. Unit tests cover the exact 700ms threshold. |
+| Guide/live | Current guide entries render. Watch live uses direct channel playback and returns to Guide. Phone/TV live chrome has audio, subtitles and exit; no pause, seek or next controls. TV media Pause does not expose VOD controls. |
+| VOD playback | Local H.264/AAC HLS decoded through Media3 on phone and TV. Pause, track-menu open/close and explicit exit were exercised. Phone fullscreen retains the paused frame and fits its aspect ratio; returning exits fullscreen. |
+| Settings/forms | Grouped settings, playback choices, OLED control, profile name input, avatar grid and confirmation sheets were inspected. Phone keyboard insets and 1.3× system font scale remain usable; scale was restored to 1.0. |
+
+The 12-second local HLS test pattern proves native decoding/surface integration
+for that fixture only. Its live designation and alternate server track inventory
+are synthetic. There is no new certification of physical remotes, real live
+networks, alternate track/subtitle rendering, HDR/DRM, UHD hardware capability,
+managed remux/transcode, PiP/casting or store signing/publication. No production
+deployment is claimed. Historical physical measurements below apply only to
+their named revisions. See `qualification/README.md` for reproducible local steps.
+
 # Failed card artwork recovery — 2026-09-14
 
 Card image fetch/decode failure, after the existing resized/original transport retry, is reported to shared Rust using `failedImages`. The renderer requests a new shared projection; episode cards can use the series landscape and never a portrait fallback. Failure observations reset when card identity or artwork changes and do not affect saved progress or playback identity. A native-backed Kotlin regression covers failure input serialization and the shared landscape/empty result. Hosted app review must compile and run it; local Gradle/emulators remain disabled. No new physical-device acceptance is claimed.

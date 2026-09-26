@@ -52,12 +52,14 @@ data class Source(
     val audio: String? = null,
     /** Direct live playback target; never serialized as a discovered stream identifier. */
     val channelId: String? = null,
+    /** These safe display fields were already projected by shared Rust. */
+    val displayResolved: Boolean = false,
 )
 
 object SourceDisplayPolicy {
     private fun display(source: Source): JSONObject = CorePolicy.value("sourceDisplay", JSONObject().put("name", source.name).put("description", source.description).put("provider", source.provider)) as JSONObject
-    fun title(source: Source): String = display(source).getString("title")
-    fun body(source: Source): String = display(source).getString("body")
+    fun title(source: Source): String = if (source.displayResolved) source.name else display(source).getString("title")
+    fun body(source: Source): String = if (source.displayResolved) source.description else display(source).getString("body")
 }
 
 data class Profile(
@@ -78,7 +80,7 @@ data class DeviceSession(val accessToken: String, val refreshToken: String, val 
  * Home rows carry their role separately from server-provided display copy.
  * Queue controls follow this flag even when the row has just become empty.
  */
-data class HomeShelf(val title: String, val items: List<Media>, val isQueueShelf: Boolean = false)
+data class HomeShelf(val title: String, val items: List<Media>, val isQueueShelf: Boolean = false, val id: String = title)
 
 data class NextResult(val status: String, val item: Media? = null)
 data class Addon(val id: String, val name: String, val manifestUrl: String, val enabled: Boolean)
@@ -125,6 +127,7 @@ data class AppState(
     val sources: List<Source> = emptyList(),
     val favorites: List<Media> = emptyList(),
     val queue: List<Media> = emptyList(),
+    val libraryQueue: Boolean = false,
     /** Queued Next is cancellable from Home before it has a source route. */
     val queueContinuationPending: Boolean = false,
     /** Query-owned state survives focus moves between keyboard and source-labelled rows. */
@@ -149,5 +152,7 @@ data class AppState(
     /** Player controls begin visible and dismiss after seven seconds of inactivity. */
     val playerChromeVisible: Boolean = true,
     val loading: Boolean = false,
+    val homeLoading: Boolean = false,
+    val sourceLoading: Boolean = false,
     val message: String? = null,
 )

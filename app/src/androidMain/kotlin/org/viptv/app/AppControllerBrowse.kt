@@ -17,8 +17,14 @@ internal fun AppController.activateCard(media: Media, queue: Boolean = false, or
     }
 }
 
-internal fun AppController.open(media: Media) = scope.launch {
-    val origin = (_state.value.route as? Route.Browse)?.destination
+internal fun AppController.open(media: Media) {
+    if (media.type == "live") { activateCard(media); return }
+    detailJob?.cancel()
+    val generation = ++detailGeneration
+    val backRoute = _state.value.route
+    val profile = _state.value.selectedProfile?.id
+    detailJob = scope.launch {
+    val origin = (backRoute as? Route.Browse)?.destination
     update(loading = true)
     runCatching {
         val details = gateway.metadata(media)
@@ -37,6 +43,7 @@ internal fun AppController.open(media: Media) = scope.launch {
             })
         }
     }.onSuccess { metadata ->
+        if (generation != detailGeneration || _state.value.selectedProfile?.id != profile) return@onSuccess
         // Catalog/history carries artwork and progress that sparse metadata
         // responses may omit. Metadata may enrich it, never erase it.
         val detail = metadata.copy(
@@ -58,31 +65,37 @@ internal fun AppController.open(media: Media) = scope.launch {
             sourceFingerprint = metadata.sourceFingerprint ?: media.sourceFingerprint,
         )
         detailReturnDestination = origin
+        detailReturnRoute = backRoute
         _state.value = _state.value.copy(route = Route.Details(detail), loading = false,
             shelves = _state.value.shelves.map { shelf -> shelf.copy(items = shelf.items.map { item ->
                 if ((item.seriesId ?: item.id) == (detail.seriesId ?: detail.id)) item.withArtworkFrom(detail) else item
             }) },
         )
-    }.onFailure(::fail)
+    }.onFailure { if (it !is CancellationException && generation == detailGeneration) fail(it) }
+    }
 }
 internal fun AppController.chooseSources(media: Media, resume: Boolean = false, origin: SourceReturn = sourceOrigin()) {
+    val previous = _state.value.route
+    val returnRoute = (previous as? Route.Sources)?.backRoute ?: previous.takeUnless { it is Route.Player }
+    val route = Route.Sources(media, resume, origin, returnRoute)
     sourceDiscovery?.cancel()
     sourceDiscovery = scope.launch {
         if (origin == SourceReturn.Home) detailReturnDestination = Destination.Home
-        _state.value = _state.value.copy(route = Route.Sources(media, resume, origin), sources = emptyList(), loading = false, message = null)
+        _state.value = _state.value.copy(route = route, sources = emptyList(), loading = true, sourceLoading = true, message = null)
         runCatching { gateway.sources(media) { arriving ->
             val route = _state.value.route
             if (route is Route.Sources && route.media.type == media.type && route.media.id == media.id) _state.value = _state.value.copy(sources = arriving)
         } }.onSuccess { discovered ->
+        _state.value = _state.value.copy(sourceLoading = false)
         val savedIdentity = ResumeIdentity.sourceIdentity(media.sourceAddonId, media.sourceFingerprint)
         val exact = if (resume) discovered.firstOrNull { ResumeIdentity.sourceIdentity(it) == savedIdentity } else null
         if (exact != null) start(media, exact, explicitResume = true) else {
             _state.value = _state.value.copy(
-                route = Route.Sources(media, resume, origin), sources = discovered, loading = false,
+                route = route, sources = discovered, loading = false,
                 message = when { discovered.isEmpty() -> "No sources found. Choose another title or try again."; resume && savedIdentity == null -> "Choose a source to resume. Your prior source cannot be verified."; resume -> "Your previous source is unavailable. Choose a source."; else -> null },
             )
         }
-    }.onFailure { error -> if (error !is CancellationException) fail(error) }
+    }.onFailure { error -> if (error !is CancellationException) { _state.value = _state.value.copy(sourceLoading = false); fail(error) } }
     }
 }
 private fun AppController.sourceOrigin(): SourceReturn = when (_state.value.route) {
@@ -90,7 +103,24 @@ private fun AppController.sourceOrigin(): SourceReturn = when (_state.value.rout
     else -> SourceReturn.Details
 }
 
-internal fun AppController.openMyList() = scope.launch { update(loading = true); runCatching { gateway.favorites(requireProfile()) }.onSuccess { _state.value = _state.value.copy(route = Route.Browse(Destination.MyList), favorites = it, catalog = it, loading = false) }.onFailure(::fail) }
+internal fun AppController.openMyList() = scope.launch {
+    val profile = requireProfile()
+    val route = Route.Browse(Destination.MyList)
+    _state.value = _state.value.copy(route = route, libraryQueue = false, loading = true)
+    runCatching { gateway.favorites(profile) }.onSuccess {
+        if (_state.value.selectedProfile?.id == profile && _state.value.route == route && !_state.value.libraryQueue)
+            _state.value = _state.value.copy(favorites = it, catalog = it, loading = false)
+    }.onFailure { if (it !is CancellationException && _state.value.route == route && _state.value.selectedProfile?.id == profile) fail(it) }
+}
+internal fun AppController.openContinueWatching() {
+    val profile = _state.value.selectedProfile?.id ?: return
+    _state.value = _state.value.copy(route = Route.Browse(Destination.MyList), libraryQueue = true, loading = false)
+    scope.launch {
+        runCatching { gateway.queue(profile) }.onSuccess {
+            if (_state.value.selectedProfile?.id == profile) _state.value = _state.value.copy(queue = it)
+        }.onFailure { if (it !is CancellationException) fail(it) }
+    }
+}
 /** The Live rail enters the Guide directly; the list surface is reserved for a truthful empty state. */
 internal fun AppController.openLive() {
     val prior = _state.value.guideUi
@@ -104,21 +134,19 @@ internal fun AppController.openSettings() = scope.launch {
     coroutineScope {
         val preferences = async { runCatching { gateway.preferences(profileId) } }
         val addons = async { runCatching { gateway.addons() } }
-        val about = async { runCatching { gateway.serverAbout() } }
         val prefResult = preferences.await()
         val addonResult = addons.await()
-        val aboutResult = about.await()
         if (prefResult.isFailure && addonResult.isFailure) {
             fail(prefResult.exceptionOrNull() ?: addonResult.exceptionOrNull()!!)
             return@coroutineScope
         }
+        if (_state.value.route != Route.Settings || _state.value.selectedProfile?.id != profileId) return@coroutineScope
         _state.value = _state.value.copy(
             route = Route.Settings,
             preferences = prefResult.getOrElse { _state.value.preferences },
             addons = addonResult.getOrElse { _state.value.addons },
-            serverAbout = aboutResult.getOrNull(),
             loading = false,
-            message = if (aboutResult.isFailure) "Server information is unavailable." else null,
+            message = null,
         )
     }
 }
@@ -150,7 +178,7 @@ internal fun AppController.saveProfile(profile: Profile?, name: String, avatarSt
             } else {
                 gateway.updateProfile(profile, normalizedName, avatarStyle, avatarChoice)
             }
-            val profiles = _state.value.profiles.filterNot { it.id == saved.id } + saved
+            val profiles = if (_state.value.profiles.any { it.id == saved.id }) _state.value.profiles.map { if (it.id == saved.id) saved else it } else _state.value.profiles + saved
             _state.value = _state.value.copy(route = Route.Profiles, profiles = profiles, loading = false, message = "Profile saved.")
             refreshProfileIdentity()
         }

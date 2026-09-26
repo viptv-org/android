@@ -1,6 +1,6 @@
 package org.viptv.app
 
-/** Exact Roku Home hold/Info inventory; ordinary shelf cards do not invent source menus. */
+/** Shared Home hold/Info inventory; ordinary shelf cards do not invent source menus. */
 object HomeHoldPolicy {
     /** Continue Watching is logical Home row zero and always opens Queue Manage. */
     fun opensQueueManage(continueWatchingRow: Boolean, media: Media): Boolean = continueWatchingRow && QueuePolicy.canManage(media)
@@ -82,8 +82,8 @@ sealed interface Route {
     data object Profiles : Route
     data class Browse(val destination: Destination) : Route
     data class Details(val media: Media) : Route
-    data class Sources(val media: Media, val resume: Boolean = false, val origin: SourceReturn = SourceReturn.Details) : Route
-    data class Player(val media: Media, val source: Source, val returnDestination: PlaybackReturn = PlaybackReturn.Details, val directOrigin: Route? = null) : Route
+    data class Sources(val media: Media, val resume: Boolean = false, val origin: SourceReturn = SourceReturn.Details, val backRoute: Route? = null) : Route
+    data class Player(val media: Media, val source: Source, val returnDestination: PlaybackReturn = PlaybackReturn.Details, val directOrigin: Route? = null, val sourceRoute: Sources? = null) : Route
     data object Search : Route
     data object Settings : Route
     data object Addons : Route

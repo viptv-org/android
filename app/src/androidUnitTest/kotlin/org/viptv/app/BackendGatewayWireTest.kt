@@ -122,6 +122,8 @@ class BackendGatewayWireTest {
             assertEquals("iptv:4", sources.first().provider)
             assertEquals("Evening News", sources.first().name)
             assertEquals("HD broadcast\nevening-news.mkv", sources.first().description)
+            assertEquals("Evening News", SourceDisplayPolicy.title(sources.first()))
+            assertEquals("HD broadcast\nevening-news.mkv", SourceDisplayPolicy.body(sources.first()))
             assertEquals("1080p", sources.first().quality)
             assertEquals("English 5.1", sources.first().audio)
             assertEquals("addon:one", sources.first().addonId)

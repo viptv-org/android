@@ -94,6 +94,28 @@ internal fun AppController.changeDiscoverPage(delta: Int) {
     }
 }
 
+/** Append the server's cursor page without discarding the user's scroll/focus. */
+internal fun AppController.appendDiscoverPage() {
+    val current = _state.value.discoverUi
+    val skip = current.nextSkip ?: return
+    if (current.loading || _state.value.route != Route.Browse(Destination.Discover)) return
+    val catalog = current.catalogs.firstOrNull { it.key == current.selectedCatalogKey } ?: return
+    val generation = ++discoverGeneration
+    _state.value = _state.value.copy(discoverUi = current.copy(loading = true))
+    discoverJob = scope.launch {
+        try {
+            val page = gateway.discover(DiscoverPolicy.request(catalog, current.selectedFilters, skip))
+            if (!isCurrentDiscover(generation)) return@launch
+            _state.value = _state.value.copy(discoverUi = current.copy(
+                items = (current.items + page.items).distinctBy { HomeFocusPolicy.mediaKey(it) },
+                nextSkip = page.nextSkip?.takeIf { page.hasMore && it > skip },
+                loading = false, error = null,
+            ))
+        } catch (error: CancellationException) { throw error }
+        catch (_: Exception) { if (isCurrentDiscover(generation)) _state.value = _state.value.copy(discoverUi = current.copy(loading = false, error = "Couldn't load more titles. Try another catalog or retry.")) }
+    }
+}
+
 private fun AppController.startDiscoverRequest(
     catalog: DiscoverCatalog,
     filters: Map<String, String>,
@@ -176,9 +198,14 @@ internal fun AppController.search(query: String) {
     searchJob = scope.launch {
         delay(650)
         try {
-            val results = gateway.search(normalized)
-            if (isActive) {
-                val count = results.sections.sumOf { it.items.size }
+            val profileId = _state.value.selectedProfile?.id
+            val results = gateway.search(normalized) { partial ->
+                if (isActive && _state.value.route == Route.Search && _state.value.selectedProfile?.id == profileId && _state.value.searchQuery.trim() == normalized) {
+                    _state.value = _state.value.copy(searchSections = partial.sections, searchResults = partial.sections.flatMap { it.items }, searchStatus = "Searching…")
+                }
+            }
+            if (isActive && _state.value.route == Route.Search && _state.value.selectedProfile?.id == profileId) {
+                val count = results.sections.flatMap { it.items }.distinctBy { HomeFocusPolicy.mediaKey(it) }.size
                 val baseStatus = if (count == 0) "No results. Try another title." else "$count results"
                 _state.value = _state.value.copy(
                     searchSections = results.sections,

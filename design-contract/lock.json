@@ -1,0 +1,318 @@
+{
+  "repository": "viptv-org/design",
+  "revision": "5b1ca1ba1bbccb98c6228362e767e580f94b0865",
+  "files": {
+    "design-contract/DESIGN.md": {
+      "source": "DESIGN.md",
+      "sha256": "ce3c8206bc2b2b8750e4b97134ae603c83b3053d8923f8177047a6fbd40edacc"
+    },
+    "design-contract/DESIGN_SYNC.md": {
+      "source": "DESIGN_SYNC.md",
+      "sha256": "a9c136ab42d220842d2f6d8cf77a797905fb07e2893653a94a7bb27704e6ee61"
+    },
+    "design-contract/ANDROID_DESIGN.md": {
+      "source": "ANDROID_DESIGN.md",
+      "sha256": "88a7e69f52c9c14aeafab478df290e73961776e1bef1f7f519c4792ccdb29209"
+    },
+    "design-contract/TV_POLISH.md": {
+      "source": "TV_POLISH.md",
+      "sha256": "b72c4fb5b95a7eecdb3b2404556012ba711c052921ae4b9ca49865416a72512a"
+    },
+    "design-contract/viptv-design-system/README.md": {
+      "source": "viptv-design-system/README.md",
+      "sha256": "46e5b8e84b9a4ca8dd45f31439488495ef372a774ea64202b68417f54e4865c7"
+    },
+    "design-contract/viptv-design-system/components.md": {
+      "source": "viptv-design-system/components.md",
+      "sha256": "f9566958d430d44feb0456c403c9051aade96e250558ba39f2862b515891feda"
+    },
+    "design-contract/viptv-design-system/copy.md": {
+      "source": "viptv-design-system/copy.md",
+      "sha256": "a3bc0faf1c5b7e6987a7804be3eb4cf526d658009f7784425577d26d9fee50ff"
+    },
+    "design-contract/viptv-design-system/decisions.md": {
+      "source": "viptv-design-system/decisions.md",
+      "sha256": "be9cdaa34c1f55dd9f3bd8b9e92ed412645113cf93d8dee46ce6a3ded890dabe"
+    },
+    "design-contract/viptv-design-system/tokens/tokens.json": {
+      "source": "viptv-design-system/tokens/tokens.json",
+      "sha256": "3c502ddf30eb838d0de2955a319716bf309f062c0ee420771b5d4a36688ffd10"
+    },
+    "app/src/androidMain/assets/design/fonts/README.md": {
+      "source": "assets/fonts/README.md",
+      "sha256": "7102f4162f3d7e0d1e1b5429aa2ea9606e0ad23d3ec2a99b13af665d27b53a5b"
+    },
+    "app/src/androidMain/assets/design/fonts/bricolage-grotesque-LICENSE.txt": {
+      "source": "assets/fonts/bricolage-grotesque-LICENSE.txt",
+      "sha256": "923f4ddf0fd39f9b7794ab0df7332f3d95dc43e8ad7ec2289d6d9e8491177f51"
+    },
+    "app/src/androidMain/res/font/bricolage_grotesque_700.ttf": {
+      "source": "assets/fonts/bricolage_grotesque_700.ttf",
+      "sha256": "01e40bbb8f88549e8603fb5b5facb3aa87d7ab96bcfc6da1298bbabbb493273d"
+    },
+    "app/src/androidMain/res/font/bricolage_grotesque_800.ttf": {
+      "source": "assets/fonts/bricolage_grotesque_800.ttf",
+      "sha256": "0ecf1839f59a304d41b516aa323f501e2538c2723688e5165dcf8aa3bbd7364d"
+    },
+    "app/src/androidMain/assets/design/fonts/onest-LICENSE.txt": {
+      "source": "assets/fonts/onest-LICENSE.txt",
+      "sha256": "a2a09da98a3d0d1ec79fc2d6deeac748b20a8153e26699552e7b59b5a40b63a3"
+    },
+    "app/src/androidMain/res/font/onest_400.ttf": {
+      "source": "assets/fonts/onest_400.ttf",
+      "sha256": "51afcba529a24777456f2f922b4b5df96e969ece8b4aebd6e5d948bba46124d5"
+    },
+    "app/src/androidMain/res/font/onest_500.ttf": {
+      "source": "assets/fonts/onest_500.ttf",
+      "sha256": "e3c13b585f2b6795f1295599451956c9eeedf6c6aef97d5f3b5810c147a0a2f7"
+    },
+    "app/src/androidMain/res/font/onest_600.ttf": {
+      "source": "assets/fonts/onest_600.ttf",
+      "sha256": "7ba629cff2a62cabc3dcf3819fa34d98f60717ef1a1b21a99f72221b48f54d72"
+    },
+    "app/src/androidMain/res/font/onest_700.ttf": {
+      "source": "assets/fonts/onest_700.ttf",
+      "sha256": "2d222f09bdbccab17f514f403105b046037a4b6ff3681183593bec9abeadfb61"
+    },
+    "app/src/androidMain/assets/design/lucide/LICENSE": {
+      "source": "assets/roku/roku/images/lucide/LICENSE",
+      "sha256": "1e7290b35280a048667bbf0ebabac1c7fd52a75300e8b2946ac165715997f2bc"
+    },
+    "app/src/androidMain/assets/design/lucide/README.md": {
+      "source": "assets/roku/roku/images/lucide/README.md",
+      "sha256": "424c51d35581ab021699670964cf2a6d5855d2a1eb3381b03f32e7fb23401c2f"
+    },
+    "app/src/androidMain/assets/design/lucide/audio-focus.png": {
+      "source": "assets/roku/roku/images/lucide/audio-focus.png",
+      "sha256": "f16a66f83606615fd0fa94e0c852cf83b8ac78114f17db5c761c16dbff28e7ea"
+    },
+    "app/src/androidMain/assets/design/lucide/audio-primary.png": {
+      "source": "assets/roku/roku/images/lucide/audio-primary.png",
+      "sha256": "e54609e79122178ce785d581f65031961f5df1dec8f14e19da38c21279b69185"
+    },
+    "app/src/androidMain/assets/design/lucide/audio-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/audio-secondary.png",
+      "sha256": "8d1d038bc84e0c61e2bd9925045874ce2668139ce3c86c9f3582241aac0a4fb8"
+    },
+    "app/src/androidMain/assets/design/lucide/back10-focus.png": {
+      "source": "assets/roku/roku/images/lucide/back10-focus.png",
+      "sha256": "79d6468dc938dc091380b6abf826ee296e90b47328cbadf954235fbb812ac69d"
+    },
+    "app/src/androidMain/assets/design/lucide/back10-primary.png": {
+      "source": "assets/roku/roku/images/lucide/back10-primary.png",
+      "sha256": "d6bca4319d6b2750eed245f256ce2f981f046ab006db9099c2695ebc4b6bcc0d"
+    },
+    "app/src/androidMain/assets/design/lucide/back10-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/back10-secondary.png",
+      "sha256": "c91781f7c95c0178f5aaf6dc298844d400c4a2ac03230350bb31b4fef6944650"
+    },
+    "app/src/androidMain/assets/design/lucide/captions-focus.png": {
+      "source": "assets/roku/roku/images/lucide/captions-focus.png",
+      "sha256": "335386413d911db8e605a10d3a7cdaccd45e0127e7ded537da54236920173626"
+    },
+    "app/src/androidMain/assets/design/lucide/captions-primary.png": {
+      "source": "assets/roku/roku/images/lucide/captions-primary.png",
+      "sha256": "8265e5e3bcb85bbdb6c79300242a8cc05c87be7802d6f804aaf47245c976d985"
+    },
+    "app/src/androidMain/assets/design/lucide/captions-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/captions-secondary.png",
+      "sha256": "984dbf80994ca3c2897d51ef4363526c135efa848b496970492cd8613ce79e27"
+    },
+    "app/src/androidMain/assets/design/lucide/check-focus.png": {
+      "source": "assets/roku/roku/images/lucide/check-focus.png",
+      "sha256": "988e05c8e8276cf850998ff19b9af064dfd57700f25e9991d53f9ec1aac374be"
+    },
+    "app/src/androidMain/assets/design/lucide/check-primary.png": {
+      "source": "assets/roku/roku/images/lucide/check-primary.png",
+      "sha256": "34a698457d7f4e578c71a2f99b76e759f2d12c76940990891b1c211aa73fb66a"
+    },
+    "app/src/androidMain/assets/design/lucide/check-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/check-secondary.png",
+      "sha256": "63d915140e45841ad7843d36fdb78680d3afcaa23cc3ea72d093f2f33d9e4c6d"
+    },
+    "app/src/androidMain/assets/design/lucide/discover-focus.png": {
+      "source": "assets/roku/roku/images/lucide/discover-focus.png",
+      "sha256": "4bed1fc1d1fff1b3c7dcece21d1f7df291ac85bf568628a667a111b70dc9a300"
+    },
+    "app/src/androidMain/assets/design/lucide/discover-primary.png": {
+      "source": "assets/roku/roku/images/lucide/discover-primary.png",
+      "sha256": "640f2dae0bfd69d4944f7623f70306b38c8723621e40cfb66958c3c819db5794"
+    },
+    "app/src/androidMain/assets/design/lucide/discover-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/discover-secondary.png",
+      "sha256": "7b2bcd16ee99bce21de19f146fceebabca5afe14e8195316a0a3fdfdcb697963"
+    },
+    "app/src/androidMain/assets/design/lucide/down-focus.png": {
+      "source": "assets/roku/roku/images/lucide/down-focus.png",
+      "sha256": "860a1a9bea1720b83e0dbe4e3e3ed174b7b4fa2dbe4dff75e3e000a0fbad9a14"
+    },
+    "app/src/androidMain/assets/design/lucide/down-primary.png": {
+      "source": "assets/roku/roku/images/lucide/down-primary.png",
+      "sha256": "7929dfd8a89ba6d9ddfffdfb2d906a0b98bb80d777ab8b4d729f228586ff6054"
+    },
+    "app/src/androidMain/assets/design/lucide/down-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/down-secondary.png",
+      "sha256": "4757e0a7f2be285018eedc1b521e7750a63794c350f8b8a66042b0ff714ef2d5"
+    },
+    "app/src/androidMain/assets/design/lucide/exit-focus.png": {
+      "source": "assets/roku/roku/images/lucide/exit-focus.png",
+      "sha256": "2a17da2e5363ddcb85d93dffeaeb6819e77f7d8286479518f74ab2f28ac2236d"
+    },
+    "app/src/androidMain/assets/design/lucide/exit-primary.png": {
+      "source": "assets/roku/roku/images/lucide/exit-primary.png",
+      "sha256": "8f234ed2e152675f119da8036c678754c5b73b74d1db3415a6902dd2f2330f49"
+    },
+    "app/src/androidMain/assets/design/lucide/exit-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/exit-secondary.png",
+      "sha256": "ecd6660f5e4df1ab1cc3caab6d3389ba0faef4ee221a030dfa1e43a7142a875d"
+    },
+    "app/src/androidMain/assets/design/lucide/forward30-focus.png": {
+      "source": "assets/roku/roku/images/lucide/forward30-focus.png",
+      "sha256": "a106134a3872580e2641f12e245974483214751180af528073649b47309ddc9e"
+    },
+    "app/src/androidMain/assets/design/lucide/forward30-primary.png": {
+      "source": "assets/roku/roku/images/lucide/forward30-primary.png",
+      "sha256": "f4e01b78f04911f370a0c354a23bf2eda9793c2f52f8d9683ffb25a3be67fc51"
+    },
+    "app/src/androidMain/assets/design/lucide/forward30-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/forward30-secondary.png",
+      "sha256": "22f323522347c7c5f6c5616959d5d832a8364eaa4b1e4c41f337a09da6b6bfb4"
+    },
+    "app/src/androidMain/assets/design/lucide/home-focus.png": {
+      "source": "assets/roku/roku/images/lucide/home-focus.png",
+      "sha256": "27e004ac04aa834e950e929460710428243791bae21f69486b0804c1f26025a8"
+    },
+    "app/src/androidMain/assets/design/lucide/home-primary.png": {
+      "source": "assets/roku/roku/images/lucide/home-primary.png",
+      "sha256": "fc23fa3324e21676a53f609e64592bcd32cf1c477aed2c37cd74010f2848c8d8"
+    },
+    "app/src/androidMain/assets/design/lucide/home-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/home-secondary.png",
+      "sha256": "ff82d3eda251b71385f35cd7d727fcb1584da29c24920368d487ae273dcd5590"
+    },
+    "app/src/androidMain/assets/design/lucide/info-focus.png": {
+      "source": "assets/roku/roku/images/lucide/info-focus.png",
+      "sha256": "a32f2c61096a9a85ae8816468b62c731c70e38b777ab5bbca7d94a008bc76761"
+    },
+    "app/src/androidMain/assets/design/lucide/info-primary.png": {
+      "source": "assets/roku/roku/images/lucide/info-primary.png",
+      "sha256": "5918d763bc4fef2eec53782d836e7e760e7d9da43911d1cfd283b0a53e6fd074"
+    },
+    "app/src/androidMain/assets/design/lucide/info-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/info-secondary.png",
+      "sha256": "15ded92cef672383c88f8f4b3d55fd0c7c9ef73aa57fe1c62c280507b09c5f1d"
+    },
+    "app/src/androidMain/assets/design/lucide/list-focus.png": {
+      "source": "assets/roku/roku/images/lucide/list-focus.png",
+      "sha256": "4d934999051fbaa340422e46675a41c99eb9f032f608b23e6e99a0cc76b0192b"
+    },
+    "app/src/androidMain/assets/design/lucide/list-primary.png": {
+      "source": "assets/roku/roku/images/lucide/list-primary.png",
+      "sha256": "dc7a731fb1c2b93c5bb7765a4561e06c45da7a26af3bc270f59e5034fe3c0c51"
+    },
+    "app/src/androidMain/assets/design/lucide/list-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/list-secondary.png",
+      "sha256": "29c0614c65fe9e5c730b814d8d6ce223f08aebdd9b3bd213532fdaa79ba202db"
+    },
+    "app/src/androidMain/assets/design/lucide/live-focus.png": {
+      "source": "assets/roku/roku/images/lucide/live-focus.png",
+      "sha256": "80aff2435006e3e4d0838fa138edb0b3fbbbd94bf97da86958c48ed372f62afd"
+    },
+    "app/src/androidMain/assets/design/lucide/live-primary.png": {
+      "source": "assets/roku/roku/images/lucide/live-primary.png",
+      "sha256": "5233e43ce02b2c411af60d752d39c0139cb2d1e39c3f55b7a6ddaa83bbf857d6"
+    },
+    "app/src/androidMain/assets/design/lucide/live-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/live-secondary.png",
+      "sha256": "fef435cdc07f86f3dabc575fc4f164e7954ac0310b081cca443f6b50242fb95b"
+    },
+    "app/src/androidMain/assets/design/lucide/next-focus.png": {
+      "source": "assets/roku/roku/images/lucide/next-focus.png",
+      "sha256": "258419706c78a39633a19a43f479573c6fe22f0607c94ba15888414c5570e052"
+    },
+    "app/src/androidMain/assets/design/lucide/next-primary.png": {
+      "source": "assets/roku/roku/images/lucide/next-primary.png",
+      "sha256": "4dab11e6c60232218c47ce5b1320df5a80e62105acfc8174fe4015a7e05ab4c6"
+    },
+    "app/src/androidMain/assets/design/lucide/next-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/next-secondary.png",
+      "sha256": "5e88ba1aa1e71f29598b757c68eeb2aa41baeb1c0b427f73cbbe6b04ee52ec4e"
+    },
+    "app/src/androidMain/assets/design/lucide/pause-focus.png": {
+      "source": "assets/roku/roku/images/lucide/pause-focus.png",
+      "sha256": "0d8a5701d9599fc43ed09dccd45f598ac379130a4c175752d1ed46874a280874"
+    },
+    "app/src/androidMain/assets/design/lucide/pause-primary.png": {
+      "source": "assets/roku/roku/images/lucide/pause-primary.png",
+      "sha256": "3894f6379677ee27543463b00759afb6415de5ba1a67806630b2cc09bea12dec"
+    },
+    "app/src/androidMain/assets/design/lucide/pause-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/pause-secondary.png",
+      "sha256": "7834a00cd20ca3abb5c4c9baa34c3443ecfb87d8f23c786e50b6c00bf31000a0"
+    },
+    "app/src/androidMain/assets/design/lucide/pencil-focus.png": {
+      "source": "assets/roku/roku/images/lucide/pencil-focus.png",
+      "sha256": "5dcb1f41c3afbce53d900afefe678eb799d5b7e6638e5e17b51a6e381d607d9f"
+    },
+    "app/src/androidMain/assets/design/lucide/pencil-primary.png": {
+      "source": "assets/roku/roku/images/lucide/pencil-primary.png",
+      "sha256": "77154b3923ebbbd5965565eee20d14d4ec7ce06b575d081e26025549998c406a"
+    },
+    "app/src/androidMain/assets/design/lucide/pencil-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/pencil-secondary.png",
+      "sha256": "84a3a18230b44142234fa237f48592e3dc9856f08d5fc4463d9271afc35d6ad2"
+    },
+    "app/src/androidMain/assets/design/lucide/play-focus.png": {
+      "source": "assets/roku/roku/images/lucide/play-focus.png",
+      "sha256": "c5b63b903eeb383e7a8b030baf5afdde5890036086319e5446f5b49497185688"
+    },
+    "app/src/androidMain/assets/design/lucide/play-primary.png": {
+      "source": "assets/roku/roku/images/lucide/play-primary.png",
+      "sha256": "2f4dd962e510188db676337a4cbf07bd32aced9fe33c6101298e37a7872c978d"
+    },
+    "app/src/androidMain/assets/design/lucide/play-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/play-secondary.png",
+      "sha256": "72bcfbda3a366059c0149c5062ffc207e31ce7d9f5c1bf3a951ab4eeb02467c9"
+    },
+    "app/src/androidMain/assets/design/lucide/plus-focus.png": {
+      "source": "assets/roku/roku/images/lucide/plus-focus.png",
+      "sha256": "6380a11940c4746418789c38906f339ae3e0fd9d0b8010b3441435960e7272f2"
+    },
+    "app/src/androidMain/assets/design/lucide/plus-primary.png": {
+      "source": "assets/roku/roku/images/lucide/plus-primary.png",
+      "sha256": "6a0b3723d1d5aef01fec2bc0abb58a3229d61bb673629ccb784a8efbb5b7f676"
+    },
+    "app/src/androidMain/assets/design/lucide/plus-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/plus-secondary.png",
+      "sha256": "74252f30a4e18603087236b2ef0db383a58ce2800deb9c1aa359b33fc42666ef"
+    },
+    "app/src/androidMain/assets/design/lucide/search-focus.png": {
+      "source": "assets/roku/roku/images/lucide/search-focus.png",
+      "sha256": "f47ee72b118d1477630dc44c3aaeb24420df517fdbc57a1ca61e1af71330dbe8"
+    },
+    "app/src/androidMain/assets/design/lucide/search-primary.png": {
+      "source": "assets/roku/roku/images/lucide/search-primary.png",
+      "sha256": "e77f5f1800949dbff1881a0cb42c594db9008e1d93d93f024dfb71737def02f7"
+    },
+    "app/src/androidMain/assets/design/lucide/search-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/search-secondary.png",
+      "sha256": "daa7db2f14f06fda4ec16bb17997f1a6c3cb52b34ea21403a299774710a188e4"
+    },
+    "app/src/androidMain/assets/design/lucide/settings-focus.png": {
+      "source": "assets/roku/roku/images/lucide/settings-focus.png",
+      "sha256": "ba032a7426575fa27784747209f1f914fd2de8e35a7a767606f1e0f6439a6c9d"
+    },
+    "app/src/androidMain/assets/design/lucide/settings-primary.png": {
+      "source": "assets/roku/roku/images/lucide/settings-primary.png",
+      "sha256": "e2eda734849ddcc79b229fe1989a732bdeaaa5648ad0a2b279297cc9814e163b"
+    },
+    "app/src/androidMain/assets/design/lucide/settings-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/settings-secondary.png",
+      "sha256": "fa3e6ae4c5327ad92f72528c8ee02f2cf29a9786d27594d7254886ce63b229da"
+    },
+    "app/src/androidMain/kotlin/org/viptv/app/theme/ViptvTokens.kt": {
+      "source": "generated from pinned tokens",
+      "sha256": "c13b69f787d22503277266271b2de89f53af2a070a14074f8476e7342906c442"
+    }
+  }
+}

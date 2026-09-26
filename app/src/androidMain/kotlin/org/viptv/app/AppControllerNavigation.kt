@@ -4,6 +4,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 internal fun AppController.navigate(destination: Destination) = scope.launch {
+    detailGeneration++; detailJob?.cancel()
+    if (destination != Destination.Search) searchJob?.cancel()
+    if (destination != Destination.Live) { guideBrowseGeneration++; guideGeneration++ }
     if (destination != Destination.Home) cancelPendingQueueContinuation()
     if (destination != Destination.Discover) {
         discoverJob?.cancel()
@@ -15,8 +18,10 @@ internal fun AppController.navigate(destination: Destination) = scope.launch {
     if (destination == Destination.Live) { openLive(); return@launch }
     if (destination == Destination.Search) { _state.value = _state.value.copy(route = Route.Search, loading = false); return@launch }
     if (destination == Destination.Discover) { openDiscover(); return@launch }
-    _state.value = _state.value.copy(route = Route.Browse(destination), loading = true, message = null)
-    runCatching { when (destination) { Destination.Home -> gateway.home(requireProfile()); Destination.Discover, Destination.Search -> listOf(HomeShelf("Discover", gateway.discover())); Destination.MyList -> listOf(HomeShelf("My List", gateway.discover())); Destination.Live -> listOf(HomeShelf("Live TV", gateway.discover("live"))); Destination.Settings, Destination.Profile -> emptyList() } }.onSuccess { shelves -> _state.value = _state.value.copy(shelves = shelves, catalog = shelves.flatMap(HomeShelf::items), loading = false) }.onFailure(::fail)
+    _state.value = _state.value.copy(route = Route.Browse(Destination.Home), loading = false, message = null)
+    requestHomeFocusRestore()
+    if (_state.value.shelves.isEmpty() && homeJob?.isActive != true) _state.value.selectedProfile?.let { loadHome(it) }
+
 }
 
 /** Invalidates an in-flight source/playback request before a user leaves its surface. */
@@ -26,6 +31,7 @@ internal fun AppController.back() { handleBack() }
 internal fun AppController.consumesBack(state: AppState = _state.value): Boolean = BackAvailabilityPolicy.consumes(state)
 /** Returns false only when Android should handle app exit at a root gate/page. */
 internal fun AppController.handleBack(): Boolean {
+    detailGeneration++; detailJob?.cancel()
     if (queueContinuationJob?.isActive == true) {
         cancelPendingQueueContinuation()
         return true
@@ -52,14 +58,15 @@ internal fun AppController.handleBack(): Boolean {
             invalidatePlaybackPreparation()
             sourceDiscovery?.cancel()
             queueContinuationJob?.cancel()
-            _state.value = _state.value.copy(route = SourceReturnPolicy.cancelRoute(route.origin, route.media))
+            _state.value = _state.value.copy(route = route.backRoute ?: SourceReturnPolicy.cancelRoute(route.origin, route.media), loading = false, sourceLoading = false, message = null)
             if (route.origin == SourceReturn.Home) requestHomeFocusRestore()
         }
         is Route.Profiles -> if (_state.value.managingProfiles) _state.value = _state.value.copy(managingProfiles = false) else if (_state.value.selectedProfile != null) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null) else return false
         is Route.Details -> {
             val destination = DetailReturnPolicy.destination(detailReturnDestination)
-            detailReturnDestination = null
-            _state.value = _state.value.copy(route = Route.Browse(destination), dialog = null, pinPrompt = null)
+            val target = detailReturnRoute ?: Route.Browse(destination)
+            detailReturnDestination = null; detailReturnRoute = null
+            _state.value = _state.value.copy(route = target, dialog = null, pinPrompt = null)
             if (destination == Destination.Home) requestHomeFocusRestore()
         }
         is Route.Guide -> {
@@ -68,7 +75,8 @@ internal fun AppController.handleBack(): Boolean {
             _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
             requestHomeFocusRestore()
         }
-        is Route.Search, is Route.Settings, is Route.Addons, is Route.ProfileEditor -> _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
+        is Route.ProfileEditor -> _state.value = _state.value.copy(route = Route.Profiles, dialog = null, pinPrompt = null)
+        is Route.Search, is Route.Settings, is Route.Addons -> _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
         is Route.Browse -> if (route.destination != Destination.Home) {
             if (route.destination == Destination.Discover) {
                 discoverJob?.cancel()

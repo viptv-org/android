@@ -47,7 +47,13 @@ private suspend fun AppController.prepareAndStartLocked(
     generation: Long,
 ): Boolean {
     val current = _state.value.route
-    val directOrigin = if (current is Route.Player) current.directOrigin else current.takeIf { source.channelId != null }
+    val sourceRoute = when (current) { is Route.Sources -> current; is Route.Player -> current.sourceRoute; else -> null }
+    val directOrigin = when {
+        current is Route.Player -> current.directOrigin
+        current is Route.Sources && media.type == "live" -> current.backRoute ?: Route.Browse(Destination.Home)
+        source.channelId != null -> current
+        else -> null
+    }
     val returnDestination = when (current) {
         is Route.Sources -> SourceReturnPolicy.playbackReturn(current.origin, current.resume)
         is Route.Player -> current.returnDestination
@@ -130,7 +136,7 @@ private suspend fun AppController.prepareAndStartLocked(
                 explicitResumeAwaitingCompletionKey = key
             }
             _state.value = _state.value.copy(
-                route = Route.Player(playbackMedia, source, returnDestination, directOrigin),
+                route = Route.Player(playbackMedia, source, returnDestination, directOrigin, sourceRoute),
                 playerChromeVisible = true,
                 playbackTracks = PlaybackTrackChoices(launch.audioTracks, launch.subtitleTracks, launch.subtitlesSupported),
                 playbackDeliveryMode = launch.mode,

@@ -77,16 +77,7 @@ internal class CoreSession(
                     drain(core.resolve(id, result.toString()))
                 }
                 effect.has("Http") -> effectScope.launch {
-                    var activeCall: HttpTransport.Call? = null
-                    val result = try { suspendCancellableCoroutine<JSONObject> { continuation ->
-                        val call = transport.execute(effect.getJSONObject("Http")) { result ->
-                            if (continuation.isActive) continuation.resume(result)
-                        }
-                        activeCall = call
-                        calls.add(call)
-                        continuation.invokeOnCancellation { call.cancel() }
-                    }
-                    } finally { calls.remove(activeCall) }
+                    val result = executeSessionRead(effect.getJSONObject("Http"), ::exchange)
                     if (!closed) {
                         try { drain(core.resolve(id, result.toString())) }
                         catch (cancelled: CancellationException) { throw cancelled }
@@ -96,6 +87,17 @@ internal class CoreSession(
             }
         }
     }
+    private suspend fun exchange(request: JSONObject): JSONObject {
+        var activeCall: HttpTransport.Call? = null
+        return try { suspendCancellableCoroutine { continuation ->
+            val call = transport.execute(request) { result ->
+                if (continuation.isActive) continuation.resume(result)
+            }
+            activeCall = call
+            calls.add(call)
+            continuation.invokeOnCancellation { call.cancel() }
+        } } finally { calls.remove(activeCall) }
+    }
     private fun savedSession(): String? {
         store.getString("core.session", null)?.let { return it }
         // One-time migration retains the existing Android grant and profile-scoped history.
@@ -104,4 +106,12 @@ internal class CoreSession(
             .put("accessToken", store.getString("access", "")).put("refreshToken", refresh)
             .put("profileId", JSONObject.NULL).put("expiresIn", 0).toString()
     }
+}
+
+/** A pooled connection can expire while an account screen is idle. Only a failed
+ * transport read is safe to repeat; profile writes and HTTP errors go to Rust. */
+internal suspend fun executeSessionRead(request: JSONObject, exchange: suspend (JSONObject) -> JSONObject): JSONObject {
+    val response = exchange(request)
+    return if (request.optString("method").equals("GET", ignoreCase = true) &&
+        response.optJSONObject("Err")?.optString("Io") == "HTTP transport failed") exchange(request) else response
 }

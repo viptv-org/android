@@ -46,6 +46,8 @@ kotlin {
 }
 
 android {
+    lint { baseline = file("lint-baseline.xml") }
+    buildFeatures { buildConfig = true }
     sourceSets.getByName("main").jniLibs.srcDir("src/androidMain/jniLibs")
     testOptions.unitTests.all {
         it.systemProperty("jna.library.path", rootProject.file("vendor/core/target/debug").absolutePath)
@@ -80,4 +82,36 @@ android {
             signingConfig = signingConfigs.getByName("viptvDevelopment")
         }
     }
+}
+
+val verifyDesign by tasks.registering(Exec::class) {
+    workingDir(rootProject.projectDir)
+    commandLine("node", "scripts/design-sync.mjs", "check")
+}
+tasks.named("preBuild") { dependsOn(verifyDesign) }
+
+// An opt-in, debug-only trust anchor for the loopback emulator fixture server.
+// Public CA material is generated under build/; production resources never use it.
+val fixtureCa = providers.gradleProperty("fixtureCa")
+if (fixtureCa.isPresent) {
+    val fixtureResources = layout.buildDirectory.dir("generated/fixtureRes")
+    android.sourceSets.getByName("debug").res.srcDir(fixtureResources)
+    val prepareFixtureTrust by tasks.registering {
+        val certificate = rootProject.file(fixtureCa.get())
+        inputs.file(certificate)
+        outputs.dir(fixtureResources)
+        doLast {
+            val output = fixtureResources.get().asFile
+            output.resolve("raw").mkdirs()
+            output.resolve("xml").mkdirs()
+            certificate.copyTo(output.resolve("raw/viptv_fixture_ca.pem"), overwrite = true)
+            output.resolve("xml/network_security_config.xml").writeText("""
+                <network-security-config>
+                  <base-config cleartextTrafficPermitted="false"><trust-anchors><certificates src="system" /></trust-anchors></base-config>
+                  <debug-overrides><trust-anchors><certificates src="@raw/viptv_fixture_ca" /></trust-anchors></debug-overrides>
+                </network-security-config>
+            """.trimIndent())
+        }
+    }
+    tasks.matching { it.name == "preDebugBuild" }.configureEach { dependsOn(prepareFixtureTrust) }
 }
