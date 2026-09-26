@@ -30,7 +30,8 @@ import org.viptv.app.theme.ViptvColor as C
     val saved = app.favorites.any { it.id == media.id && it.type == media.type }
     val initial = LocalContentFocus.current
     val rail = LocalRailFocus.current
-    val label = if (target == null) "No episodes available" else CoreModels.presentation(target).primaryActionLabel
+    val targetPresentation = remember(target) { target?.let(CoreModels::presentation) }
+    val label = targetPresentation?.primaryActionLabel ?: "No episodes available"
     val episodeFocus = remember(episodes) { episodes.map { FocusRequester() } }
     val episodeScroll = rememberLazyListState()
     val pageScroll = rememberLazyListState()
@@ -66,7 +67,7 @@ import org.viptv.app.theme.ViptvColor as C
                 }
                 if (tv) Row(Modifier.padding(top = 32.dp, bottom = if (episodes.isEmpty()) 40.dp else 108.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     if (target != null) AppButton(label, ::play, Modifier.widthIn(min = 280.dp).focusRequester(initial).focusProperties { left = rail }, "play",
-                        onHold = { controller.chooseSources(target) })
+                        onHold = { controller.chooseSources(target) }, tvAccent = targetPresentation?.primaryAction == "resume")
                     if (target != null) AppButton("Choose source", { controller.chooseSources(target) })
                     else VText(label, 22, Modifier.align(Alignment.CenterVertically), C.textSecondary)
                     AppButton("My List", { controller.toggleMyList(media) }, Modifier.then(if (target == null) Modifier.focusRequester(initial) else Modifier), icon = if (saved) "check" else "plus")

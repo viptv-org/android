@@ -142,16 +142,17 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
         contentAlignment = Alignment.Center, content = content)
 }
 
-@Composable internal fun AppButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: String? = null, primary: Boolean = false, selected: Boolean = false, danger: Boolean = false, onHold: (() -> Unit)? = null, onFocused: (() -> Unit)? = null, pill: Boolean = true) {
+@Composable internal fun AppButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: String? = null, primary: Boolean = false, selected: Boolean = false, danger: Boolean = false, onHold: (() -> Unit)? = null, onFocused: (() -> Unit)? = null, pill: Boolean = true, tvAccent: Boolean = false) {
     val tv = LocalTv.current
     val closeRail = LocalCloseRail.current
     var focused by remember { mutableStateOf(false) }
-    val fill = when { tv && focused -> C.textPrimary; primary && !tv -> LocalAccent.current; selected -> C.surfaceN3; else -> C.surfaceN3 }
-    val foreground = when { tv && focused -> C.onLight; primary && !tv -> C.onAccent; danger -> C.statusDanger; else -> C.textPrimary }
+    val accented = (primary && !tv) || (tv && tvAccent)
+    val fill = when { accented -> LocalAccent.current; tv && focused -> C.textPrimary; primary && !tv -> LocalAccent.current; selected -> C.surfaceN3; else -> C.surfaceN3 }
+    val foreground = when { accented -> C.onAccent; tv && focused -> C.onLight; primary && !tv -> C.onAccent; danger -> C.statusDanger; else -> C.textPrimary }
     val shape = if (pill) RoundedCornerShape(50) else RoundedCornerShape(measure(14, 12))
     Holdable(onClick, onHold, modifier.height(measure(72, 54)).onFocusChanged {
         focused = it.isFocused; if (it.isFocused) { closeRail(); onFocused?.invoke() }
-    }.clip(shape).background(fill)) {
+    }.clip(shape).background(fill).then(if (tv && tvAccent && focused) Modifier.border(4.dp, C.textPrimary, shape) else Modifier)) {
         Row(Modifier.padding(horizontal = if (pill) measure(32, 22) else 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(measure(16, 10))) {
             if (icon != null) VIcon(icon, color = foreground)
             VText(label, if (tv) 26 else 16, color = foreground, bold = true, lines = 1)

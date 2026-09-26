@@ -116,7 +116,7 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
         VText(media.description.orEmpty(), 26, Modifier.offset(y = 394.dp).width(760.dp), C.textBody, lines = 2)
         Row(Modifier.offset(y = 496.dp).onFocusChanged { if (it.hasFocus) controller.recordHomeFocus(0, state.shelves.firstOrNull()?.id.orEmpty(), media, HomeFocusSurface.Hero) }.focusGroup(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             AppButton(hero.primaryActionLabel, { controller.activateHero(media, queue) }, Modifier.width(228.dp).focusRequester(initial).focusProperties { left = rail },
-                "play", onHold = { controller.chooseSources(media, origin = SourceReturn.Home) },
+                "play", tvAccent = hero.primaryAction == "resume", onHold = { controller.chooseSources(media, origin = SourceReturn.Home) },
                 onFocused = { controller.recordHomeFocus(0, state.shelves.firstOrNull()?.id.orEmpty(), media, HomeFocusSurface.Hero) })
             AppButton("Details", { controller.open(media) }, Modifier.width(228.dp))
             AppIconButton(if (saved) "check" else "plus", if (saved) "Remove from My List" else "Add to My List", { controller.toggleMyList(media) })

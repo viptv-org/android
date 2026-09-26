@@ -46,3 +46,57 @@ Settings rail exit/re-entry, profile selection and failed selection, long episod
 titles, rapid focus changes, clock updates, live source/play/Back, slow/failing
 catalogues, and cancellation during profile or route changes. Use 1920 × 1080
 and scaled TV viewports. Record request counts and actual startup timing.
+
+# TV-038 — Vizio navigation aligned with Android TV
+
+Status: owner requested on 2026-09-26. Applies to the hosted TV DOM entry
+(`?platform=vizio`, also shared with Tizen) and Android TV's Resume emphasis.
+These rules supersede the TV reference's older paging, key legends and white
+Resume styling. Implementation/browser/device evidence remains separate.
+
+- Use explicit rail neighbors: Profile, Search, Home, Discover, Live TV,
+  My List, Settings. Up/Down cannot escape into content across the Settings
+  gap. At the first/last rail item, keep focus. Right/Back restores content.
+- Move exactly one card per Left/Right press on every horizontal row, including
+  episodes, search and library rows. Scroll only the distance required to show
+  that card and its ring; do not recenter it to a one-third/two-thirds anchor.
+  Clamp at content ends. Browser automatic focus scrolling must not fight the
+  controlled animation. Up reveals earlier content in the upward direction.
+- Home uses one scroll frame containing the hero and shelves. The hero and
+  first Continue Watching row fit together; focusing that row leaves the
+  viewport at the top. Lower shelves scroll naturally. Returning to the first
+  row or hero reveals the complete hero. Cards remain 320×180, gap 36, and
+  shelf spacing includes captions as in Android TV.
+- Hero blur matches Android TV in the 1920px logical frame: the hero stage is
+  664px high, the sharp art is 1120px wide at the right, and the full-size ambient
+  image uses a 72px blur at 0.6 opacity. Shared left/bottom scrims keep copy legible
+  and adapt to OLED ground. The art scrolls with the hero.
+- Resume uses the selected accent with dark foreground on Android TV and
+  Vizio, including while focused. Retain a white focus ring without changing
+  its size. Other action/focus colors keep their established meaning.
+- Hide native scrollbars throughout TV viewing surfaces while keeping scrolling
+  and accessible focus operable. Do not reserve a scrollbar gutter on TV.
+- Up from every episode returns to the Season selector, independent of horizontal
+  offset. Down from Season restores the selected episode; Left/Right remain
+  within the episode row. Season changes reset that season's row correctly.
+- Discover has a content-type row first, followed below by a separately
+  scrollable catalog/filter row, matching Android TV. All type/filter chips
+  have an outline; selection adds a fill and stronger outline; focus remains
+  explicit. Grid cards fit their cells and retain 16:9 art without cropping
+  captions or creating horizontal overflow. Reuse the same card family.
+- Remove passive Select/Options/Back/keycap legends from the TV app's screens,
+  panels and player. Keep actual button labels, accessible names, remote key
+  behavior, hold actions and actionable controls.
+- Catalog pagination makes at most one request per in-flight query/page,
+  preserves the chosen filter values, and aborts superseded work. Empty pages,
+  repeated pages with no new items, or non-advancing cursors stop automatic
+  paging even if an upstream incorrectly reports more. Missing required catalog
+  filters show the existing input state and never start a request loop.
+
+Acceptance: traverse the entire rail both ways; traverse >12 cards and >8
+episodes forward/back at 1920×1080 and a scaled viewport; compare first/last
+card bounds and vertical animation direction; reach Season from a middle/end
+episode and return; exercise Movies/Series/Other catalogs and required search
+filters; count requests for empty/repeating/cancelled pages; inspect all TV
+scrollbars, chips, card captions and legends. Verify Android TV Resume and the
+served Vizio asset hash after delivering the tested artifacts.

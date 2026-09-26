@@ -1,3 +1,17 @@
+# TV-038 Resume accent — 2026-09-26
+
+Home and detail Resume now retain the user's accent on Android TV. A white
+focus ring marks the focused action without changing its size; other TV actions
+retain their existing focus style. Adopted design `0322985`.
+
+Library/app unit suites passed **99 tests**; APK assembly and lint passed with
+61 advisory warnings and the existing three generated UniFFI baseline entries.
+The production-connected API 36 TV emulator received the normal APK as an update
+and retained its sign-in. Its Home Resume color, dark icon/text, white ring and
+unchanged 228×72 bounds were visually checked. The deliverable contains no test
+CA. No new physical-device or playback qualification is claimed for this style
+change.
+
 # Search, player layout and Up Next — 2026-09-26
 
 AND-037 corrects TV keyboard navigation, preserves catalog-labelled search
