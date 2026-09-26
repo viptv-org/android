@@ -58,6 +58,7 @@ internal fun AppController.saveProgress(media: Media) {
     scope.launch { persistProgress(profileId, media, position) }
 }
 internal fun AppController.previewSeek(deltaMillis: Long) {
+    cancelUpNext()
     val playback = player.state.value
     val timeline = playback.timeline ?: return
     val base = _state.value.seekPreview?.targetMillis ?: absolutePositionMillis()

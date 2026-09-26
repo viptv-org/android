@@ -91,7 +91,7 @@ data class Addon(val id: String, val name: String, val manifestUrl: String, val 
 /** Deliberately minimal, account-safe facts for the informational Settings section. */
 data class ServerAbout(val mediaServiceAvailable: Boolean)
 /** A labelled source section retained when another search source fails. */
-data class SearchSection(val source: String, val items: List<Media>)
+data class SearchSection(val source: String, val items: List<Media>, val id: String = source, val type: String? = null)
 /** Partial failures are explicit so the UI can retain results without lying about coverage. */
 data class SearchResults(val sections: List<SearchSection>, val partialFailure: Boolean)
 
@@ -152,6 +152,7 @@ data class AppState(
     val dialog: DialogState? = null,
     val pinPrompt: PinPrompt? = null,
     val seekPreview: SeekPreview? = null,
+    val upNext: UpNextPrompt? = null,
     val deviceCode: DeviceCode? = null,
     /** Player controls begin visible and dismiss after seven seconds of inactivity. */
     val playerChromeVisible: Boolean = true,

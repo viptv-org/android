@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,6 +18,8 @@ import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -35,7 +35,6 @@ import org.viptv.app.theme.ViptvColor as C
 
 private enum class TrackMenu { Audio, Subtitles }
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable internal fun PlaybackScreen(media: Media, chromeVisible: Boolean, seekPreview: SeekPreview?, serverTracks: PlaybackTrackChoices, controller: AppController) {
     val tv = LocalTv.current
     val playback by controller.player.state.collectAsState()
@@ -83,9 +82,9 @@ private enum class TrackMenu { Audio, Subtitles }
         }
     }
     LaunchedEffect(media.id, position, duration, playback.isPlaying, playback.status) { controller.maybeAutoNext(media, position, duration.takeIf { it > 0 }, playback.isPlaying, playback.status == PlaybackStatus.Ended) }
-    LaunchedEffect(menu, info) {
+    LaunchedEffect(menu, info, app.upNext != null) {
         controller.setPlayerMenuOpen(menu != null || info)
-        if (tv && menu == null && !info) { withFrameNanos {}; runCatching { focus.requestFocus() } }
+        if (tv && menu == null && !info && app.upNext == null) { withFrameNanos {}; runCatching { focus.requestFocus() } }
     }
     DisposableEffect(controller, media.id) {
         onDispose {
@@ -98,8 +97,9 @@ private enum class TrackMenu { Audio, Subtitles }
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent { event ->
-        if (!tv || menu != null || info) return@onPreviewKeyEvent false
         val key = event.nativeKeyEvent; val code = key.keyCode
+        val mediaKey = code in listOf(KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_MEDIA_NEXT)
+        if (!tv || menu != null || info || (app.upNext != null && !mediaKey)) return@onPreviewKeyEvent false
         if (code == KeyEvent.KEYCODE_BACK) { seekJob?.cancel(); return@onPreviewKeyEvent false }
         if (key.action == KeyEvent.ACTION_UP) {
             if (code == seekKey) releaseSeek()
@@ -149,17 +149,20 @@ private enum class TrackMenu { Audio, Subtitles }
         Box(Modifier.matchParentSize().pointerInput(chromeVisible) { detectTapGestures {
             if (chromeVisible) controller.hidePlayerChrome() else controller.showPlayerChrome()
         } })
+        val density = LocalDensity.current
+        var controlsHeight by remember(portrait) { mutableStateOf(if (portrait) 230.dp else 140.dp) }
         if (shown) {
             if (!portrait) Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .6f), Color.Transparent, Color.Black.copy(alpha = .85f)))))
-            Row(Modifier.align(Alignment.TopStart).fillMaxWidth().then(if (tv) Modifier.padding(96.dp, 76.dp) else Modifier.statusBarsPadding().padding(16.dp)), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.align(Alignment.TopStart).fillMaxWidth().then(if (tv) Modifier.padding(96.dp, 76.dp) else Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)).padding(16.dp)), verticalAlignment = Alignment.CenterVertically) {
                 if (!tv) { AppIconButton("back", "Back", controller::exitPlayback, Modifier.size(44.dp)); Spacer(Modifier.width(12.dp)) }
                 Column(Modifier.weight(1f)) {
-                    VText(media.name, if (tv) 24 else 17, bold = true, lines = 1)
+                    VText(media.name, if (tv) 24 else 17, bold = true, lines = if (portrait) 2 else 1)
                     if (!tv && media.season != null) VText("S" + media.season + " · E" + media.episode + " · " + media.episodeTitle.orEmpty(), 13, color = C.textSecondary, lines = 1)
                 }
-                VText(if (live) "● LIVE" else if (buffering) "BUFFERING" else if (playback.isPlaying) "PLAYING" else "PAUSED", if (tv) 20 else 11, color = if (live) C.statusLive else C.textPrimary, bold = true)
+                if (tv || live) VText(if (live) "● LIVE" else if (buffering) "BUFFERING" else if (playback.isPlaying) "PLAYING" else "PAUSED", if (tv) 20 else 11, color = if (live) C.statusLive else C.textPrimary, bold = true)
             }
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().then(if (tv) Modifier.padding(horizontal = 96.dp, vertical = 96.dp) else Modifier.navigationBarsPadding().padding(horizontal = 20.dp, vertical = 24.dp))) {
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { controlsHeight = with(density) { it.height.toDp() } }
+                .then(if (tv) Modifier.padding(horizontal = 96.dp, vertical = 96.dp) else Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)).padding(horizontal = 16.dp, vertical = 12.dp))) {
                 if (tv) {
                     VText(if (live) "LIVE TV" else "NOW PLAYING", 20, color = C.textSecondary, bold = true)
                     if (media.season != null) VText("S" + media.season + " · E" + media.episode + " · " + media.episodeTitle.orEmpty(), 26, Modifier.padding(top = 18.dp), lines = 1)
@@ -167,45 +170,34 @@ private enum class TrackMenu { Audio, Subtitles }
                 }
                 if (!live) {
                     val displayPosition = seekPreview?.targetMillis ?: position
-                    if (tv) {
-                        ProgressLine(if (duration > 0) displayPosition.toFloat() / duration else 0f, Modifier.padding(vertical = 14.dp))
-                        if (row == 0) VText(if (seekPreview != null) "Seeking to " + formatTime(displayPosition) else "Use left or right to seek", 20, color = C.textSecondary)
-                    } else Slider(
-                        value = if (duration > 0) (displayPosition.toFloat() / duration).coerceIn(0f, 1f) else 0f,
-                        onValueChange = { value -> controller.previewSeek((duration * value).toLong() - (controller.state.value.seekPreview?.targetMillis ?: controller.absolutePositionMillis())) },
-                        onValueChangeFinished = { controller.commitSeek() },
-                        enabled = duration > 0 && playback.timeline?.canSeek == true,
-                        // Scrubbing from the start/end must not trigger Android's edge Back gesture.
-                        modifier = Modifier.height(32.dp).systemGestureExclusion(),
-                        thumb = { Box(Modifier.size(12.dp).clip(CircleShape).background(C.textPrimary)) },
-                        track = { ProgressLine(if (duration > 0) displayPosition.toFloat() / duration else 0f) },
-                        colors = SliderDefaults.colors(thumbColor = C.textPrimary, activeTrackColor = LocalAccent.current, inactiveTrackColor = C.lineStrong))
-                    Row(Modifier.fillMaxWidth().padding(bottom = measure(32, 20)), horizontalArrangement = Arrangement.SpaceBetween) {
-                        VText(formatTime(displayPosition), if (tv) 22 else 13, bold = true)
-                        VText(formatTime(duration), if (tv) 22 else 13, color = C.textSecondary)
-                    }
+                    val bufferedPosition = playback.bufferedPositionMillis?.let { PlaybackTimelinePolicy.absolutePositionMillis(it, controller.playbackTitleOffsetMillis) }
+                    PlayerTimeline(displayPosition, duration, bufferedPosition, Modifier.padding(bottom = measure(32, 12)),
+                        enabled = playback.timeline?.canSeek == true,
+                        onSeek = if (tv) null else { target -> controller.previewSeek(target - (controller.state.value.seekPreview?.targetMillis ?: controller.absolutePositionMillis())) },
+                        onCommit = { controller.commitSeek() }, onCancel = { controller.cancelSeek() })
+                    if (tv && row == 0) VText(if (seekPreview != null) "Seeking to " + formatTime(displayPosition) else "Use left or right to seek", 20, color = C.textSecondary)
                 }
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = if (tv) Arrangement.spacedBy(18.dp) else Arrangement.SpaceEvenly) {
+                if (tv) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                     if (!live) {
-                        PlayerControl("back10", "Back 10 seconds", tv && row == 1 && button == 0, { activate(0) })
-                        PlayerControl(if (playback.isPlaying) "pause" else "play", if (playback.isPlaying) "Pause" else "Play", tv && row == 1 && button == 1, { activate(1) }, primary = !tv)
-                        PlayerControl("forward30", "Forward 30 seconds", tv && row == 1 && button == 2, { activate(2) })
-                        if (hasNext) PlayerControl("next", "Next episode", tv && row == 1 && button == 6, { activate(6) })
+                        PlayerControl("back10", "Back 10 seconds", row == 1 && button == 0, { activate(0) })
+                        PlayerControl(if (playback.isPlaying) "pause" else "play", if (playback.isPlaying) "Pause" else "Play", row == 1 && button == 1, { activate(1) })
+                        PlayerControl("forward30", "Forward 30 seconds", row == 1 && button == 2, { activate(2) })
+                        if (hasNext) PlayerControl("next", "Next episode", row == 1 && button == 6, { activate(6) })
                     }
-                    if (tv) Spacer(Modifier.weight(1f))
-                    if (tv || live) {
-                        PlayerControl("audio", "Audio", tv && row == 1 && button == 3, { activate(3) })
-                        PlayerControl("captions", "Subtitles", tv && row == 1 && button == 4, { activate(4) })
-                        PlayerControl("exit", "Exit player", tv && row == 1 && button == 5, { activate(5) })
-                    }
-                }
-                if (!tv && !live) Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    AppIconButton("audio", "Audio", { activate(3) }, Modifier.size(44.dp))
-                    AppIconButton("captions", "Subtitles", { activate(4) }, Modifier.size(44.dp))
-                    AppIconButton("info", "Playback info", { info = true }, Modifier.size(44.dp))
-                    AppIconButton("expand", "Fullscreen", { activity?.requestedOrientation = if (portrait) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT }, Modifier.size(44.dp))
-                }
+                    Spacer(Modifier.weight(1f))
+                    PlayerControl("audio", "Audio", row == 1 && button == 3, { activate(3) })
+                    PlayerControl("captions", "Subtitles", row == 1 && button == 4, { activate(4) })
+                    PlayerControl("exit", "Exit player", row == 1 && button == 5, { activate(5) })
+                } else PhonePlayerControls(portrait, live, hasNext, playback.isPlaying, ::activate, { info = true }, {
+                    activity?.requestedOrientation = if (portrait) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                })
             }
+        }
+        app.upNext?.let { prompt ->
+            UpNextCard(prompt, controller::playUpNext, controller::cancelUpNext,
+                Modifier.align(if (portrait) Alignment.BottomCenter else Alignment.BottomEnd)
+                    .padding(start = measure(96, 16), end = measure(96, 16), bottom = if (tv) 320.dp else controlsHeight + 12.dp)
+                    .widthIn(max = measure(480, 358)).then(if (portrait) Modifier.fillMaxWidth() else Modifier.width(measure(480, 358))))
         }
         if (buffering) CircularProgressIndicator(Modifier.align(Alignment.Center).size(measure(64, 44)), color = LocalAccent.current)
         val nativeTracks = if (app.playbackDeliveryMode == "direct") PlaybackTrackChoices(
@@ -222,9 +214,37 @@ private enum class TrackMenu { Audio, Subtitles }
 @Composable private fun PlayerControl(icon: String, label: String, focused: Boolean, onClick: () -> Unit, primary: Boolean = false) {
     val tv = LocalTv.current
     Box(Modifier.size(measure(72, if (primary) 54 else 44)).clip(CircleShape)
-        .background(if (focused) C.textPrimary else if (primary) LocalAccent.current else C.surfaceN3)
+        .background(if (focused) C.textPrimary else if (primary) LocalAccent.current else if (tv) C.surfaceN3 else Color.Transparent)
         .clickable(onClick = onClick).semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
         VIcon(icon, modifier = Modifier.size(measure(32, 24)), color = if (focused || primary) C.onLight else C.textPrimary)
+        if (icon == "back10" || icon == "forward30") VText(if (icon == "back10") "10" else "30", if (tv) 12 else 9, color = if (focused || primary) C.onLight else C.textPrimary, bold = true)
+    }
+}
+
+@Composable private fun PhonePlayerControls(portrait: Boolean, live: Boolean, hasNext: Boolean, playing: Boolean,
+    activate: (Int) -> Unit, onInfo: () -> Unit, onFullscreen: () -> Unit) {
+    val transport: @Composable () -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (portrait) 20.dp else 8.dp)) {
+            PlayerControl("back10", "Back 10 seconds", false, { activate(0) })
+            PlayerControl(if (playing) "pause" else "play", if (playing) "Pause" else "Play", false, { activate(1) }, primary = true)
+            PlayerControl("forward30", "Forward 30 seconds", false, { activate(2) })
+            if (hasNext) PlayerControl("next", "Next episode", false, { activate(6) })
+        }
+    }
+    val tools: @Composable RowScope.() -> Unit = {
+        PlayerControl("audio", "Audio", false, { activate(3) })
+        PlayerControl("captions", "Subtitles", false, { activate(4) })
+        PlayerControl("info", "Playback info", false, onInfo)
+        if (portrait) Spacer(Modifier.weight(1f))
+        PlayerControl(if (portrait) "expand" else "expand", if (portrait) "Fullscreen" else "Exit fullscreen", false, onFullscreen)
+    }
+    if (portrait) {
+        if (!live) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { transport() }
+        Row(Modifier.fillMaxWidth().padding(top = if (live) 0.dp else 24.dp), verticalAlignment = Alignment.CenterVertically, content = tools)
+    } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        if (!live) transport()
+        Spacer(Modifier.weight(1f))
+        Row(verticalAlignment = Alignment.CenterVertically, content = tools)
     }
 }
 

@@ -26,7 +26,7 @@ import org.viptv.app.theme.ViptvColor as C
     var seasonPicker by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf(false) }
     val episodes = remember(media, season) { media.episodes.filter { (it.season ?: 1) == season } }
-    val target = initialEpisode ?: media.takeUnless { it.type == "series" && it.episode == null }
+    val target = initialEpisode?.withArtworkFrom(media) ?: media.takeUnless { it.type == "series" && it.episode == null }
     val saved = app.favorites.any { it.id == media.id && it.type == media.type }
     val initial = LocalContentFocus.current
     val rail = LocalRailFocus.current
@@ -84,14 +84,14 @@ import org.viptv.app.theme.ViptvColor as C
                     LazyRow(state = episodeScroll, modifier = Modifier.fillMaxWidth().padding(top = 24.dp).focusGroup(), horizontalArrangement = Arrangement.spacedBy(36.dp), contentPadding = PaddingValues(4.dp)) {
                         itemsIndexed(episodes, key = { _, item -> item.id }) { index, episode ->
                             EpisodeCard(episode, Modifier.width(360.dp).focusRequester(episodeFocus[index]),
-                                onClick = { selectedEpisode = index; restoreEpisodes = true; controller.chooseSources(episode) },
+                                onClick = { selectedEpisode = index; restoreEpisodes = true; controller.chooseSources(episode.withArtworkFrom(media)) },
                                 onHold = { controller.requestDialog(DialogKind.EpisodeManage, episode.episodeTitle ?: episode.name, episode) },
                                 onFocused = { selectedEpisode = index })
                         }
                     }
                 } else itemsIndexed(episodes, key = { _, item -> item.id }) { _, episode ->
                     EpisodeCard(episode, Modifier.padding(horizontal = 20.dp, vertical = 10.dp).fillMaxWidth(),
-                        onClick = { controller.chooseSources(episode, episode.positionMillis > 0) },
+                        onClick = { controller.chooseSources(episode.withArtworkFrom(media), episode.positionMillis > 0) },
                         onHold = { controller.requestDialog(DialogKind.EpisodeManage, episode.episodeTitle ?: episode.name, episode) })
                 }
             }

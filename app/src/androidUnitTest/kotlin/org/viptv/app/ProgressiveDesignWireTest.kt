@@ -69,6 +69,21 @@ class ProgressiveDesignWireTest {
             assertEquals(listOf("Slow", "Fast"), withTimeout(3000) { result.await() }.sections.map { it.source })
         } finally { gate.countDown(); server.close() }
     }
+    @Test fun sameNamedCataloguesKeepTheirIdentityAndRepeatedTitles() = runBlocking {
+        val server = ParallelFixture { path, _ -> when (path) {
+            "/api/catalogs" -> """[{"id":"search","type":"movie","name":"Search","addon_id":1,"addon_name":"Provider One","supports_search":true},{"id":"search","type":"movie","name":"Search","addon_id":2,"addon_name":"Provider Two","supports_search":true}]"""
+            "/api/live" -> """{"channels":[]}"""
+            "/api/discover" -> """{"metas":[{"id":"shared","type":"movie","name":"Shared title"},{"id":"shared","type":"movie","name":"Shared title"}]}"""
+            else -> error("Unexpected request")
+        } }
+        try {
+            val result = VipTvHttpGateway(server.origin).search("title")
+            assertEquals(listOf("Provider One · Search", "Provider Two · Search"), result.sections.map { it.source })
+            assertEquals(2, result.sections.map { it.id }.toSet().size)
+            assertEquals(listOf(listOf("shared"), listOf("shared")), result.sections.map { it.items.map(Media::id) })
+        } finally { server.close() }
+    }
+
 }
 
 private class ParallelFixture(respond: (String, String) -> String) : AutoCloseable {

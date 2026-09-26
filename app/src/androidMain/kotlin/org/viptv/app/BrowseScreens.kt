@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.*
@@ -97,54 +96,5 @@ import org.viptv.app.theme.ViptvColor as C
                 onClick = { keyboard?.hide(); onClick(media) }, onHold = { onHold(media) }, portrait = !tv, wide = tv)
         }
         if (loading) item(span = { GridItemSpan(maxLineSpan) }) { VText("Loading more titles…", if (tv) 22 else 14, Modifier.padding(16.dp), C.textTertiary) }
-    }
-}
-
-@Composable internal fun SearchScreen(state: AppState, controller: AppController) {
-    val tv = LocalTv.current
-    val first = LocalContentFocus.current
-    val resultsFocus = remember { FocusRequester() }
-    val rail = LocalRailFocus.current
-    var filter by rememberSaveable { mutableStateOf("All") }
-    val resultRows = rememberLazyListState()
-    var keyboardFocused by remember { mutableStateOf(true) }
-    val results = remember(state.searchSections, filter) {
-        state.searchSections.flatMap { it.items }.distinctBy { HomeFocusPolicy.mediaKey(it) }.filter {
-            filter == "All" || (filter == "Movies" && it.type == "movie") || (filter == "Series" && it.type in listOf("series", "episode")) || (filter == "Live TV" && it.type == "live")
-        }
-    }
-    val groups = remember(results) { results.groupBy { if (it.type == "live") "Live TV" else if (it.type in listOf("series", "episode")) "Series" else "Movies" } }
-    LaunchedEffect(groups.keys.toList(), keyboardFocused) {
-        if (tv && keyboardFocused) resultRows.scrollToItem(0)
-    }
-    LaunchedEffect(Unit) { withFrameNanos {}; runCatching { first.requestFocus() } }
-    Column(Modifier.fillMaxSize().imePadding().padding(start = measure(192, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
-        ScreenHeader("Search", if (tv) null else controller::back)
-        if (tv) Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(96.dp)) {
-            Column(Modifier.width(560.dp).onFocusChanged { keyboardFocused = it.hasFocus }.focusProperties { left = rail }) {
-                VText(state.searchQuery.ifBlank { "Search movies and series" }, 32, Modifier.fillMaxWidth().background(C.surfaceN1, androidx.compose.foundation.shape.RoundedCornerShape(20.dp)).padding(22.dp), if (state.searchQuery.isBlank()) C.textTertiary else C.textPrimary, lines = 1)
-                Spacer(Modifier.height(28.dp))
-                RemoteKeyboard(state.searchQuery, controller::search, first, onResults = { runCatching { resultsFocus.requestFocus() } })
-            }
-            Column(Modifier.weight(1f)) {
-                VText(state.searchStatus, 22, Modifier.padding(bottom = 20.dp), C.textTertiary)
-                LazyColumn(state = resultRows, verticalArrangement = Arrangement.spacedBy(36.dp), contentPadding = PaddingValues(4.dp)) {
-                    groups.entries.forEachIndexed { sectionIndex, (title, items) -> item(key = title) {
-                        VText(title, 32, display = true)
-                        LazyRow(Modifier.padding(top = 18.dp).focusGroup(), horizontalArrangement = Arrangement.spacedBy(36.dp), contentPadding = PaddingValues(4.dp)) {
-                            itemsIndexed(items, key = { _, item -> HomeFocusPolicy.mediaKey(item) }) { index, media ->
-                                MediaCard(media, Modifier.then(if (sectionIndex == 0 && index == 0) Modifier.focusRequester(resultsFocus) else Modifier),
-                                    onClick = { controller.activateCard(media) }, onHold = { controller.requestDialog(DialogKind.MyListManage, media.name, media) })
-                            }
-                        }
-                    } }
-                }
-            }
-        } else {
-            AppField(state.searchQuery, controller::search, "Search movies and series", Modifier.focusRequester(first))
-            FilterTabs(listOf("All", "Movies", "Series", "Live TV"), filter, { filter = it }, Modifier.padding(vertical = 18.dp))
-            if (results.isEmpty()) EmptyState(if (state.searchQuery.isBlank()) "Find your next favorite" else "No matching titles", if (state.searchQuery.isBlank()) "Search movies, series and live TV." else state.searchStatus, "search")
-            else MediaGrid(results, onClick = { controller.activateCard(it) }, onHold = { controller.requestDialog(DialogKind.MyListManage, it.name, it) })
-        }
     }
 }

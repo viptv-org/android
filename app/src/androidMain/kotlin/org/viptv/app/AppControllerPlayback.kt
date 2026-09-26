@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 
 internal fun AppController.start(media: Media, source: Source, explicitResume: Boolean = false) {
+    cancelUpNext()
     if (_state.value.preparingSourceId != null) return
     playbackStartJob?.cancel()
     val requestGeneration = ++playbackGeneration
@@ -48,6 +49,7 @@ private suspend fun AppController.prepareAndStartLocked(
     resetTrackChoices: Boolean,
     generation: Long,
 ): Boolean {
+    cancelUpNext()
     val current = _state.value.route
     val sourceRoute = when (current) { is Route.Sources -> current; is Route.Player -> current.sourceRoute; else -> null }
     val directOrigin = when {
@@ -161,6 +163,7 @@ private suspend fun AppController.prepareAndStartLocked(
 internal fun AppController.onPlayerEvent(event: PlaybackEvent) {
     if (event !is PlaybackEvent.Failed || _state.value.dialog?.kind == DialogKind.PlaybackRecovery) return
     val active = _state.value.route as? Route.Player ?: return
+    cancelUpNext()
     _state.value = _state.value.copy(message = event.error.message)
     val route = active.copy(media = snapshotPlaybackMedia(active))
     retirePlaybackSession()

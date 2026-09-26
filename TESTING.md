@@ -1,3 +1,23 @@
+# Search, player layout and Up Next — 2026-09-26
+
+AND-037 corrects TV keyboard navigation, preserves catalog-labelled search
+results and resets their offsets per query. A shared native timeline includes
+buffered media, aligned time labels and a circular seek handle. Phone portrait
+and landscape use distinct control arrangements with transparent tools. Both
+platforms now display a cancellable ten-second Up Next card using the resolved
+episode still and existing continuation policy.
+
+Library/app tests passed **99 tests** (28 + 71), including independent catalog
+arrival/identity and paused countdowns. Debug assembly, lint and core/design
+integrity passed. Final lint retains 61 advisory warnings and the existing three-entry
+generated UniFFI baseline. The shared
+Rust/native ABI pin is unchanged; the APK uses its previously verified ABI set.
+
+[DESIGN_AUDIT.md](DESIGN_AUDIT.md) records inspected surfaces, measurements,
+corrections and the limits of the emulator evidence. Native QA used separate
+headless emulators and local HTTPS fixtures; normal phone/TV delivery retains
+the production origin and sign-in. Test CA/media are not in the delivered APK.
+
 # Native direct playback and phone sign-in — 2026-09-26
 
 AND-036 adds phone username/password sign-in with optional pairing, original-URL Media3 playback, source progress/errors/cancellation, provider identity filters, stateful My List actions and corrected native insets/TV hero behavior. Core is `2cfd963e5cf9178d93e8bbb7462bcccb92b152f3`; design is `fb7e662165da44a917504da23a73bf826f9e3a9c`.

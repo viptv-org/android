@@ -41,7 +41,7 @@ Hosted `app-review.yml` also builds the pinned native core for host tests and al
 
 ## Design and native preview
 
-`DESIGN_REF` pins AND-036 and the current shared visual system. The generated tokens, local Onest/Bricolage fonts and licensed Lucide assets are checked by `scripts/design-sync.mjs`; never edit generated files. To adopt a new committed design:
+`DESIGN_REF` pins AND-037 and the current shared visual system. The generated tokens, local Onest/Bricolage fonts and licensed Lucide assets are checked by `scripts/design-sync.mjs`; never edit generated files. To adopt a new committed design:
 
 ```sh
 node scripts/design-sync.mjs sync ../design <full-commit-sha>

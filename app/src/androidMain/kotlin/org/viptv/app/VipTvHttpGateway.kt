@@ -143,7 +143,7 @@ class VipTvHttpGateway(
         val term = query.trim()
         if (term.isEmpty()) return SearchResults(emptyList(), false)
         return coroutineScope {
-            val gate = Semaphore(6)
+            val gate = Semaphore(3)
             val publisher = kotlinx.coroutines.sync.Mutex()
             val completed = java.util.TreeMap<Int, SearchSection>()
             var partial = false
@@ -166,7 +166,7 @@ class VipTvHttpGateway(
             catalogs.mapIndexed { index, catalog -> async {
                 publish(index, attempt { gate.withPermit {
                     val items = discover(DiscoverPolicy.request(catalog, DiscoverPolicy.defaults(catalog) + ("search" to term), 0)).items
-                    SearchSection(catalog.name, items.distinctBy { HomeFocusPolicy.mediaKey(it) }.take(24))
+                    SearchSection(listOfNotNull(catalog.addonName?.takeIf(String::isNotBlank), catalog.name).joinToString(" · "), items.distinctBy { HomeFocusPolicy.mediaKey(it) }.take(24), catalog.key.stableId, catalog.key.type)
                 } })
             } }.awaitAll()
             liveRequest.await()

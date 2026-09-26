@@ -112,3 +112,67 @@ forward/back seeks and clock stability; exit/background audio silence; phone
 rotation; stateful membership; safe insets; TV scroll-away and full-hero restore.
 Production promotion requires tested immutable artifacts and verification of the
 running backend/transcoder plus served TV asset hashes; Git push is not a deploy.
+
+# AND-037 — Search focus, native player controls and Up Next
+
+Status: owner requested on 2026-09-26; Android implementation and emulator audit
+are recorded separately in TESTING.md. Related: Android #3 and design #6.
+
+## Search
+
+- Keep one TV result shelf per returned catalog, labelled with its addon and
+  catalog name. Live remains its own shelf. Do not collapse catalog results
+  into media-type groups or deduplicate titles across different catalogs.
+- Each new query resets all result offsets. Progressive arrivals preserve the
+  focused catalog/item and do not request focus. Catalog identity includes
+  addon, catalog ID and type, even when display names collide.
+- Left/Right moves through individual keyboard keys. Only Left at the first
+  column enters the sidebar. Right at any row's last key, remote Play/Fast
+  Forward, or the visible Results action enters the first result, scrolling it
+  into view before focus. With no results, stay on the keyboard. Left from a
+  shelf's first result restores the last keyboard key; subsequent cards move
+  left within their row. Physical text input remains supported.
+
+## Phone player
+
+- Portrait follows PhPlayer: 16dp side gutters, a readable title/episode header,
+  a fitted video surface, shared timeline, transport row and compact tools row.
+  Phone status words do not compete with the title. Live omits transport/timeline.
+- Landscape uses the desktop overlay arrangement at phone density: header at
+  top-left, one timeline above one controls row; transport controls left and
+  audio/subtitle/info/fullscreen controls right. Keep 16dp safe side gutters
+  and system/cutout insets. Never stack portrait tool rows across the video.
+- Only Play/Pause uses a 54dp accent disc. Other controls have transparent
+  44dp touch targets and 22–24dp glyphs. Tools group on the left in portrait,
+  with fullscreen at the right edge. Use existing licensed rounded icons.
+- Timeline is a 4dp rounded track with played accent, actual lighter buffered
+  range, and a consistently circular 14dp white knob. It has a 44dp touch target,
+  with times aligned to the track ends. Seeking supports tap/drag/accessibility,
+  excludes only its own area from edge Back gestures, and preserves pause.
+
+## Up Next
+
+- Eligible final-ten-second series playback resolves one server-authorized next
+  episode, then displays a 10-second countdown card. It does not immediately
+  replace playback. The card contains landscape art, NEXT EPISODE, episode
+  title, Starts in {seconds}, a remaining-time line, Play now and Cancel.
+- Place the card above controls on portrait phone, and bottom-right above the
+  timeline on landscape/TV. Phone card is at most 358dp wide; TV is 480px wide.
+  It remains visible when player chrome auto-hides. TV initially focuses Play now;
+  Left/Right selects its actions; Back cancels and restores player focus.
+- Countdown advances during playback or the ended frame, freezes on pause,
+  buffering and track/info menus. Seeking, Cancel, Back, source replacement,
+  profile change or exit cancels it; it must not reopen for the same playback.
+  Explicit Resume in the last ten seconds waits for completion before offering it.
+- Play now/expiry uses the existing controlled continuation and exact-source
+  affinity; reuse the resolved metadata rather than requesting it twice. Retain
+  the outgoing frame while preparing, and preserve Back/cancel recovery.
+  Missing/unreleased successors never produce an invented card or a guessed episode.
+
+Acceptance: navigate left/right in every keyboard row; enter results from the
+first row; verify catalog collisions, late arrivals and query reset; compare
+portrait/landscape seek/time/buffer geometry; inspect a paused scrub and rotated
+player; show, pause, cancel and accept Up Next on both phone and TV; verify
+cancel/exit prevent delayed playback. Audit Home, profiles, details, sources,
+settings and search against their pinned reference screens. Keep the full hero
+visible while Continue Watching is focused, as specified by AND-036.

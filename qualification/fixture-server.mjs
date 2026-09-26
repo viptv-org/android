@@ -2,13 +2,15 @@
 // Native Android exercises the same HTTP fixtures as the TV/browser previews.
 // All art/media is served locally over TLS; no account or upstream is contacted.
 import https from 'node:https';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync, createReadStream } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.ANDROID_FIXTURE_PORT ?? 9443);
 const origin = 'https://10.0.2.2:' + port;
+const nativeMedia = process.env.ANDROID_FIXTURE_MEDIA;
+const nativeDuration = Number(process.env.ANDROID_FIXTURE_DURATION ?? 12);
 process.env.PREVIEW_API_ORIGIN = origin;
 const { installBackend, referenceDir } = await import('../../tv-web/tests/preview/backend.ts');
 const routes = [];
@@ -20,6 +22,7 @@ await installBackend({
 let approved = !process.argv.includes('--pairing');
 let live = false;
 let delayMetadata = 0;
+let delaySearchMovies = 0;
 const calls = [];
 const token = { session_id: 'android-fixture-session', account_id: '7', profile_id: null, access_token: 'fixture-access', refresh_token: 'fixture-refresh', expires_in: 900 };
 const json = (response, value, status = 200) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(value)); };
@@ -47,15 +50,30 @@ const server = https.createServer({
     const body = bodyText ? JSON.parse(bodyText) : {};
     const url = new URL(request.url, origin);
     const path = url.pathname;
+    if (path === '/fixtures/native-validation.mp4' && nativeMedia) {
+      const size = statSync(nativeMedia).size;
+      const range = /bytes=(\d+)-(\d*)/.exec(request.headers.range ?? '');
+      const start = range ? Number(range[1]) : 0;
+      const end = range?.[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+      if (start >= size || start > end) { response.writeHead(416); return response.end(); }
+      response.writeHead(range ? 206 : 200, { 'content-type': 'video/mp4', 'accept-ranges': 'bytes', 'content-length': end - start + 1, ...(range ? { 'content-range': `bytes ${start}-${end}/${size}` } : {}) });
+      return createReadStream(nativeMedia, { start, end }).pipe(response);
+    }
     if (path === '/__control') {
       if ('approved' in body) approved = body.approved;
       if ('delayMetadata' in body) delayMetadata = body.delayMetadata;
+      if ('delaySearchMovies' in body) delaySearchMovies = Math.max(0, Math.min(10000, Number(body.delaySearchMovies)));
       return json(response, { ok: true });
     }
     if (path === '/__requests') return json(response, calls);
     calls.push({ method: request.method, path, at: Date.now(), ...(path === "/api/streams" ? { itemId: body.id, itemType: body.type } : {}), ...(path === "/api/playback" ? { channelId: body.channel_id } : {}) });
     if (path === '/api/auth/device/token') return approved ? json(response, token) : json(response, { error: 'authorization_pending' }, 400);
     if (path === '/api/auth/device/code') return json(response, { device_code: 'fixture-device', user_code: 'AB12CD34', verification_uri: origin + '/device', verification_uri_complete: origin + '/device?code=AB12CD34', expires_in: 600, interval: 1 });
+    if (path.endsWith('/continue/next')) {
+      const episode = Number(body.episode ?? 1) + 1;
+      return json(response, episode <= 10 ? { status: 'next', item: { id: `tt-monster:1:${episode}`, type: 'episode', series_id: 'tt-monster', name: 'Monster: The Jeffrey Dahmer Story', season: 1, episode } } : { status: 'caught_up' });
+    }
+    if (path === '/api/discover' && url.searchParams.get('search') && url.searchParams.get('type') === 'movie' && delaySearchMovies) await new Promise(resolve => setTimeout(resolve, delaySearchMovies));
     if (path === '/api/streams') live = body.type === 'live';
     if (path.startsWith('/api/meta/') && delayMetadata) await new Promise(resolve => setTimeout(resolve, delayMetadata));
     if (path.startsWith('/fixtures/art/')) {
@@ -80,7 +98,7 @@ const server = https.createServer({
             value.programs = (value.programs ?? []).map(program => ({ ...program, start: program.start + shift, end: program.end + shift }));
           }
           if (favoritePage) value = { items: value, total: value.length, offset: 0, next_offset: null };
-          if (path === '/api/playback' && request.method === 'POST') value = { ...value, mode: 'direct', live: live || !!body.channel_id, duration: live ? 0 : 12, position: 0 };
+          if (path === '/api/playback' && request.method === 'POST') value = { ...value, mode: 'direct', live: live || !!body.channel_id, duration: live ? 0 : nativeDuration, position: 0, ...(nativeMedia ? { url: origin + '/fixtures/native-validation.mp4', format: 'file' } : {}) };
           output = JSON.stringify(value);
         }
         response.writeHead(result.status ?? 200, { ...result.headers, ...(result.contentType ? { 'content-type': result.contentType } : {}) });

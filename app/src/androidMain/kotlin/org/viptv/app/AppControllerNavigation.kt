@@ -51,6 +51,7 @@ internal fun AppController.back() { handleBack() }
 internal fun AppController.consumesBack(state: AppState = _state.value): Boolean = BackAvailabilityPolicy.consumes(state)
 /** Returns false only when Android should handle app exit at a root gate/page. */
 internal fun AppController.handleBack(): Boolean {
+    if (_state.value.upNext != null) { cancelUpNext(); return true }
     detailGeneration++; detailJob?.cancel()
     if (queueContinuationJob?.isActive == true) {
         cancelPendingQueueContinuation()

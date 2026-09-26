@@ -114,11 +114,12 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
     val info by rememberUpdatedState(onInfo ?: onHold)
     val focus = remember { FocusRequester() }
     val memory = LocalFocusMemory.current
+    val closeRail = LocalCloseRail.current
     LaunchedEffect(pressed) {
         if (pressed && hold != null) { delay(HoldPolicy.thresholdMillis); if (pressed) { consumed = true; hold?.invoke() } }
     }
     Box(modifier.focusRequester(focus).onFocusChanged {
-        if (it.isFocused && rememberFocus) memory.target = focus
+        if (it.isFocused && rememberFocus) { memory.target = focus; closeRail() }
         if (!it.hasFocus) { pressed = false; consumed = true }
     }
         .onPreviewKeyEvent { event ->

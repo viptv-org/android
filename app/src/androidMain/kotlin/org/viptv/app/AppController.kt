@@ -49,6 +49,7 @@ class AppController(context: Context, private val origin: String) {
     internal var discoverJob: Job? = null
     internal var searchJob: Job? = null
     internal var nextEpisodeJob: Job? = null
+    internal var upNextJob: Job? = null
     internal var playerChromeJob: Job? = null
     internal var playerMenuOpen = false
     private var heartbeatJob: Job? = null
@@ -198,6 +199,7 @@ class AppController(context: Context, private val origin: String) {
     internal fun refreshProfileIdentity() { keepProfilesOnIdentityRefresh = true; coreSession.retry() }
     fun chooseProfile(profile: Profile) {
         keepProfilesOnIdentityRefresh = false
+        cancelUpNext()
         homeJob?.cancel()
         homeRefreshGeneration++
         detailGeneration++; detailJob?.cancel()
@@ -275,6 +277,7 @@ class AppController(context: Context, private val origin: String) {
         }
     }
     internal fun stopPlayback(media: Media? = null) {
+        cancelUpNext()
         invalidatePlaybackPreparation()
         if (!playerDelegate.isInitialized()) return
         val position = absolutePositionMillis()

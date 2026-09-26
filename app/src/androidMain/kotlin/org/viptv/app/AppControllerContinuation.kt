@@ -3,19 +3,24 @@ package org.viptv.app
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import android.os.SystemClock
+import org.viptv.video.PlaybackStatus
 
 /** Controlled continuation is the only non-Resume automatic source path. */
-internal fun AppController.nextEpisode(outgoing: Media) {
+internal fun AppController.nextEpisode(outgoing: Media, resolved: NextResult? = null, playWhenReady: Boolean? = null) {
+    cancelUpNext()
     nextEpisodeJob?.cancel()
     val outgoingRoute = _state.value.route as? Route.Player ?: return
     val requestGeneration = ++playbackGeneration
     continuationRestore = outgoingRoute
     continuationWasPlaying = player.state.value.isPlaying
+    val nextShouldPlay = playWhenReady ?: continuationWasPlaying
     nextEpisodeJob = scope.launch {
         player.pause()
         _state.value = _state.value.copy(message = "LOADING", loading = false)
         try {
-            val result = gateway.nextEpisode(requireProfile(), outgoing)
+            val result = resolved ?: gateway.nextEpisode(requireProfile(), outgoing)
             if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
             when (result.status) {
                 "next" -> {
@@ -36,7 +41,7 @@ internal fun AppController.nextEpisode(outgoing: Media) {
                             message = "Choose a source for the next episode.",
                         )
                     } else {
-                        val started = prepareAndStart(next, selected, explicitResume = false, playWhenReady = continuationWasPlaying, resetTrackChoices = true, expectedGeneration = requestGeneration)
+                        val started = prepareAndStart(next, selected, explicitResume = false, playWhenReady = nextShouldPlay, resetTrackChoices = true, expectedGeneration = requestGeneration)
                         if (!started && PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) restoreContinuation("Could not prepare the next episode.")
                     }
                 }
@@ -60,17 +65,52 @@ internal fun AppController.restoreContinuation(message: String?) {
     continuationRestore = null
 }
 
-/** Player state triggers a bounded request; the server decides whether a successor exists. */
+/** Metadata lookup leaves the current episode playing; only the visible countdown may advance it. */
 internal fun AppController.maybeAutoNext(media: Media, positionMillis: Long, durationMillis: Long?, playing: Boolean, ended: Boolean) {
-    if (_state.value.seekPreview != null) return
+    if (_state.value.seekPreview != null || continuationRestore != null) return
     val key = "${media.type}.${media.id}"
     if (explicitResumeAwaitingCompletionKey == key && !ended) return
     if (explicitResumeAwaitingCompletionKey == key && ended) explicitResumeAwaitingCompletionKey = null
-    val eligible = if (ended) media.type == "series" && durationMillis != null && durationMillis > 10_000 && _state.value.preferences.autoplay else PlaybackPolicy.canAutoNext(media, positionMillis, durationMillis, playing, seeking = false, nextAvailable = true, autoplay = _state.value.preferences.autoplay)
-    if (eligible && autoNextMediaKey != key && nextEpisodeJob?.isActive != true) {
-        autoNextMediaKey = key
-        nextEpisode(media)
+    val eligible = PlaybackPolicy.canAutoNext(media, positionMillis, durationMillis, playing || ended, seeking = false, nextAvailable = true, autoplay = _state.value.preferences.autoplay)
+    if (!eligible || autoNextMediaKey == key || nextEpisodeJob?.isActive == true) return
+    autoNextMediaKey = key
+    val generation = playbackGeneration
+    upNextJob = scope.launch {
+        try {
+            val result = gateway.nextEpisode(requireProfile(), media)
+            if (!isActive || generation != playbackGeneration || (_state.value.route as? Route.Player)?.media?.id != media.id) return@launch
+            val successor = result.item?.takeIf { result.status == "next" } ?: return@launch
+            // Usually cached from Details; use the exact episode and series artwork for the card.
+            val metadata = try { gateway.metadata(successor) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Throwable) { null }
+            if (!isActive || generation != playbackGeneration) return@launch
+            val episode = metadata?.episodes?.firstOrNull { it.id == successor.id }
+            val next = (episode?.let(successor::withArtworkFrom) ?: successor).let { item -> metadata?.let(item::withArtworkFrom) ?: item }
+            val clock = NextEpisodeCountdown()
+            _state.value = _state.value.copy(upNext = UpNextPrompt(next))
+            var last = SystemClock.elapsedRealtime()
+            while (isActive && generation == playbackGeneration && _state.value.upNext != null) {
+                delay(250)
+                val now = SystemClock.elapsedRealtime()
+                val playback = player.state.value
+                val advancing = !playerMenuOpen && !playback.isBuffering && (playback.isPlaying || playback.status == PlaybackStatus.Ended)
+                val done = clock.advance(now - last, advancing)
+                last = now
+                _state.value = _state.value.copy(upNext = UpNextPrompt(next, clock.remainingMillis))
+                if (done) { playUpNext(); return@launch }
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Throwable) { _state.value = _state.value.copy(upNext = null) }
     }
+}
+
+internal fun AppController.cancelUpNext() {
+    upNextJob?.cancel(); upNextJob = null
+    if (_state.value.upNext != null) _state.value = _state.value.copy(upNext = null)
+}
+internal fun AppController.playUpNext() {
+    val next = _state.value.upNext?.media ?: return
+    val outgoing = (_state.value.route as? Route.Player)?.media ?: return
+    nextEpisode(outgoing, NextResult("next", next), playWhenReady = true)
 }
 
 internal fun AppController.requestQueueManage(media: Media) {
