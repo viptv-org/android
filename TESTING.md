@@ -268,3 +268,10 @@ offline recovery and disabled controls. Reference/implementation images were
 inspected privately; no captures are distributed. The normal artifact omits
 fixture trust. Physical Vizio discovery/launch, TV playback, and broad device
 qualification remain unverified; synthetic acknowledgments are not TV playback.
+
+The final four-box native PIN entry was rechecked after layout changes. Forget
+returned Settings to Off and removed the saved selection. On the separate API
+36 TV emulator (5576), Home and detail navigation retained the TV frame and
+D-pad controls; the phone remote entry was absent. This does not qualify media
+decoding. Actions 36359986368 produced the universal APK; its downloaded SHA256
+and all three core ABIs were verified, with no fixture CA resource present.

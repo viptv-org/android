@@ -171,7 +171,11 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
                 if (error?.optString("kind") == "authentication" && failure != null) failure()
                 else {
                     online = false
-                    message = if (error?.optString("kind") == "authentication") "Pair this TV again to reconnect." else error?.optString("message")?.takeIf { it.isNotBlank() } ?: "Can't reach your TV. Check the Wi-Fi connection and try again."
+                    message = when {
+                        operation == "finishPair" && error?.optString("kind") in listOf("authentication", "invalidParameter") -> "Incorrect PIN. Try again."
+                        error?.optString("kind") == "authentication" -> "Pair this TV again to reconnect."
+                        else -> error?.optString("message")?.takeIf { it.isNotBlank() } ?: "Can't reach your TV. Check the Wi-Fi connection and try again."
+                    }
                 }
             }
         } }
