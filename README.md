@@ -1,5 +1,10 @@
 # VIPTV Android
 
+Actions delivery: main pushes and manual builds produce sideloading artifacts
+(Android universal APK; desktop Windows/Linux installers; Roku ZIP; TV WGT/IPK).
+Other repositories have no Actions workflows. Local checks remain; previous
+CI/release-publication descriptions below are historical. No automatic deploys.
+
 Native phone and Android TV VIPTV app and playback contracts backed by AndroidX Media3. `:app` is the adaptive Jetpack Compose client; the root module is the Android-only playback library it uses. Product controls, focus, screens and playback policy follow the pinned design repository contract.
 
 The initial import was derived from `air-tv/video` at `57551ec48d63c81d407e098214611140230739f4`. Upstream history and the included Apache-2.0 and MIT license texts are retained.
