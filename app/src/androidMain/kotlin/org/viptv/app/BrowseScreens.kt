@@ -24,7 +24,7 @@ import org.viptv.app.theme.ViptvColor as C
     var claimedFocus by remember { mutableStateOf(false) }
     LaunchedEffect(ui.loading) { if (tv && !ui.loading && !claimedFocus) { withFrameNanos {}; claimedFocus = runCatching { first.requestFocus() }.getOrDefault(false) } }
     Column(Modifier.fillMaxSize().padding(start = measure(192, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
-        ScreenHeader("Discover")
+        ScreenHeader("Discover", trailing = { PhoneTabActions(state, controller) })
         val types = ui.catalogs.filter { it.key.type != "live" }.map { DiscoverPolicy.typeGroup(it.key.type) }.distinct()
         FilterTabs(types.map(DiscoverPolicy::groupLabel), DiscoverPolicy.groupLabel(DiscoverPolicy.typeGroup(ui.selectedType)), { label ->
             types.firstOrNull { DiscoverPolicy.groupLabel(it) == label }?.let(controller::setDiscoverType)
@@ -63,7 +63,7 @@ import org.viptv.app.theme.ViptvColor as C
     val items = if (queue) state.queue else state.favorites
     LaunchedEffect(Unit) { if (tv) { withFrameNanos {}; runCatching { first.requestFocus() } } }
     Column(Modifier.fillMaxSize().padding(start = measure(192, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
-        ScreenHeader("My List")
+        ScreenHeader("My List", trailing = { PhoneTabActions(state, controller) })
         FilterTabs(listOf("My List", "Continue Watching"), if (queue) "Continue Watching" else "My List", {
             if (it == "My List") controller.openMyList() else controller.openContinueWatching()
         }, Modifier.padding(bottom = measure(40, 24)), first)

@@ -165,3 +165,24 @@ Platform keys: **P** = phone, **D** = desktop app and web, **T** = TV.
 - **Playback info:** key / value rows in monospace (decoder, transport, container, delivery, codecs, resolution).
 - **Errors:** "This source could not be played" with Details (it expands to show HTTP status, request, error code and engine), then Retry / Choose another source / Back. "Playback could not be restored" appears on resume.
 - **Live:** no timeline or next. It shows the channel name, "Live TV" and the live dot, and audio / exit only on TV.
+
+
+## 11. TV remote (phone, Watch on TV)
+
+**Rules**
+- Off by default. The only way in is **Settings → This device → Watch on TV** (the row reads "Off" until a TV is paired). Nothing else in the app changes for people who never set it up.
+- Setup is a pushed page flow, not a dialog: intro → choose your TV → PIN → connected. The intro says what the remote does and does NOT do (nothing playing on the phone moves to the TV) before discovery starts. Android SDK 36 does not require a runtime local-network prompt.
+- **Remote button:** once a TV is paired, a 44 round button (surface-1, 1 px `line-outline` border, remote icon 20) sits in the header of the four tab screens (Home, Discover, Live, My List), left of the avatar. Its label is "TV remote: [TV name]". It never goes in the bottom nav. It can be switched off in Watch on TV settings. The first time it appears, show a one-time tip (off-white bubble with `on-light` text, "Got it") pointing at it.
+- **The remote** is a bottom sheet (top 118, radius 30, `scrim-sheet`) with every control in the lower half, for one-handed use:
+  - Header: TV tile 44 + TV name (17/700) + status line ("Connected · [IP]" / "Not reachable" with a wifi-off icon) + a 44 close button.
+  - "Open VIPTV on TV": the accent primary, full width.
+  - A Buttons / Swipe segmented control (232 wide, 40 tall).
+  - Buttons mode: a 272 round pad (surface-2, hairline) with 88 arrow targets and a 104 off-white OK. Swipe mode: a 358 × 272 touchpad (surface-2, radius 28, faint dot grid, "Swipe to move · Tap for OK").
+  - Bottom row: Back, Play, Pause (64 round, surface-3, labels 12/600 in `text-tertiary`), and a 2-part volume rocker (− / +).
+- Vibrate on every press and keep the screen on while the sheet is open. Both are on by default and can be switched off in settings.
+- **TV not reachable:** the Open button is replaced by a surface-2 card ("Can't reach [TV name]", "Turn the TV on and check it's on the same Wi‑Fi as this phone.", a light "Try again" button), and every control drops to opacity 0.4.
+- **Pairing PIN:** 4 boxes 64 × 72 (radius 18). It pairs automatically when the 4th digit goes in, so there's no confirm button. Offer a "New PIN" text link.
+- **Watch on TV settings (once set up):** a TV card (name, status, "Open the remote"), then Remote (Remote button, Vibrate on press, Keep screen on) and TV (Change TV; Forget this TV, danger). Forgetting the TV turns the feature off and removes the button.
+- Phone **browsers** can't pair: they show the "Watch on TV" dialog pointing to the desktop app (`PhCastUnavailable`).
+
+**Screens:** PhTvSetup, PhTvSearch, PhTvNoAccess, PhTvManual, PhTvPin, PhTvDone, PhHomeRemote, PhRemote, PhRemoteSwipe, PhRemoteOffline, PhTvSettings, PhTvForget.

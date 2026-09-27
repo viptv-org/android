@@ -55,7 +55,11 @@ private data class SettingRow(val title: String, val detail: String, val icon: S
         SettingRow("Server", model.origin, "settings", { server = true }),
         SettingRow("About VIPTV", "Version " + BuildConfig.VERSION_NAME, "info", { about = true }),
         SettingRow("Sign out", if (tv) "Sign out of this TV?" else "Sign out of this device?", "exit", { controller.requestDialog(DialogKind.SignOut, if (tv) "Sign out of this TV?" else "Sign out of this device?") }, true),
-    )
+    ).let { existing ->
+        if (!tv && page == "Settings") existing.toMutableList().apply {
+            add(5, SettingRow("Watch on TV", model.remote.selected?.name ?: "Use this phone as a Vizio TV remote · Off", "live", model.remote::settings))
+        } else existing
+    }
     BackHandler(page != "Settings") { page = "Settings" }
     LaunchedEffect(page) { if (tv && page != "Addons") { withFrameNanos {}; runCatching { first.requestFocus() } } }
     if (page == "Addons") AddonsContent(state, controller) { page = "Settings" }
@@ -64,14 +68,15 @@ private data class SettingRow(val title: String, val detail: String, val icon: S
             ScreenHeader(page, { if (page != "Settings") page = "Settings" else controller.back() })
             LazyColumn(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(measure(14, 0)), contentPadding = PaddingValues(bottom = 40.dp)) {
                 itemsIndexed(rows, key = { _, row -> row.title }) { index, row ->
-                    if (!tv && page == "Settings") when (index) {
+                    val groupIndex = if (!tv && page == "Settings" && index > 5) index - 1 else index
+                    if (!tv && page == "Settings" && index != 5) when (groupIndex) {
                         0 -> SettingGroupLabel("PROFILE")
                         2 -> SettingGroupLabel("PLAYBACK")
                         3 -> SettingGroupLabel("THIS DEVICE")
                         5 -> SettingGroupLabel("ACCOUNT")
                     }
-                    val starts = page != "Settings" || index in listOf(0, 2, 3, 5, 8)
-                    val ends = page != "Settings" || index in listOf(1, 2, 4, 7, 8)
+                    val starts = page != "Settings" || groupIndex in listOf(0, 2, 3, 5, 8)
+                    val ends = page != "Settings" || groupIndex in listOf(1, 2, 4, 7, 8) || (!tv && index == 5)
                     if (!tv && index == 8 && page == "Settings") Spacer(Modifier.height(24.dp))
                     SettingsRow(row, Modifier.then(if (index == 0 && tv) Modifier.focusRequester(first).focusProperties { left = rail; if (state.profiles.isNotEmpty() && page == "Settings") right = avatarFocus } else Modifier.focusProperties { if (tv) left = rail }), { selected = index }, starts, ends)
                 }

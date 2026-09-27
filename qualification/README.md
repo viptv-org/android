@@ -1,5 +1,15 @@
 # Native Android design qualification
 
+## Vizio remote fixture
+
+After starting the HTTPS fixture, run `node qualification/smartcast-fixture.mjs`.
+In the phone app use Settings → Watch on TV → Set up a TV → Enter IP address:
+`10.0.2.2`. The synthetic PIN is `1234`; another PIN exercises retry. The fixture
+listens on loopback 7345 and records only synthetic key commands. Its HTTPS
+`/__control` endpoint accepts `{"offline":true}` and `{"paired":false}` to test
+network and credential recovery; GET returns recorded commands. This does not
+test LAN discovery or a physical TV. Never use this fixture's token on a device.
+
 These scripts exercise the native Compose/Media3 app over local HTTPS using the same content fixtures as TV-web. They do not connect to a real account or upstream stream. Node 22+ and sibling `tv-web` and `design` checkouts are required. The native adapter imports `tv-web/tests/preview/backend.ts`; changes to that fixture contract must be checked here too.
 
 ## Dedicated emulators

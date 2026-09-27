@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -106,7 +107,7 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
 }
 
 /** One input owner for touch, accessibility and release-to-activate remotes. */
-@Composable internal fun Holdable(onActivate: () -> Unit, onHold: (() -> Unit)? = null, modifier: Modifier = Modifier, selected: Boolean = false, onInfo: (() -> Unit)? = null, rememberFocus: Boolean = true, content: @Composable BoxScope.() -> Unit) {
+@Composable internal fun Holdable(onActivate: () -> Unit, onHold: (() -> Unit)? = null, modifier: Modifier = Modifier, selected: Boolean = false, onInfo: (() -> Unit)? = null, rememberFocus: Boolean = true, enabled: Boolean = true, content: @Composable BoxScope.() -> Unit) {
     var pressed by remember { mutableStateOf(false) }
     var consumed by remember { mutableStateOf(false) }
     val activate by rememberUpdatedState(onActivate)
@@ -123,6 +124,7 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
         if (!it.hasFocus) { pressed = false; consumed = true }
     }
         .onPreviewKeyEvent { event ->
+            if (!enabled) return@onPreviewKeyEvent false
             val key = event.nativeKeyEvent
             when (key.keyCode) {
                 KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_INFO -> if (info == null) false else {
@@ -138,11 +140,11 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
                 }
                 else -> false
             }
-        }.combinedClickable(role = Role.Button, onClick = { activate() }, onLongClick = onHold?.let { { hold?.invoke() } }),
+        }.combinedClickable(enabled = enabled, role = Role.Button, onClick = { activate() }, onLongClick = onHold?.let { { hold?.invoke() } }),
         contentAlignment = Alignment.Center, content = content)
 }
 
-@Composable internal fun AppButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: String? = null, primary: Boolean = false, selected: Boolean = false, danger: Boolean = false, onHold: (() -> Unit)? = null, onFocused: (() -> Unit)? = null, pill: Boolean = true, tvAccent: Boolean = false) {
+@Composable internal fun AppButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: String? = null, primary: Boolean = false, selected: Boolean = false, danger: Boolean = false, onHold: (() -> Unit)? = null, onFocused: (() -> Unit)? = null, pill: Boolean = true, tvAccent: Boolean = false, enabled: Boolean = true) {
     val tv = LocalTv.current
     val closeRail = LocalCloseRail.current
     var focused by remember { mutableStateOf(false) }
@@ -150,9 +152,9 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
     val fill = when { accented -> LocalAccent.current; tv && focused -> C.textPrimary; primary && !tv -> LocalAccent.current; selected -> C.surfaceN3; else -> C.surfaceN3 }
     val foreground = when { accented -> C.onAccent; tv && focused -> C.onLight; primary && !tv -> C.onAccent; danger -> C.statusDanger; else -> C.textPrimary }
     val shape = if (pill) RoundedCornerShape(50) else RoundedCornerShape(measure(14, 12))
-    Holdable(onClick, onHold, modifier.height(measure(72, 54)).onFocusChanged {
+    Holdable(onClick, onHold, modifier.alpha(if (enabled) 1f else .4f).height(measure(72, 54)).onFocusChanged {
         focused = it.isFocused; if (it.isFocused) { closeRail(); onFocused?.invoke() }
-    }.clip(shape).background(fill).then(if (tv && tvAccent && focused) Modifier.border(4.dp, C.textPrimary, shape) else Modifier)) {
+    }.clip(shape).background(fill).then(if (tv && tvAccent && focused) Modifier.border(4.dp, C.textPrimary, shape) else Modifier), enabled = enabled) {
         Row(Modifier.padding(horizontal = if (pill) measure(32, 22) else 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(measure(16, 10))) {
             if (icon != null) VIcon(icon, color = foreground)
             VText(label, if (tv) 26 else 16, color = foreground, bold = true, lines = 1)

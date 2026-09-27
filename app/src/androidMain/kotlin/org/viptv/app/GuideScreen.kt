@@ -49,7 +49,7 @@ import org.viptv.app.theme.ViptvColor as C
             VText(selected?.name.orEmpty() + (programme?.let { " · " + programmeTime(it) } ?: ""), 22, Modifier.padding(top = 18.dp), C.textSecondary)
             VText(programme?.description ?: "No guide information. You can still watch this channel.", 26, Modifier.padding(top = 24.dp).widthIn(max = 1100.dp).height(76.dp), C.textBody, lines = 2)
             Spacer(Modifier.height(36.dp))
-        } else ScreenHeader("Live TV") { VText("● " + clockLabel(now), 12, color = C.statusLive, bold = true) }
+        } else ScreenHeader("Live TV", trailing = { PhoneTabActions(state, controller) })
         LazyRow(Modifier.fillMaxWidth().padding(bottom = measure(30, 22)), horizontalArrangement = Arrangement.spacedBy(measure(14, 8))) {
             item { AppChip("All", { controller.setGuideFilter(LiveChannelFilter.AllUs) }, ui.channelFilter == LiveChannelFilter.AllUs, Modifier.then(if (tv && ui.channels.isEmpty()) Modifier.focusRequester(first).focusProperties { left = rail } else Modifier)) }
             item { AppChip("My channels", { controller.setGuideFilter(LiveChannelFilter.MyChannels) }, ui.channelFilter == LiveChannelFilter.MyChannels) }

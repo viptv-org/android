@@ -40,3 +40,20 @@ native username/password sign-in, keeps pairing optional, and requires original
 source playback on Android. Source feedback, player lifetime, provider groups,
 stateful library actions, insets and the scrolling/blurred TV hero are specified
 in `../../ANDROID_DESIGN.md#and-036--native-sign-in-direct-playback-and-interaction-corrections`.
+
+## 15. Native Roku complete TV audit (ROK-043)
+
+The owner extends the later TV corrections to Roku, including accent Resume,
+all addon catalog shelves, bounded lazy loading, three lower Home shelves,
+TvTitle composition and TvLive guide. See [ROK-043](../ROKU_DESIGN.md#rok-043--complete-tv-screen-audit-and-catalog-correction).
+
+
+## Phone TV remote (Watch on TV)
+
+- **Opt-in, in Settings.** Most people never use it, so it is off by default and adds nothing to the app until a TV is paired.
+- **The button goes in the tab-screen headers**, next to the avatar. The bottom nav and search stay identical for everyone. Remotes are opened occasionally, and the controls themselves sit in the thumb zone of the sheet, so reaching up for the button once is fine. A one-time tip shows where it went.
+- **The remote is a sheet, not a page**, so the app stays underneath and closing it returns you where you were.
+- **Two modes:** big buttons (the default) and a swipe touchpad. The last-used mode is remembered.
+- **Honest setup:** the intro says nothing is mirrored before discovery. Android SDK 36 has no runtime LAN prompt; denied access gets recovery, never a fake permission prompt.
+- **The PIN pairs automatically** on the 4th digit.
+- **Forget this TV turns the feature off**, so there's no separate master switch.

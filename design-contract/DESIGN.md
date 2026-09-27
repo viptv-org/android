@@ -1,5 +1,7 @@
 # viptv design specification
 
+Native Roku adopts the current TV design through [ROK-042](ROKU_DESIGN.md).
+
 This repository is the source of truth for viptv product UI, UX and app assets. The normative baseline is the actual Roku implementation at `vynxc/viptv@7d6b413`; historical notes are evidence, not overrides. This migration makes no Roku runtime changes.
 
 ## Reading order
@@ -27,6 +29,8 @@ TV layouts use the Roku reference canvas and focus model. Phone and desktop layo
 Current platform implementation scope and test interfaces: [TV_IMPLEMENTATION.md](TV_IMPLEMENTATION.md).
 
 Shared data/state architecture and startup adoption: [SHARED_CORE.md](SHARED_CORE.md).
+
+Browser HTTPS playback and conversion: [BROWSER_MEDIA_PIPELINE.md](BROWSER_MEDIA_PIPELINE.md).
 
 ## Visual design system
 

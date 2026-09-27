@@ -80,3 +80,18 @@ These are the exact strings used on the screens. Text in `[brackets]` is a place
 - TV: "Visit this address, then enter the code shown below." [viptv.syek.tech/device] [AB12CD34EF]
 - Desktop: Continue in browser. "Sign in securely in your browser. This window will connect automatically."
 - Profiles: Who's watching? · Manage profiles · Add a profile · Edit profile · "A space for their favorites, shows, and discoveries." · Find your favorite · "[468] avatars. Pick a world, then pick your character."
+
+
+## Watch on TV (phone remote)
+
+- Settings row: **Watch on TV** · "Use this phone as a Vizio TV remote" · value "Off" until a TV is paired.
+- Intro: "Use this phone as your TV remote" / "Works with Vizio SmartCast TVs on the same Wi‑Fi as this phone. It's off until you set it up." Points: "Arrows, OK, Back, play and volume for your TV." · "Opens VIPTV on the TV in one tap." · "What's playing on this phone stays here. Nothing is sent to the TV." Note: "VIPTV searches your local network only to find your TV." Button: **Set up a TV**.
+- Choose your TV: "Looking for Vizio TVs on your Wi‑Fi…" · "Don't see your TV?" / "Turn the TV on, then check it's on the same Wi‑Fi as this phone. It can take a few seconds to show up." · **Enter IP address**.
+- Permission off: "VIPTV can't look for TVs" / "Local network access is off for VIPTV. Turn it on in your phone's settings, then come back here." · **Open phone settings** (Manual IP entry does not bypass a network permission denial).
+- IP entry: "Enter your TV's IP address" / "Find it on the TV under Settings › Network." · **Connect** · **Cancel**.
+- PIN: "Enter the PIN on your TV" / "[TV name] is showing a 4-digit PIN." · "Pairs as soon as all 4 digits are in." · **New PIN** · **Cancel**.
+- Connected: "Connected to [TV name]" / "You can control it from this phone now." · Remote button: "Shows at the top of Home, Discover, Live and My List." · **Open the remote** · **Done**.
+- One-time tip: "Your TV remote" / "It stays up here on Home, Discover, Live and My List. Turn it off in Settings › Watch on TV." · **Got it**.
+- Remote: "Connected · [IP]" · "Not reachable" · **Open VIPTV on TV** · Buttons / Swipe · "Swipe to move · Tap for OK" · Back · Play · Pause · Volume. Offline: "Can't reach [TV name]" / "Turn the TV on and check it's on the same Wi‑Fi as this phone." · **Try again**.
+- Settings: Remote button ("At the top of Home, Discover, Live and My List") · Vibrate on press · Keep screen on ("While the remote is open") · Change TV ("Pair a different Vizio TV") · Forget this TV ("Turns off Watch on TV").
+- Forget: "Forget [TV name]?" / "The remote button goes away. You can set up a TV again at any time." · **Forget TV** (danger) · **Cancel**.

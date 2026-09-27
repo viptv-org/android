@@ -1,5 +1,53 @@
 # AND-035 — Native Android phone and TV design adoption
 
+## AND-038 — Android phone Vizio remote (2026-09-27)
+
+Status: approved implementation contract; device qualification remains separate.
+Source: owner's `viptv-design-system (1).zip`, exported 2026-09-27. The twelve
+PhTv*/PhRemote*/PhHomeRemote reference states and components section 11 define
+the phone remote. Existing AND-036/037 and TV corrections continue to apply.
+
+Settings → This device → Watch on TV is the only entry before pairing. Setup
+pushes native pages over the saved app route: introduction, bounded LAN search,
+manual IPv4 address, four-digit PIN (submit automatically), connected. Back
+cancels the pending operation and returns one step; leaving setup restores the
+originating screen. New PIN starts a fresh challenge. A failed PIN stays on the
+PIN page with editable input. Pairing tokens use the Android Keystore; selected
+TV and preferences are device-local, never account credentials.
+
+The target remains SDK 36: do not display a fictitious local-network permission
+prompt. Intro copy is “VIPTV searches your local network only to find your TV.”
+Actual access denial opens recovery; manual addressing cannot bypass denial.
+Discovery is user-initiated, scoped to the connected local network, cancellable,
+and falls back to manual entry. Timeouts and offline TVs have retry actions.
+
+One paired TV enables a 44 dp header remote button on Home, Discover, Live and
+My List. The bottom navigation is unchanged. Show the one-time “Your TV remote”
+tip with “Got it”. The sheet uses the 390×844 reference proportionally with safe
+insets and scrolling on smaller screens; it restores the underlying route when
+closed. Its controls are D-pad/OK, Back, separate Play/Pause and volume −/+.
+Each tap sends one key; each swipe past 32 dp sends one direction, tap sends OK.
+No background repeat or queued gesture survives dismissal. Serialize commands.
+Buttons is the initial mode, then retain the last mode. Buttons remain an
+accessible equivalent to all swipe actions. Use native labeled touch targets.
+
+“Open VIPTV on TV” launches the configured HTTPS Vizio receiver, never transfers
+the phone video. A TV acknowledgment is not proof the receiver rendered.
+Reconnect checks the saved token; authentication failure offers re-pairing.
+Network failure shows PhRemoteOffline and disables commands until retry succeeds.
+Remote button visibility, vibration, and keep-screen-on default on. Screen-on
+is active only while the sheet is visible. Change TV retains the old selection
+until a replacement pairs; Forget deletes the credential/selection and hides
+the header button. Cancelling Forget preserves both. TV mode never exposes this
+phone feature. No other platform UI adopts this update.
+
+Acceptance: first setup, empty search/manual fallback, invalid IP, wrong/new PIN,
+cancel/stale response, paired restart, every button and swipe, offline/retry,
+revoked credential/re-pair, change-TV cancellation, preferences, Forget/cancel,
+rotation/font scaling/keyboard insets, background cleanup, unchanged phone
+playback and Android TV navigation. Record functional, visual and physical TV
+evidence separately in Android TESTING.md.
+
 Status: owner requested on 2026-09-25; implementation and emulator acceptance
 must be recorded in Android TESTING.md. Related: Android issue #3, design #6.
 

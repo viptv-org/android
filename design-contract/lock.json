@@ -1,10 +1,10 @@
 {
   "repository": "viptv-org/design",
-  "revision": "03229857686d103d178577e804cc171108ab569f",
+  "revision": "f9c3b5eea7718950e38dc612cb9064ed1bc0d2dc",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
-      "sha256": "ce3c8206bc2b2b8750e4b97134ae603c83b3053d8923f8177047a6fbd40edacc"
+      "sha256": "219b1573f0e9dad14deafcd4cc5245696251fbcfffcab9824175d4abb40e338c"
     },
     "design-contract/DESIGN_SYNC.md": {
       "source": "DESIGN_SYNC.md",
@@ -12,11 +12,11 @@
     },
     "design-contract/ANDROID_DESIGN.md": {
       "source": "ANDROID_DESIGN.md",
-      "sha256": "613bb8cf4c0d571b898549e3452ff8160bd9b63195eb5cdbf8caf104b8afadf9"
+      "sha256": "a97e14541ab1a8977925a42c289d44edefe41da24c7308b7afe0ed5f8925e145"
     },
     "design-contract/TV_POLISH.md": {
       "source": "TV_POLISH.md",
-      "sha256": "ff72c75a3c0996f177425ab97e080d59c1a94001ede32619c90ab15571ee756d"
+      "sha256": "ca2384cd1b1afd3ab77fd3372ecd476c7919cc36fe9a4ef4967d72e98dee8fab"
     },
     "design-contract/viptv-design-system/README.md": {
       "source": "viptv-design-system/README.md",
@@ -24,15 +24,15 @@
     },
     "design-contract/viptv-design-system/components.md": {
       "source": "viptv-design-system/components.md",
-      "sha256": "f9566958d430d44feb0456c403c9051aade96e250558ba39f2862b515891feda"
+      "sha256": "84e214655b5a2f606bb0d770b04c5a2b2c87c988b53814e1cd3376381fff5331"
     },
     "design-contract/viptv-design-system/copy.md": {
       "source": "viptv-design-system/copy.md",
-      "sha256": "a3bc0faf1c5b7e6987a7804be3eb4cf526d658009f7784425577d26d9fee50ff"
+      "sha256": "5bd9e34cd323759539a7be2d900485c3909444d5367253d01b98fa2b78c7ab58"
     },
     "design-contract/viptv-design-system/decisions.md": {
       "source": "viptv-design-system/decisions.md",
-      "sha256": "ac4580362125ff2c86380964e3f8d873636254c9b1441b5fcf132aa45a273e21"
+      "sha256": "9eafb2d1f855490db0eacd89da0142d64a0ff1501a8e477ebc83364c85a60ca5"
     },
     "design-contract/viptv-design-system/tokens/tokens.json": {
       "source": "viptv-design-system/tokens/tokens.json",
@@ -80,7 +80,19 @@
     },
     "app/src/androidMain/assets/design/lucide/README.md": {
       "source": "assets/roku/roku/images/lucide/README.md",
-      "sha256": "424c51d35581ab021699670964cf2a6d5855d2a1eb3381b03f32e7fb23401c2f"
+      "sha256": "801a0efcb6c980018d720f786bd5bc790f0338e114475c8a128501869ec0a2e1"
+    },
+    "app/src/androidMain/assets/design/lucide/addons-focus.png": {
+      "source": "assets/roku/roku/images/lucide/addons-focus.png",
+      "sha256": "c9fd1aa0adcfad0a38ac939f1ab44e6b0cf536560c5e6421fd9e9da81385c2ba"
+    },
+    "app/src/androidMain/assets/design/lucide/addons-primary.png": {
+      "source": "assets/roku/roku/images/lucide/addons-primary.png",
+      "sha256": "9146d8039d1cfd040e5030b8ea4e1e9d805d29ddf81930029270eff57b624826"
+    },
+    "app/src/androidMain/assets/design/lucide/addons-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/addons-secondary.png",
+      "sha256": "07a2bdc0cdc03676c6cf9c9040e7ce300c78fb6876a3da0f92086ba3f54c5661"
     },
     "app/src/androidMain/assets/design/lucide/audio-focus.png": {
       "source": "assets/roku/roku/images/lucide/audio-focus.png",
@@ -106,6 +118,18 @@
       "source": "assets/roku/roku/images/lucide/back10-secondary.png",
       "sha256": "c91781f7c95c0178f5aaf6dc298844d400c4a2ac03230350bb31b4fef6944650"
     },
+    "app/src/androidMain/assets/design/lucide/backspace-focus.png": {
+      "source": "assets/roku/roku/images/lucide/backspace-focus.png",
+      "sha256": "55c610bf4fe01e861fc09135e54b2901b692a7bf77ef5d7794b75ff9e4a4a987"
+    },
+    "app/src/androidMain/assets/design/lucide/backspace-primary.png": {
+      "source": "assets/roku/roku/images/lucide/backspace-primary.png",
+      "sha256": "fcd4dc36373494d414b06c3f04d241e71e8dac1d7108eb4f3fa4382a4379108d"
+    },
+    "app/src/androidMain/assets/design/lucide/backspace-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/backspace-secondary.png",
+      "sha256": "b53b854bcf86c812cfeba7810bab2f73d8bbf0cc61261b14090dab90b781f7cb"
+    },
     "app/src/androidMain/assets/design/lucide/captions-focus.png": {
       "source": "assets/roku/roku/images/lucide/captions-focus.png",
       "sha256": "335386413d911db8e605a10d3a7cdaccd45e0127e7ded537da54236920173626"
@@ -129,6 +153,18 @@
     "app/src/androidMain/assets/design/lucide/check-secondary.png": {
       "source": "assets/roku/roku/images/lucide/check-secondary.png",
       "sha256": "63d915140e45841ad7843d36fdb78680d3afcaa23cc3ea72d093f2f33d9e4c6d"
+    },
+    "app/src/androidMain/assets/design/lucide/delete-focus.png": {
+      "source": "assets/roku/roku/images/lucide/delete-focus.png",
+      "sha256": "66db62a18f6246ca49bd71308eeabd2c5eae35cb2ac6cbefddbf200d5c2728dd"
+    },
+    "app/src/androidMain/assets/design/lucide/delete-primary.png": {
+      "source": "assets/roku/roku/images/lucide/delete-primary.png",
+      "sha256": "5ecb6daf28b60528e1b34da2c3397973c80f487eafe4e027dd7e9f61c8810738"
+    },
+    "app/src/androidMain/assets/design/lucide/delete-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/delete-secondary.png",
+      "sha256": "a1ae6ffc9d0c399a2696c65a554de180573b6eac81a17dfa359276697dafb03a"
     },
     "app/src/androidMain/assets/design/lucide/discover-focus.png": {
       "source": "assets/roku/roku/images/lucide/discover-focus.png",
@@ -286,6 +322,18 @@
       "source": "assets/roku/roku/images/lucide/plus-secondary.png",
       "sha256": "74252f30a4e18603087236b2ef0db383a58ce2800deb9c1aa359b33fc42666ef"
     },
+    "app/src/androidMain/assets/design/lucide/profile-focus.png": {
+      "source": "assets/roku/roku/images/lucide/profile-focus.png",
+      "sha256": "e13001a856798716fdbd6613869cd52ef1ccd7f79aeab6c7c20d2cdb5861d31f"
+    },
+    "app/src/androidMain/assets/design/lucide/profile-primary.png": {
+      "source": "assets/roku/roku/images/lucide/profile-primary.png",
+      "sha256": "a9323ac3d3311a283fd5f7ff36bb368a46989ec4bce892ad42b2bdee7e6ea2ee"
+    },
+    "app/src/androidMain/assets/design/lucide/profile-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/profile-secondary.png",
+      "sha256": "daa9b74d11ef1510c04dcec3fd7ecf8fcb660918e0b6f6016a6eadbf1a8a6534"
+    },
     "app/src/androidMain/assets/design/lucide/search-focus.png": {
       "source": "assets/roku/roku/images/lucide/search-focus.png",
       "sha256": "f47ee72b118d1477630dc44c3aaeb24420df517fdbc57a1ca61e1af71330dbe8"
@@ -309,6 +357,30 @@
     "app/src/androidMain/assets/design/lucide/settings-secondary.png": {
       "source": "assets/roku/roku/images/lucide/settings-secondary.png",
       "sha256": "fa3e6ae4c5327ad92f72528c8ee02f2cf29a9786d27594d7254886ce63b229da"
+    },
+    "app/src/androidMain/assets/design/lucide/source-focus.png": {
+      "source": "assets/roku/roku/images/lucide/source-focus.png",
+      "sha256": "aa1a740f577d46a186748a97dfe8ed62fe5ff051d0cc7c9811a79620db4acbce"
+    },
+    "app/src/androidMain/assets/design/lucide/source-primary.png": {
+      "source": "assets/roku/roku/images/lucide/source-primary.png",
+      "sha256": "3b707bb26c6427a54246d9110130ea0c3713891038fffb7439e8e9cf1b40136a"
+    },
+    "app/src/androidMain/assets/design/lucide/source-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/source-secondary.png",
+      "sha256": "7206d51d8874e331bbd132bbc42921509e8b401b2dbf8d5d4b392e0c419be450"
+    },
+    "app/src/androidMain/assets/design/lucide/space-focus.png": {
+      "source": "assets/roku/roku/images/lucide/space-focus.png",
+      "sha256": "e5fdb19913b59378972265ca58b9852885d1851936faef992c2f69b19cd40cf5"
+    },
+    "app/src/androidMain/assets/design/lucide/space-primary.png": {
+      "source": "assets/roku/roku/images/lucide/space-primary.png",
+      "sha256": "af1cbad51e9a3bcc53846dfba3e10af98b36b68d8e334006da61b9f84f528b3e"
+    },
+    "app/src/androidMain/assets/design/lucide/space-secondary.png": {
+      "source": "assets/roku/roku/images/lucide/space-secondary.png",
+      "sha256": "f38d4e83a44c55d6e665b9404701f1d3ac26fb647438639530df89f8af6773dd"
     },
     "app/src/androidMain/kotlin/org/viptv/app/theme/ViptvTokens.kt": {
       "source": "generated from pinned tokens",

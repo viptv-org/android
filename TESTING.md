@@ -251,3 +251,20 @@ Core pin advanced to `1388b17db29a6b0279af5f125cc1fafc76776459`, which avoids du
 Adopts core `9317bfeb8bcd172789535cc812d751dcfed81d39`, preserving all addon-defined catalog namespaces and their optional addon names. The Android catalog key adapter now uses the exact generated string type rather than converting a media enum. Core Rust unit/integration tests pass (42); import hash validation passes. Android Kotlin tests/APK compilation require the hosted app-review workflow; no local Gradle, emulator or device run was performed.
 
 Catalog response follow-up adopts core `a8ece4f10576b7ea72b6f2cf6c52ae7dd13dffe7`. Bounded real addon metadata checks confirm anime/anime.series return series, anime.movie/collection return movies, and exact metadata routes return child videos. The generated DiscoverPage adds optional unsupportedCount; this pin is compatible with existing native decoding. Core tests pass (43); Android host compilation for this exact revision remains pending CI.
+# AND-038 — Vizio phone remote, 2026-09-27
+
+Design: f9c3b5e (full revision in DESIGN_REF). Native phone-only Compose setup,
+pairing, remote sheet and preferences reuse the pinned SmartCast JNI bridge.
+Host native-core build, library/app JVM tests (including local-address/gesture
+checks), three Android ABI builds, APK assembly and lint passed. Lint retains
+the existing baseline; warnings are not a hardware qualification.
+
+On the dedicated API 36 phone emulator (5574, 390×844 logical viewport), used
+local HTTPS fixtures and qualification/smartcast-fixture.mjs: device sign-in,
+profile/home/settings, remote opt-in, manual address, wrong PIN, automatic
+fourth-digit pairing, Buttons/Swipe, Up, Volume up and swipe Right all exercised.
+The synthetic server recorded the expected SmartCast key codes. HTTP 503 showed
+offline recovery and disabled controls. Reference/implementation images were
+inspected privately; no captures are distributed. The normal artifact omits
+fixture trust. Physical Vizio discovery/launch, TV playback, and broad device
+qualification remain unverified; synthetic acknowledgments are not TV playback.

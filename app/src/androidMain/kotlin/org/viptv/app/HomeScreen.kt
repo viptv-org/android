@@ -67,6 +67,8 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
                 } else {
                     Row(Modifier.fillMaxWidth().padding(bottom = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                         VText("VIPTV", 23, Modifier.weight(1f), display = true)
+                        PhoneRemoteButton()
+                        Spacer(Modifier.width(8.dp))
                         Holdable({ controller.navigate(Destination.Settings) }, modifier = Modifier.size(44.dp).clip(CircleShape)) {
                             ProfileAvatar(state.selectedProfile, Modifier.fillMaxSize())
                         }

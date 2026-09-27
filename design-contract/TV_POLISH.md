@@ -100,3 +100,91 @@ episode and return; exercise Movies/Series/Other catalogs and required search
 filters; count requests for empty/repeating/cancelled pages; inspect all TV
 scrollbars, chips, card captions and legends. Verify Android TV Resume and the
 served Vizio asset hash after delivering the tested artifacts.
+
+# TV-040 — SolidTV presentation and remote audit
+
+Status: owner requested, 2026-09-26; implementation and hardware evidence remain
+separate. Applies to the native SolidTV renderer delivered by TV-039. Android TV
+at `b7e36df` is the comparison for Home composition and queue content.
+
+- Keep glyphs visible across text, clock, color and focus updates. Prepare the
+  replacement texture before swapping it; do not recreate visible text nodes.
+  Center button labels and icons in the same vertical box, including Manage
+  profiles. Use packaged Lucide controls, with a visible source-list icon.
+- Android's hero content stage is 664px; its backdrop extends to 950px, with
+  1120×720 sharp art, 72px ambient blur at 0.6 opacity, and the lower fade from
+  440px to the ground at 950px. Preserve image aspect ratios. Home and detail
+  share the same backdrop compositor and match the actual page ground.
+- The first Continue Watching shelf remains fully visible without scrolling on
+  focus. Subsequent shelf scrolling aligns a complete heading at the top safe
+  edge; do not leave clipped heading fragments at either viewport edge. Keep
+  selected cards and captions visible. Queue ordering and content use the same
+  backend queue and shared core card projection as Android, with live content
+  separate. Keep episode metadata and progress together; long titles wrap or
+  truncate inside their own bounds without overlapping the progress indicator.
+- Discover Up/Down traverses type, catalog/filter and result rows. Left/Right
+  stays in the current row, scrolls to expose each complete focused chip, and
+  reaches every catalog/filter (no fixed twelve-chip limit). Preserve selection
+  and restore the catalog row when moving up from results.
+- Every browsing screen, including the guide, retains the rail. Expansion keeps
+  icon centers at x=72 and y=216/294/372/450/528/990, size28; the avatar stays
+  56×56 at44,54. Only the label/panel area expands. Back/Right restores focus.
+- Guide channels show their real contained logos, with monograms only on missing
+  or failed artwork. Category chips are keyboard/remote focusable and scroll
+  horizontally within the content safe edges. Guide program focus never moves
+  outside the visible time window without advancing that window first.
+- Live playback has a read-only program progress line labelled “Now” and the
+  current program's end time; unknown guide data shows “Live” as the end label.
+  This supersedes TV-034's omission of the line. It is never focusable or
+  seekable; show audio, captions and exit, without pause/skip/next controls.
+- Preparing playback shows the accent spinner above a horizontally centered
+  label. Back cancels preparation. Search preserves separate addon/catalog rows
+  with their source labels; remove result counts. Slow addons cannot hold up
+  rows already available from other addons.
+
+Acceptance: inspect 1920×1080 and 1280×720 Home, detail, profiles, Discover,
+search, guide, preparation and live/VOD playback. Capture consecutive frames
+across clock and focus changes, not just settled screenshots. Traverse >12
+catalog chips and >12 guide categories, return from results and rail, repeat
+horizontal movement through program windows, and verify live Up never focuses
+or seeks the timeline. Include missing logos, long episode titles, a delayed
+addon, cancellation and Back restoration. Record browser results separately
+from physical TV qualification; never commit screenshots.
+
+# TV-041 — Bounded Home loading and player inactivity
+
+Owner requested 2026-09-27. SolidTV must fetch content only for visible Home
+shelves and one shelf ahead, with at most two shelf requests in flight. Keep the
+catalog descriptor list and profile queue/favorites, but retain catalog payloads
+only for the visible/prefetch window and one preceding row (at most five rows).
+Evict distant payloads, cancel obsolete requests, and re-fetch on return while
+restoring remembered row/card positions. Empty results are skipped; a failed row
+has an actionable retry state. No unbounded background sweep through catalogs.
+
+Mount only that small visible/prefetch row window, with at most six horizontal
+cards per mounted row. Destroy distant rows and the offscreen hero rather than
+merely clipping them, and unmount Home when leaving it. Configure a 64 MiB GPU
+texture cleanup threshold with an earlier idle target; this is a renderer cache
+budget, not a claim about total process RAM or video-decoder memory. Preserve
+focus through loading, eviction, profile changes and cancellation.
+
+Player chrome hides after five seconds of no user interaction during playback.
+Time/buffer updates never reset this deadline. Pause, active seeking, track
+selection, dialogs and Up Next keep their controls visible; resuming starts a
+fresh inactivity interval. The first remote action after hiding reveals controls
+without also activating an invisible action. Hide the player shade with chrome.
+
+VOD seekbar focus shows its round handle even before seeking. Draw actual buffered
+ranges behind played progress; keep gaps, clamp them to the title timeline and
+never invent buffering when the engine supplies none. Live progress stays passive.
+Move the lower player information, timeline and control group 48px downward on
+the 1920×1080 frame, retaining the 54px bottom safe area (largest control ends at
+1004px). Keep the top title/status fixed.
+
+Acceptance: initial idle Home with 100 catalogs must not fetch all catalogs;
+traverse twenty shelves and return, measuring request concurrency, cached rows,
+mounted nodes, image requests and GPU cache use. Slow/error/empty rows and route
+changes must not steal focus or leak pending requests. Check idle/live/VOD controls
+under continuous time updates, reset by input, paused/panel/seek exceptions,
+first-key reveal, focused thumb, real disjoint buffered ranges, and 1080p/720p
+bottom geometry. Browser measurements do not qualify physical low-memory TVs.

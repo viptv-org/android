@@ -37,6 +37,7 @@ import org.viptv.app.theme.ViptvColor as C
 class MainActivity : ComponentActivity() {
     private lateinit var model: ViptvModel
     override fun onStop() {
+        if (::model.isInitialized && !isChangingConfigurations) model.remote.dismiss()
         if (::model.isInitialized && !isChangingConfigurations && !isInPictureInPictureMode) model.controller.stopForBackground()
         super.onStop()
     }
@@ -63,6 +64,7 @@ class MainActivity : ComponentActivity() {
 
 /** Keep credentials, requests and playback alive across phone rotation. */
 class ViptvModel(application: Application) : AndroidViewModel(application) {
+    internal val remote = TvRemoteController(application)
     private val preferences = application.getSharedPreferences("viptv.display", 0)
     var oled by mutableStateOf(preferences.getBoolean("oled", false)); private set
     var accent by mutableStateOf(Color(preferences.getInt("accent", 0xFFF5C542.toInt()))); private set
@@ -76,7 +78,7 @@ class ViptvModel(application: Application) : AndroidViewModel(application) {
         ServerOrigin.save(getApplication(), value); origin = value
         controller = AppController(getApplication(), value)
     }
-    override fun onCleared() { controller.close() }
+    override fun onCleared() { remote.close(); controller.close() }
 }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -84,6 +86,7 @@ class ViptvModel(application: Application) : AndroidViewModel(application) {
     val controller = model.controller
     val state by controller.state.collectAsStateWithLifecycle()
     val tv = LocalTv.current
+    CompositionLocalProvider(LocalTvRemote provides if (tv) null else model.remote) {
     ViptvTheme(model.oled, model.accent) {
         BoxWithConstraints(Modifier.fillMaxSize().background(LocalGround.current)) {
             if (tv) {
@@ -92,9 +95,14 @@ class ViptvModel(application: Application) : AndroidViewModel(application) {
                 CompositionLocalProvider(LocalDensity provides Density(density.density * scale, 1f), LocalBringIntoViewSpec provides VisibleFocusScroll) {
                     Box(Modifier.requiredSize(1920.dp, 1080.dp).align(Alignment.Center)) { ApplicationShell(state, controller, model) }
                 }
-            } else ApplicationShell(state, controller, model)
+            } else {
+                ApplicationShell(state, controller, model)
+                TvRemoteOverlay(model.remote)
+            }
         }
     }
+}
+
 }
 
 private fun Route.screenKey(): String = when (this) {
