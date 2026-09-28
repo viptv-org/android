@@ -328,3 +328,28 @@ the late lease was deleted. Source list/filter state survived Close, no playback
 or media fetch started, and the private screenshot showed readable stacked
 actions. TV remote focus, physical-device clipboard behavior, and external
 players requiring provider headers remain unverified.
+# REL-001 — errors, remote resume, lazy metadata and startup (2026-09-28)
+
+Design 80e1331; shared core 64f986e (full immutable revisions in the pin files).
+The native HTTP boundary now uses Rust's safe/actionable error projection,
+including explicit provider connection capacity versus rate limiting. Initial
+history/saved metadata enrichment is capped at six items per row; composed
+visible items enrich on demand through a three-request gate. The 30-item wire
+fixture returns all items while making only six initial metadata requests.
+
+Remote resume verifies retained pairing silently, retries transport once, and
+only then shows offline recovery. Five-second request limits apply. A lifecycle
+pending flag (not the key-invalidation epoch) determines whether another check
+is required, preventing failed verification from looping. Pause/resume, including
+quick app switches, retains the PIN page. Power/Mute and reported-name refresh
+use shared SmartCast operations. Startup uses bundled branding and dark system
+theme resources, with no artwork gate or artificial launch delay.
+
+JDK 17 library/app tests, all three native ABI builds, APK assembly and lint pass
+(74 warnings, unchanged three-error baseline). Dedicated API 36 phone emulator
+5574 with isolated HTTPS fixtures: Power/Mute produced codes 11/2 and 5/4;
+check-reconnect.py verified silent resume, no duplicate pairing, bounded offline
+failure and automatic recovery. The in-app restoration screen was inspected
+privately under delayed identity response. The immediate system screenshot was
+too early to qualify the OS splash itself. Real Vizio/TV firmware, frame-time
+performance and physical-device OS splash behavior remain unverified.

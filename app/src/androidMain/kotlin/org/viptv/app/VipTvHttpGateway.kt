@@ -83,7 +83,8 @@ class VipTvHttpGateway(
         suspend fun hydrate(items: List<Media>, order: Int, title: String, queue: Boolean) {
             val enriched = items.toMutableList()
             publish(order, HomeShelf(title, items, queue))
-            items.mapIndexed { index, item -> async {
+            // Prime one visible row plus lookahead; remaining cards enrich on demand.
+            items.take(6).mapIndexed { index, item -> async {
                 if (item.type != "live") {
                     val lookup = item.copy(id = item.seriesId ?: item.id, type = if (item.type == "episode") "series" else item.type)
                     val key = lookup.type + ":" + lookup.id
@@ -376,8 +377,11 @@ class VipTvHttpGateway(
                             return
                         }
                         if (!it.isSuccessful) {
-                            val message = runCatching { JSONObject(text.ifBlank { "{}" }).optString("error", "Request failed") }
-                                .getOrDefault("Request failed")
+                            val message = runCatching {
+                                val error = runCatching { JSONObject(text.ifBlank { "{}" }) }.getOrDefault(JSONObject())
+                                error.put("status", it.code)
+                                JSONObject(uniffi.viptv_core.normalize("apiError", error.toString(), "")).getString("message")
+                            }.getOrDefault("The server could not complete this request.")
                             if (continuation.isActive) continuation.resume(CallFailure(it.code, message))
                         } else if (continuation.isActive) {
                             continuation.resume(CallText(text))

@@ -12,6 +12,22 @@ import kotlin.test.*
 
 /** The real HTTP/JSON/native-core path, with independent upstream latency. */
 class ProgressiveDesignWireTest {
+    @Test fun initialHomeMetadataIsBoundedToVisibleCardsAndLookahead() = runBlocking {
+        val metadata = AtomicInteger()
+        val items = (1..30).joinToString(",") { """{"id":"movie-$it","type":"movie","name":"Movie $it"}""" }
+        ParallelFixture { path, _ -> when {
+            path == "/api/catalogs" -> "[]"
+            path.endsWith("/continue/page") -> """{"items":[$items]}"""
+            path.endsWith("/favorites/page") -> """{"items":[]}"""
+            path == "/api/live" -> """{"channels":[]}"""
+            path.startsWith("/api/meta/") -> { metadata.incrementAndGet(); """{"meta":{"id":"${path.substringAfterLast('/')}","type":"movie","name":"Enriched"}}""" }
+            else -> error("Unexpected fixture path")
+        } }.use { server ->
+            val rows = VipTvHttpGateway(server.origin).home("1")
+            assertEquals(30, rows.first { it.isQueueShelf }.items.size)
+            assertEquals(6, metadata.get())
+        }
+    }
     @Test fun savedQueueAppearsBeforeCataloguesAndSharedMetadataIsFetchedOnce() = runBlocking {
         val gate = CountDownLatch(1)
         val counts = ConcurrentHashMap<String, AtomicInteger>()

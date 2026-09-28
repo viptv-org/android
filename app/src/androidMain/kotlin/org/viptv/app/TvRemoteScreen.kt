@@ -186,11 +186,15 @@ internal val LocalTvRemote = staticCompositionLocalOf<TvRemoteController?> { nul
             Icon(Icons.Rounded.Tv, null, Modifier.size(44.dp), tint = C.textPrimary)
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 VText(remote.tvName, 17, bold = true)
-                VText(if (remote.online) "Connected · ${remote.address}" else "Not reachable", 13, color = C.textSecondary)
+                VText(if (remote.online) "Connected · ${remote.address}" else if (remote.checking) remote.address else "Not reachable", 13, color = C.textSecondary)
             }
             IconButton(remote::dismiss) { Icon(Icons.Rounded.Close, "Close remote", tint = C.textPrimary) }
         }
-        if (remote.online) AppButton("Open VIPTV on TV", remote::launchTv, Modifier.fillMaxWidth(), "live", primary = true, enabled = !remote.busy)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            AppButton("Power", remote::power, Modifier.weight(1f), enabled = !remote.busy && !remote.checking)
+            AppButton("Mute", remote::mute, Modifier.weight(1f), enabled = remote.online && !remote.busy)
+        }
+        if (remote.online || remote.checking) AppButton("Open VIPTV on TV", remote::launchTv, Modifier.fillMaxWidth(), "live", primary = true, enabled = remote.online && !remote.busy)
         else Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(C.surfaceN2).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             VText("Can't reach ${remote.tvName}", 20, display = true)
             VText("Turn the TV on and check it's on the same Wi-Fi as this phone.", 14, color = C.textSecondary)

@@ -18,6 +18,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 class AppController(context: Context, private val origin: String) {
     private val television = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
@@ -45,6 +47,8 @@ class AppController(context: Context, private val origin: String) {
     internal var queueContinuationJob: Job? = null
     /** Last queue/Home refresh wins over any earlier response racing Undo. */
     internal var homeRefreshGeneration = 0L
+    private val homeMetadataGate = Semaphore(3)
+    private val homeMetadataRequested = mutableSetOf<String>()
     internal var libraryRevision = 0L
     internal var discoverJob: Job? = null
     internal var searchJob: Job? = null
@@ -181,6 +185,7 @@ class AppController(context: Context, private val origin: String) {
         if (homeJob !== job) homeJob?.cancel()
         homeJob = job
         val refresh = ++homeRefreshGeneration
+        homeMetadataRequested.clear()
         val library = libraryRevision
         _state.value = _state.value.copy(homeLoading = true)
         if (enter) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), selectedProfile = profile, loading = false)
@@ -197,6 +202,26 @@ class AppController(context: Context, private val origin: String) {
         if (generation == sessionRenderGeneration && refresh == homeRefreshGeneration) _state.value = _state.value.copy(homeLoading = false)
     }
     internal fun refreshProfileIdentity() { keepProfilesOnIdentityRefresh = true; coreSession.retry() }
+    internal fun enrichVisibleHomeItem(media: Media) {
+        val current = _state.value
+        if (media.type == "live" || current.homeLoading || current.route != Route.Browse(Destination.Home)) return
+        val profile = current.selectedProfile?.id ?: return
+        val generation = homeRefreshGeneration
+        val key = media.type + ":" + media.id
+        if (!homeMetadataRequested.add(key)) return
+        scope.launch {
+            homeMetadataGate.withPermit {
+                if (generation != homeRefreshGeneration || _state.value.selectedProfile?.id != profile) return@withPermit
+                val rich = try { gateway.metadata(media) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { return@withPermit }
+                if (generation != homeRefreshGeneration || _state.value.selectedProfile?.id != profile) return@withPermit
+                val state = _state.value
+                val shelves = state.shelves.map { shelf -> shelf.copy(items = shelf.items.map { item ->
+                    if (item.type == media.type && item.id == media.id) CoreModels.enrich(item, rich) else item
+                }) }
+                _state.value = state.copy(shelves = shelves, queue = shelves.firstOrNull { it.isQueueShelf }?.items.orEmpty())
+            }
+        }
+    }
     fun chooseProfile(profile: Profile) {
         keepProfilesOnIdentityRefresh = false
         cancelUpNext()

@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.painterResource
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import org.json.JSONObject
@@ -32,6 +33,16 @@ import org.viptv.app.theme.ViptvColor as C
 
 @Composable internal fun Pairing(state: AppState, controller: AppController, model: ViptvModel) {
     val tv = LocalTv.current
+    if (!tv && state.sessionRestoring && state.loading) {
+        Box(Modifier.fillMaxSize().background(LocalGround.current), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                Image(painterResource(R.drawable.viptv_mark), "VIPTV", Modifier.size(88.dp))
+                VText("VIPTV", 34, display = true)
+                CircularProgressIndicator(Modifier.size(22.dp), color = LocalAccent.current, strokeWidth = 2.dp)
+            }
+        }
+        return
+    }
     if (!tv && !state.sessionRestoring && !state.pairingRequested) { PhoneSignIn(state, controller, model); return }
     val context = LocalContext.current
     var server by remember { mutableStateOf(false) }

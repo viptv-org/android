@@ -116,3 +116,12 @@ No media bytes are packaged in the app. `POST /__control` with
 `{"delaySearchMovies":9000}` delays only movie search catalogs; reset it to zero
 after checking late-arrival focus. The fixture's continuation advances its
 reference episode IDs so countdown expiry and Play now can be checked separately.
+# Reliability follow-up checks
+
+On the paired remote of dedicated emulator 5574, run
+`python3 qualification/check-reconnect.py` with the synthetic SmartCast fixture.
+It verifies delayed silent reconnect, no re-pairing, bounded offline failure and
+recovery. `authDelay` (0–3000 ms) and `authChecks` on its `/__control` support the
+check. Power/Mute must record code sets/codes 11/2 and 5/4. The app HTTPS fixture
+accepts `delayIdentity` (0–10000 ms) to inspect branded session restoration; reset
+it to zero after inspection. Normal shared APKs must omit fixture trust.

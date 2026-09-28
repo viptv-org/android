@@ -22,6 +22,7 @@ await installBackend({
 let approved = !process.argv.includes('--pairing');
 let live = false;
 let delayMetadata = 0;
+let delayIdentity = 0;
 let delaySearchMovies = 0;
 let copyUrl = false;
 let delayPlayback = 0;
@@ -68,11 +69,13 @@ const server = https.createServer({
       if ('failPlayback' in body) failPlayback = !!body.failPlayback;
       if ('approved' in body) approved = body.approved;
       if ('delayMetadata' in body) delayMetadata = body.delayMetadata;
+      if ('delayIdentity' in body) delayIdentity = Math.max(0, Math.min(10000, Number(body.delayIdentity) || 0));
       if ('delaySearchMovies' in body) delaySearchMovies = Math.max(0, Math.min(10000, Number(body.delaySearchMovies)));
       return json(response, { ok: true });
     }
     if (path === '/__requests') return json(response, calls);
     calls.push({ method: request.method, path, at: Date.now(), ...(path === "/api/streams" ? { itemId: body.id, itemType: body.type } : {}), ...(path === "/api/playback" ? { channelId: body.channel_id } : {}) });
+    if (path === '/api/auth/me' && delayIdentity) await new Promise(resolve => setTimeout(resolve, delayIdentity));
     if (path === '/api/playback' && request.method === 'POST') {
       if (delayPlayback) await new Promise(resolve => setTimeout(resolve, delayPlayback));
       if (failPlayback) return json(response, { error: 'Synthetic copy failure' }, 503);

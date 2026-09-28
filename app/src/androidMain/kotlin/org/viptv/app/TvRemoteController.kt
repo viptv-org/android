@@ -68,6 +68,8 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
     private var clientOrigin: String? = null
     private var pairingPending = false
     private var resumeSearch = false
+    private var reconnectPending = false
+    private var nameJob: Job? = null
     private var target: RemoteTv? = null
     private var challenge: JSONObject? = null
     private var pairingReturn = "search"
@@ -77,6 +79,7 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
     var page by mutableStateOf(""); private set
     var busy by mutableStateOf(false); private set
     var online by mutableStateOf(false); private set
+    var checking by mutableStateOf(false); private set
     var message by mutableStateOf(""); private set
     var results by mutableStateOf(emptyList<RemoteTv>()); private set
     var pin by mutableStateOf(""); private set
@@ -109,17 +112,20 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
         foreground = false
         keyEpoch++; pendingKeys = 0
         resumeSearch = page == "search"
+        reconnectPending = page == "remote"
         stopSearch()
+        nameJob?.cancel()
         // The ViewModel retains the page and challenge; backgrounding isn't Cancel.
     }
     fun onForeground() {
         foreground = true
         if (resumeSearch && page == "search") { resumeSearch = false; discover() }
+        else if (page == "remote") { reconnectPending = true; reconnect() }
     }
     fun dismiss() {
         keyEpoch++; pendingKeys = 0; resumeSearch = false
         generation++; stopSearch(); page = ""; message = ""; pin = ""; challenge = null; target = null
-        busy = false
+        busy = false; checking = false; reconnectPending = false; nameJob?.cancel()
         // Retire only after the active callback, including a late pairing challenge.
         scope.launch { commands.withLock { withContext(Dispatchers.IO) { releaseSession() } } }
     }
@@ -131,10 +137,27 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
     }
     fun open() {
         val tv = selected ?: return
-        dismiss(); target = tv; page = "remote"; online = false
-        command("pingAuth") { online = true }
+        dismiss(); target = tv; page = "remote"
+        reconnect()
     }
-    fun retry() = open()
+    fun retry() = reconnect()
+    private fun reconnect() {
+        if (checking || busy || selected == null || !foreground || page != "remote") return
+        reconnectPending = false
+        checking = true
+        command("pingAuth", silent = true) { online = true; message = ""; refreshName() }
+    }
+    private fun refreshName() {
+        val tv = target ?: selected ?: return
+        val ticket = generation
+        nameJob?.cancel()
+        nameJob = scope.launch {
+            val found = withContext(Dispatchers.IO) { probe(tv.origin) } ?: return@launch
+            if (ticket != generation || !foreground || selected?.origin != tv.origin) return@launch
+            selected = found; target = found
+            prefs.edit().putString("name", found.name).apply()
+        }
+    }
     fun repair() { selected?.let { connect(it.origin, it.name, forcePair = true) } }
     fun connect(value: String, name: String = "Vizio TV", forcePair: Boolean = false) {
         val origin = RemoteInput.origin(value)
@@ -169,6 +192,7 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
         selected = tv; online = true; page = "done"; challenge = null
         prefs.edit().putString("origin", tv.origin).putString("name", tv.name).apply()
         tip = !prefs.getBoolean("tipSeen", false)
+        refreshName()
     }
     fun key(key: String): Boolean {
         if (!online || !foreground || page != "remote" || pendingKeys >= 8) return false
@@ -176,19 +200,27 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
         command("key", JSONObject().put("key", key), control = true) {}
         return true
     }
+    fun power() {
+        if (!foreground || page != "remote" || busy || checking) return
+        command("powerToggle") { message = "Power request sent." }
+    }
+    fun mute() {
+        if (!online || !foreground || page != "remote" || busy) return
+        command("muteToggle") { message = "Mute request sent." }
+    }
     fun launchTv() {
         if (online) command("launchConjure", JSONObject().put("url", "https://watch.syek.tech/?platform=vizio")) {
             message = "The TV accepted the launch request. Check its screen to confirm VIPTV opened."
         }
     }
     private fun command(operation: String, input: JSONObject = JSONObject(), failure: (() -> Unit)? = null,
-        control: Boolean = false, restartPair: Boolean = false, done: (JSONObject) -> Unit) {
+        control: Boolean = false, restartPair: Boolean = false, silent: Boolean = false, done: (JSONObject) -> Unit) {
         if (!control && busy) return
         val tv = target ?: selected ?: return
         val ticket = generation
         val epoch = keyEpoch
         val alreadyPaired = selected?.origin == tv.origin
-        if (!control) { busy = true; message = "" }
+        if (!control && !silent) { busy = true; message = "" }
         scope.launch {
             try {
                 val output = commands.withLock {
@@ -207,7 +239,11 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
                                 pairingPending = true
                                 prefs.edit().putString("pendingPair", tv.origin).commit()
                             }
-                            val result = request(active, operation, input)
+                            var result = request(active, operation, input)
+                            if (silent && result.optJSONObject("error")?.optString("kind") in listOf("transport", "httpStatus") && ticket == generation && epoch == keyEpoch) {
+                                delay(350)
+                                if (ticket == generation && epoch == keyEpoch) result = request(active, operation, input)
+                            }
                             if ((operation == "finishPair" && result.optString("kind") == "complete") ||
                                 (operation == "beginPair" && result.optString("kind") == "error" && result.optJSONObject("error")?.optString("kind") != "transport")) {
                                 pairingPending = false
@@ -218,8 +254,8 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
                         } catch (_: Exception) { JSONObject().put("kind", "error").put("error", JSONObject().put("kind", "transport")) }
                     }
                 } ?: return@launch
-                if (ticket != generation || (control && epoch != keyEpoch)) return@launch
-                if (!control) busy = false
+                if (ticket != generation || ((control || silent) && epoch != keyEpoch)) return@launch
+                if (!control && !silent) busy = false
                 if (output.optString("kind") == "complete") done(output.optJSONObject("result") ?: JSONObject())
                 else {
                     val error = output.optJSONObject("error")
@@ -238,6 +274,12 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
                 }
             } finally {
                 if (ticket == generation && control && epoch == keyEpoch) pendingKeys--
+                if (ticket == generation && silent) {
+                    checking = false
+                }
+                // Only a lifecycle request schedules another check. A failed ping
+                // invalidates queued keys too, but must never create a retry loop.
+                if (ticket == generation && reconnectPending && foreground && page == "remote") reconnect()
             }
         }
     }

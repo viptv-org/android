@@ -17,6 +17,17 @@ import kotlin.test.assertTrue
  */
 class BackendGatewayWireTest {
 
+    @Test fun `connection limits remain actionable through HTTP and native normalization`() = runBlocking {
+        FixtureServer(1) { FixtureResponse("""{"error":"Provider connection limit reached","error_code":"provider_connection_limit"}""", 429) }.use { server ->
+            val failure = kotlin.test.assertFailsWith<GatewayError> {
+                VipTvHttpGateway(server.origin).playback(Source("one", "Fixture"), 0,
+                    PlaybackClientCapabilities(1920, 1080, true, false, false, true, true))
+            }
+            assertTrue(failure.message.contains("Stop another stream"))
+            assertEquals(429, failure.status)
+        }
+    }
+
     @Test fun `native password sign in uses one endpoint and keeps secrets out of descriptions`() = runBlocking {
         FixtureServer(1) { request ->
             assertEquals("/api/auth/device/login", request.target)

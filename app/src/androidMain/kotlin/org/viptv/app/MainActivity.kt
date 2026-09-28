@@ -36,12 +36,15 @@ import org.viptv.app.theme.ViptvColor as C
 
 class MainActivity : ComponentActivity() {
     private lateinit var model: ViptvModel
-    override fun onStart() {
-        super.onStart()
+    override fun onResume() {
+        super.onResume()
         if (::model.isInitialized) model.remote.onForeground()
     }
-    override fun onStop() {
+    override fun onPause() {
         if (::model.isInitialized && !isChangingConfigurations) model.remote.onBackground()
+        super.onPause()
+    }
+    override fun onStop() {
         if (::model.isInitialized && !isChangingConfigurations && !isInPictureInPictureMode) model.controller.stopForBackground()
         super.onStop()
     }

@@ -8,6 +8,8 @@ let pairing = false;
 let starts = 0;
 let cancels = 0;
 let keyDelay = 0;
+let authDelay = 0;
+let authChecks = 0;
 const commands = [];
 createServer({ key: readFileSync(new URL('server.key', tls)), cert: readFileSync(new URL('server.crt', tls)) }, async (request, response) => {
   let raw = '';
@@ -19,9 +21,11 @@ createServer({ key: readFileSync(new URL('server.key', tls)), cert: readFileSync
     if ('offline' in body) offline = body.offline;
     if ('paired' in body) paired = body.paired;
     if ('keyDelay' in body) keyDelay = Math.max(0, Math.min(3000, Number(body.keyDelay)));
+    if ('authDelay' in body) authDelay = Math.max(0, Math.min(3000, Number(body.authDelay)));
     if (body.reset) { pairing = false; paired = false; starts = 0; cancels = 0; commands.length = 0; }
-    return send({ offline, paired, pairing, starts, cancels, commands });
+    return send({ offline, paired, pairing, starts, cancels, commands, authChecks });
   }
+  if (request.url === '/state/device/power_mode') { authChecks++; await new Promise(resolve => setTimeout(resolve, authDelay)); }
   if (offline) { response.writeHead(503); return send({ STATUS: { RESULT: 'FAILURE' } }); }
   const success = (ITEM = {}) => send({ STATUS: { RESULT: 'SUCCESS' }, ITEM, ITEMS: [{ TYPE: 'T_VIZIO_DEVICE_INFO_V1', VALUE: { CAST_NAME: 'Fixture TV' } }] });
   if (request.url === '/state/device/deviceinfo') return success();

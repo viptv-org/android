@@ -62,3 +62,48 @@ change the launch button's appearance. See the Android contract for acceptance.
 - **Honest setup:** the intro says nothing is mirrored before discovery. Android SDK 36 has no runtime LAN prompt; denied access gets recovery, never a fake permission prompt.
 - **The PIN pairs automatically** on the 4th digit.
 - **Forget this TV turns the feature off**, so there's no separate master switch.
+# Reliability follow-up — REL-001 (proposed, 2026-09-28)
+
+Owner-approved scope: backend, shared core, Android, native Roku, browser/TV and
+desktop. Extend existing surfaces; do not change source selection or auto-play.
+
+- API errors retain stable `error_code` and a safe, actionable message. Provider
+  connection capacity is distinct from request rate limiting, upstream access
+  denial, expired sources, network failure and unsupported delivery. Never show
+  URLs, cookies, credentials, stack traces or raw response markup. Unknown errors
+  use a bounded safe message or status-specific fallback; retain Retry/Choose
+  another source/Back and the selected source/time. Auth policy codes keep their
+  existing meaning. Connection-limit copy: `This IPTV provider has reached its
+  connection limit. Stop another stream or choose another provider.`
+- Home renders usable saved/initial rows immediately. Remove Roku's metadata and
+  artwork readiness cover, including re-entry triggers; loading images must not
+  intercept input. Keep account restoration truthful and retryable. Refreshes
+  preserve visible rows and focus. Metadata work follows visible items plus a
+  bounded lookahead; no artwork-completion gate. Missing art uses existing ground.
+- Roku time labels use a verified numeric font path without `monospacedDigits`
+  substitution. Position/duration stay readable, including hours and zero values;
+  validate on hardware before claiming physical acceptance.
+- TV Home scroll-out/return must recreate visible text, controls and images after
+  texture cleanup. Source/provider panels remain opaque surface-1 with the
+  existing scrim. Verify repeated scroll and panel opening under memory pressure;
+  do not hide a renderer defect by increasing memory without bounds.
+- Browser header profile buttons open Settings. Switch profile remains an
+  explicit Settings action; keep dedicated TV profile-selection navigation.
+- Native SmartCast remotes expose Power and Mute with accessible labels, existing
+  44dp-or-larger phone / desktop button geometry, and the TV's reported name
+  (fallback `Vizio TV`). Only explicit presses send power/mute; no repeat/hold.
+  Power off is not treated as expired pairing. On app return, silently verify the
+  retained pairing with bounded retries, keeping the current remote layout/name.
+  Show offline recovery only after verification fails; show pairing recovery only
+  for rejected credentials. Background discards queued keys, never the PIN page.
+- Android launch uses the bundled VIPTV mark on the existing dark ground, with
+  matching system-bar colors and a compact in-app branded restoration state.
+  No artificial minimum delay, artwork wait, or replayed splash on resume.
+
+Acceptance: capacity/429/auth/404/5xx/timeout/malformed responses show distinct
+safe outcomes on each client; slow or failed artwork never blocks Home; repeated
+TV scroll/panel cycles survive cleanup; profile-to-Settings-to-profile navigation
+works; delayed reconnect has no offline flash, eventual failure is recoverable,
+and power/mute/name work via the synthetic SmartCast boundary. Measure Android
+initial/offscreen requests and retain first-frame, device and fixture evidence
+separately. Existing typography, palette and focus/Back contracts remain in force.

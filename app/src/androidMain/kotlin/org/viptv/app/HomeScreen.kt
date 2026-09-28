@@ -76,7 +76,10 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
                     if (featured.isEmpty()) EmptyState(if (state.homeLoading) "Finding your next watch" else "Your library is empty", "Browse Discover to find movies and series.", "home")
                     else {
                         val pager = rememberPagerState(pageCount = { featured.size })
-                        HorizontalPager(pager, pageSpacing = 16.dp, key = { featured[it].id }) { index -> PhoneHero(featured[index], state, controller) }
+                        HorizontalPager(pager, pageSpacing = 16.dp, key = { featured[it].id }) { index ->
+                            LaunchedEffect(featured[index].id, state.homeLoading) { controller.enrichVisibleHomeItem(featured[index]) }
+                            PhoneHero(featured[index], state, controller)
+                        }
                         if (featured.size > 1) Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.Center) {
                             repeat(featured.size) { index -> Box(Modifier.padding(horizontal = 3.dp).size(if (pager.currentPage == index) 18.dp else 6.dp, 6.dp).clip(CircleShape).background(if (pager.currentPage == index) C.textPrimary else C.fillDot)) }
                         }
@@ -168,6 +171,7 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
             itemsIndexed(shelf.items, key = { _, item -> HomeFocusPolicy.mediaKey(item) }) { column, media ->
                 val action = { controller.activateCard(media, shelf.isQueueShelf, SourceReturn.Home) }
                 val hold = { if (shelf.isQueueShelf) controller.requestQueueManage(media) else controller.requestDialog(DialogKind.MyListManage, media.name, media) }
+                LaunchedEffect(media.id, state.homeLoading) { controller.enrichVisibleHomeItem(media) }
                 if (!tv && shelf.isQueueShelf) QueueCard(media, action, hold)
                 else MediaCard(media, Modifier.focusRequester(focuses[column]).then(if (column == 0 && tv) Modifier.focusProperties { left = rail } else Modifier),
                     shelf.isQueueShelf, action, hold, onFocused = { controller.recordHomeFocus(index, shelf.id, media) })
