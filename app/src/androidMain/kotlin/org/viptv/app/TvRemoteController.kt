@@ -25,6 +25,14 @@ import uniffi.viptv_core.vizioDiscoveryCandidates
 internal data class RemoteTv(val name: String, val origin: String)
 
 internal object RemoteInput {
+    fun parent(page: String, pairingReturn: String, paired: Boolean): String = when (page) {
+        "manual" -> "search"
+        "pin" -> pairingReturn
+        "search", "access" -> "intro"
+        "intro" -> if (paired) "settings" else ""
+        "forget" -> "settings"
+        else -> ""
+    }
     fun origin(value: String): String? {
         val parts = value.trim().removePrefix("https://").split(':')
         if (parts.size !in 1..2) return null
@@ -56,6 +64,8 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
     private var client: SmartCastClient? = null
     private var target: RemoteTv? = null
     private var challenge: JSONObject? = null
+    private var pairingReturn = "search"
+    var manualAddress by mutableStateOf("")
     private var forgotten = mutableSetOf<String>()
     var selected by mutableStateOf(prefs.getString("origin", null)?.let { RemoteTv(prefs.getString("name", "Vizio TV")!!, it) }); private set
     var page by mutableStateOf(""); private set
@@ -84,11 +94,9 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
     fun confirmForget() { page = "forget" }
     fun cancelForget() { page = "settings" }
     fun back() {
-        when (page) {
-            "manual", "pin", "search", "access" -> { dismiss(); page = "intro" }
-            "forget" -> page = "settings"
-            else -> dismiss()
-        }
+        val previous = RemoteInput.parent(page, pairingReturn, selected != null)
+        dismiss()
+        if (previous == "remote") open() else page = previous
     }
     private fun stopSearch() { search?.cancel(); search = null }
     fun dismiss() {
@@ -112,6 +120,7 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
     fun connect(value: String, name: String = "Vizio TV", forcePair: Boolean = false) {
         val origin = RemoteInput.origin(value)
         if (origin == null) { message = "Enter a local IPv4 address, optionally followed by :7345 or :9000."; return }
+        pairingReturn = when (page) { "manual" -> "manual"; "remote" -> "remote"; else -> "search" }
         dismiss(); target = RemoteTv(name, origin); page = "pin"; forgotten.remove(origin)
         if (forcePair || tokens.load(origin) == null) newPin()
         else command("pingAuth", failure = { newPin() }) { paired() }

@@ -77,7 +77,7 @@ private data class SettingRow(val title: String, val detail: String, val icon: S
                     }
                     val starts = page != "Settings" || groupIndex in listOf(0, 2, 3, 5, 8)
                     val ends = page != "Settings" || groupIndex in listOf(1, 2, 4, 7, 8) || (!tv && index == 5)
-                    if (!tv && index == 8 && page == "Settings") Spacer(Modifier.height(24.dp))
+                    if (!tv && groupIndex == 8 && page == "Settings") Spacer(Modifier.height(24.dp))
                     SettingsRow(row, Modifier.then(if (index == 0 && tv) Modifier.focusRequester(first).focusProperties { left = rail; if (state.profiles.isNotEmpty() && page == "Settings") right = avatarFocus } else Modifier.focusProperties { if (tv) left = rail }), { selected = index }, starts, ends)
                 }
             }

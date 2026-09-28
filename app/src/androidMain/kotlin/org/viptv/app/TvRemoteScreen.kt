@@ -15,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -97,11 +96,10 @@ internal val LocalTvRemote = staticCompositionLocalOf<TvRemoteController?> { nul
                     if (!remote.busy) AppButton("Try again", remote::discover, Modifier.fillMaxWidth())
                 }
                 "manual" -> {
-                    var address by rememberSaveable { mutableStateOf("") }
                     VText("Enter your TV's IP address", 34, display = true)
                     VText("Find it on the TV under Settings › Network.", color = C.textSecondary)
-                    AppField(address, { address = it }, "IP address", keyboardType = KeyboardType.Uri, onSubmit = { remote.connect(address) })
-                    AppButton("Connect", { remote.connect(address) }, Modifier.fillMaxWidth(), primary = true)
+                    AppField(remote.manualAddress, { remote.manualAddress = it }, "IP address", keyboardType = KeyboardType.Uri, onSubmit = { remote.connect(remote.manualAddress) })
+                    AppButton("Connect", { remote.connect(remote.manualAddress) }, Modifier.fillMaxWidth(), primary = true)
                     AppButton("Cancel", remote::back, Modifier.fillMaxWidth())
                 }
                 "pin" -> {
