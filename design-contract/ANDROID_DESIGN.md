@@ -1,5 +1,37 @@
 # AND-035 — Native Android phone and TV design adoption
 
+## AND-039 — Phone remote reliability and responsiveness
+
+Owner feedback, 2026-09-27; supersedes AND-038's background-dismissal and
+outlined header-button treatment. No other platform UI changes.
+
+- Background/foreground and rotation retain the setup page, entered IP and
+  current pairing challenge. Returning must not start a second pairing request.
+  The screen-awake flag is released in the background. Discovery pauses there;
+  already queued remote keys are discarded, never replayed on return.
+- Explicit Cancel/Back out of a PIN challenge and New PIN send the existing
+  device-scoped cancelPair operation before another beginPair. Release a late
+  challenge too. Keep only a pending-origin marker for process-death recovery;
+  never persist the PIN or challenge. Preserve the stable phone device ID.
+- Discovery consumes the actual shared-core Result envelope and probes both
+  supported SmartCast ports. Results arrive progressively; a bad/unreachable
+  host cannot abort the scan. Network, TLS, JNI client setup and credential
+  operations run off the UI thread. No global TLS weakening.
+- Key presses never toggle the launch button's disabled/alpha state, clear its
+  label, or rebuild connection chrome. Serialize an eight-command bounded queue,
+  give immediate local press/haptic feedback, and cancel queued keys on exit.
+  Connection failures still show recovery; a rejected command alone is not an
+  offline TV. The launch button is busy only for setup/launch operations.
+- Header remote and profile use identical 44 dp touch/visual slots and circular
+  avatar-ground styling, without an outline. The remote glyph is 20 dp, centered.
+
+Acceptance: actual JNI discovery enumeration; automatic fixture discovery;
+background/resume during PIN with exactly one beginPair; Cancel/re-pair and New
+PIN against a TV that rejects overlapping challenges; delayed key responses
+without launch-button flicker; ordered rapid taps; cancellation without replay;
+native header size/appearance inspection. Physical LAN/device evidence remains
+distinct from emulator and synthetic-network evidence.
+
 ## AND-038 — Android phone Vizio remote (2026-09-27)
 
 Status: approved implementation contract; device qualification remains separate.

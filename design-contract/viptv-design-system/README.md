@@ -1,7 +1,9 @@
 # VIPTV Design System
 
 The design language for VIPTV on phone, desktop (Tauri app), web and TV. It is dark-only, with one accent colour and the thumb (phone) or the D-pad (TV) in mind.
-Everything here comes from the redesign canvas: 26 updated original screens, 129 new screens and 9 component sheets.
+The system contains 167 reference screens and 9 component sheets, including the
+12 phone remote screens from the owner's 2026-09-27 export. Android adaptation
+and interaction details are recorded in AND-038 in `../ANDROID_DESIGN.md`.
 
 ```
 viptv-design-system/

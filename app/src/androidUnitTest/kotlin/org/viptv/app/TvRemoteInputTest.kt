@@ -5,6 +5,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class TvRemoteInputTest {
+    @Test fun discoveryDecodesTheRealNativeResultEnvelope() {
+        val candidates = RemoteInput.discoveryCandidates("192.168.1")
+        assertEquals(508, candidates.length())
+        assertEquals("192.168.1.1:7345", candidates.getJSONObject(0).getString("host"))
+        assertEquals("192.168.1.1:9000", candidates.getJSONObject(1).getString("host"))
+        assertEquals("192.168.1.254:9000", candidates.getJSONObject(507).getString("host"))
+    }
     @Test fun backReturnsOneSetupStepWithoutLosingThePairedTvSettings() {
         assertEquals("manual", RemoteInput.parent("pin", "manual", false))
         assertEquals("search", RemoteInput.parent("pin", "search", false))

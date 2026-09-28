@@ -275,3 +275,32 @@ returned Settings to Off and removed the saved selection. On the separate API
 D-pad controls; the phone remote entry was absent. This does not qualify media
 decoding. Actions 36359986368 produced the universal APK; its downloaded SHA256
 and all three core ABIs were verified, with no fixture CA resource present.
+
+## AND-039 — remote reliability follow-up, 2026-09-27
+
+Discovery decoded the JNI Result envelope as a bare array and failed before
+probing. A real native-bridge regression now checks all 508 candidates. The
+bounded scan tolerates slower Wi-Fi connection establishment and publishes
+results progressively. Client/Keystore/TLS initialization runs on IO; remote
+keys use a bounded, ordered queue without changing the setup loading state.
+Backgrounding retains the in-memory PIN challenge and screen, discards queued
+keys, and releases keep-awake. Cancel/New PIN releases the device-scoped pairing
+request; a pending-origin marker supports recovery after process death without
+persisting a PIN or challenge. The header shortcut uses the same 44dp circular
+avatar surface, no outline, and a 20dp glyph.
+
+On the dedicated API 36 phone emulator 5574, `qualification/check-remote.py`
+passed discovery over virtual Wi-Fi, background/return while pairing without a
+second request, Cancel, New PIN, successful PIN entry, and four ordered rapid
+keys with delayed responses. The launch button stayed enabled and its
+acknowledgement stayed visible during key traffic. Separately, force-stop during
+pairing followed by retry cancelled the persisted pending request. These are
+synthetic SmartCast HTTPS checks, not a physical Vizio or Wi-Fi multicast
+qualification. General frame-time performance and physical TV latency remain
+unmeasured.
+
+Final JDK 17 library/app JVM tests, normal APK assembly and lint passed. Lint
+reports 73 warnings with the existing three-error baseline unchanged. All three
+Android core ABIs are packaged, and fixture trust is absent from the normal
+APK. A private Home screenshot confirmed equal circular header surfaces and
+the reduced remote glyph; no captures are committed.

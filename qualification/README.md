@@ -7,8 +7,21 @@ In the phone app use Settings → Watch on TV → Set up a TV → Enter IP addre
 `10.0.2.2`. The synthetic PIN is `1234`; another PIN exercises retry. The fixture
 listens on loopback 7345 and records only synthetic key commands. Its HTTPS
 `/__control` endpoint accepts `{"offline":true}` and `{"paired":false}` to test
-network and credential recovery; GET returns recorded commands. This does not
-test LAN discovery or a physical TV. Never use this fixture's token on a device.
+network and credential recovery; GET returns recorded commands and pairing
+start/cancel counters. `{"keyDelay":3000}` delays key responses; set it back to
+zero after testing. Overlapping pairing requests return BUSY. Never use this
+fixture's token on a device.
+
+For the remote regression check, use the dedicated `viptv-native-qa` emulator
+(5574), with the fixture-trusting debug APK and both HTTPS fixture servers.
+Connect its virtual Wi-Fi with
+`adb -s emulator-5574 shell cmd wifi connect-network AndroidWifi open` if needed.
+Start unpaired on **Choose your TV**, then run
+`python3 qualification/check-remote.py`. It verifies discovery of the synthetic
+TV, background PIN retention, cancellation/New PIN, and ordered remote keys
+without disabling the launch button. Background return focuses the existing
+Android task, rather than starting a duplicate Activity. This tests the emulator's
+virtual Wi-Fi probe path, not physical-LAN multicast or a physical TV.
 
 These scripts exercise the native Compose/Media3 app over local HTTPS using the same content fixtures as TV-web. They do not connect to a real account or upstream stream. Node 22+ and sibling `tv-web` and `design` checkouts are required. The native adapter imports `tv-web/tests/preview/backend.ts`; changes to that fixture contract must be checked here too.
 

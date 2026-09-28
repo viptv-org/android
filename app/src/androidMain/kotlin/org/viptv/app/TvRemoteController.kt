@@ -25,6 +25,7 @@ import uniffi.viptv_core.vizioDiscoveryCandidates
 internal data class RemoteTv(val name: String, val origin: String)
 
 internal object RemoteInput {
+    fun discoveryCandidates(prefix: String): JSONArray = JSONObject(vizioDiscoveryCandidates(prefix)).getJSONArray("Ok")
     fun parent(page: String, pairingReturn: String, paired: Boolean): String = when (page) {
         "manual" -> "search"
         "pin" -> pairingReturn
@@ -58,15 +59,20 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
     private val lifetime = SupervisorJob()
     private val scope = CoroutineScope(lifetime + Dispatchers.Main.immediate)
     private val executor = Executors.newFixedThreadPool(8)
-    private var generation = 0
+    @Volatile private var generation = 0
+    @Volatile private var keyEpoch = 0
+    private var pendingKeys = 0
     private val commands = Mutex()
     private var search: Job? = null
     private var client: SmartCastClient? = null
+    private var clientOrigin: String? = null
+    private var pairingPending = false
+    private var resumeSearch = false
     private var target: RemoteTv? = null
     private var challenge: JSONObject? = null
     private var pairingReturn = "search"
     var manualAddress by mutableStateOf("")
-    private var forgotten = mutableSetOf<String>()
+    var foreground by mutableStateOf(true); private set
     var selected by mutableStateOf(prefs.getString("origin", null)?.let { RemoteTv(prefs.getString("name", "Vizio TV")!!, it) }); private set
     var page by mutableStateOf(""); private set
     var busy by mutableStateOf(false); private set
@@ -89,7 +95,7 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
     }
     fun dismissTip() { tip = false; prefs.edit().putBoolean("tipSeen", true).apply() }
     fun settings() { dismiss(); page = if (selected == null) "intro" else "settings" }
-    fun manual() { stopSearch(); message = ""; page = "manual" }
+    fun manual() { dismiss(); page = "manual" }
     fun changeTv() { dismiss(); page = "intro" }
     fun confirmForget() { page = "forget" }
     fun cancelForget() { page = "settings" }
@@ -99,16 +105,29 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
         if (previous == "remote") open() else page = previous
     }
     private fun stopSearch() { search?.cancel(); search = null }
+    fun onBackground() {
+        foreground = false
+        keyEpoch++; pendingKeys = 0
+        resumeSearch = page == "search"
+        stopSearch()
+        // The ViewModel retains the page and challenge; backgrounding isn't Cancel.
+    }
+    fun onForeground() {
+        foreground = true
+        if (resumeSearch && page == "search") { resumeSearch = false; discover() }
+    }
     fun dismiss() {
+        keyEpoch++; pendingKeys = 0; resumeSearch = false
         generation++; stopSearch(); page = ""; message = ""; pin = ""; challenge = null; target = null
-        // A running bridge owns its callback until completion; never destroy it underneath JNI.
-        if (!busy) client?.close()
-        client = null; busy = false
+        busy = false
+        // Retire only after the active callback, including a late pairing challenge.
+        scope.launch { commands.withLock { withContext(Dispatchers.IO) { releaseSession() } } }
     }
     fun forget() {
-        selected?.let { forgotten.add(it.origin); tokens.clear(it.origin) }
+        val origin = selected?.origin
         prefs.edit().remove("origin").remove("name").remove("tipSeen").apply()
         selected = null; tip = false; online = false; dismiss()
+        if (origin != null) scope.launch { commands.withLock { withContext(Dispatchers.IO) { tokens.clear(origin) } } }
     }
     fun open() {
         val tv = selected ?: return
@@ -121,13 +140,15 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
         val origin = RemoteInput.origin(value)
         if (origin == null) { message = "Enter a local IPv4 address, optionally followed by :7345 or :9000."; return }
         pairingReturn = when (page) { "manual" -> "manual"; "remote" -> "remote"; else -> "search" }
-        dismiss(); target = RemoteTv(name, origin); page = "pin"; forgotten.remove(origin)
-        if (forcePair || tokens.load(origin) == null) newPin()
-        else command("pingAuth", failure = { newPin() }) { paired() }
+        dismiss(); target = RemoteTv(name, origin); page = "pin"
+        if (forcePair) newPin()
+        else command("pingAuth", failure = { beginPair(false) }) { paired() }
     }
-    fun newPin() {
+    fun newPin() = beginPair(true)
+    private fun beginPair(restart: Boolean) {
+        if (busy) return
         pin = ""; challenge = null
-        command("beginPair") { result ->
+        command("beginPair", restartPair = restart) { result ->
             if (result.has("challengeType") && result.has("token")) challenge = result
             else message = "The TV did not return a PIN. Try again."
         }
@@ -144,50 +165,97 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
     private fun paired() {
         val tv = target ?: return
         val old = selected
-        if (old != null && old.origin != tv.origin) tokens.clear(old.origin)
+        if (old != null && old.origin != tv.origin) scope.launch(Dispatchers.IO) { tokens.clear(old.origin) }
         selected = tv; online = true; page = "done"; challenge = null
         prefs.edit().putString("origin", tv.origin).putString("name", tv.name).apply()
         tip = !prefs.getBoolean("tipSeen", false)
     }
-    fun key(key: String) { if (online) command("key", JSONObject().put("key", key)) {} }
+    fun key(key: String): Boolean {
+        if (!online || !foreground || page != "remote" || pendingKeys >= 8) return false
+        pendingKeys++
+        command("key", JSONObject().put("key", key), control = true) {}
+        return true
+    }
     fun launchTv() {
         if (online) command("launchConjure", JSONObject().put("url", "https://watch.syek.tech/?platform=vizio")) {
             message = "The TV accepted the launch request. Check its screen to confirm VIPTV opened."
         }
     }
-    private fun command(operation: String, input: JSONObject = JSONObject(), failure: (() -> Unit)? = null, done: (JSONObject) -> Unit) {
-        if (busy) return
+    private fun command(operation: String, input: JSONObject = JSONObject(), failure: (() -> Unit)? = null,
+        control: Boolean = false, restartPair: Boolean = false, done: (JSONObject) -> Unit) {
+        if (!control && busy) return
         val tv = target ?: selected ?: return
         val ticket = generation
-        val active = client ?: SmartCastClient(tv.origin,
-            prefs.getString("deviceId", null) ?: UUID.randomUUID().toString().also { prefs.edit().putString("deviceId", it).apply() },
-            "VIPTV phone", tokens, executor).also { client = it }
-        busy = true; message = ""
-        scope.launch { commands.withLock {
-            if (ticket != generation) { active.close(); return@withLock }
-            // Deliberately await the final callback even after navigation invalidates this ticket.
-            val output = runCatching { suspendCoroutine<JSONObject> { continuation ->
-                active.run(operation, input) { continuation.resume(it) }
-            } }.getOrElse { JSONObject().put("kind", "error") }
-            if (ticket != generation) {
-                if (forgotten.contains(tv.origin) || (operation == "finishPair" && selected?.origin != tv.origin)) tokens.clear(tv.origin)
-                active.close(); return@withLock
-            }
-            busy = false
-            if (output.optString("kind") == "complete") done(output.optJSONObject("result") ?: JSONObject())
-            else {
-                val error = output.optJSONObject("error")
-                if (error?.optString("kind") == "authentication" && failure != null) failure()
+        val epoch = keyEpoch
+        val alreadyPaired = selected?.origin == tv.origin
+        if (!control) { busy = true; message = "" }
+        scope.launch {
+            try {
+                val output = commands.withLock {
+                    withContext(Dispatchers.IO) {
+                        if (ticket != generation || (control && epoch != keyEpoch)) return@withContext null
+                        try {
+                            if (clientOrigin != tv.origin) releaseSession()
+                            val active = client ?: SmartCastClient(tv.origin,
+                                prefs.getString("deviceId", null) ?: UUID.randomUUID().toString().also { prefs.edit().putString("deviceId", it).commit() },
+                                "VIPTV phone", tokens, executor).also { client = it; clientOrigin = tv.origin }
+                            if (operation == "beginPair") {
+                                if (restartPair || pairingPending || prefs.getString("pendingPair", null) == tv.origin) {
+                                    val cancelled = request(active, "cancelPair")
+                                    if (cancelled.optString("kind") != "complete") return@withContext cancelled
+                                }
+                                pairingPending = true
+                                prefs.edit().putString("pendingPair", tv.origin).commit()
+                            }
+                            val result = request(active, operation, input)
+                            if ((operation == "finishPair" && result.optString("kind") == "complete") ||
+                                (operation == "beginPair" && result.optString("kind") == "error" && result.optJSONObject("error")?.optString("kind") != "transport")) {
+                                pairingPending = false
+                                prefs.edit().remove("pendingPair").commit()
+                            }
+                            if (ticket != generation && operation == "finishPair" && !alreadyPaired) tokens.clear(tv.origin)
+                            result
+                        } catch (_: Exception) { JSONObject().put("kind", "error").put("error", JSONObject().put("kind", "transport")) }
+                    }
+                } ?: return@launch
+                if (ticket != generation || (control && epoch != keyEpoch)) return@launch
+                if (!control) busy = false
+                if (output.optString("kind") == "complete") done(output.optJSONObject("result") ?: JSONObject())
                 else {
-                    online = false
-                    message = when {
-                        operation == "finishPair" && error?.optString("kind") in listOf("authentication", "invalidParameter") -> "Incorrect PIN. Try again."
-                        error?.optString("kind") == "authentication" -> "Pair this TV again to reconnect."
-                        else -> error?.optString("message")?.takeIf { it.isNotBlank() } ?: "Can't reach your TV. Check the Wi-Fi connection and try again."
+                    val error = output.optJSONObject("error")
+                    if (error?.optString("kind") == "authentication" && failure != null) failure()
+                    else {
+                        if (error?.optString("kind") in listOf("authentication", "transport", "httpStatus")) {
+                            online = false; keyEpoch++; pendingKeys = 0
+                        }
+                        message = when {
+                            operation == "finishPair" && error?.optString("kind") in listOf("authentication", "invalidParameter") -> "Incorrect PIN. Try again."
+                            error?.optString("kind") == "authentication" -> "Pair this TV again to reconnect."
+                            operation == "beginPair" && error?.optString("kind") == "busy" -> "A pairing request is still active. Choose New PIN to restart this phone's pairing."
+                            else -> error?.optString("message")?.takeIf { it.isNotBlank() } ?: "Can't reach your TV. Check the Wi-Fi connection and try again."
+                        }
                     }
                 }
+            } finally {
+                if (ticket == generation && control && epoch == keyEpoch) pendingKeys--
             }
-        } }
+        }
+    }
+    private suspend fun request(active: SmartCastClient, operation: String, input: JSONObject = JSONObject()): JSONObject =
+        suspendCoroutine { continuation -> active.run(operation, input) { continuation.resume(it) } }
+
+    /** Called only under commands on IO, after the preceding request has finished. */
+    private suspend fun releaseSession() {
+        val active = client ?: return
+        try {
+            if (pairingPending) {
+                val result = request(active, "cancelPair")
+                if (result.optString("kind") == "complete") prefs.edit().remove("pendingPair").commit()
+            }
+        } catch (_: Exception) { /* Keep the pending-origin marker for explicit retry. */
+        } finally {
+            active.close(); client = null; clientOrigin = null; pairingPending = false
+        }
     }
 
     fun discover() {
@@ -195,14 +263,16 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
         val ticket = generation
         search = scope.launch {
             try {
-                withTimeout(12_000) {
-                    val network = context.getSystemService(ConnectivityManager::class.java)
-                    val lan = network.allNetworks.firstOrNull { network.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true }
-                    val ip = lan?.let { network.getLinkProperties(it)?.linkAddresses?.firstOrNull { a -> a.address is Inet4Address }?.address?.hostAddress }
+                withTimeout(30_000) {
+                    val ip = withContext(Dispatchers.IO) {
+                        val network = context.getSystemService(ConnectivityManager::class.java)
+                        val lan = network.allNetworks.firstOrNull { network.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true }
+                        lan?.let { network.getLinkProperties(it)?.linkAddresses?.firstOrNull { a -> a.address is Inet4Address }?.address?.hostAddress }
+                    }
                     if (ip == null) { message = "Connect this phone to the same Wi-Fi as your TV."; return@withTimeout }
                     val prefix = ip.substringBeforeLast('.')
-                    val candidates = JSONArray(vizioDiscoveryCandidates(prefix))
-                    val permits = Semaphore(24)
+                    val candidates = withContext(Dispatchers.IO) { RemoteInput.discoveryCandidates(prefix) }
+                    val permits = Semaphore(32)
                     withContext(Dispatchers.IO) {
                         coroutineScope {
                             launch {
@@ -257,10 +327,10 @@ internal class TvRemoteController(private val context: Context) : AutoCloseable 
     }
     private suspend fun probe(origin: String): RemoteTv? = runCatching {
         val uri = URI(origin)
-        Socket().use { it.connect(InetSocketAddress(uri.host, uri.port), 300) }
+        Socket().use { it.connect(InetSocketAddress(uri.host, uri.port), 1500) }
         val transport = SmartCastTransport(origin, executor)
         val request = JSONObject().put("url", "$origin/state/device/deviceinfo").put("method", "GET")
-            .put("headers", JSONObject()).put("timeoutMillis", 1200).put("maxResponseBytes", 65536)
+            .put("headers", JSONObject()).put("timeoutMillis", 2500).put("maxResponseBytes", 65536)
         val response = suspendCancellableCoroutine<SmartCastTransport.Response> { continuation ->
             val call = transport.execute(request) { result -> continuation.resumeWith(result) }
             continuation.invokeOnCancellation { call.cancel() }

@@ -50,6 +50,11 @@ TvTitle composition and TvLive guide. See [ROK-043](../ROKU_DESIGN.md#rok-043--c
 
 ## Phone TV remote (Watch on TV)
 
+Android owner follow-up AND-039 keeps pairing visible across backgrounding,
+cancels abandoned TV challenges, and uses a 20 px glyph in the same borderless
+44 px avatar-style header slot as the profile picture. Key traffic does not
+change the launch button's appearance. See the Android contract for acceptance.
+
 - **Opt-in, in Settings.** Most people never use it, so it is off by default and adds nothing to the app until a TV is paired.
 - **The button goes in the tab-screen headers**, next to the avatar. The bottom nav and search stay identical for everyone. Remotes are opened occasionally, and the controls themselves sit in the thumb zone of the sheet, so reaching up for the button once is fine. A one-time tip shows where it went.
 - **The remote is a sheet, not a page**, so the app stays underneath and closing it returns you where you were.

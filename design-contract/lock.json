@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/design",
-  "revision": "f9c3b5eea7718950e38dc612cb9064ed1bc0d2dc",
+  "revision": "f2aeb7ef216acd05630808d827f6f08be19435f9",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
@@ -12,7 +12,7 @@
     },
     "design-contract/ANDROID_DESIGN.md": {
       "source": "ANDROID_DESIGN.md",
-      "sha256": "a97e14541ab1a8977925a42c289d44edefe41da24c7308b7afe0ed5f8925e145"
+      "sha256": "77af7f3210b4b2d5fb5e4084f5f4a29e9ee8b2a9fe9bf13980b36b28c275f156"
     },
     "design-contract/TV_POLISH.md": {
       "source": "TV_POLISH.md",
@@ -20,7 +20,7 @@
     },
     "design-contract/viptv-design-system/README.md": {
       "source": "viptv-design-system/README.md",
-      "sha256": "46e5b8e84b9a4ca8dd45f31439488495ef372a774ea64202b68417f54e4865c7"
+      "sha256": "f6a9e5e0da4312a8d71d0e2b2a3338088bf9a5b5a9891a783c0a859257acd7e2"
     },
     "design-contract/viptv-design-system/components.md": {
       "source": "viptv-design-system/components.md",
@@ -32,7 +32,7 @@
     },
     "design-contract/viptv-design-system/decisions.md": {
       "source": "viptv-design-system/decisions.md",
-      "sha256": "9eafb2d1f855490db0eacd89da0142d64a0ff1501a8e477ebc83364c85a60ca5"
+      "sha256": "09c4e2a86f6b91ab7283a4d310d1e4da2c4f27435538ce9182d8d09cdc305dc7"
     },
     "design-contract/viptv-design-system/tokens/tokens.json": {
       "source": "viptv-design-system/tokens/tokens.json",

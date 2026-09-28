@@ -39,8 +39,8 @@ internal val LocalTvRemote = staticCompositionLocalOf<TvRemoteController?> { nul
     if (LocalTv.current) return
     val remote = LocalTvRemote.current ?: return
     if (remote.visible) Box {
-        IconButton(remote::open, Modifier.size(44.dp).clip(CircleShape).background(C.surfaceN1).border(1.dp, C.lineOutline, CircleShape)) {
-            Icon(Icons.Rounded.SettingsRemote, "TV remote: ${remote.selected?.name}", tint = C.textPrimary)
+        Holdable(remote::open, modifier = Modifier.size(44.dp).clip(CircleShape).background(C.surfaceAvatar)) {
+            Icon(Icons.Rounded.SettingsRemote, "TV remote: ${remote.selected?.name}", Modifier.size(20.dp), tint = C.textPrimary)
         }
         DropdownMenu(remote.tip && remote.page.isEmpty(), remote::dismissTip, containerColor = C.textPrimary) {
             Column(Modifier.width(260.dp).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -55,7 +55,7 @@ internal val LocalTvRemote = staticCompositionLocalOf<TvRemoteController?> { nul
 @Composable internal fun PhoneTabActions(state: AppState, controller: AppController) {
     if (!LocalTv.current) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         PhoneRemoteButton()
-        Holdable({ controller.navigate(Destination.Settings) }, modifier = Modifier.size(44.dp)) { ProfileAvatar(state.selectedProfile, Modifier.fillMaxSize()) }
+        Holdable({ controller.navigate(Destination.Settings) }, modifier = Modifier.size(44.dp).clip(CircleShape)) { ProfileAvatar(state.selectedProfile, Modifier.fillMaxSize()) }
     }
 }
 
@@ -171,15 +171,14 @@ internal val LocalTvRemote = staticCompositionLocalOf<TvRemoteController?> { nul
 @Composable private fun RemoteControls(remote: TvRemoteController) {
     val view = LocalView.current
     val haptic = LocalHapticFeedback.current
-    DisposableEffect(view, remote.keepAwake) {
+    DisposableEffect(view, remote.keepAwake, remote.foreground) {
         val original = view.keepScreenOn
-        view.keepScreenOn = remote.keepAwake
+        view.keepScreenOn = remote.keepAwake && remote.foreground
         onDispose { view.keepScreenOn = original }
     }
     val send: (String) -> Unit = { key ->
-        if (remote.online && !remote.busy) {
+        if (remote.key(key)) {
             if (remote.vibrate) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            remote.key(key)
         }
     }
     Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
