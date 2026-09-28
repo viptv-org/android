@@ -30,6 +30,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import org.viptv.app.theme.ViptvColor as C
 
@@ -107,6 +108,7 @@ internal val LocalTvRemote = staticCompositionLocalOf<TvRemoteController?> { nul
                     VText("Enter the PIN on your TV", 34, display = true)
                     VText("${remote.tvName} is showing a 4-digit PIN.", color = C.textSecondary)
                     BasicTextField(remote.pin, remote::enterPin, enabled = !remote.busy, singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         cursorBrush = SolidColor(Color.Transparent), modifier = Modifier.fillMaxWidth().semantics { contentDescription = "4-digit PIN" },
                         decorationBox = { inner ->
