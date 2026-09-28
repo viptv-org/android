@@ -256,3 +256,32 @@ player; show, pause, cancel and accept Up Next on both phone and TV; verify
 cancel/exit prevent delayed playback. Audit Home, profiles, details, sources,
 settings and search against their pinned reference screens. Keep the full hero
 visible while Continue Watching is focused, as specified by AND-036.
+# AND-040 — copy a stream URL (proposed, 2026-09-28)
+
+Owner request: add Copy stream URL to Android stream actions. Applies to the
+native phone/TV Source details sheet only; web remains unchanged. Entry remains
+the source row's overflow or existing hold/Info action. Keep source metadata and
+Close; add a full-width secondary `Copy stream URL` button above Close using
+existing 54dp phone/72dp TV buttons, 12dp gap and the existing sheet padding.
+Focus starts on Copy; Back/Close returns to the originating source without
+playing it or changing filters, progress or source selection. A press copies
+once; repeats while resolving do nothing. No new hold gesture is introduced.
+
+Resolve only the explicitly selected stream through the existing authenticated
+native direct-URL contract. Do not start the local player or fetch media. Retire
+the temporary server lease before reporting success. Show `Getting URL…` while
+resolving, disable only Copy, and leave Close available. Closing or backgrounding
+cancels delivery to the clipboard; a late response still retires its lease.
+Failure says `Could not copy the stream URL. Try again.` and permits retry.
+Success says `URL copied` without closing the sheet; announce it accessibly.
+Keep this hint visible: `Links may expire or require provider headers. Share only
+with people you trust.` Copy the exact URL, never headers/cookies or a guessed
+stream identifier. Mark clipboard contents sensitive and never log, display,
+persist or include the URL in errors or UI-state descriptions.
+
+Acceptance: copy two different sources and verify exact clipboard targets;
+repeated activation has one pending request; success leaves playback stopped;
+failure is safe/retryable; Close/Back/background during delayed resolution never
+overwrites clipboard and releases a returned lease; keyboard/remote access and
+focus return remain usable. Provider-header-dependent external playback and
+physical TV clipboard usability remain unqualified.

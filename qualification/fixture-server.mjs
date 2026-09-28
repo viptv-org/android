@@ -23,6 +23,9 @@ let approved = !process.argv.includes('--pairing');
 let live = false;
 let delayMetadata = 0;
 let delaySearchMovies = 0;
+let copyUrl = false;
+let delayPlayback = 0;
+let failPlayback = false;
 const calls = [];
 const token = { session_id: 'android-fixture-session', account_id: '7', profile_id: null, access_token: 'fixture-access', refresh_token: 'fixture-refresh', expires_in: 900 };
 const json = (response, value, status = 200) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(value)); };
@@ -60,6 +63,9 @@ const server = https.createServer({
       return createReadStream(nativeMedia, { start, end }).pipe(response);
     }
     if (path === '/__control') {
+      if ('copyUrl' in body) copyUrl = !!body.copyUrl;
+      if ('delayPlayback' in body) delayPlayback = Math.max(0, Math.min(10000, Number(body.delayPlayback) || 0));
+      if ('failPlayback' in body) failPlayback = !!body.failPlayback;
       if ('approved' in body) approved = body.approved;
       if ('delayMetadata' in body) delayMetadata = body.delayMetadata;
       if ('delaySearchMovies' in body) delaySearchMovies = Math.max(0, Math.min(10000, Number(body.delaySearchMovies)));
@@ -67,6 +73,10 @@ const server = https.createServer({
     }
     if (path === '/__requests') return json(response, calls);
     calls.push({ method: request.method, path, at: Date.now(), ...(path === "/api/streams" ? { itemId: body.id, itemType: body.type } : {}), ...(path === "/api/playback" ? { channelId: body.channel_id } : {}) });
+    if (path === '/api/playback' && request.method === 'POST') {
+      if (delayPlayback) await new Promise(resolve => setTimeout(resolve, delayPlayback));
+      if (failPlayback) return json(response, { error: 'Synthetic copy failure' }, 503);
+    }
     if (path === '/api/auth/device/token') return approved ? json(response, token) : json(response, { error: 'authorization_pending' }, 400);
     if (path === '/api/auth/device/code') return json(response, { device_code: 'fixture-device', user_code: 'AB12CD34', verification_uri: origin + '/device', verification_uri_complete: origin + '/device?code=AB12CD34', expires_in: 600, interval: 1 });
     if (path.endsWith('/continue/next')) {
@@ -99,6 +109,7 @@ const server = https.createServer({
           }
           if (favoritePage) value = { items: value, total: value.length, offset: 0, next_offset: null };
           if (path === '/api/playback' && request.method === 'POST') value = { ...value, mode: 'direct', live: live || !!body.channel_id, duration: live ? 0 : nativeDuration, position: 0, ...(nativeMedia ? { url: origin + '/fixtures/native-validation.mp4', format: 'file' } : {}) };
+          if (path === '/api/playback' && request.method === 'POST' && copyUrl) value.url = 'https://provider.test/stream/' + encodeURIComponent(body.stream_id) + '.mkv?token=synthetic%2Bvalue';
           output = JSON.stringify(value);
         }
         response.writeHead(result.status ?? 200, { ...result.headers, ...(result.contentType ? { 'content-type': result.contentType } : {}) });

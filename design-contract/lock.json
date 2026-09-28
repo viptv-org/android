@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/design",
-  "revision": "f2aeb7ef216acd05630808d827f6f08be19435f9",
+  "revision": "eac4f93bb6b88e3ce82b4ff3f392571898596ac2",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
@@ -12,7 +12,7 @@
     },
     "design-contract/ANDROID_DESIGN.md": {
       "source": "ANDROID_DESIGN.md",
-      "sha256": "77af7f3210b4b2d5fb5e4084f5f4a29e9ee8b2a9fe9bf13980b36b28c275f156"
+      "sha256": "51f0d1a32921447e548d38d18e37dbcced2254fae4fad3d7a65dc72699244057"
     },
     "design-contract/TV_POLISH.md": {
       "source": "TV_POLISH.md",

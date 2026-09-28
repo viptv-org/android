@@ -77,6 +77,16 @@ Flags: `--tv`, `--pairing` (wait for approval), `--parent-pin`, `--many-profiles
 
 ## Input and private inspection
 
+For Copy stream URL checks, POST `{"copyUrl":true}` to the HTTPS fixture's
+`/__control`. Source preparation then returns a synthetic provider URL unique
+to the selected stream (never real credentials). `{"failPlayback":true}` tests
+safe failure/retry; `{"delayPlayback":10000}` tests closing/backgrounding before
+resolution. Reset both afterward. Check POST `/api/playback` is followed by
+DELETE for the returned lease, with no media request. Copy source one, then
+cancel a delayed copy of source two and paste into an empty app search field:
+the clipboard must still contain source one's exact URL. Do not perform this
+inspection against production links, or commit clipboard/screenshot captures.
+
 ```sh
 python3 qualification/drive.py snapshot home
 python3 qualification/drive.py tap Discover

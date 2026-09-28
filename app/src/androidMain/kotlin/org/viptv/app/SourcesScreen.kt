@@ -12,6 +12,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.os.PersistableBundle
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import org.viptv.app.theme.ViptvColor as C
 
 @Composable internal fun SourcePicker(media: Media, sources: List<Source>, controller: AppController) {
@@ -85,7 +98,7 @@ import org.viptv.app.theme.ViptvColor as C
     val state by controller.state.collectAsState()
     val dismiss = { controller.dismissDialog() }
     if (dialog.kind == DialogKind.SourceDetails) {
-        FullInfo(dialog.title, dialog.source?.let { SourceDisplayPolicy.title(it) + "\n\n" + SourceDisplayPolicy.body(it) }.orEmpty(), dismiss)
+        SourceDetails(dialog, controller, dismiss)
         return
     }
     val options = buildList<Pair<String, () -> Unit>> {
@@ -128,4 +141,58 @@ import org.viptv.app.theme.ViptvColor as C
         }
     }
     ChoiceDialog(dialog.title, options, dismiss, description = dialog.detail)
+}
+
+@Composable private fun SourceDetails(dialog: DialogState, controller: AppController, dismiss: () -> Unit) {
+    val source = dialog.source
+    val context = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val scope = rememberCoroutineScope()
+    var copying by remember(dialog) { mutableStateOf(false) }
+    var feedback by remember(dialog) { mutableStateOf("") }
+    var pending by remember(dialog) { mutableStateOf<Job?>(null) }
+    val first = remember(dialog) { FocusRequester() }
+    val tv = LocalTv.current
+    DisposableEffect(lifecycle, dialog) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) pending?.cancel()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer); pending?.cancel() }
+    }
+    AppOverlay(dialog.title, dismiss, full = true) {
+        VText(source?.let { SourceDisplayPolicy.title(it) + "\n\n" + SourceDisplayPolicy.body(it) }.orEmpty(),
+            if (tv) 26 else 16, Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), color = C.textBody)
+        Spacer(Modifier.height(measure(28, 20)))
+        VText("Links may expire or require provider headers. Share only with people you trust.",
+            if (tv) 22 else 13, color = C.textSecondary)
+        // Reserve feedback space so resolving/copying doesn't move either action.
+        VText(feedback.ifEmpty { " " }, if (tv) 22 else 13,
+            Modifier.padding(vertical = 12.dp).semantics { liveRegion = LiveRegionMode.Polite }, C.textSecondary)
+        AppButton(if (copying) "Getting URL…" else "Copy stream URL", {
+            if (!copying && source != null) {
+                copying = true; feedback = ""
+                pending = scope.launch {
+                    try {
+                        val url = resolveStreamUrlForCopy(controller.gateway, source,
+                            PlaybackClientCapabilities.from(controller.player.capabilities.value))
+                        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                            val clip = ClipData.newPlainText("Stream URL", url)
+                            clip.description.extras = PersistableBundle().apply {
+                                // Literal supports pre-33 devices; newer Android masks the preview.
+                                putBoolean("android.content.extra.IS_SENSITIVE", true)
+                            }
+                            checkNotNull(context.getSystemService(ClipboardManager::class.java)).setPrimaryClip(clip)
+                            feedback = "URL copied"
+                        }
+                    } catch (cancelled: CancellationException) { throw cancelled
+                    } catch (_: Exception) { feedback = "Could not copy the stream URL. Try again."
+                    } finally { copying = false }
+                }
+            }
+        }, Modifier.fillMaxWidth().focusRequester(first), enabled = source != null && !copying)
+        Spacer(Modifier.height(12.dp))
+        AppButton("Close", dismiss, Modifier.fillMaxWidth())
+        LaunchedEffect(dialog) { if (tv && source != null) { withFrameNanos {}; first.requestFocus() } }
+    }
 }

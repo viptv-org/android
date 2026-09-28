@@ -304,3 +304,27 @@ reports 73 warnings with the existing three-error baseline unchanged. All three
 Android core ABIs are packaged, and fixture trust is absent from the normal
 APK. A private Home screenshot confirmed equal circular header surfaces and
 the reduced remote glyph; no captures are committed.
+
+## AND-040 — Copy stream URL, 2026-09-28
+
+Android Source details includes Copy stream URL with resolving, success and safe
+retry states. The native direct-URL request resolves only the selected stream;
+its temporary lease is retired without opening the player. URLs remain outside
+UI state/logs and are marked sensitive in the system clipboard. Closing or
+backgrounding suppresses late clipboard delivery while lease cleanup finishes.
+
+Four JVM regressions cover two exact source URLs (including encoded query data),
+headers excluded from copied text, cancellation with late lease cleanup,
+rejection of session-bound media URLs, and resolution failure. Library/app unit
+checks, all three native ABI builds, normal APK assembly and lint passed; the
+existing lint error baseline remains unchanged. The normal APK excludes fixture
+trust.
+
+API 36 phone emulator 5574, isolated HTTPS fixture: opened source overflow,
+copied and pasted the exact synthetic URL, observed masked system clipboard
+preview and URL copied feedback, exercised 503 failure, then closed a second
+source's delayed request. The original clipboard content remained unchanged and
+the late lease was deleted. Source list/filter state survived Close, no playback
+or media fetch started, and the private screenshot showed readable stacked
+actions. TV remote focus, physical-device clipboard behavior, and external
+players requiring provider headers remain unverified.
