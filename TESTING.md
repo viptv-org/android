@@ -1,3 +1,29 @@
+# BE-002 same-source gateway recovery — 2026-09-29
+
+Initial native open and active VOD failures use the same bounded delivery ladder:
+original delivery, authorized gateway auto output, then explicit conversion only
+after another native decoder refusal. The source, title position and manual tracks
+are unchanged; successful gateway/conversion intent survives seek/pause/track
+replacement. A new source starts direct-first again. Control errors never take
+the conversion path. Failed admissions release before retry under an independent
+five-second bound; cancelled/obsolete openings cannot advance to a new delivery.
+
+Media3 HTTP401/403/404/410/429 failures remain source/access causes rather than
+decoder/connection refusals. Error copy preserves the status without raw engine
+details. The existing recovery dialog remains the error/Retry/source-choice UI;
+no viewing layout or additional control was introduced.
+
+JDK17 host/JNI preparation, all 132 library/app tests (no failure/skips), three
+Android ABIs, debug APK assembly and lint passed. Lint reports 74 warnings and
+three pre-existing baseline-filtered errors; this is not a warning-free claim.
+Nine new pure/coroutine/HTTP fixtures cover bounded escalation, no-gateway refusal,
+release/cancellation/obsolescence and exact canonical request/position/track facts.
+The first wire fixture omitted required gateway fields and failed; the corrected
+complete envelope passed the full rerun. The APK is
+app/build/outputs/apk/debug/app-debug.apk; no install/deployment occurred.
+Live, emulator/device decoding, PiP, real gateway native integration and the
+remaining BE-002 checklist remain open. These are host tests, not codec acceptance.
+
 # BE-002 active Android VOD playback — 2026-09-29
 
 Movie/exact-episode playback now uses shared-core v2 intent/lease contracts with

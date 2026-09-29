@@ -266,13 +266,15 @@ class VipTvHttpGateway(
         audioTrackIndex: Int?,
         subtitleTrackIndex: Int?,
         subtitlesOff: Boolean,
+        delivery: PlaybackDeliveryOptions,
     ): PlaybackLaunch {
         if (source.channelId == null) {
             val intent = JSONObject().put("requestId", java.util.UUID.randomUUID().toString())
                 .put("platform", if (television) "android_tv" else "android")
                 .put("playback", JSONObject().put("streamId", source.id).put("position", seconds(positionMillis))
                     .put("capabilities", capabilities.toCoreJson()).putOpt("audioTrackIndex", audioTrackIndex)
-                    .putOpt("subtitleTrackIndex", subtitleTrackIndex).put("subtitlesOff", subtitlesOff))
+                    .putOpt("subtitleTrackIndex", subtitleTrackIndex).put("subtitlesOff", subtitlesOff)
+                    .put("managedOnly", delivery.forceGateway).put("forceTranscode", delivery.forceTranscode))
             val canonical = try { JSONObject(uniffi.viptv_core.normalize("playbackV2Intent", intent.toString(), origin)) }
             catch (_: Exception) { throw GatewayError(400, "This device could not report a supported playback configuration.", "invalid_playback_request") }
             return playbackV2.start(canonical)

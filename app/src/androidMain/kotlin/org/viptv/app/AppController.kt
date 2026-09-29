@@ -81,6 +81,7 @@ class AppController(context: Context, private val origin: String) {
     internal var managedRecoveryKey: String? = null
     /** Suppresses duplicate Media3 failure events while the one permitted same-source recovery is awaiting the server. */
     internal var managedRecoveryInFlightKey: String? = null
+    internal var activePlaybackDelivery = PlaybackDeliveryOptions()
     internal val playbackPrepareMutex = Mutex()
     internal var playbackGeneration = 0L
     internal var playbackInteractionVersion = 0L

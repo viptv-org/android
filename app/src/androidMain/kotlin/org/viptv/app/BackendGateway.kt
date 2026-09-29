@@ -22,6 +22,7 @@ interface BackendGateway {
         audioTrackIndex: Int? = null,
         subtitleTrackIndex: Int? = null,
         subtitlesOff: Boolean = false,
+        delivery: PlaybackDeliveryOptions = PlaybackDeliveryOptions(),
     ): PlaybackLaunch
     suspend fun heartbeat(playbackId: String)
     suspend fun stopPlayback(playbackId: String)

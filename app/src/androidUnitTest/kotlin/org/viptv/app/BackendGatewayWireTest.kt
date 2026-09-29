@@ -16,6 +16,28 @@ import kotlin.test.assertTrue
  * mocking the gateway or its JSON helpers.
  */
 class BackendGatewayWireTest {
+    @Test fun `same source gateway options use shared mapping without changing title position or tracks`() = runBlocking {
+        val ids = mutableSetOf<String>()
+        FixtureServer(2) { request ->
+            val body = JSONObject(request.body)
+            ids.add(body.getString("request_id"))
+            assertEquals("source-one", body.getString("stream_id"))
+            assertEquals(42.0, body.getDouble("position"))
+            assertEquals(2, body.getInt("audio_track"))
+            assertTrue(body.getBoolean("subtitles_off"))
+            assertTrue(body.getBoolean("force_gateway"))
+            assertEquals(2160, body.getJSONObject("client").getInt("max_height"))
+            assertEquals(if (ids.size == 1) "auto" else "audio_video", body.getString("conversion"))
+            FixtureResponse(v2Ready("gateway-${ids.size}", """{"kind":"gateway","url":"https://gateway.example/media/viewer/cap/index.m3u8","format":"hls","mode":"remux","video_mode":"copy","audio_mode":"copy","position":42,"duration":120,"live":false,"audio_tracks":[],"subtitle_tracks":[],"subtitles_supported":false}"""))
+        }.use { server ->
+            val gateway = VipTvHttpGateway(server.origin)
+            for (transcode in listOf(false, true)) gateway.playback(Source("source-one", "Fixture"), 42_000,
+                PlaybackClientCapabilities(3840, 2160, true, true, true, true, true),
+                audioTrackIndex = 2, subtitlesOff = true, delivery = PlaybackDeliveryOptions(true, transcode))
+            assertEquals(2, ids.size)
+            server.assertHealthy()
+        }
+    }
     @Test fun `v2 conversion intent maps through native core into generated request types`() {
         val input = """{"requestId":"native","platform":"android_tv","preferences":{"audioLanguage":"en","quality":"1080p"},"playback":{"streamId":"source","capabilities":{"maxWidth":3840,"maxHeight":2160,"h264":true,"aac":true,"directUrls":true},"forceTranscode":true,"conversionReason":"audio-codec"}}"""
         val mapped = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.PlaybackV2Request>(

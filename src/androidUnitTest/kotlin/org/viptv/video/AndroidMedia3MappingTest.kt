@@ -8,6 +8,15 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class AndroidMedia3MappingTest {
+    @Test fun `HTTP access limits and missing sources are not decoder or transport refusals`() {
+        for (status in listOf(401, 403, 404, 410, 429)) {
+            val failure = media3HttpError(status)
+            assertEquals(PlaybackErrorCode.Source, failure.code)
+            assertFalse(failure.recoverable)
+            assertTrue(failure.message.contains(status.toString()))
+        }
+        assertEquals(PlaybackErrorCode.Network, media3HttpError(503).code)
+    }
     @Test
     fun onDemandRollingHlsUsesTheTimelineWindowAsItsSessionClock() {
         // A 32-second HLS window has slid forward 26 seconds. Media3's native

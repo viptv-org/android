@@ -17,6 +17,7 @@ internal fun AppController.start(media: Media, source: Source, explicitResume: B
     playbackStartJob = scope.launch {
         managedRecoveryKey = null
         managedRecoveryInFlightKey = null
+        activePlaybackDelivery = PlaybackDeliveryOptions()
         if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
         val started = prepareAndStart(media, source, explicitResume, playWhenReady = true, resetTrackChoices = true, expectedGeneration = requestGeneration)
         if (!started && PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) showPlaybackRecovery(media, source)
@@ -36,9 +37,10 @@ internal suspend fun AppController.prepareAndStart(
     resetTrackChoices: Boolean,
     /** Captured before this request can queue on the preparation mutex. */
     expectedGeneration: Long,
+    deliveryOptions: PlaybackDeliveryOptions = if (resetTrackChoices) PlaybackDeliveryOptions() else activePlaybackDelivery,
 ): Boolean = playbackPrepareMutex.withLock {
     if (!PlaybackRequestPolicy.mayPrepareAfterMutexWait(expectedGeneration, playbackGeneration)) return@withLock false
-    prepareAndStartLocked(media, source, explicitResume, playWhenReady, resetTrackChoices, expectedGeneration)
+    prepareAndStartLocked(media, source, explicitResume, playWhenReady, resetTrackChoices, expectedGeneration, deliveryOptions)
 }
 
 private suspend fun AppController.prepareAndStartLocked(
@@ -48,6 +50,7 @@ private suspend fun AppController.prepareAndStartLocked(
     playWhenReady: Boolean,
     resetTrackChoices: Boolean,
     generation: Long,
+    deliveryOptions: PlaybackDeliveryOptions,
 ): Boolean {
     cancelUpNext()
     val current = _state.value.route
@@ -67,24 +70,21 @@ private suspend fun AppController.prepareAndStartLocked(
     val requestedSubtitle = if (resetTrackChoices) null else selectedSubtitleTrackIndex
     val requestedSubtitlesOff = if (resetTrackChoices) false else subtitlesOff
     _state.value = _state.value.copy(preparingSourceId = source.id, loading = true, message = null)
+    var nativeBoundaryCrossed = false
     return try {
-        val launch = gateway.playback(
-            source = source,
-            positionMillis = media.positionMillis,
-            capabilities = PlaybackClientCapabilities.from(player.capabilities.value),
-            audioTrackIndex = requestedAudio,
-            subtitleTrackIndex = requestedSubtitle,
-            subtitlesOff = requestedSubtitlesOff,
-        )
-        if (!PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) {
-            discardPreparedLease(launch.sessionId)
-            return false
-        }
-        if (launch.url.isBlank()) {
-            if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) update(loading = false, message = "The selected source could not be prepared.")
-            false
-        } else {
-            try {
+        val (launch, deliveredOptions) = openPlaybackDelivery(
+            initial = deliveryOptions,
+            prepare = { options -> gateway.playback(
+                source = source,
+                positionMillis = media.positionMillis,
+                capabilities = PlaybackClientCapabilities.from(player.capabilities.value),
+                audioTrackIndex = requestedAudio,
+                subtitleTrackIndex = requestedSubtitle,
+                subtitlesOff = requestedSubtitlesOff,
+                delivery = options,
+            ) },
+            open = { launch ->
+                nativeBoundaryCrossed = true
                 player.open(
                     PlaybackSource(
                         launch.url,
@@ -100,18 +100,11 @@ private suspend fun AppController.prepareAndStartLocked(
                     ),
                     playWhenReady = playWhenReady,
                 )
-            } catch (error: Throwable) {
-                discardPreparedLease(launch.sessionId)
-                // Opening crossed the native replacement boundary; the outgoing
-                // lease can no longer be assumed healthy.
-                if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) { player.stop(); retirePlaybackSession() }
-                throw error
-            }
-            if (!PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) {
-                player.stop()
-                discardPreparedLease(launch.sessionId)
-                return false
-            }
+            },
+            release = gateway::stopPlayback,
+            isCurrent = { PlaybackRequestPolicy.isCurrent(generation, playbackGeneration) },
+        )
+            activePlaybackDelivery = deliveredOptions
             playbackTitleOffsetMillis = PlaybackTimelinePolicy.titleOffsetMillis(launch.timelineMode, launch.positionMillis)
             playbackTitleDurationMillis = launch.durationMillis ?: media.durationMillis
             lastTrustedTitlePositionMillis = launch.positionMillis
@@ -145,11 +138,13 @@ private suspend fun AppController.prepareAndStartLocked(
             startProgressPersistence(playbackMedia)
             schedulePlayerChromeDismissal()
             true
-        }
     } catch (error: CancellationException) {
+        if (nativeBoundaryCrossed) player.stop()
         if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) update(loading = false)
         throw error
     } catch (error: Throwable) {
+        // Native replacement has crossed the outgoing lease boundary.
+        if (nativeBoundaryCrossed && PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) { player.stop(); retirePlaybackSession() }
         if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) update(loading = false, message = playbackFailureMessage(error))
         false
     } finally {
@@ -157,15 +152,16 @@ private suspend fun AppController.prepareAndStartLocked(
     }
 }
 internal fun AppController.onPlayerEvent(event: PlaybackEvent) {
-    if (event !is PlaybackEvent.Failed || _state.value.dialog?.kind == DialogKind.PlaybackRecovery) return
+    if (event !is PlaybackEvent.Failed || _state.value.dialog?.kind == DialogKind.PlaybackRecovery || _state.value.preparingSourceId != null) return
     val active = _state.value.route as? Route.Player ?: return
     cancelUpNext()
     _state.value = _state.value.copy(message = event.error.message)
     val route = active.copy(media = snapshotPlaybackMedia(active))
-    retirePlaybackSession()
     val key = "${route.media.type}:${route.media.id}:${route.source.id}"
     if (managedRecoveryInFlightKey == key) return
-    if (!ManagedRecoveryPolicy.shouldAttempt(
+    retirePlaybackSession()
+    val delivery = if (route.source.channelId == null) nextPlaybackDelivery(activePlaybackDelivery, _state.value.playbackDeliveryMode == "direct", event.error.code) else null
+    if (delivery == null && !ManagedRecoveryPolicy.shouldAttempt(
             serverManaged = SeekCommitPolicy.usesManagedReplacement(_state.value.playbackDeliveryMode),
             networkFailure = event.error.code == PlaybackErrorCode.Network,
             alreadyAttempted = managedRecoveryKey == key,
@@ -189,6 +185,7 @@ internal fun AppController.onPlayerEvent(event: PlaybackEvent) {
                 playWhenReady = playWhenReady,
                 resetTrackChoices = false,
                 expectedGeneration = requestGeneration,
+                deliveryOptions = delivery ?: activePlaybackDelivery,
             )
             if (restored) managedRecoveryKey = null
             else if (PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) showPlaybackRecovery(route)
@@ -262,9 +259,4 @@ internal fun playbackFailureMessage(error: Throwable): String = when (error) {
     }
     is java.io.IOException -> "Could not reach the source or server. Check the connection and try another source."
     else -> "The selected source could not start on this device. Try another source."
-}
-
-/** Cleanup outlives a cancelled opening coroutine, but remains bounded. */
-private fun AppController.discardPreparedLease(sessionId: String) {
-    scope.launch { kotlinx.coroutines.withTimeoutOrNull(5000) { runCatching { gateway.stopPlayback(sessionId) } } }
 }
