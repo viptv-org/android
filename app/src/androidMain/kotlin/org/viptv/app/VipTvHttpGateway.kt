@@ -200,25 +200,29 @@ class VipTvHttpGateway(
         // poll interval. Roku's three-minute discovery budget lives in Rust.
         val request = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.ApiRequest>(
             uniffi.viptv_core.normalize("request", JSONObject()
-                .put("operation", "sources")
+                .put("operation", if (media.type == "live") "sources" else "sourcesV2")
                 .put("item", JSONObject(media.normalizedJson())).toString(), origin)
         )
         val id = json(request.method, request.path.removePrefix("/api"), request.body?.let { JSONObject(org.viptv.core.wire.CoreJson.encode(it)) }).getString("id")
         var state = jsonStepState()
         while (true) {
-            val poll = json("GET", pollPath(id, state))
+            val poll = json("GET", pollPath(id, state, media.type != "live"))
             val output = step(state, poll)
             val accumulated = output.sources()
             onUpdate(accumulated)
-            if (output.optBoolean("done")) return accumulated
+            if (output.optBoolean("done")) {
+                val failure = output.optJSONObject("state")?.optJSONArray("errors")?.optJSONObject(0)
+                if (accumulated.isEmpty() && failure != null) throw GatewayError(502, failure.getString("message"), failure.optString("code").takeUnless { it.isBlank() || it == "null" })
+                return accumulated
+            }
             state = output.getJSONObject("state")
             delay(1_500)
         }
     }
-    private fun pollPath(id: String, state: JSONObject): String {
+    private fun pollPath(id: String, state: JSONObject, v2: Boolean): String {
         val request = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.ApiRequest>(
             uniffi.viptv_core.normalize("request", JSONObject()
-                .put("operation", "sourcesPoll")
+                .put("operation", if (v2) "sourcesPollV2" else "sourcesPoll")
                 .put("id", id)
                 .put("after", state.optLong("after", 0L)).toString(), origin)
         )
@@ -418,7 +422,7 @@ class VipTvHttpGateway(
     private fun enc(value: String) = URLEncoder.encode(value, "UTF-8")
 
 }
-class GatewayError(val status: Int, override val message: String) : IllegalStateException(message)
+class GatewayError(val status: Int, override val message: String, val code: String? = null) : IllegalStateException(message)
 
 private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 /**

@@ -16,6 +16,19 @@ import kotlin.test.assertTrue
  * mocking the gateway or its JSON helpers.
  */
 class BackendGatewayWireTest {
+    @Test fun `v2 source failures stay actionable without leaking upstream URLs`() = runBlocking {
+        FixtureServer(2) { request -> when(request.target) {
+            "/api/v2/streams" -> FixtureResponse("""{"id":"job"}""")
+            "/api/v2/streams/job?after=0" -> FixtureResponse("""{"events":[{"seq":1,"source":"iptv:1","streams":[],"error_code":"provider_connection_limit","error":"https://provider.invalid/private-token"}],"done":true}""")
+            else -> error("Unexpected fixture route")
+        } }.use { server ->
+            val failure=kotlin.test.assertFailsWith<GatewayError> { VipTvHttpGateway(server.origin).sources(Media("tt123", "movie", "Movie")) }
+            assertEquals("provider_connection_limit",failure.code)
+            assertTrue(failure.message.contains("Stop another stream"))
+            assertFalse(failure.message.contains("private-token"))
+            server.assertHealthy()
+        }
+    }
 
     @Test fun `connection limits remain actionable through HTTP and native normalization`() = runBlocking {
         FixtureServer(1) { FixtureResponse("""{"error":"Provider connection limit reached","error_code":"provider_connection_limit"}""", 429) }.use { server ->
@@ -151,11 +164,11 @@ class BackendGatewayWireTest {
     }
 
     @Test
-    fun `source polling consumes every streams array event`() = runBlocking {
+    fun `source polling keeps healthy streams when another provider fails`() = runBlocking {
         FixtureServer(2) { request ->
             when (request.target) {
-                "/api/streams" -> FixtureResponse("""{"id":"job-1"}""")
-                "/api/streams/job-1?after=0" -> FixtureResponse(
+                "/api/v2/streams" -> FixtureResponse("""{"id":"job-1"}""")
+                "/api/v2/streams/job-1?after=0" -> FixtureResponse(
                     """{"events":[
                         {"seq":1,"source":"iptv:4","streams":[
                           {"id":"stream-a","provider":"iptv:4","source_name":"Evening News","title":"HD broadcast","filename":"evening-news.mkv","source_quality":"1080p","source_audio":"English 5.1","headers":{"Authorization":"private-token"},"source_addon_id":"addon:one","source_fingerprint":"fp-a"},
@@ -163,7 +176,8 @@ class BackendGatewayWireTest {
                         ]},
                         {"seq":2,"source":"addon:two","streams":[
                           {"id":"stream-c","name":"480p","source_addon_id":"addon:two","source_fingerprint":"fp-c"}
-                        ]}
+                        ]},
+                        {"seq":3,"source":"iptv:9","streams":[],"error_code":"provider_rate_limited","error":"http://private.invalid/secret"}
                     ],"done":true}""".trimIndent(),
                 )
                 else -> error("Unexpected request ${request.target}")

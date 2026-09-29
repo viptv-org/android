@@ -1,3 +1,16 @@
+# BE-002 VOD discovery adoption — 2026-09-29 (in progress)
+
+Adopted core 4817b07f985d23687ca54df888222f5af96c0cb2, matching TV-web. Movies
+and exact episodes use v2 discovery; terminal empty results retain safe provider
+failure codes/messages while partial success keeps healthy sources. Native
+fixtures check connection-limit text without exposing upstream URL credentials.
+Live discovery/playback and the rest of client cutover remain pending.
+
+With JDK 17, prepare-core host, both Gradle unit suites, prepare-core android
+(arm64-v8a, armeabi-v7a, x86_64) and app:assembleDebug passed. The debug APK is
+app/build/outputs/apk/debug/app-debug.apk. No emulator/device playback or
+production deployment is claimed for this checkpoint.
+
 # TV-038 Resume accent — 2026-09-26
 
 Home and detail Resume now retain the user's accent on Android TV. A white
