@@ -323,6 +323,26 @@ class VipTvHttpGateway(
         coreRequest("correctProgress", profileId, media, JSONObject().put("action", action).putOpt("duration", media.durationMillis?.let(::seconds)))
     }
     override suspend fun live(): List<LiveChannel> = json("GET", "/live?view=us&limit=80").liveChannels()
+    override suspend fun liveV2(query: LiveCatalogQuery): org.viptv.core.wire.LiveCatalogPage = liveV2Decode("liveCatalogV2",liveV2Control(query.coreInput("livePageV2")))
+    override suspend fun liveCategoriesV2(query: LiveCatalogQuery): org.viptv.core.wire.LiveCatalogCategories = liveV2Decode("liveCategoriesV2",liveV2Control(query.coreInput("liveCategoriesV2")))
+    override suspend fun liveSourceV2(channelId: String): Source = CoreModels.sourceNormalized(
+        liveV2Decode("liveSourceV2",liveV2Control(JSONObject().put("operation","liveSourceV2").put("id",channelId))))
+    override suspend fun guideV2(channelId: String): List<GuideProgramme> {
+        val response=liveV2Control(JSONObject().put("operation","liveGuideV2").put("id",channelId))
+        val normalized = try { JSONObject(uniffi.viptv_core.normalize("guide",response.toString(),origin)) }
+        catch (_: Exception) { throw GatewayError(502,"The server returned invalid guide data. Update the app/server or retry.","invalid_catalog_response") }
+        return guideView(normalized)
+    }
+    private suspend fun liveV2Control(input: JSONObject): JSONObject {
+        val request = try { org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.ApiRequest>(uniffi.viptv_core.normalize("request",input.toString(),origin)) }
+        catch (_: Exception) { throw GatewayError(400,"The live playlist request is invalid. Reload the guide.","invalid_catalog_query") }
+        val text = responseText(request.method,request.path.removePrefix("/api"),request.body?.let { JSONObject(org.viptv.core.wire.CoreJson.encode(it)) })
+        return try { JSONObject(text) }
+        catch (_: Exception) { throw GatewayError(502,"The server returned invalid live playlist data. Update the app/server or reload the guide.","invalid_catalog_response") }
+    }
+    private inline fun <reified T> liveV2Decode(kind: String,value: JSONObject): T = try {
+        org.viptv.core.wire.CoreJson.decode(uniffi.viptv_core.normalize(kind,value.toString(),origin))
+    } catch (_: Exception) { throw GatewayError(502,"The server returned invalid live playlist data. Update the app/server or reload the guide.","invalid_catalog_response") }
     override suspend fun livePage(request: LiveBrowseRequest): LiveBrowsePage {
         val root = JSONObject(uniffi.viptv_core.normalize("live", json("GET", livePath(request)).toString(), origin))
         return LiveBrowsePage(
@@ -336,6 +356,9 @@ class VipTvHttpGateway(
         .array("categories").mapNotNull { it.optJSONObject()?.let { item -> LiveCategory(item.getString("id"), item.getString("name"), item.getInt("count")) } }
     override suspend fun guide(channelId: String): List<GuideProgramme> {
         val response = JSONObject(uniffi.viptv_core.normalize("guide", json("GET", "/guide/${enc(channelId)}").toString(), origin))
+        return guideView(response)
+    }
+    private fun guideView(response: JSONObject): List<GuideProgramme> {
         val labels = response.array("timeline").mapNotNull { value -> value.optJSONObject()?.let { tick -> (tick.getDouble("time") * 1000).toLong() to tick.getString("displayTime") } }.toMap()
         return response.array("programs").mapNotNull { it.optJSONObject()?.let { programme ->
             GuideProgramme(programme.getString("title"), (programme.getDouble("start") * 1000).toLong(), (programme.getDouble("end") * 1000).toLong(), programme.optString("description").ifBlank { null }, displayTime = programme.optString("displayTime").ifBlank { null }, timezone = response.getString("timezone"), timelineLabels = labels)
@@ -384,7 +407,8 @@ class VipTvHttpGateway(
                 .header("Accept", "application/json")
                 .apply { if (path == "/auth/device/login") header("Origin", origin) }
                 .apply { bearer?.let { header("Authorization", "Bearer $it") } }
-                .method(method, body?.toString()?.toRequestBody(JSON_MEDIA_TYPE))
+                .method(method, body?.toString()?.toRequestBody(JSON_MEDIA_TYPE)
+                    ?: if (method in listOf("POST", "PUT", "PATCH")) "".toRequestBody(null) else null)
                 .build()
             val call = client.newCall(request)
             continuation.invokeOnCancellation { call.cancel() }

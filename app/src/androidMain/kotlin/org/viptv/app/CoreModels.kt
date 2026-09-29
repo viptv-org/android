@@ -15,9 +15,10 @@ import kotlin.math.roundToLong
 internal object CoreModels {
     fun mediaNormalized(item: MediaItem): Media = item.view()
     fun media(value: JSONObject): Media = CoreJson.decode<MediaItem>(normalize("media", value.toString(), "")).view()
-    fun source(value: JSONObject): Source = CoreJson.decode<MediaSource>(normalize("source", value.toString(), "")).let {
+    fun source(value: JSONObject): Source = sourceNormalized(CoreJson.decode<MediaSource>(normalize("source", value.toString(), "")))
+    fun sourceNormalized(it: MediaSource): Source {
         val display = CoreJson.decode<org.viptv.core.wire.SourcePresentation>(normalize("sourceDisplay", CoreJson.encode(it), ""))
-        Source(it.id, it.provider.orEmpty(), display.title, display.body, it.sourceAddonId, it.sourceFingerprint, it.quality, it.audio, displayResolved = true, providerKey = display.providerKey, providerLabel = display.providerLabel)
+        return Source(it.id, it.provider.orEmpty(), display.title, display.body, it.sourceAddonId, it.sourceFingerprint, it.quality, it.audio, displayResolved = true, providerKey = display.providerKey, providerLabel = display.providerLabel)
     }
     fun catalog(value: JSONObject): DiscoverCatalog? {
         val item = CoreJson.decode<org.viptv.core.wire.Catalog>(normalize("catalog", value.toString(), ""))

@@ -1,3 +1,24 @@
+# BE-002 raw live API preparation — 2026-09-29
+
+Core pin b75393e matches TV-web. New explicit transport methods use generated
+raw live/category DTOs, original default/cursor filters, exact live source cards
+and v2 guide routes. JNI/HTTP fixtures retain HTTP logos/provider order and safe
+catalog-change/parent errors without indexing a playlist or falling back to
+legacy responses. Source cards cannot supply playable URL/header authority.
+
+JDK17 host preparation, all 137 library/app tests, three native ABIs, debug APK
+and lint passed. A fresh rerun of all 108 app tests also passed. One actual
+adapter bug was fixed: bodyless canonical POST/PUT/PATCH requests now supply an
+empty native HTTP body instead of failing before network execution. Five new
+wire tests exercise these APIs; ordinary Guide/Home/live playback callers remain
+legacy pending the coordinated cursor/lease cutover. No viewing UI was added.
+
+The first full JVM run aborted with native RustBuffer assertions/SIGSEGV. C ABI
+checks against the same built library and later focused/full/fresh JVM reruns did
+not reproduce it. Its cause remains unproven; the crash record is kept privately,
+not committed. Passing reruns do not close native stress/device qualification.
+No APK installation, provider use or production deployment occurred.
+
 # BE-002 same-source gateway recovery — 2026-09-29
 
 Initial native open and active VOD failures use the same bounded delivery ladder:

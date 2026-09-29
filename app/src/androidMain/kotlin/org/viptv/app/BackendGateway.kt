@@ -34,6 +34,10 @@ interface BackendGateway {
     suspend fun setQueueVisibility(profileId: String, media: Media, hidden: Boolean)
     suspend fun correctProgress(profileId: String, media: Media, action: String)
     suspend fun live(): List<LiveChannel>
+    suspend fun liveV2(query: LiveCatalogQuery = LiveCatalogQuery()): org.viptv.core.wire.LiveCatalogPage
+    suspend fun liveCategoriesV2(query: LiveCatalogQuery = LiveCatalogQuery()): org.viptv.core.wire.LiveCatalogCategories
+    suspend fun liveSourceV2(channelId: String): Source
+    suspend fun guideV2(channelId: String): List<GuideProgramme>
     /** Canonical EPG filter/page contract; legacy implementations may supply the all-channel list only. */
     suspend fun livePage(request: LiveBrowseRequest): LiveBrowsePage {
         val channels = live()
