@@ -1,3 +1,14 @@
+# BE-002 shared playback lease types — 2026-09-29
+
+Core pin f48f983454b21ba637b4580b426ea8e1647ffbb8 matches TV-web and supplies
+generated v2 playback lease/request types and native normalization. Host native
+preparation, both unit suites, three Android ABIs and debug APK assembly passed.
+A JNI-to-generated-Kotlin fixture verifies native HTTP direct delivery, enum
+decoding, expiry units, source authorization and expired-session URL removal.
+The application has not yet switched its playback lifecycle to v2; polling,
+renewal/cancellation and conversion/track preference parity remain open. No
+emulator/device or deployment evidence is claimed for this checkpoint.
+
 # BE-002 VOD discovery adoption — 2026-09-29 (in progress)
 
 Adopted core 4817b07f985d23687ca54df888222f5af96c0cb2, matching TV-web. Movies

@@ -16,6 +16,21 @@ import kotlin.test.assertTrue
  * mocking the gateway or its JSON helpers.
  */
 class BackendGatewayWireTest {
+    @Test fun `v2 playback leases decode through native core and generated Kotlin types`() {
+        val wire = """{"id":"pb2_fixture","status":"ready","expires_at":1800000060,"renew_after_seconds":20,"delivery":{"kind":"direct","url":"http://provider.example/movie.mp4","format":"original","headers":{"User-Agent":"Native fixture"},"position":12,"live":false}}"""
+        val normalized = uniffi.viptv_core.normalize("playbackV2", wire, "https://backend.example")
+        val lease = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.PlaybackLease>(normalized)
+        assertEquals(org.viptv.core.wire.PlaybackLeaseStatus.READY, lease.status)
+        assertEquals(1800000060000L, lease.expiresAt.toLong())
+        assertEquals(org.viptv.core.wire.PlaybackDeliveryKind.DIRECT, lease.session?.deliveryKind)
+        assertEquals("http://provider.example/movie.mp4", lease.session?.url)
+        assertEquals("Native fixture", lease.session?.authorization?.userAgent)
+        val expired = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.PlaybackLease>(
+            uniffi.viptv_core.normalize("playbackV2", wire.replace("\"ready\"", "\"expired\""), "https://backend.example"))
+        assertEquals(null, expired.session)
+        assertEquals("playback_expired", expired.errorCode)
+    }
+
     @Test fun `v2 source failures stay actionable without leaking upstream URLs`() = runBlocking {
         FixtureServer(2) { request -> when(request.target) {
             "/api/v2/streams" -> FixtureResponse("""{"id":"job"}""")
