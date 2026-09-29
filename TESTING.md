@@ -1,3 +1,12 @@
+# BE-002 shared conversion/track mapping — 2026-09-29
+
+Core pin 4418f1ddb3c1640276f31b130deeb2d4ffa6873d matches TV-web. A real JNI /
+generated-Kotlin fixture verifies scoped audio conversion, Android TV identity,
+2160p decoder facts and preferred language from playbackV2Intent. Host preparation,
+both unit suites, all three Android native ABIs and debug APK assembly passed.
+Ordinary playback transport is not yet switched to v2; background lease recovery,
+profile-preference integration and device qualification remain open.
+
 # BE-002 shared playback lease types — 2026-09-29
 
 Core pin f48f983454b21ba637b4580b426ea8e1647ffbb8 matches TV-web and supplies

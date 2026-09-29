@@ -16,6 +16,16 @@ import kotlin.test.assertTrue
  * mocking the gateway or its JSON helpers.
  */
 class BackendGatewayWireTest {
+    @Test fun `v2 conversion intent maps through native core into generated request types`() {
+        val input = """{"requestId":"native","platform":"android_tv","preferences":{"audioLanguage":"en","quality":"1080p"},"playback":{"streamId":"source","capabilities":{"maxWidth":3840,"maxHeight":2160,"h264":true,"aac":true,"directUrls":true},"forceTranscode":true,"conversionReason":"audio-codec"}}"""
+        val mapped = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.PlaybackV2Request>(
+            uniffi.viptv_core.normalize("playbackV2Intent", input, "https://backend.example"))
+        assertEquals(org.viptv.core.wire.PlaybackConversion.AUDIO, mapped.conversion)
+        assertEquals(2160L, mapped.client.maxHeight)
+        assertEquals("en", mapped.preferredAudioLanguage)
+        assertTrue(mapped.forceGateway)
+    }
+
     @Test fun `v2 playback leases decode through native core and generated Kotlin types`() {
         val wire = """{"id":"pb2_fixture","status":"ready","expires_at":1800000060,"renew_after_seconds":20,"delivery":{"kind":"direct","url":"http://provider.example/movie.mp4","format":"original","headers":{"User-Agent":"Native fixture"},"position":12,"live":false}}"""
         val normalized = uniffi.viptv_core.normalize("playbackV2", wire, "https://backend.example")
