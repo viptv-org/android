@@ -18,6 +18,7 @@ internal fun AppController.titleDurationMillis(): Long? = if (_state.value.playb
 
 /** Pause captures title time before Media3's rolling window can advance. */
 internal fun AppController.pausePlayback() {
+    playbackInteractionVersion++
     val route = _state.value.route as? Route.Player ?: return
     if (ManagedPausePolicy.usesAnchor(_state.value.playbackDeliveryMode, route.media.type == "live")) {
         managedPauseAnchorMillis = absolutePositionMillis()
@@ -28,6 +29,7 @@ internal fun AppController.pausePlayback() {
 
 /** Managed paused output resumes by preparing the original title coordinate. */
 internal fun AppController.resumePlayback() {
+    playbackInteractionVersion++
     val route = _state.value.route as? Route.Player ?: return
     val anchor = managedPauseAnchorMillis
     if (ManagedPausePolicy.requiresReplacementOnResume(_state.value.playbackDeliveryMode, anchor)) {

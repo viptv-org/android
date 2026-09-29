@@ -30,7 +30,12 @@ class VipTvHttpGateway(
     private var accessToken: String? = null,
     /** Coalesced session refresh for an authenticated 401; returns a fresh access token or null. */
     private val onUnauthorized: (suspend (String?) -> String?)? = null,
+    private val television: Boolean = false,
 ) : BackendGateway {
+    private val playbackV2 = V2PlaybackControl(origin, ::json)
+    private val legacyPlaybackIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    fun playbackRemainingMillis(id: String): Long? = playbackV2.remainingMillis(id)
+    fun playbackRenewAfterMillis(id: String): Long? = playbackV2.renewAfterMillis(id)
     fun setAccessToken(value: String?) { accessToken = value }
     private val titleArtwork = java.util.concurrent.ConcurrentHashMap<String, Media>()
     private val client = OkHttpClient.Builder()
@@ -262,6 +267,16 @@ class VipTvHttpGateway(
         subtitleTrackIndex: Int?,
         subtitlesOff: Boolean,
     ): PlaybackLaunch {
+        if (source.channelId == null) {
+            val intent = JSONObject().put("requestId", java.util.UUID.randomUUID().toString())
+                .put("platform", if (television) "android_tv" else "android")
+                .put("playback", JSONObject().put("streamId", source.id).put("position", seconds(positionMillis))
+                    .put("capabilities", capabilities.toCoreJson()).putOpt("audioTrackIndex", audioTrackIndex)
+                    .putOpt("subtitleTrackIndex", subtitleTrackIndex).put("subtitlesOff", subtitlesOff))
+            val canonical = try { JSONObject(uniffi.viptv_core.normalize("playbackV2Intent", intent.toString(), origin)) }
+            catch (_: Exception) { throw GatewayError(400, "This device could not report a supported playback configuration.", "invalid_playback_request") }
+            return playbackV2.start(canonical)
+        }
         val body = JSONObject()
             .put(if (source.channelId != null) "channel_id" else "stream_id", source.channelId ?: source.id)
             .put("position", seconds(positionMillis))
@@ -270,10 +285,16 @@ class VipTvHttpGateway(
             .putOpt("subtitle_track_index", subtitleTrackIndex)
             .put("subtitles_off", subtitlesOff)
         val root = json("POST", "/playback", body)
-        return CoreModels.playback(root, origin)
+        return CoreModels.playback(root, origin).also { legacyPlaybackIds.add(it.sessionId) }
     }
-    override suspend fun heartbeat(playbackId: String) { json("POST", "/playback/${enc(playbackId)}/heartbeat", JSONObject()) }
-    override suspend fun stopPlayback(playbackId: String) { json("DELETE", "/playback/${enc(playbackId)}") }
+    override suspend fun heartbeat(playbackId: String) {
+        if (playbackId in legacyPlaybackIds) json("POST", "/playback/${enc(playbackId)}/heartbeat", JSONObject())
+        else playbackV2.renew(playbackId)
+    }
+    override suspend fun stopPlayback(playbackId: String) {
+        if (playbackId in legacyPlaybackIds) { json("DELETE", "/playback/${enc(playbackId)}"); legacyPlaybackIds.remove(playbackId) }
+        else playbackV2.stop(playbackId)
+    }
     override suspend fun updateProgress(profileId: String, media: Media, positionMillis: Long) {
         coreRequest("saveProgress", profileId, media, JSONObject().put("position", seconds(positionMillis)).putOpt("duration", media.durationMillis?.let(::seconds)))
     }
@@ -348,7 +369,7 @@ class VipTvHttpGateway(
     private suspend fun jsonArray(method: String, path: String, body: JSONObject? = null): JSONArray = JSONArray(responseText(method, path, body))
     private sealed interface CallResult
     private class CallText(val text: String) : CallResult
-    private class CallFailure(val status: Int, val message: String) : CallResult
+    private class CallFailure(val status: Int, val message: String, val code: String?) : CallResult
 
     /**
      * A cancellable OkHttp boundary works in Android and host-JVM wire tests,
@@ -381,12 +402,12 @@ class VipTvHttpGateway(
                             return
                         }
                         if (!it.isSuccessful) {
-                            val message = runCatching {
+                            val failure = runCatching {
                                 val error = runCatching { JSONObject(text.ifBlank { "{}" }) }.getOrDefault(JSONObject())
                                 error.put("status", it.code)
-                                JSONObject(uniffi.viptv_core.normalize("apiError", error.toString(), "")).getString("message")
-                            }.getOrDefault("The server could not complete this request.")
-                            if (continuation.isActive) continuation.resume(CallFailure(it.code, message))
+                                JSONObject(uniffi.viptv_core.normalize("apiError", error.toString(), ""))
+                            }.getOrDefault(JSONObject().put("message", "The server could not complete this request."))
+                            if (continuation.isActive) continuation.resume(CallFailure(it.code, failure.getString("message"), failure.optString("code").takeUnless { code -> code.isBlank() || code == "null" }))
                         } else if (continuation.isActive) {
                             continuation.resume(CallText(text))
                         }
@@ -411,11 +432,11 @@ class VipTvHttpGateway(
                     if (refreshed != null && refreshed != bearer) {
                         when (val retry = awaitResult(method, path, body, refreshed)) {
                             is CallText -> return retry.text
-                            is CallFailure -> throw GatewayError(retry.status, retry.message)
+                            is CallFailure -> throw GatewayError(retry.status, retry.message, retry.code)
                         }
                     }
                 }
-                throw GatewayError(first.status, first.message)
+                throw GatewayError(first.status, first.message, first.code)
             }
         }
     }

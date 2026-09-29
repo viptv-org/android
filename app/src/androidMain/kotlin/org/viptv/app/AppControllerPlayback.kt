@@ -80,10 +80,6 @@ private suspend fun AppController.prepareAndStartLocked(
             discardPreparedLease(launch.sessionId)
             return false
         }
-        if (launch.mode != "direct") {
-            discardPreparedLease(launch.sessionId)
-            throw GatewayError(409, "This server did not honor native direct playback. Update the server and try again.")
-        }
         if (launch.url.isBlank()) {
             if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) update(loading = false, message = "The selected source could not be prepared.")
             false
@@ -94,11 +90,11 @@ private suspend fun AppController.prepareAndStartLocked(
                         launch.url,
                         mimeType = when (launch.format) { "hls" -> "application/x-mpegURL"; "dash" -> "application/dash+xml"; else -> null },
                         headers = launch.headers,
-                        startPositionMillis = if (launch.live) 0 else launch.positionMillis,
+                        startPositionMillis = launch.nativeStartPositionMillis,
                         options = org.viptv.video.PlaybackOptions(
-                            preferredAudioLanguage = _state.value.preferences.audioLanguage.takeIf { it.isNotBlank() },
-                            preferredSubtitleLanguage = _state.value.preferences.subtitleLanguage.takeIf { it.isNotBlank() },
-                            subtitlesEnabled = _state.value.preferences.subtitlesEnabled),
+                            preferredAudioLanguage = launch.preferredAudioLanguage ?: launch.audioTracks.firstOrNull { it.selected }?.language ?: _state.value.preferences.audioLanguage.takeIf { it.isNotBlank() },
+                            preferredSubtitleLanguage = launch.preferredSubtitleLanguage ?: launch.subtitleTracks.firstOrNull { it.selected }?.language ?: _state.value.preferences.subtitleLanguage.takeIf { it.isNotBlank() },
+                            subtitlesEnabled = launch.subtitlesEnabled ?: _state.value.preferences.subtitlesEnabled),
                         title = media.name,
                         kindHint = if (launch.live || media.type == "live") PlaybackKind.Live else PlaybackKind.OnDemand,
                     ),
@@ -116,10 +112,10 @@ private suspend fun AppController.prepareAndStartLocked(
                 discardPreparedLease(launch.sessionId)
                 return false
             }
-            playbackTitleOffsetMillis = PlaybackTimelinePolicy.titleOffsetMillis(launch.mode, launch.positionMillis)
+            playbackTitleOffsetMillis = PlaybackTimelinePolicy.titleOffsetMillis(launch.timelineMode, launch.positionMillis)
             playbackTitleDurationMillis = launch.durationMillis ?: media.durationMillis
             lastTrustedTitlePositionMillis = launch.positionMillis
-            managedPauseAnchorMillis = ManagedPausePolicy.anchorAfterOpen(launch.mode, launch.live, launch.positionMillis, playWhenReady)
+            managedPauseAnchorMillis = ManagedPausePolicy.anchorAfterOpen(launch.timelineMode, launch.live, launch.positionMillis, playWhenReady)
             replacePlaybackSession(launch.sessionId)
             selectedAudioTrackIndex = requestedAudio
             selectedSubtitleTrackIndex = requestedSubtitle
@@ -140,7 +136,7 @@ private suspend fun AppController.prepareAndStartLocked(
                 route = Route.Player(playbackMedia, source, returnDestination, directOrigin, sourceRoute),
                 playerChromeVisible = true,
                 playbackTracks = PlaybackTrackChoices(launch.audioTracks, launch.subtitleTracks, launch.subtitlesSupported),
-                playbackDeliveryMode = launch.mode,
+                playbackDeliveryMode = launch.timelineMode,
                 dialog = null,
                 loading = false,
                 preparingSourceId = null,

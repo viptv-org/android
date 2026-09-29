@@ -18,7 +18,7 @@ internal suspend fun resolveStreamUrlForCopy(
         val launch = gateway.playback(source, 0, capabilities)
         try {
             val uri = try { URI(launch.url) } catch (_: Exception) { null }
-            check(launch.mode == "direct" && uri?.scheme in listOf("https", "http") &&
+            check(launch.timelineMode == "direct" && uri?.scheme in listOf("https", "http") &&
                 !uri?.host.isNullOrBlank() && !uri!!.path.orEmpty().startsWith("/media/${launch.sessionId}/")) {
                 "A direct stream URL is unavailable"
             }

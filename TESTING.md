@@ -1,3 +1,33 @@
+# BE-002 active Android VOD playback — 2026-09-29
+
+Movie/exact-episode playback now uses shared-core v2 intent/lease contracts with
+correct phone/TV platform facts. Startup is bounded to 45 seconds; cancellation
+and ambiguous admission use the identical request body for bounded five-second
+cleanup. Active leases renew, stop on refusal/expiry and validate on foreground
+return. Late renewal cannot restore a released cache entry. Recovery preserves
+the last title position and stops progress writes after retirement. A newer
+Pause action prevents foreground validation from resuming playback unexpectedly.
+
+Gateway processing `mode: direct` remains managed delivery: native start is zero,
+title offset is server-owned, and seek/pause policies use delivery kind. Valid
+native HTTP source headers remain intact. Server language/selected-track metadata
+feeds Media3 options. Copy URL rejects gateway capabilities and releases its own
+lease; canceled copy cannot deliver a clipboard value. Safe HTTP error codes are
+retained rather than discarded by the native transport.
+
+With JDK 17: host core preparation, all 123 library/app tests (zero failures or
+skips), three Android ABIs and debug APK assembly passed. Eleven new coroutine /
+JNI tests cover polling, ambiguous/canceled admission, startup/cleanup deadlines,
+late renewal, terminal provider errors, managed timeline and renewal lifetimes.
+HTTP fixtures verify platform facts, original headers, gateway metadata, progress
+and Copy URL cleanup. The APK is app/build/outputs/apk/debug/app-debug.apk and
+requires the matching v2 backend; it was not installed or deployed in this pass.
+
+This is host/wire validation, not emulator, codec, physical-TV or PiP acceptance.
+Live remains legacy. Automatic same-source gateway fallback after native decoder
+refusal, native/device integration and the rest of the original checklist remain
+open. No viewing layouts were added or reshaped.
+
 # BE-002 shared conversion/track mapping — 2026-09-29
 
 Core pin 4418f1ddb3c1640276f31b130deeb2d4ffa6873d matches TV-web. A real JNI /

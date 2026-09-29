@@ -142,6 +142,10 @@ data class PlaybackClientCapabilities(
         .put("aac", aac)
         .put("direct_play", directPlay)
         .put("direct_urls", true)
+
+    fun toCoreJson(): JSONObject = JSONObject().put("maxWidth", maxWidth).put("maxHeight", maxHeight)
+        .put("h264", h264).put("hevc", hevc).put("hevcSdr", hevcSdr).put("aac", aac)
+        .put("directPlay", directPlay).put("directUrls", true)
 }
 
 /** Complete server-owned delivery facts. The controller decides the UX; it never guesses from a URL. */
@@ -159,7 +163,15 @@ data class PlaybackLaunch(
     val audioTracks: List<PlaybackTrack> = emptyList(),
     val subtitleTracks: List<PlaybackTrack> = emptyList(),
     val subtitlesSupported: Boolean = false,
-) { override fun toString() = "PlaybackLaunch(mode=$mode, format=$format, credentials=<redacted>)" }
+    val deliveryKind: String? = null,
+    val preferredAudioLanguage: String? = null,
+    val preferredSubtitleLanguage: String? = null,
+    val subtitlesEnabled: Boolean? = null,
+) {
+    val timelineMode: String get() = if (deliveryKind == "gateway") "managed" else mode
+    val nativeStartPositionMillis: Long get() = if (live || timelineMode != "direct") 0 else positionMillis
+    override fun toString() = "PlaybackLaunch(mode=$mode, format=$format, credentials=<redacted>)"
+}
 
 /** Input-stream track facts: index is server/ffprobe input index, never output order. */
 data class PlaybackTrack(

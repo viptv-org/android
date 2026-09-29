@@ -86,9 +86,11 @@ class BackendGatewayWireTest {
     @Test fun `native playback requests the original URL and preserves required source headers`() = runBlocking {
         FixtureServer(1) { request ->
             val body = JSONObject(request.body)
-            assertTrue(body.getJSONObject("capabilities").getBoolean("direct_urls"))
+            assertEquals("/api/v2/playback", request.target)
+            assertTrue(body.getJSONObject("client").getBoolean("can_play_direct"))
+            assertEquals("android", body.getJSONObject("client").getString("platform"))
             assertEquals(125.0, body.getDouble("position"))
-            FixtureResponse("""{"id":"native-media","url":"http://provider.test/video.mkv","mode":"direct","format":"file","position":125,"authorization":{"cookie":"fixture-cookie","user_agent":"Native Fixture","headers":{"Referer":"https://provider.test/watch"}}}""")
+            FixtureResponse(v2Ready("native-media", """{"kind":"direct","url":"http://provider.test/video.mkv","format":"original","position":125,"live":false,"headers":{"Cookie":"fixture-cookie","User-Agent":"Native Fixture","Referer":"https://provider.test/watch"}}"""))
         }.use { server ->
             val launch = VipTvHttpGateway(server.origin).playback(Source("movie", "IPTV"), 125_000,
                 PlaybackClientCapabilities(1920, 1080, true, false, false, true, true))
@@ -233,21 +235,21 @@ class BackendGatewayWireTest {
     fun `playback and progress convert seconds at the HTTP boundary and retain delivery facts`() = runBlocking {
         FixtureServer(2) { request ->
             when (request.target) {
-                "/api/playback" -> FixtureResponse(
+                "/api/v2/playback" -> FixtureResponse(v2Ready("session-1",
                     """{
-                      "id":"session-1","url":"/media/session-1/capability/index.m3u8",
+                      "kind":"gateway","url":"https://gateway.test/base/media/session-1/capability/index.m3u8",
                       "format":"hls","mode":"remux","video_mode":"copy","audio_mode":"encode",
                       "position":42.5,"duration":120.25,"live":false,
                       "audio_tracks":[{"input_index":2,"codec":"aac","language":"en","language_status":"declared","title":"English","selected":true,"supported":true,"selectable":true}],
                       "subtitle_tracks":[{"input_index":4,"codec":"webvtt","language":"es","title":"Spanish","selected":false,"supported":true,"selectable":true}],
                       "subtitles_supported":true
                     }""".trimIndent(),
-                )
+                ))
                 "/api/profiles/profile-1/progress" -> FixtureResponse("{}")
                 else -> error("Unexpected request ${request.target}")
             }
         }.use { server ->
-            val gateway = VipTvHttpGateway(server.origin)
+            val gateway = VipTvHttpGateway(server.origin, television = true)
             val source = Source("stream-1", "Provider", name = "1080p", addonId = "addon:one", fingerprint = "fp-one")
             val launch = gateway.playback(
                 source = source,
@@ -273,19 +275,18 @@ class BackendGatewayWireTest {
 
             val playback = JSONObject(server.requests[0].body)
             assertEquals(42.5, playback.getDouble("position"))
-            assertEquals(2, playback.getInt("audio_track_index"))
-            assertEquals(4, playback.getInt("subtitle_track_index"))
+            assertEquals(2, playback.getInt("audio_track"))
+            assertTrue(playback.isNull("subtitle_track"))
             assertTrue(playback.getBoolean("subtitles_off"))
-            val capabilities = playback.getJSONObject("capabilities")
+            val capabilities = playback.getJSONObject("client")
             assertEquals(3840, capabilities.getInt("max_width"))
             assertEquals(2160, capabilities.getInt("max_height"))
-            assertTrue(capabilities.getBoolean("h264"))
-            assertTrue(capabilities.getBoolean("hevc"))
-            assertTrue(capabilities.getBoolean("hevc_sdr"))
-            assertTrue(capabilities.getBoolean("aac"))
-            assertTrue(capabilities.getBoolean("direct_play"))
+            assertEquals("android_tv", capabilities.getString("platform"))
+            assertEquals("[\"h264\",\"hevc\"]", capabilities.getJSONArray("video_codecs").toString())
+            assertTrue(capabilities.getBoolean("can_play_direct"))
 
-            assertEquals("${server.origin}/media/session-1/capability/index.m3u8", launch.url)
+            assertEquals("https://gateway.test/base/media/session-1/capability/index.m3u8", launch.url)
+            assertEquals("managed", launch.timelineMode)
             assertEquals("remux", launch.mode)
             assertEquals(42_500, launch.positionMillis)
             assertEquals(120_250, launch.durationMillis)
