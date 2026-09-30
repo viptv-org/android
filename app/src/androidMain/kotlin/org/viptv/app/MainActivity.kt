@@ -39,10 +39,10 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (::model.isInitialized) model.remote.onForeground()
-        if (::model.isInitialized) model.controller.validatePlaybackOnForeground()
+        if (::model.isInitialized) model.controller.onForeground()
     }
     override fun onPause() {
-        if (::model.isInitialized && !isChangingConfigurations) model.remote.onBackground()
+        if (::model.isInitialized && !isChangingConfigurations) { model.remote.onBackground(); model.controller.cancelForegroundValidation() }
         super.onPause()
     }
     override fun onStop() {
@@ -172,6 +172,15 @@ private fun Route.screenKey(): String = when (this) {
                     .padding(horizontal = measure(64, 16), vertical = measure(32, if (tab) 116 else 40))
                     .widthIn(max = measure(660, 440)).clip(RoundedCornerShape(20.dp)).background(C.surfaceN3).padding(measure(24, 16))) {
                     VText(message, if (tv) 22 else 14, lines = 3)
+                }
+            }
+            state.foregroundError?.let { error ->
+                Column(Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(horizontal = measure(64, 16), vertical = measure(32, if (tab) 116 else 24))
+                    .widthIn(max = measure(660, 440)).clip(RoundedCornerShape(20.dp)).background(C.surfaceN3).padding(measure(24, 16)),
+                    verticalArrangement = Arrangement.spacedBy(measure(12, 8))) {
+                    VText(error, if (tv) 22 else 14, lines = 3)
+                    AppButton("Try again", controller::retryForegroundValidation)
                 }
             }
             state.dialog?.let { ActionDialog(it, controller) }

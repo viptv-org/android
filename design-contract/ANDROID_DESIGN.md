@@ -1,5 +1,58 @@
 # AND-035 — Native Android phone and TV design adoption
 
+## AND-041 — silent foreground backend validation (2026-09-30)
+
+Status: approved implementation scope for Android issue 4; native media and
+rendered qualification must be recorded independently. Applies to an already
+authenticated phone/TV returning to the foreground. Fresh startup/sign-in and
+SmartCast remote pairing keep their existing contracts.
+
+- AND-041-PENDING: preserve the current profile, route, loaded rows, source
+  selection, scroll and focused control while validating backend identity/token
+  authorization. No global loading cover, pairing page, profile-picker flicker,
+  spinner or new focus request. Coalesce repeated foreground callbacks and token
+  refresh into one attempt; bound it to 30 seconds. Mutating network operations
+  continue to enforce current server authorization. Do not clear credentials on
+  transient network failure or replay old pairing requests.
+- AND-041-RESTORED: matching account/profile authorization leaves the existing
+  screen and focus intact. A refreshed token must not cause the ordinary startup
+  presentation or refetch all Home rows. No automatic player restart on return.
+- AND-041-RETRY: after final timeout/network failure, retain the current route,
+  profile and selections. Show the existing inline error/action pattern with
+  `Could not reconnect to VIPTV. Try again.` and `Try again`. Preserve safe server
+  reasons for explicit denials; never display URLs, headers or token values.
+  Retry validates the existing identity rather than starting pairing. Back leaves
+  this recovery normally and cancels any pending validation for the old route.
+- AND-041-REVOKED: an explicit rejected refresh/session or changed account clears
+  protected presentation and returns to existing sign-in with `Your session
+  expired. Sign in again.` A removed/unauthorized selected profile returns to the
+  existing profile chooser with `This profile is no longer available. Choose a
+  profile.` Do not retain another account's state or silently select a replacement.
+- Background, sign-out, account/profile replacement and disposal cancel the
+  pending attempt. Late validation/refresh cannot overwrite a newer route,
+  resurrect the old profile or start media. Configuration rotation retains the
+  established session; callback coalescing still prevents duplicate work.
+
+Keep AND-036's background-stop contract: capture/persist the actual absolute VOD
+clock, stop/detach Media3, retire the backend/gateway lease, and return to the
+documented originating route. Explicit later Resume retains the saved source
+fingerprint and nonzero absolute position; restarting an output does not turn
+that position into a relative clip offset. No PiP or background-audio feature.
+Native direct/copy/remux policy is unchanged; do not force transcode for testing.
+
+Geometry/assets: existing phone and TV reference screens, fonts, buttons, inline
+errors and safe insets are unchanged. Phone recovery uses 44dp minimum targets;
+TV uses its existing 72px action/focus style. Tab/D-pad follows visual action
+order; Retry does not steal focus from another control. No new hold gesture.
+
+Acceptance AND-041-01 through 04 covers silent delayed success; bounded failure
+and retry without re-pairing; refresh/revocation/profile replacement and canceled
+late responses; and actual authenticated media foreground/background/return with
+required nonempty headers, nonzero saved Resume and final lease/native cleanup.
+Record phone/TV emulator input, visible states/focus, decoded media, host/native
+regressions and normal system-trust APK identity separately. Fixture-trusting
+APKs cannot be distributed; emulator results are not ARM/physical-device proof.
+
 ## AND-039 — Phone remote reliability and responsiveness
 
 Owner feedback, 2026-09-27; supersedes AND-038's background-dismissal and

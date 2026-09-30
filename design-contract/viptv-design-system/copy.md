@@ -20,8 +20,8 @@ These are the exact strings used on the screens. Text in `[brackets]` is a place
 | Discover, no titles | No titles yet |
 | Search, no results | No matching titles |
 | Live, empty category | No channels here yet. Choose another category. (TV / desktop: "…another filter.") |
-| Live search, phone | No channels or programmes match your search. |
-| Live search, desktop / TV | No matching US channels or current programmes. Try a channel name, section, or another title. |
+| Live search, phone | No channels match your search. |
+| Live search, desktop / TV | No channels match your search. |
 | Sources, finding | Finding sources. Sources appear here as they arrive. |
 | Sources, none | No sources available. Check your add-ons in Settings. |
 | Sources, filtered out | No matching sources. Choose another provider or quality. |

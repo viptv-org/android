@@ -118,6 +118,7 @@ data class PinPrompt(val title: String)
 data class SeekPreview(val targetMillis: Long)
 
 data class AppState(
+    val foregroundError: String? = null,
     val sessionRestoring: Boolean = true,
     val route: Route = Route.Pairing,
     val profiles: List<Profile> = emptyList(),

@@ -37,6 +37,8 @@ class VipTvHttpGateway(
     fun playbackRenewAfterMillis(id: String): Long? = playbackV2.renewAfterMillis(id)
     fun setAccessToken(value: String?) { accessToken = value }
     private val titleArtwork = java.util.concurrent.ConcurrentHashMap<String, Media>()
+    private var metadataEpoch = 0L
+    fun clearProfileCache() = synchronized(titleArtwork) { metadataEpoch++; titleArtwork.clear() }
     private val client = OkHttpClient.Builder()
         .followRedirects(false).followSslRedirects(false)
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -58,12 +60,17 @@ class VipTvHttpGateway(
         }
     }
     override suspend fun refresh(refreshToken: String): DeviceSession = session(json("POST", "/auth/device/refresh", JSONObject().put("refresh_token", refreshToken)))
+    suspend fun foregroundIdentity(): org.viptv.core.wire.Identity {
+        val root = json("GET", "/auth/me")
+        return org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.Identity>(
+            uniffi.viptv_core.normalize("identity", root.toString(), origin))
+    }
     override suspend fun profiles(): Pair<List<Profile>, String?> {
         val root = json("GET", "/auth/me")
         val array = root.optJSONArray("profiles") ?: JSONArray()
         return (0 until array.length()).map { index -> array.getJSONObject(index).profile() } to root.opt("profile_id")?.toString()
     }
-    override suspend fun selectProfile(profileId: String) { json("POST", "/auth/profile", JSONObject().put("profile_id", profileId)) }
+    override suspend fun selectProfile(profileId: String) { json("POST", "/auth/profile", JSONObject().put("profile_id", profileId)); clearProfileCache() }
     override suspend fun home(profileId: String, onUpdate: (List<HomeShelf>) -> Unit): List<HomeShelf> = coroutineScope {
         val rows = java.util.TreeMap<Int, HomeShelf>()
         val publisher = kotlinx.coroutines.sync.Mutex()
@@ -183,10 +190,13 @@ class VipTvHttpGateway(
     override suspend fun metadata(media: Media): Media {
         val type = if (media.type == "episode") "series" else media.type
         val id = if (type == "series") media.seriesId ?: media.id else media.id
-        titleArtwork[type + "\u0000" + id]?.let { return it }
-        if (titleArtwork.size >= 256) titleArtwork.keys.firstOrNull()?.let { titleArtwork.remove(it) }
+        val key = type + "\u0000" + id
+        val epoch = synchronized(titleArtwork) { titleArtwork[key]?.let { return it }; metadataEpoch }
         val result = json("GET", "/meta/${enc(type)}/${enc(id)}").optJSONObject("meta")?.media() ?: media
-        titleArtwork[type + "\u0000" + id] = result
+        synchronized(titleArtwork) { if (epoch == metadataEpoch) {
+            if (titleArtwork.size >= 256) titleArtwork.keys.firstOrNull()?.let { titleArtwork.remove(it) }
+            titleArtwork[key] = result
+        } }
         return result
     }
     /** A failed enrichment lookup must never discard the item the caller already has. */
@@ -390,6 +400,7 @@ class VipTvHttpGateway(
     override suspend fun unlockParent(pin: String) { json("POST", "/parent/unlock", JSONObject().put("pin", pin)) }
     override suspend fun logout() { json("POST", "/auth/logout", JSONObject()) }
     private fun session(value: JSONObject): DeviceSession {
+        clearProfileCache()
         val token = value.getString("access_token"); accessToken = token
         return DeviceSession(token, value.getString("refresh_token"), value.opt("profile_id")?.takeUnless { it == JSONObject.NULL }?.toString(), uniffi.viptv_core.normalize("tokens", value.toString(), origin))
     }
@@ -462,7 +473,7 @@ class VipTvHttpGateway(
             is CallText -> return first.text
             is CallFailure -> {
                 val refresher = onUnauthorized
-                if (first.status == 401 && refresher != null && !path.startsWith("/auth/")) {
+                if (first.status == 401 && refresher != null && (!path.startsWith("/auth/") || path == "/auth/me")) {
                     val refreshed = refresher(bearer)
                     if (refreshed != null && refreshed != bearer) {
                         when (val retry = awaitResult(method, path, body, refreshed)) {

@@ -1,3 +1,20 @@
+# AND-041 foreground implementation checkpoint — 2026-09-30
+
+The isolated `fix/android-foreground-lifecycle` candidate adopts design
+`9bb130ae80af18d41c411c137c6a515b175a5991`. Host tests exercise bounded/coalesced
+foreground identity, explicit denial, late cancellation, profile/account authority
+changes and profile-scoped metadata. Decoder/network failures now retire the exact
+lease and expose explicit recovery rather than silently requesting gateway or
+transcode delivery. Same-delivery managed network recovery remains unchanged.
+
+JDK17 library/app host tasks passed with 174 tests and zero failures/errors.
+Core8 remains unchanged. This is an implementation/review checkpoint, not final
+native-media qualification. Earlier phone/TV synthetic-account delay/timeout/Retry
+observations do not qualify later authority/readiness changes. Accepted token
+rotation cancellation, actual required-header/nonzero Resume media, native/backend
+cleanup and the final normal system-trust APK remain pending. Fixture-trusting
+QA APKs must not be distributed. No production operation or ARM/device claim.
+
 # BE-002 Android live cutover handoff — 2026-09-29
 
 ## Isolated category screen wiring and quality-control retirement — 2026-09-30
