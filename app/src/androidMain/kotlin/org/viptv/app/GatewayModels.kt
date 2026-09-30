@@ -3,33 +3,32 @@ package org.viptv.app
 import org.viptv.video.PlayerCapabilities
 import org.json.JSONObject
 
-/** `/live?view=us` paging inputs. Offset stays zero-based and page size is bounded by Rust's 200-channel limit. */
+/** Opaque server cursor; display positions must never become offset queries. */
 data class LiveBrowseRequest(
     val filter: LiveChannelFilter = LiveChannelFilter.AllUs,
-    val offset: Int = 0,
+    val cursor: String? = null,
     val limit: Int = GuidePolicy.PAGE_SIZE,
+    val catalogId: String? = null,
 ) {
     init {
-        require(offset >= 0)
         require(limit in 1..200)
     }
 }
 
 data class LiveBrowsePage(
     val channels: List<LiveChannel>,
-    val total: Int,
     val request: LiveBrowseRequest,
-    val searchScope: String? = null,
-) {
-    val nextOffset: Int? get() = (request.offset + channels.size).takeIf { it < total }
-    val hasMore: Boolean get() = nextOffset != null
-}
+    val catalogId: String?,
+    val generation: String?,
+    val nextCursor: String?,
+    val previousCursor: String?,
+)
 
-data class LiveCategory(val id: String, val name: String, val count: Int) {
+data class LiveCategory(val id: String, val name: String, val count: Int? = null) {
     init {
         require(id.isNotBlank())
         require(name.isNotBlank())
-        require(count >= 0)
+        require(count == null || count >= 0)
     }
 }
 

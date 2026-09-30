@@ -134,18 +134,21 @@ class BackendGatewayWireTest {
     }
 
     @Test
-    fun `direct live playback sends a channel target without a stream id`() = runBlocking {
-        FixtureServer(1) { request ->
+    fun `live playback resolves exactly one channel then admits its opaque source through v2`() = runBlocking {
+        FixtureServer(2) { request ->
             assertEquals("POST", request.method)
-            assertEquals("/api/playback", request.target)
+            if (request.target == "/api/v2/iptv/live/station-1/source")
+                return@FixtureServer FixtureResponse("""{"source":{"id":"opaque-live","source":"iptv:1","source_addon_id":"iptv:1","name":"Fixture"}}""")
+            assertEquals("/api/v2/playback", request.target)
             val body = JSONObject(request.body)
-            assertEquals("station-1", body.getString("channel_id"))
-            assertFalse(body.has("stream_id"))
-            FixtureResponse("""{"id":"live-session","url":"/media/live-session/capability/index.m3u8","format":"hls","mode":"direct","position":0,"live":true}""")
+            assertEquals("opaque-live", body.getString("stream_id"))
+            assertFalse(body.has("channel_id"))
+            assertEquals(0.0, body.getDouble("position"))
+            FixtureResponse(v2Ready("live-session", """{"kind":"direct","url":"http://provider.example/live.ts","format":"original","headers":{},"position":0,"live":true}"""))
         }.use { server ->
             val result = VipTvHttpGateway(server.origin).playback(
                 source = Source("station-1", "Live TV", "News", channelId = "station-1"),
-                positionMillis = 0,
+                positionMillis = 18_000,
                 capabilities = PlaybackClientCapabilities(maxWidth = 1920, maxHeight = 1080, h264 = true, hevc = false, hevcSdr = false, aac = true, directPlay = true),
             )
             assertTrue(result.live)

@@ -4,7 +4,7 @@
 import https from 'node:https';
 import { readFileSync, statSync, createReadStream } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.ANDROID_FIXTURE_PORT ?? 9443);
@@ -12,13 +12,16 @@ const origin = 'https://10.0.2.2:' + port;
 const nativeMedia = process.env.ANDROID_FIXTURE_MEDIA;
 const nativeDuration = Number(process.env.ANDROID_FIXTURE_DURATION ?? 12);
 process.env.PREVIEW_API_ORIGIN = origin;
-const { installBackend, referenceDir } = await import('../../tv-web/tests/preview/backend.ts');
+const { installBackend, referenceDir } = await import(process.env.ANDROID_FIXTURE_TV_WEB
+  ? pathToFileURL(resolve(process.env.ANDROID_FIXTURE_TV_WEB, 'tests/preview/backend.ts')).href
+  : '../../tv-web/tests/preview/backend.ts');
 const routes = [];
-await installBackend({
+const fixturePage = {
   on() {},
   async addInitScript() {},
   async route(pattern, handler) { routes.push({ pattern, handler }); },
-}, { family: process.argv.includes('--tv') ? 'tv' : 'phone', session: 'profiles', sourcesDone: true, favorites: true, profilePin: process.argv.includes('--parent-pin'), signOutPin: process.argv.includes('--parent-pin'), noCatalogs: process.argv.includes('--empty'), queue: !process.argv.includes('--empty'), searchFail: process.argv.includes('--search-failure'), manyProfiles: process.argv.includes('--many-profiles'), media: { duration: 12, position: 0 } });
+};
+await installBackend(fixturePage, { family: process.argv.includes('--tv') ? 'tv' : 'phone', session: 'profiles', sourcesDone: true, favorites: true, profilePin: process.argv.includes('--parent-pin'), signOutPin: process.argv.includes('--parent-pin'), noCatalogs: process.argv.includes('--empty'), queue: !process.argv.includes('--empty'), searchFail: process.argv.includes('--search-failure'), manyProfiles: process.argv.includes('--many-profiles'), media: { duration: 12, position: 0 } });
 let approved = !process.argv.includes('--pairing');
 let live = false;
 let delayMetadata = 0;
@@ -27,6 +30,7 @@ let delaySearchMovies = 0;
 let copyUrl = false;
 let delayPlayback = 0;
 let failPlayback = false;
+let liveCount = 0;
 const calls = [];
 const token = { session_id: 'android-fixture-session', account_id: '7', profile_id: null, access_token: 'fixture-access', refresh_token: 'fixture-refresh', expires_in: 900 };
 const json = (response, value, status = 200) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(value)); };
@@ -64,6 +68,7 @@ const server = https.createServer({
       return createReadStream(nativeMedia, { start, end }).pipe(response);
     }
     if (path === '/__control') {
+      if ('liveCount' in body) liveCount = Math.max(0, Math.min(1000, Number(body.liveCount) || 0));
       if ('copyUrl' in body) copyUrl = !!body.copyUrl;
       if ('delayPlayback' in body) delayPlayback = Math.max(0, Math.min(10000, Number(body.delayPlayback) || 0));
       if ('failPlayback' in body) failPlayback = !!body.failPlayback;
@@ -74,9 +79,21 @@ const server = https.createServer({
       return json(response, { ok: true });
     }
     if (path === '/__requests') return json(response, calls);
-    calls.push({ method: request.method, path, at: Date.now(), ...(path === "/api/streams" ? { itemId: body.id, itemType: body.type } : {}), ...(path === "/api/playback" ? { channelId: body.channel_id } : {}) });
+    const pageOffset = /^page_\d+$/.test(url.searchParams.get('cursor') ?? '') ? Number(url.searchParams.get('cursor').slice(5)) : 0;
+    calls.push({ method: request.method, path, at: Date.now(), ...(path === '/api/v2/iptv/live/channels' ? { pageOffset } : {}) });
+    if (liveCount && path === '/api/v2/iptv/live/categories')
+      return json(response, { catalog_id: 1, generation: 1, items: [{ id: 'news', name: 'News' }], next_cursor: null, previous_cursor: null });
+    if (liveCount && path === '/api/v2/iptv/live/channels') {
+      const search = (url.searchParams.get('search') ?? '').toLowerCase();
+      const items = Array.from({ length: liveCount }, (_, index) => ({ id: `channel-${index}`, name: `Channel ${index + 1}`, category_id: 'news', category: 'News' }))
+        .filter(channel => channel.name.toLowerCase().includes(search));
+      const limit = Number(url.searchParams.get('limit') ?? 50);
+      return json(response, { catalog_id: 1, generation: 1, items: items.slice(pageOffset, pageOffset + limit),
+        next_cursor: pageOffset + limit < items.length ? `page_${pageOffset + limit}` : null,
+        previous_cursor: pageOffset > 0 ? `page_${Math.max(0, pageOffset - limit)}` : null });
+    }
     if (path === '/api/auth/me' && delayIdentity) await new Promise(resolve => setTimeout(resolve, delayIdentity));
-    if (path === '/api/playback' && request.method === 'POST') {
+    if (path === '/api/v2/playback' && request.method === 'POST') {
       if (delayPlayback) await new Promise(resolve => setTimeout(resolve, delayPlayback));
       if (failPlayback) return json(response, { error: 'Synthetic copy failure' }, 503);
     }
@@ -100,19 +117,24 @@ const server = https.createServer({
     const entry = [...routes].reverse().find(route => matches(route.pattern, dispatchUrl));
     if (!entry) return json(response, { error: 'Unknown fixture endpoint' }, 404);
     await entry.handler({
-      request: () => ({ url: () => dispatchUrl, method: () => request.method, headers: () => request.headers, postData: () => bodyText, postDataJSON: () => body }),
+      request: () => ({ url: () => dispatchUrl, method: () => request.method, headers: () => request.headers, postData: () => bodyText, postDataJSON: () => body, frame: () => ({ page: () => fixturePage }) }),
       abort: () => json(response, { error: 'External access blocked' }, 404),
       async fulfill(result) {
         let output = result.body ?? '';
         if (typeof output === 'string' && (result.contentType?.includes('json') || result.headers?.['content-type']?.includes('json'))) {
           let value = rewrite(JSON.parse(output));
-          if (path.startsWith('/api/guide/')) {
+          if (path.startsWith('/api/v2/iptv/guide/')) {
             const shift = Math.floor(Date.now() / 1000) - Date.parse('2026-09-23T10:55:00-04:00') / 1000;
             value.programs = (value.programs ?? []).map(program => ({ ...program, start: program.start + shift, end: program.end + shift }));
           }
           if (favoritePage) value = { items: value, total: value.length, offset: 0, next_offset: null };
-          if (path === '/api/playback' && request.method === 'POST') value = { ...value, mode: 'direct', live: live || !!body.channel_id, duration: live ? 0 : nativeDuration, position: 0, ...(nativeMedia ? { url: origin + '/fixtures/native-validation.mp4', format: 'file' } : {}) };
-          if (path === '/api/playback' && request.method === 'POST' && copyUrl) value.url = 'https://provider.test/stream/' + encodeURIComponent(body.stream_id) + '.mkv?token=synthetic%2Bvalue';
+          if (path === '/api/v2/playback' && value.delivery) {
+            const isLive = String(body.stream_id ?? '').startsWith('live_source_') || value.delivery.live;
+            value.delivery = { ...value.delivery, kind: 'direct', mode: 'direct', format: 'original', headers: {},
+              live: isLive, duration: isLive ? 0 : nativeDuration, position: 0,
+              ...(nativeMedia ? { url: origin + '/fixtures/native-validation.mp4' } : {}) };
+            if (copyUrl) value.delivery.url = 'https://provider.test/stream/' + encodeURIComponent(body.stream_id) + '.mkv?token=synthetic%2Bvalue';
+          }
           output = JSON.stringify(value);
         }
         response.writeHead(result.status ?? 200, { ...result.headers, ...(result.contentType ? { 'content-type': result.contentType } : {}) });

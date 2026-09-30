@@ -24,7 +24,7 @@ import org.viptv.app.theme.ViptvColor as C
     val ui = state.guideUi
     val first = LocalContentFocus.current
     val rail = LocalRailFocus.current
-    val rows = rememberLazyListState()
+    val rows = rememberLazyListState(initialFirstVisibleItemIndex = ui.visibleFirst, initialFirstVisibleItemScrollOffset = ui.visibleScrollOffset)
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var search by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<Pair<LiveChannel, GuideProgramme?>?>(null) }
@@ -32,9 +32,9 @@ import org.viptv.app.theme.ViptvColor as C
     val programme = selected?.let { ui.schedulesByChannelId[it.id]?.firstOrNull { item -> item.startMillis <= now && item.endMillis > now } }
     LaunchedEffect(Unit) { while (true) { delay(30_000); now = System.currentTimeMillis() } }
     LaunchedEffect(ui.channels.isNotEmpty()) { if (tv) { withFrameNanos {}; runCatching { first.requestFocus() } } }
-    LaunchedEffect(rows, ui.channels.size, ui.channelTotal, state.loading) {
-        snapshotFlow { rows.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }.distinctUntilChanged().collect { last ->
-            if (last >= ui.channels.size - 5 && ui.channels.isNotEmpty() && ui.channels.size + ui.channelOffset < ui.channelTotal && !state.loading) controller.appendGuidePage()
+    LaunchedEffect(rows, ui.channels, ui.paging, state.loading) {
+        snapshotFlow { Triple(rows.firstVisibleItemIndex, rows.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1, rows.firstVisibleItemScrollOffset) }.distinctUntilChanged().collect { (first, last, offset) ->
+            if (last >= 0) controller.onGuideViewport(first, last, offset)
         }
     }
     if (!tv) LaunchedEffect(rows, ui.channels) {
@@ -72,7 +72,7 @@ import org.viptv.app.theme.ViptvColor as C
                 if (tv) Row(Modifier.fillMaxWidth().height(94.dp).focusGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     var focused by remember(item.id) { mutableStateOf(false) }
                     Holdable({ controller.watchGuideChannel(item) }, { detail = item to current },
-                        Modifier.width(266.dp).fillMaxHeight().then(if (index == 0) Modifier.focusRequester(first) else Modifier)
+                        Modifier.width(266.dp).fillMaxHeight().then(if (item.id == ui.selectedChannelId) Modifier.focusRequester(first) else Modifier)
                             .focusProperties { left = rail }.onFocusChanged { focused = it.isFocused; if (focused) controller.selectGuideChannel(item) }
                             .clip(RoundedCornerShape(16.dp)).background(if (focused) C.textPrimary else C.surfaceN1)) {
                         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -110,7 +110,7 @@ import org.viptv.app.theme.ViptvColor as C
             }
         }
     }
-    if (search) TextEntry("Search live TV", "Search channels and programmes.", onDone = { controller.setGuideSearch(it); search = false }, onCancel = { search = false })
+    if (search) TextEntry("Search live TV", "Search channels", onDone = { controller.setGuideSearch(it); search = false }, onCancel = { search = false })
     detail?.let { (item, entry) -> AppOverlay(entry?.title ?: "Live TV", { detail = null }) {
         VText(item.name + (entry?.let { " · " + programmeTime(it) } ?: ""), if (tv) 24 else 14, color = C.textSecondary)
         VText(entry?.description ?: "No guide information. You can still watch this channel.", if (tv) 26 else 16, Modifier.padding(vertical = measure(32, 24)), C.textBody)

@@ -1,5 +1,24 @@
 # VIPTV Android
 
+## Backend v2 development handoff
+
+`refactor/android-backend-cutover` is isolated from the owner's active UI checkout.
+It targets backend `refactor/backend-v2` at `2c2eca2` or later compatible revisions,
+with shared core `fba95c8`. Do not install this candidate against the older
+production backend: live browsing requires the v2 next/previous cursor contract.
+Further backend work must preserve this v2 wire contract or use a new protocol
+version; no production migration/deployment is implied by this handoff.
+
+Networking/controller changes remove legacy live discovery/playback/catalog calls,
+retain only three channel pages, and fetch bounded viewport schedules. Layouts
+are unchanged. The small `GuideScreen.kt` integration diff reports the viewport,
+restores its saved position/focus and corrects search copy. Review that diff when
+merging UI work; the owner checkout has not been switched or overwritten.
+
+Remaining gates include category traversal beyond its first 200 entries, Android
+TV/physical-device qualification, real backend/gateway integration, and the
+remaining quality/legacy cleanup across the organization. See TESTING.md.
+
 Actions delivery: main pushes and manual builds produce sideloading artifacts
 (Android universal APK; desktop Windows/Linux installers; Roku ZIP; TV WGT/IPK).
 Other repositories have no Actions workflows. Local checks remain; previous

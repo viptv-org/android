@@ -38,12 +38,8 @@ interface BackendGateway {
     suspend fun liveCategoriesV2(query: LiveCatalogQuery = LiveCatalogQuery()): org.viptv.core.wire.LiveCatalogCategories
     suspend fun liveSourceV2(channelId: String): Source
     suspend fun guideV2(channelId: String): List<GuideProgramme>
-    /** Canonical EPG filter/page contract; legacy implementations may supply the all-channel list only. */
-    suspend fun livePage(request: LiveBrowseRequest): LiveBrowsePage {
-        val channels = live()
-        return LiveBrowsePage(channels, total = channels.size, request = request)
-    }
-    /** US guide categories are server-declared section IDs, never display-name guesses. */
+    suspend fun livePage(request: LiveBrowseRequest): LiveBrowsePage
+    /** Provider categories; counts are absent rather than invented. */
     suspend fun liveCategories(): List<LiveCategory> = emptyList()
     suspend fun guide(channelId: String): List<GuideProgramme>
     suspend fun preferences(profileId: String): PlaybackPreferences

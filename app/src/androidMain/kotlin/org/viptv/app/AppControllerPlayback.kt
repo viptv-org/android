@@ -11,6 +11,7 @@ import kotlinx.coroutines.sync.withLock
 internal fun AppController.start(media: Media, source: Source, explicitResume: Boolean = false) {
     cancelUpNext()
     if (_state.value.preparingSourceId != null) return
+    if (_state.value.route is Route.Guide) cancelGuideWork()
     playbackStartJob?.cancel()
     val requestGeneration = ++playbackGeneration
     _state.value = _state.value.copy(preparingSourceId = source.id, loading = true, message = null)
@@ -160,7 +161,7 @@ internal fun AppController.onPlayerEvent(event: PlaybackEvent) {
     val key = "${route.media.type}:${route.media.id}:${route.source.id}"
     if (managedRecoveryInFlightKey == key) return
     retirePlaybackSession()
-    val delivery = if (route.source.channelId == null) nextPlaybackDelivery(activePlaybackDelivery, _state.value.playbackDeliveryMode == "direct", event.error.code) else null
+    val delivery = nextPlaybackDelivery(activePlaybackDelivery, _state.value.playbackDeliveryMode == "direct", event.error.code)
     if (delivery == null && !ManagedRecoveryPolicy.shouldAttempt(
             serverManaged = SeekCommitPolicy.usesManagedReplacement(_state.value.playbackDeliveryMode),
             networkFailure = event.error.code == PlaybackErrorCode.Network,

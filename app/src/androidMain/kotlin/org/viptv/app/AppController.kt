@@ -77,6 +77,10 @@ class AppController(context: Context, private val origin: String) {
     internal var detailGeneration = 0L
     internal var guideGeneration = 0L
     internal var guideBrowseGeneration = 0L
+    internal var guideBrowseJob: Job? = null
+    internal var guideRowsJob: Job? = null
+    internal var guidePageJob: Job? = null
+    internal val guidePages = LivePageWindow()
     internal var discoverGeneration = 0L
     internal var managedRecoveryKey: String? = null
     /** Suppresses duplicate Media3 failure events while the one permitted same-source recovery is awaiting the server. */
@@ -232,8 +236,7 @@ class AppController(context: Context, private val origin: String) {
         detailGeneration++; detailJob?.cancel()
         searchJob?.cancel(); discoverJob?.cancel(); sourceDiscovery?.cancel()
         cancelPendingQueueContinuation()
-        guideBrowseGeneration++
-        guideGeneration++
+        cancelGuideWork()
         pendingCoreAction = { coreSession.select(profile.id) }
         coreSession.select(profile.id)
     }

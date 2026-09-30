@@ -1,3 +1,37 @@
+# BE-002 Android live cutover handoff — 2026-09-29
+
+Isolated branch `refactor/android-backend-cutover`; core fba95c8, matching backend
+2c2eca2. Normal Home/recent/search/guide and exact live playback use v2. No native
+original URL is obtained from a source card: its opaque handle goes through the
+ordinary lease path. Gateway recovery retains the exact selected live channel;
+renewal/stop never fall back to legacy endpoints. Native HTTP stays supported.
+
+Guide channels retain at most three forty-row server pages, with reverse cursors
+for evicted pages and no local playlist index or fabricated totals. Schedule
+fetching covers the actual viewport plus bounded lookahead, with a 200-entry
+cache, debounced scrolling, generation guards and cancellation. Suspended guide
+work clears busy flags without losing its viewport; return resumes missing EPG.
+Paging errors retry on a later scroll action, not unchanged effect callbacks.
+Native responses reject missing reverse contracts, duplicate IDs and substituted
+explicit playlists. The existing viewing geometry is unchanged.
+
+Phone API36 emulator-5574 exercised synthetic 400-channel HTTPS input: lazy
+entry, forward cursor pages beyond channel300, backward retrieval to channel1,
+real H.264/AAC HLS frame decoding through Media3, exact source admission/release,
+and return to channel157 at the same scroll coordinates. Captures were inspected
+privately; no real provider or production account was used. These observations
+precede final defensive guide lifecycle guards, which additionally have host
+policy coverage; Android TV/physical-device qualification remains unperformed.
+The first playback fixture omitted mandatory direct headers and was corrected;
+the client validator was not relaxed. Native input used ADB, not host-window
+keyboard forwarding or a physical remote.
+
+JDK17: host preparation, all three Android ABIs, 147 library/app unit tests, debug
+APK and lint passed. Lint retains 74 warnings and three baseline-filtered errors.
+Earlier native RustBuffer crash stress qualification is still open. Categories
+currently expose one bounded 200-entry page; extended category traversal and real
+backend/gateway end-to-end tests remain gates. No deploy or production migration.
+
 # BE-002 raw live API preparation — 2026-09-29
 
 Core pin b75393e matches TV-web. New explicit transport methods use generated
