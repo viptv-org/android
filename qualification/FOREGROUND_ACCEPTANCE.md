@@ -64,7 +64,8 @@ foreground recovery. A fresh browser-approved grant was used for later probes.
 ## Actual held-refresh profile intent
 
 The held-profile callback and Core dispatch reached POST, but the fixture's
-HTTP/1.0 connection lifecycle produced a pre-wire transport failure. A tagged,
+HTTP/1.0 connection lifecycle produced a transport failure with no completed
+backend profile request recorded. A tagged,
 QA-only `Connection: close` request-header discriminator made the identical
 actual native profile replacement/restore loop pass. That client workaround
 and all diagnostic tags were removed; this diagnostic pass is not final
