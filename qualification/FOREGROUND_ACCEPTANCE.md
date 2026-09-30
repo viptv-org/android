@@ -1,6 +1,7 @@
 # AND-041 native qualification ledger
 
-This is a partial ledger. Open cases are not acceptance claims. All accounts,
+This ledger records the narrow issue4 qualification. Unrun broader stress cases
+are not acceptance claims. All accounts,
 content and servers are isolated synthetic fixtures; production and the original
 Android checkout are untouched. Private captures/configuration are outside Git.
 
@@ -15,7 +16,8 @@ two refresh requests but only one successful rotation.
 With session-owned bounded single-flight refresh, the same native loop passed:
 one request/one successful rotation, no new pairing, same confirmed profile2,
 Home and Resume0:20 retained. This is actual authenticated HTTP/native evidence,
-not a mocked host result. Profile replacement during held refresh remains open.
+not a mocked host result. The shared held-refresh profile-choice boundary was
+subsequently qualified through the actual TV native lifecycle below.
 
 ## Actual phone media and background release
 
@@ -59,10 +61,7 @@ profile to sign-in and showed `Your session expired. Sign in again.` The new
 pairing challenge after revocation is a legitimate transition, not silent
 foreground recovery. A fresh browser-approved grant was used for later probes.
 
-## Remaining
-
-- Phone/TV explicit profile intent while a successful refresh response is held.
-- Final ordinary-shell held-profile run against corrected fixture framing and review.
+## Actual held-refresh profile intent
 
 The held-profile callback and Core dispatch reached POST, but the fixture's
 HTTP/1.0 connection lifecycle produced a pre-wire transport failure. A tagged,
@@ -70,6 +69,19 @@ QA-only `Connection: close` request-header discriminator made the identical
 actual native profile replacement/restore loop pass. That client workaround
 and all diagnostic tags were removed; this diagnostic pass is not final
 ordinary-client acceptance and changes no production transport policy.
+
+The final ordinary shell (without the diagnostic header or tags) passed against
+the corrected fixture at helper commit
+`7ea0c60908919d4b8b1b3ba28f2327da7688e4a2`, which explicitly advertises closed
+HTTP connections. The TV chooser and alternate profile were loaded/focused
+before triggering the actual identity401 and successful token rotation. While
+the committed refresh response was held, native Enter selected profile4. After
+the response arrived, the actual profile POST returned200 and native Home
+displayed profile4; a subsequent explicit selection restored profile2 through
+another POST200. The bounded harness asserted exactly one successful rotation
+and no additional pairing. Fresh fixture startup's rejected old grant was setup,
+not counted as a foreground-recovery result. The previous transport red was a
+fixture connection-framing fault; no production transport change was required.
 
 ## Final source checks
 
