@@ -12,7 +12,13 @@ JDK17 host preparation and all 148 library/app unit tests passed. The new actual
 HTTP adapter fixture verifies the outgoing body and decoding a backend response
 without quality; its synthetic partial-merge store retains a historical value.
 This is transport evidence, not a real backend migration or a device test.
-Normal APK/native build evidence is recorded after the build below.
+All three native ABIs, normal debug APK assembly and lint passed at source
+`c3ebe7b`; lint retains 74 warnings and its existing baseline constraints.
+The normal APK contains no `res/raw/viptv_fixture_ca.pem` (ZIP entries checked).
+Artifact SHA256:
+`8332e35f654a067f8e36393d04d62d73003d9b81516ed33ccc2a3825c45ec1eb`.
+No APK installation or repeat emulator qualification was performed for this
+transport-only change. The owner's root Android checkout remains unchanged.
 
 Isolated branch `refactor/android-backend-cutover`; core fba95c8, matching backend
 2c2eca2. Normal Home/recent/search/guide and exact live playback use v2. No native
