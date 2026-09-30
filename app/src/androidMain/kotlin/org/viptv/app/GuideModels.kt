@@ -24,6 +24,7 @@ data class GuideUiState(
     val visibleScrollOffset: Int = 0,
     val channelFilter: LiveChannelFilter = LiveChannelFilter.AllUs,
     val categories: List<LiveCategory> = emptyList(),
+    val categoryPage: GuideCategoryPageState = GuideCategoryPageState(),
     val searchScope: String? = null,
     val windowStartMillis: Long = 0,
     val followsNow: Boolean = true,
@@ -45,7 +46,8 @@ object GuidePolicy {
         first != state.visibleFirst || kotlin.math.abs(offset.toLong() - state.visibleScrollOffset) >= 24
     fun mayResumeSchedules(preparing: Boolean, activeJob: Boolean, cacheMissing: Boolean): Boolean =
         !preparing && !activeJob && cacheMissing
-    fun suspended(state: GuideUiState): GuideUiState = state.copy(paging = false, loadingChannelIds = emptySet())
+    fun suspended(state: GuideUiState): GuideUiState = state.copy(paging = false, loadingChannelIds = emptySet(),
+        categoryPage = state.categoryPage.copy(loading = false))
     private const val HALF_HOUR_MILLIS = 30 * 60 * 1_000L
     private const val MAX_AHEAD_MILLIS = 24 * 60 * 60 * 1_000L
 

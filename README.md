@@ -15,9 +15,37 @@ are unchanged. The small `GuideScreen.kt` integration diff reports the viewport,
 restores its saved position/focus and corrects search copy. Review that diff when
 merging UI work; the owner checkout has not been switched or overwritten.
 
-Remaining gates include category traversal beyond its first 200 entries, Android
+Category controller logic now supports next/previous replacement pages of 200,
+with separate cancellation/retry and scope guards. The owner-facing
+`GuideScreen.kt` callbacks are deliberately not wired by this controller-only
+pass; see the integration notes below. Remaining gates include visible category
+traversal beyond its first 200 entries, Android
 TV/physical-device qualification, real backend/gateway integration, and the
 remaining quality/legacy cleanup across the organization. See TESTING.md.
+
+### Category integration for the UI owner
+
+Keep the existing row, fixed All/My channels/Recent/Search actions and visuals;
+do not add paging buttons or reserve provider IDs. `guideUi.categoryPage` exposes
+the page revision, next/previous tokens, saved viewport, loading/error and desired
+edge focus. Existing `guideUi.categories` remains the current bounded list.
+
+- Report the rendered revision and first/last **category IDs** through
+  `onGuideCategoryViewport(revision, firstId, lastId, offset)`; fixed tab indices
+  are not category indices. Capture the revision belonging to the rendered row,
+  not a newer state from a stale callback.
+- When `awaitingAnchor` is true, restore the page's `focusIndex` (first on forward,
+  last on backward) using existing list/focus mechanics before acknowledging its
+  viewport. Old/unrestored callbacks are ignored, preventing page oscillation.
+  Preserve the saved visible index/offset when returning without replacement.
+- Use `changeGuideCategoryPage(delta, renderedRevision)` at the intentional
+  remote category boundary and `retryGuideCategories()` for an existing retry
+  action. Keep fixed actions, especially Search, independently reachable; do not
+  consume their navigation merely to advance provider categories.
+
+These methods update category state only. They must not reset channel filters,
+programme time, schedules or unrelated playback. No default catalog override is
+invented from response metadata. Your root Android checkout is not modified.
 
 Actions delivery: main pushes and manual builds produce sideloading artifacts
 (Android universal APK; desktop Windows/Linux installers; Roku ZIP; TV WGT/IPK).

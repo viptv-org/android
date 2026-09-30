@@ -8,6 +8,33 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class LiveV2WireTest {
+    @Test fun `category cursors cross two hundred and refetch backward without inventing a catalog override`() = runBlocking {
+        FixtureServer(3) { request ->
+            val offset = when (request.target) {
+                "/api/v2/iptv/live/categories?limit=200" -> 0
+                "/api/v2/iptv/live/categories?limit=200&cursor=next_200" -> 200
+                "/api/v2/iptv/live/categories?limit=200&cursor=previous_0" -> 0
+                else -> error("Unexpected category fixture route")
+            }
+            val items = org.json.JSONArray().also { list -> repeat(200) { index ->
+                list.put(org.json.JSONObject().put("id", "category-${offset + index}").put("name", "Category ${offset + index}"))
+            } }
+            FixtureResponse(org.json.JSONObject().put("catalog_id", 1).put("generation", 7).put("items", items)
+                .put("next_cursor", if (offset == 0) "next_200" else org.json.JSONObject.NULL)
+                .put("previous_cursor", if (offset == 200) "previous_0" else org.json.JSONObject.NULL).toString())
+        }.use { server ->
+            val api = VipTvHttpGateway(server.origin)
+            val query = LiveCatalogQuery(limit = 200)
+            val first = api.liveCategoriesV2(query)
+            val second = api.liveCategoriesV2(query.copy(cursor = first.nextCursor))
+            val back = api.liveCategoriesV2(query.copy(cursor = second.previousCursor))
+            assertEquals("category-0", first.items.first().id)
+            assertEquals("category-200", second.items.first().id)
+            assertEquals(first, back)
+            assertTrue(server.requests.all { !it.target.contains("catalog_id=") })
+            server.assertHealthy()
+        }
+    }
     @Test fun `old reverse contract substituted catalogs and duplicate channel keys fail closed`() = runBlocking {
         var attempt = 0
         FixtureServer(3) {

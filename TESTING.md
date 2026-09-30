@@ -1,5 +1,28 @@
 # BE-002 Android live cutover handoff — 2026-09-29
 
+## Category controller preparation — 2026-09-30
+
+The authenticated category coordinator retains one replacement page of at most
+200 records and preserves the original implicit/explicit catalog query across
+opaque forward/reverse cursors. Profile/catalog/snapshot/revision guards cancel
+or reject late work; failures retain current categories and explicit retries use
+the same cursor. A 15-second page deadline clears busy state safely. Channel/EPG/
+time/playback state is independent, and new-page viewport acknowledgement avoids
+automatic forward/backward oscillation. Guide channel publication additionally
+rechecks the selected profile; controller disposal cancels guide work.
+
+JDK17 host preparation and all 158 library/app unit tests passed, including the
+final unchanged-viewport guard. New tests exercise five forward/back category pages,
+200-record retention, implicit and explicit queries, stale scope/revision,
+restoration acknowledgement, failed retry, metadata/duplicate/empty rejection,
+safe diagnostics and deadlines. A real HTTP/native-core wire fixture traverses
+400 synthetic categories forward and back without inserting a catalog override.
+
+This is controller/transport preparation, not visible UI or emulator acceptance.
+`GuideScreen.kt` has not been edited in this pass and still needs the owner's
+boundary/viewport integration described in README. The frozen v2 wire and core
+pin are unchanged; the root Android UI checkout remains untouched.
+
 ## Preference transport follow-up — 2026-09-30
 
 Preference PUTs now omit the retired `quality` field while sending the six active

@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 internal fun AppController.cancelGuideWork() {
     guideBrowseGeneration++; guideGeneration++
     guideBrowseJob?.cancel(); guideRowsJob?.cancel(); guidePageJob?.cancel()
+    guideCategories.cancel()
     _state.value = _state.value.copy(guideUi = GuidePolicy.suspended(_state.value.guideUi))
 }
 internal fun AppController.setGuideFilter(filter: LiveChannelFilter) = loadGuidePage(filter, 0)
@@ -27,16 +28,17 @@ internal fun AppController.loadGuidePage(filter: LiveChannelFilter, offset: Int,
     if (_state.value.preparingSourceId != null) invalidatePlaybackPreparation()
     cancelGuideWork()
     val ticket = guideBrowseGeneration
+    val profile = _state.value.selectedProfile?.id
     val prior = _state.value.guideUi
     guideScheduleCache.clear()
     _state.value = _state.value.copy(route = Route.Guide(), liveChannels = emptyList(),
-        guideUi = prior.copy(channels = emptyList(), categories = emptyList(), schedulesByChannelId = emptyMap(),
+        guideUi = prior.copy(channels = emptyList(), schedulesByChannelId = emptyMap(),
             channelFilter = filter, paging = false, pagingFailed = false, loadingChannelIds = emptySet()),
         loading = true, message = null)
     guideBrowseJob = scope.launch {
         try {
             val page = gateway.livePage(LiveBrowseRequest(filter, cursor))
-            if (ticket != guideBrowseGeneration || _state.value.route !is Route.Guide) return@launch
+            if (ticket != guideBrowseGeneration || _state.value.selectedProfile?.id != profile || _state.value.route !is Route.Guide) return@launch
             guidePages.replace(page, offset)
             val initial = LiveEntryPolicy.initialChannel(page.channels, preferredChannelId ?: prior.selectedChannelId)
             val guide = _state.value.guideUi.copy(channels = page.channels, selectedChannelId = initial?.id,
@@ -49,13 +51,9 @@ internal fun AppController.loadGuidePage(filter: LiveChannelFilter, offset: Int,
                 message = if (initial != null) null else if (filter is LiveChannelFilter.Search) "No channels match your search." else "No channels are available for this filter.")
             requestGuideSchedules()
             // Categories never hold first content behind another network request.
-            val categories = gateway.liveCategoriesV2(LiveCatalogQuery(limit = 200))
-            if (ticket != guideBrowseGeneration || _state.value.route !is Route.Guide) return@launch
-            if (categories.catalogId != page.catalogId || categories.generation != page.generation)
-                throw GatewayError(409, "This playlist changed while you were browsing. Reload the guide.", "catalog_changed")
-            _state.value = _state.value.copy(guideUi = _state.value.guideUi.copy(categories = categories.items.map { LiveCategory(it.id, it.name) }))
+            guideCategories.ensure()
         } catch (error: CancellationException) { throw error }
-        catch (error: Throwable) { if (ticket == guideBrowseGeneration && _state.value.route is Route.Guide) fail(error) }
+        catch (error: Throwable) { if (ticket == guideBrowseGeneration && _state.value.selectedProfile?.id == profile && _state.value.route is Route.Guide) fail(error) }
     }
 }
 internal fun AppController.openGuide(channel: LiveChannel) {
@@ -94,16 +92,21 @@ internal fun AppController.onGuideViewport(first: Int, last: Int, scrollOffset: 
     else if (end >= current.channels.size - 5 && current.nextCursor != null) loadAdjacentGuidePage(false)
 }
 internal fun AppController.appendGuidePage() = loadAdjacentGuidePage(false)
+internal fun AppController.changeGuideCategoryPage(delta: Int, renderedRevision: Long) = guideCategories.move(delta, renderedRevision)
+internal fun AppController.retryGuideCategories() = guideCategories.retry()
+internal fun AppController.onGuideCategoryViewport(renderedRevision: Long, firstId: String, lastId: String, offset: Int = 0) =
+    guideCategories.viewport(renderedRevision, firstId, lastId, offset)
 private fun AppController.loadAdjacentGuidePage(previous: Boolean) {
     val current = _state.value.guideUi
     val cursor = if (previous) current.previousCursor else current.nextCursor
     if (cursor == null || current.paging || current.pagingFailed || _state.value.loading || _state.value.route !is Route.Guide) return
     val ticket = guideBrowseGeneration
+    val profile = _state.value.selectedProfile?.id
     _state.value = _state.value.copy(guideUi = current.copy(paging = true))
     guidePageJob = scope.launch {
         try {
             val page = gateway.livePage(LiveBrowseRequest(current.channelFilter, cursor))
-            if (ticket != guideBrowseGeneration || _state.value.route !is Route.Guide) return@launch
+            if (ticket != guideBrowseGeneration || _state.value.selectedProfile?.id != profile || _state.value.route !is Route.Guide) return@launch
             guidePages.add(page, previous)
             val channels = guidePages.channels
             val latest = _state.value.guideUi
@@ -117,7 +120,7 @@ private fun AppController.loadAdjacentGuidePage(previous: Boolean) {
             requestGuideSchedules()
         } catch (error: CancellationException) { throw error }
         catch (error: Throwable) {
-            if (ticket == guideBrowseGeneration && _state.value.route is Route.Guide) {
+            if (ticket == guideBrowseGeneration && _state.value.selectedProfile?.id == profile && _state.value.route is Route.Guide) {
                 _state.value = _state.value.copy(guideUi = _state.value.guideUi.copy(paging = false, pagingFailed = true))
                 fail(error)
             }

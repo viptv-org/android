@@ -81,6 +81,15 @@ class AppController(context: Context, private val origin: String) {
     internal var guideRowsJob: Job? = null
     internal var guidePageJob: Job? = null
     internal val guidePages = LivePageWindow()
+    internal val guideCategories by lazy {
+        GuideCategoryPager(scope, gateway::liveCategoriesV2, {
+            val state = _state.value
+            state.selectedProfile?.id?.takeIf { state.route is Route.Guide && !state.loading && state.preparingSourceId == null }
+                ?.let { GuideCategoryScope(it, state.guideUi.catalogId, state.guideUi.generation) }
+        }, { page ->
+            _state.value = _state.value.copy(guideUi = _state.value.guideUi.copy(categories = page.items, categoryPage = page))
+        }, ::fail)
+    }
     internal var discoverGeneration = 0L
     internal var managedRecoveryKey: String? = null
     /** Suppresses duplicate Media3 failure events while the one permitted same-source recovery is awaiting the server. */
@@ -246,6 +255,7 @@ class AppController(context: Context, private val origin: String) {
 
     fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback((_state.value.route as? Route.Player)?.media); pendingCoreAction = coreSession::signOut; coreSession.signOut() } }
     fun close() {
+        cancelGuideWork()
         loginJob?.cancel(); playbackStartJob?.cancel(); coreSession.close(); homeJob?.cancel(); detailJob?.cancel(); pairingPoll?.cancel(); sourceDiscovery?.cancel()
         queueContinuationJob?.cancel(); discoverJob?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel()
         if (playerDelegate.isInitialized()) { stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
