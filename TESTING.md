@@ -23,6 +23,12 @@ This is controller/transport preparation, not visible UI or emulator acceptance.
 boundary/viewport integration described in README. The frozen v2 wire and core
 pin are unchanged; the root Android UI checkout remains untouched.
 
+All three native ABIs, normal debug APK and lint also passed at `76338e8`.
+Lint retains 74 warnings/three baseline-filtered errors; no fixture CA is in the
+normal APK. Artifact SHA256:
+`3e50663994d416d05f17f1b11bde0da814a8b80ef3eacdc12c4a6cb2413eb6d2`.
+The controller-only category addition was not re-emulated or installed.
+
 ## Preference transport follow-up — 2026-09-30
 
 Preference PUTs now omit the retired `quality` field while sending the six active
