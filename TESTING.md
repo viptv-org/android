@@ -1,5 +1,26 @@
 # BE-002 Android live cutover handoff — 2026-09-29
 
+## Engine-free shared Core adoption — 2026-09-30
+
+The isolated handoff adopts published Core
+`8ae9f81bb753aaf2de53af5b594ead29845e1a8a` using `scripts/core-sync.mjs`.
+Host/Android preparation selects only `native`, removing the retired provider
+feature. Vendored changes are script-generated; the frozen Kotlin wire/model
+declarations are byte-identical. AppController, GuideModels, GuideCategoryPager,
+all application/library source and UI files are untouched in this adoption.
+
+JDK17 host preparation, fresh execution of all 158 library/app unit tests,
+three release native ABI builds (arm64-v8a, armeabi-v7a, x86_64), normal debug APK
+assembly and lint passed. Core/design integrity checks and diff checks passed.
+Lint retains 74 warnings and three baseline-filtered errors. The packaged APK
+contains all three native libraries, no fixture CA resource, and its packaged
+network security XML trusts system certificates only. Normal APK SHA256:
+`f52367af8207e5616cfe8e3e25b40d23370bec22788b08f3b6ad5c3727cca935`.
+
+No APK installation, emulator/physical playback, hosted build or production
+operation was performed. Existing category UI integration and hardware gates
+remain open. The owner's original Android checkout remains untouched.
+
 ## Category controller preparation — 2026-09-30
 
 The authenticated category coordinator retains one replacement page of at most

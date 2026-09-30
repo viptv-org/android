@@ -4,7 +4,7 @@
 
 `refactor/android-backend-cutover` is isolated from the owner's active UI checkout.
 It targets backend `refactor/backend-v2` at `2c2eca2` or later compatible revisions,
-with shared core `fba95c8`. Do not install this candidate against the older
+with shared core `8ae9f81`. Do not install this candidate against the older
 production backend: live browsing requires the v2 next/previous cursor contract.
 Further backend work must preserve this v2 wire contract or use a new protocol
 version; no production migration/deployment is implied by this handoff.
