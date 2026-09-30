@@ -59,7 +59,7 @@ class VipTvHttpGateway(
             else -> throw error
         }
     }
-    override suspend fun refresh(refreshToken: String): DeviceSession = session(json("POST", "/auth/device/refresh", JSONObject().put("refresh_token", refreshToken)))
+    override suspend fun refresh(refreshToken: String): DeviceSession = session(json("POST", "/auth/device/refresh", JSONObject().put("refresh_token", refreshToken)), adopt = false)
     suspend fun foregroundIdentity(): org.viptv.core.wire.Identity {
         val root = json("GET", "/auth/me")
         return org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.Identity>(
@@ -399,10 +399,11 @@ class VipTvHttpGateway(
     override suspend fun deleteProfile(profile: Profile) { json("DELETE", "/profiles/${enc(profile.id)}") }
     override suspend fun unlockParent(pin: String) { json("POST", "/parent/unlock", JSONObject().put("pin", pin)) }
     override suspend fun logout() { json("POST", "/auth/logout", JSONObject()) }
-    private fun session(value: JSONObject): DeviceSession {
-        clearProfileCache()
-        val token = value.getString("access_token"); accessToken = token
-        return DeviceSession(token, value.getString("refresh_token"), value.opt("profile_id")?.takeUnless { it == JSONObject.NULL }?.toString(), uniffi.viptv_core.normalize("tokens", value.toString(), origin))
+    private fun session(value: JSONObject, adopt: Boolean = true): DeviceSession {
+        val token = value.getString("access_token")
+        val session = DeviceSession(token, value.getString("refresh_token"), value.opt("profile_id")?.takeUnless { it == JSONObject.NULL }?.toString(), uniffi.viptv_core.normalize("tokens", value.toString(), origin))
+        if (adopt) { clearProfileCache(); accessToken = token }
+        return session
     }
     private suspend fun coreRequest(operation: String, profileId: String, media: Media, values: JSONObject = JSONObject()): JSONObject {
         values.put("operation", operation).put("profileId", profileId).put("item", JSONObject(media.normalizedJson()))

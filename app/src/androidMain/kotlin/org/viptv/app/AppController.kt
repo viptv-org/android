@@ -7,6 +7,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +39,9 @@ class AppController(context: Context, private val origin: String) {
     private var authenticationGeneration = 0L
     private var expiredSessionNotice: String? = null
     private var verifiedIdentity: org.viptv.core.wire.Identity? = null
+    private var sessionRefreshJob: Deferred<Result<String?>>? = null
+    private var pendingProfileAfterRefresh: Profile? = null
+    private var pendingProfileRefreshWait: Job? = null
     internal val _state = MutableStateFlow(AppState(loading = true))
     val state: StateFlow<AppState> = _state.asStateFlow()
     private val foregroundValidation = ForegroundValidation(scope, gateway::foregroundIdentity)
@@ -150,7 +156,11 @@ class AppController(context: Context, private val origin: String) {
         validatePlaybackOnForeground()
     }
     fun retryForegroundValidation() = onForeground()
-    internal fun cancelForegroundValidation() { foregroundValidation.onBackground(); _state.value = _state.value.copy(foregroundError = null) }
+    internal fun cancelForegroundValidation() {
+        foregroundValidation.onBackground()
+        pendingProfileAfterRefresh = null; pendingProfileRefreshWait?.cancel(); pendingProfileRefreshWait = null
+        _state.value = _state.value.copy(foregroundError = null)
+    }
     private fun cancelAuthenticatedWork() {
         gateway.clearProfileCache()
         cancelGuideWork(); cancelPendingQueueContinuation(); cancelUpNext()
@@ -173,6 +183,8 @@ class AppController(context: Context, private val origin: String) {
     }
     fun signIn(username: String, password: String) {
         if (username.isBlank() || password.isEmpty()) { update(message = "Enter your username and password."); return }
+        cancelForegroundValidation(); authenticationGeneration++; sessionRefreshJob?.cancel()
+        quietSessionAdoption = false
         loginJob?.cancel(); pairingPoll?.cancel()
         update(loading = true, message = null)
         loginJob = scope.launch {
@@ -231,6 +243,9 @@ class AppController(context: Context, private val origin: String) {
                     view.identity?.let { identity -> verifiedIdentity?.let { prior ->
                         acceptForegroundResult(foregroundIdentityResult(prior, identity, _state.value.selectedProfile?.id))
                     } }
+                    val requested = pendingProfileAfterRefresh
+                    pendingProfileAfterRefresh = null
+                    if (requested != null && _state.value.route == Route.Profiles) chooseProfile(requested)
                     return
                 }
                 quietSessionAdoption = false
@@ -260,7 +275,14 @@ class AppController(context: Context, private val origin: String) {
             }
             "PAIRING" -> { gateway.clearProfileCache(); quietSessionAdoption = false; _state.value = AppState(route = Route.Pairing, sessionRestoring = false, message = expiredSessionNotice); if (television) beginPairing() }
             "ERROR" -> {
-                if (quietSessionAdoption) { quietSessionAdoption = false; return }
+                if (quietSessionAdoption) {
+                    quietSessionAdoption = false
+                    if (pendingProfileAfterRefresh != null) {
+                        pendingProfileAfterRefresh = null
+                        _state.value = _state.value.copy(foregroundError = "Could not reconnect to VIPTV. Try again.")
+                    }
+                    return
+                }
                 val message = view.error ?: "Could not restore your session. Try again."
                 _state.value = _state.value.copy(loading = false, profiles = if (keepProfilesOnIdentityRefresh) _state.value.profiles else profiles, message = message)
                 if (view.errorStatus == 403) {
@@ -316,6 +338,21 @@ class AppController(context: Context, private val origin: String) {
     fun chooseProfile(profile: Profile) {
         cancelForegroundValidation()
         gateway.clearProfileCache()
+        val refresh = sessionRefreshJob?.takeIf { it.isActive }
+        if (refresh != null || quietSessionAdoption) {
+            pendingProfileAfterRefresh = profile
+            val generation = authenticationGeneration
+            if (refresh != null) pendingProfileRefreshWait = scope.launch {
+                val error = refresh.await().exceptionOrNull()
+                if (error != null && authenticationGeneration == generation &&
+                    pendingProfileAfterRefresh?.id == profile.id && _state.value.route == Route.Profiles) {
+                    pendingProfileAfterRefresh = null
+                    acceptForegroundResult(if (error is GatewayError && error.status == 401) ForegroundValidationResult.Revoked
+                        else ForegroundValidationResult.Failed("Could not reconnect to VIPTV. Try again."))
+                }
+            }
+            return
+        }
         quietSessionAdoption = false
         keepProfilesOnIdentityRefresh = false
         cancelUpNext()
@@ -334,7 +371,7 @@ class AppController(context: Context, private val origin: String) {
 
     fun signOut() = scope.launch { cancelForegroundValidation(); guarded("Enter parent PIN to sign out") { quietSessionAdoption = false; authenticationGeneration++; stopPlayback((_state.value.route as? Route.Player)?.media); pendingCoreAction = coreSession::signOut; coreSession.signOut() } }
     fun close() {
-        foregroundValidation.close(); authenticationGeneration++
+        foregroundValidation.close(); authenticationGeneration++; sessionRefreshJob?.cancel(); pendingProfileRefreshWait?.cancel()
         cancelGuideWork()
         loginJob?.cancel(); playbackStartJob?.cancel(); coreSession.close(); homeJob?.cancel(); detailJob?.cancel(); pairingPoll?.cancel(); sourceDiscovery?.cancel()
         queueContinuationJob?.cancel(); discoverJob?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel()
@@ -465,29 +502,37 @@ class AppController(context: Context, private val origin: String) {
      * tokens are persisted exactly as the core session's storage effect
      * writes them, and the Rust session model adopts the new grant.
      */
-    internal suspend fun refreshAccessToken(rejectedToken: String?): String? = sessionRefreshMutex.withLock {
-        store.getString("access", null)?.takeIf { it != rejectedToken }?.let { return@withLock it }
-        val refreshToken = store.getString("refresh", null) ?: return@withLock null
-        val generation = authenticationGeneration
-        val accountId = store.getString("core.session", null)?.let { org.json.JSONObject(it).optString("accountId") }
-        try {
-            val session = gateway.refresh(refreshToken)
-            currentCoroutineContext().ensureActive()
-            if (generation != authenticationGeneration) throw CancellationException("Session was replaced")
-            if (accountId != null && org.json.JSONObject(session.coreJson).optString("accountId") != accountId) {
-                gateway.setAccessToken(rejectedToken)
-                throw GatewayError(401, "Your session expired. Sign in again.")
+    internal suspend fun refreshAccessToken(rejectedToken: String?): String? {
+        val refresh = sessionRefreshMutex.withLock {
+            store.getString("access", null)?.takeIf { it != rejectedToken }?.let { return it }
+            sessionRefreshJob?.takeIf { it.isActive } ?: run {
+                val refreshToken = store.getString("refresh", null) ?: return null
+                val saved = store.getString("core.session", null)?.let { org.json.JSONObject(it) } ?: return null
+                val generation = authenticationGeneration
+                val accountId = saved.getString("accountId")
+                val sessionId = saved.getString("sessionId")
+                // The grant owns this rotation. Canceling a route's await must not
+                // discard a token already committed by the server.
+                scope.async {
+                    runCatching { withTimeout(30_000) {
+                        val session = gateway.refresh(refreshToken)
+                        currentCoroutineContext().ensureActive()
+                        val current = store.getString("core.session", null)?.let { org.json.JSONObject(it) }
+                        if (generation != authenticationGeneration || current?.optString("sessionId") != sessionId)
+                            throw CancellationException("Session was replaced")
+                        if (org.json.JSONObject(session.coreJson).getString("accountId") != accountId)
+                            throw GatewayError(401, "Your session expired. Sign in again.")
+                        check(store.edit().putString("core.session", session.coreJson).putString("access", session.accessToken)
+                            .putString("refresh", session.refreshToken).commit())
+                        gateway.setAccessToken(session.accessToken)
+                        quietSessionAdoption = _state.value.route != Route.Pairing
+                        coreSession.adopt(session.coreJson)
+                        session.accessToken
+                    } }
+                }.also { sessionRefreshJob = it }
             }
-            store.edit()
-                .putString("core.session", session.coreJson)
-                .putString("access", session.accessToken)
-                .putString("refresh", session.refreshToken)
-                .commit()
-            quietSessionAdoption = _state.value.route != Route.Pairing
-            coreSession.adopt(session.coreJson)
-            session.accessToken
-        } catch (cancelled: CancellationException) { throw cancelled }
-        catch (error: Exception) { throw error }
+        }
+        return refresh.await().getOrThrow()
     }
     internal fun update(loading: Boolean = _state.value.loading, message: String? = _state.value.message) { _state.value = _state.value.copy(loading = loading, message = message) }
     internal fun fail(error: Throwable) {

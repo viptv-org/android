@@ -21,7 +21,7 @@ def main():
     parser.add_argument('--serial', choices=['emulator-5574', 'emulator-5576'], required=True)
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--artifacts', type=Path, required=True)
-    parser.add_argument('--phase', choices=['basic', 'extended', 'rotation', 'revoke'], default='basic')
+    parser.add_argument('--phase', choices=['basic', 'extended', 'rotation', 'profile-rotation', 'revoke'], default='basic')
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
     tls = ssl.create_default_context(cafile=config['ca'])
@@ -85,7 +85,7 @@ def main():
                 root, _ = tree()
                 focused = next((n for n in root.iter('node') if n.get('focused') == 'true'), None)
                 if focused is not None and label in texts(focused):
-                    device('shell', 'input', 'keyevent', 'KEYCODE_DPAD_CENTER')
+                    device('shell', 'input', 'keyevent', 'KEYCODE_ENTER')
                     return
                 device('shell', 'input', 'keyevent', 'KEYCODE_TAB')
             raise AssertionError('TV action was not keyboard/remote reachable: ' + label)
@@ -99,8 +99,49 @@ def main():
         assert right - left >= 44 and bottom - top >= 44
         device('shell', 'input', 'tap', str((left + right) // 2), str((top + bottom) // 2))
 
+    def open_profiles(name):
+        activate(name + ' profile')
+        if args.serial == 'emulator-5574':
+            wait(lambda: 'Switch profile' in texts(tree()[0]), 10)
+            activate('Switch profile')
+        wait(lambda: 'Who’s watching?' in texts(tree()[0]), 10)
+
     initial = capture('foreground-before')
-    assert not any(value in ['Sign in to VIPTV', 'Who’s watching?'] for value in texts(initial))
+    assert 'Sign in to VIPTV' not in texts(initial)
+    if args.phase not in ['profile-rotation', 'revoke']:
+        assert 'Who’s watching?' not in texts(initial)
+    if args.phase == 'profile-rotation':
+        if 'Who’s watching?' not in texts(initial):
+            open_profiles(config['profile_name'])
+        if args.serial == 'emulator-5576':
+            for _ in range(12):
+                root, _ = tree()
+                focused = next((n for n in root.iter('node') if n.get('focused') == 'true'), None)
+                if focused is not None and config['alternate_profile_name'] in texts(focused):
+                    break
+                device('shell', 'input', 'keyevent', 'KEYCODE_TAB')
+            else:
+                raise AssertionError('Alternate profile focus was not established before hold')
+        before = control({'failIdentityOnce401': True, 'rejectRefresh401': False, 'delayIdentity': 0, 'delayRefreshResponse': 15000})
+        background_return()
+        wait(lambda: control()['successfulRefreshes'] > before['successfulRefreshes'], 10)
+        if args.serial == 'emulator-5576':
+            device('shell', 'input', 'keyevent', 'KEYCODE_ENTER')
+        else:
+            activate(config['alternate_profile_name'])
+        wait(lambda: 'Home' in texts(tree()[0]) and 'Who’s watching?' not in texts(tree()[0]) and
+            config['alternate_profile_name'] + ' profile' in texts(tree()[0]), 35)
+        replaced = capture('foreground-held-refresh-profile-replaced')
+        assert 'Who’s watching?' not in texts(replaced)
+        assert config['profile_name'] + ' profile' not in texts(replaced)
+        assert control()['successfulRefreshes'] == before['successfulRefreshes'] + 1
+        assert control()['pairingStarts'] == before['pairingStarts']
+        control({'delayRefreshResponse': 0})
+        open_profiles(config['alternate_profile_name'])
+        activate(config['profile_name'])
+        wait(lambda: 'Home' in texts(tree()[0]) and config['profile_name'] + ' profile' in texts(tree()[0]), 20)
+        print('PASS: accepted rotation preserves new explicit profile intent without old-profile resurrection')
+        return
     if args.phase == 'rotation':
         before = control({'failIdentityOnce401': True, 'rejectRefresh401': False, 'delayIdentity': 0, 'delayRefreshResponse': 10000})
         background_return()
@@ -144,15 +185,14 @@ def main():
         before = control({'delayIdentity': 12000})
         background_return()
         wait(lambda: control()['identityCalls'] > before['identityCalls'], 10)
-        activate(config['profile_name'] + ' profile')
-        wait(lambda: 'Who’s watching?' in texts(tree()[0]), 10)
+        open_profiles(config['profile_name'])
         control({'delayIdentity': 0})
         activate(config['alternate_profile_name'])
-        wait(lambda: config['alternate_profile_name'] + ' profile' in texts(tree()[0]), 20)
+        wait(lambda: 'Home' in texts(tree()[0]) and config['alternate_profile_name'] + ' profile' in texts(tree()[0]), 20)
         time.sleep(13)
-        assert config['alternate_profile_name'] + ' profile' in texts(capture('foreground-replaced-profile'))
-        activate(config['alternate_profile_name'] + ' profile')
-        wait(lambda: 'Who’s watching?' in texts(tree()[0]), 10)
+        replaced = capture('foreground-replaced-profile')
+        assert 'Who’s watching?' not in texts(replaced) and config['alternate_profile_name'] + ' profile' in texts(replaced)
+        open_profiles(config['alternate_profile_name'])
         activate(config['profile_name'])
         wait(lambda: config['profile_name'] + ' profile' in texts(tree()[0]), 20)
         control({'delayIdentity': 0})

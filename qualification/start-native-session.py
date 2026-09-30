@@ -74,6 +74,8 @@ def main():
         for label, value in [('Username', config['username']), ('Password', config['password'])]:
             assert re.fullmatch(r'[A-Za-z0-9_-]+', value), 'Fixture text must not require shell escaping'
             tap(label)
+            device('shell', 'input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_A')
+            device('shell', 'input', 'keyevent', 'KEYCODE_DEL')
             device('shell', 'input', 'text', value)
         device('shell', 'input', 'keyevent', 'KEYCODE_BACK')
         tap('Sign in')
@@ -97,7 +99,15 @@ def main():
             device('shell', 'input', 'keyevent', 'KEYCODE_TAB')
         else:
             raise AssertionError('Configured profile was not remotely reachable')
-    wait('Home')
+    try:
+        wait('Home', timeout=10)
+    except AssertionError:
+        assert 'Who’s watching?' in labels(tree()), 'Profile selection returned an unexpected public state'
+        if args.serial == 'emulator-5574':
+            tap(config['profile_name'])
+        else:
+            device('shell', 'input', 'keyevent', 'KEYCODE_DPAD_CENTER')
+        wait('Home')
     print('PASS: actual native authentication and server-confirmed profile selection')
 
 
