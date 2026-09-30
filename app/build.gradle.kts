@@ -43,6 +43,11 @@ kotlin {
             implementation("org.json:json:20240303")
             implementation("com.squareup.okhttp3:okhttp:4.12.0")
         }
+        androidInstrumentedTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.androidx.test.runner)
+            implementation(libs.kotlinx.coroutines.test)
+        }
     }
 }
 

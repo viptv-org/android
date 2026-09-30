@@ -1,5 +1,57 @@
 # BE-002 Android live cutover handoff — 2026-09-29
 
+## Actual Android x86_64 JNA/JNI instrumentation — 2026-09-30
+
+The same isolated native-stress branch now adds only `:app` instrumentation test
+dependencies (existing runner/catalog versions), a three-case test class and this
+evidence. Production UI/policy, Core8 source/bindings/wire/pins and the owner's
+original Android/handoff checkouts are unchanged. `AndroidJUnitRunner` was already
+the configured runner; no Compose test Activity or MainActivity rule was added.
+
+Normal debug and test APK assembly passed. All three packaged `libviptv_core.so`
+files were copied from the reviewed handoff's existing Core8 builds and independently
+hash-verified: arm64-v8a `7bda7ca7…`, armeabi-v7a `ff9c1687…`, x86_64 `66bda53c…`.
+Only x86_64 was executed here; packaging unchanged ARM files is not ARM runtime
+qualification. Normal APK SHA256:
+`ea1bdedc1082898b6333f9c53a487aee4b718792a87b28b5981052cd7607ffaa`;
+test APK:
+`ea14f9420f57fa8ee6911f81adee88b8b019b09c2eb341332f0445af2fa4fa9b`.
+
+One new API36 Google APIs x86_64 phone AVD used a private `ANDROID_AVD_HOME`,
+owned serial `emulator-5584`, and only class-filtered instrumentation:
+`org.viptv.app.SharedCoreAndroidNativeStressTest`. AndroidJUnitRunner reported
+**OK (3 tests)** in 0.887s, zero failures. Each case has a 60s deadline:
+
+- 200 actual Android native bridge start/resolve/drop and UTF-8/error-buffer cycles;
+  repeated close is safe and post-close access is rejected.
+- Real Android main-looper/CoreSession work: 50 queued begin/close cases never
+  reach storage/render; 20 native storage-error renders actually suspend and
+  cancel, with no callbacks after close. Actual Android main-looper identity is
+  asserted; no `setMain`, test-owned dispatcher, virtual clock or replacement
+  core is used.
+  Only a test storage effect fails intentionally, before any HTTP is produced.
+- 20 actual JNI concurrent-close races, with 3,813 real native views and 4,267
+  exact closed-handle refusals; old storage effects cannot publish into a newer
+  native epoch. Owned workers terminate; unexpected errors are not swallowed.
+
+MainActivity/default-origin code was never launched. Each activity monitor reported
+zero app Activities, and before/after task dumps contained no MainActivity. Effects
+were resolved in test scope or refused by the failing storage fixture; no real
+backend/provider/account/network or media source was used. Private evidence is
+retained at `/tmp/android-native-jni.T3QJqL/`. Both installed packages were removed,
+the exact owned emulator stopped, its private AVD deleted and ports5584/5585 verified
+free. No existing AVD/device, shared HTTPS service or production data was changed.
+The test-only AVD can be recreated from the installed system image; no user data
+was discarded. Host regression tasks and Core/design/diff checks passed; the 169
+qualified host results remain unchanged.
+
+This closes the bounded Android x86_64 JNI/buffer/MainLooper cancellation cases,
+not foreground/background Activity, active Android HTTP cancellation, PiP/media,
+ARM execution, physical hardware or instrumented native leak/allocation proof.
+Those remain separate gates. Runner configuration was checked against current
+Context7 Kotlin documentation and the official AndroidJUnitRunner/SDK documentation;
+the existing `androidTarget` configuration was retained without a plugin migration.
+
 ## Actual host UniFFI lifecycle stress — 2026-09-30
 
 Isolated `test/android-native-core-stress` starts at handoff
