@@ -41,12 +41,11 @@ private data class SettingRow(val title: String, val detail: String, val icon: S
         SettingRow("Subtitles", if (prefs.subtitlesEnabled) "On" else "Off", "captions", { controller.setPreference(prefs.copy(subtitlesEnabled = !prefs.subtitlesEnabled)) }, checked = prefs.subtitlesEnabled),
         SettingRow("Subtitle size", prefs.subtitleSize, "captions", { choices("Subtitle size", listOf("Small" to "small", "Normal" to "normal", "Large" to "large")) { controller.setPreference(prefs.copy(subtitleSize = it)) } }),
         SettingRow("Subtitle appearance", prefs.subtitleStyle, "captions", { choices("Subtitle appearance", listOf("System default" to "system", "Text with shadow" to "shadow", "White text on black" to "opaque")) { controller.setPreference(prefs.copy(subtitleStyle = it)) } }),
-        SettingRow("Maximum quality", prefs.quality, "settings", { choices("Maximum quality", listOf("Auto" to "auto", "1080p" to "1080p", "720p" to "720p", "480p" to "480p")) { controller.setPreference(prefs.copy(quality = it)) } }),
         SettingRow("Autoplay next episode", if (prefs.autoplay) "On" else "Off", "next", { controller.setPreference(prefs.copy(autoplay = !prefs.autoplay)) }, checked = prefs.autoplay),
     ) else listOf(
         SettingRow("Switch profile", if (tv) "Choose who's watching." else "", "profiles", { controller.navigate(Destination.Profile) }),
         SettingRow("Manage profiles", "Add, rename or delete profiles.", "person", controller::openProfileManagement),
-        SettingRow("Playback preferences", "Audio, subtitles and quality", "play", { page = "Playback preferences" }),
+        SettingRow("Playback preferences", "Audio and subtitles", "play", { page = "Playback preferences" }),
         SettingRow("OLED mode", "Pure black background", "moon", { model.updateOled(!model.oled) }, checked = model.oled),
         SettingRow("Accent colour", "Make it yours", "settings", {
             choice = "Accent colour" to listOf("Gold" to C.accentDefault, "Coral" to C.accentOptionsCoral, "Mint" to C.accentOptionsMint, "Periwinkle" to C.accentOptionsPeriwinkle).map { (name, color) -> name to { model.updateAccent(color); choice = null } }

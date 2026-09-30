@@ -94,8 +94,10 @@ internal fun AppController.onGuideViewport(first: Int, last: Int, scrollOffset: 
 internal fun AppController.appendGuidePage() = loadAdjacentGuidePage(false)
 internal fun AppController.changeGuideCategoryPage(delta: Int, renderedRevision: Long) = guideCategories.move(delta, renderedRevision)
 internal fun AppController.retryGuideCategories() = guideCategories.retry()
-internal fun AppController.onGuideCategoryViewport(renderedRevision: Long, firstId: String, lastId: String, offset: Int = 0) =
-    guideCategories.viewport(renderedRevision, firstId, lastId, offset)
+internal fun AppController.onGuideCategoryViewport(renderedRevision: Long, firstId: String, lastId: String, offset: Int = 0, allowPaging: Boolean = true) =
+    guideCategories.viewport(renderedRevision, firstId, lastId, offset, allowPaging)
+internal fun AppController.onGuideCategoryRowViewport(renderedRevision: Long, key: String, index: Int, offset: Int, focusKey: String?) =
+    guideCategories.rowViewport(renderedRevision, key, index, offset, focusKey)
 private fun AppController.loadAdjacentGuidePage(previous: Boolean) {
     val current = _state.value.guideUi
     val cursor = if (previous) current.previousCursor else current.nextCursor

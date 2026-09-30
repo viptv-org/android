@@ -17,11 +17,11 @@ merging UI work; the owner checkout has not been switched or overwritten.
 
 Category controller logic now supports next/previous replacement pages of 200,
 with separate cancellation/retry and scope guards. The owner-facing
-`GuideScreen.kt` callbacks are deliberately not wired by this controller-only
-pass; see the integration notes below. Remaining gates include visible category
-traversal beyond its first 200 entries, Android
-TV/physical-device qualification, real backend/gateway integration, and the
-remaining quality/legacy cleanup across the organization. See TESTING.md.
+`GuideScreen.kt` now wires observation-only viewport/anchor callbacks and existing
+TV terminal controls; phone paging requires continued drag beyond the existing
+row ends. The isolated Settings screen no longer offers Maximum quality. Original
+UI-checkout integration, physical-device qualification and real backend/gateway
+integration remain separate gates. See TESTING.md.
 
 ### Category integration for the UI owner
 
@@ -46,6 +46,12 @@ edge focus. Existing `guideUi.categories` remains the current bounded list.
 These methods update category state only. They must not reset channel filters,
 programme time, schedules or unrelated playback. No default catalog override is
 invented from response metadata. Your root Android checkout is not modified.
+
+The isolated screen records exact namespaced row keys/index/offset (including
+fixed controls) and actual TV focus. Search-Right advances; All-Left reverses;
+ordinary provider-to-Search/Recent focus moves and Search activation remain.
+Phone terminal overscroll waits for drag/fling settlement and closed overlays
+before restoring the provider anchor. Core/server wire declarations are unchanged.
 
 Actions delivery: main pushes and manual builds produce sideloading artifacts
 (Android universal APK; desktop Windows/Linux installers; Roku ZIP; TV WGT/IPK).

@@ -28,6 +28,11 @@ data class GuideCategoryPageState(
     val visibleLast: Int = 0,
     val scrollOffset: Int = 0,
     val awaitingAnchor: Boolean = false,
+    /** App-internal exact LazyRow position, including the fixed controls. */
+    val rowFirstKey: String? = null,
+    val rowFirstIndex: Int = 0,
+    val rowScrollOffset: Int = 0,
+    val rowFocusKey: String? = null,
 )
 
 /** One 200-category replacement page. It never fetches channels, EPG or media. */
@@ -74,8 +79,18 @@ internal class GuideCategoryPager(
         load(cursor, previous, active)
     }
 
+    fun rowViewport(renderedRevision: Long, firstKey: String, firstIndex: Int, offset: Int, focusKey: String?) {
+        if (currentScope() != owner || renderedRevision != page.revision || page.loading) return
+        if (guideCategoryRowKeyIndex(page.items, firstKey) != firstIndex ||
+            focusKey != null && guideCategoryRowKeyIndex(page.items, focusKey) == null) return
+        val position = offset.coerceAtLeast(0)
+        if (page.rowFirstKey == firstKey && page.rowFirstIndex == firstIndex && page.rowScrollOffset == position && page.rowFocusKey == focusKey) return
+        page = page.copy(rowFirstKey = firstKey, rowFirstIndex = firstIndex, rowScrollOffset = position, rowFocusKey = focusKey)
+        publish(page)
+    }
+
     /** Category IDs only, not the fixed All/My/Recent/Search tab indices. */
-    fun viewport(renderedRevision: Long, firstId: String, lastId: String, offset: Int) {
+    fun viewport(renderedRevision: Long, firstId: String, lastId: String, offset: Int, allowPaging: Boolean = true) {
         if (currentScope() != owner || renderedRevision != page.revision || page.loading) return
         val first = page.items.indexOfFirst { it.id == firstId }
         val last = page.items.indexOfFirst { it.id == lastId }
@@ -88,7 +103,7 @@ internal class GuideCategoryPager(
         page = page.copy(visibleFirst = first, visibleLast = last, scrollOffset = offset.coerceAtLeast(0), awaitingAnchor = false)
         publish(page)
         // The first viewport after restoration is an acknowledgement, not input.
-        if (restored || page.error != null) return
+        if (restored || page.error != null || !allowPaging) return
         if (forward && last == page.items.lastIndex) move(1, renderedRevision)
         else if (backward && first == 0) move(-1, renderedRevision)
     }

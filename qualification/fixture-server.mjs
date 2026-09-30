@@ -4,6 +4,7 @@
 import https from 'node:https';
 import { readFileSync, statSync, createReadStream } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { boundedCategoryCount, categoryFixturePage } from './category-fixture.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -31,6 +32,7 @@ let copyUrl = false;
 let delayPlayback = 0;
 let failPlayback = false;
 let liveCount = 0;
+let categoryCount = 0;
 const calls = [];
 const token = { session_id: 'android-fixture-session', account_id: '7', profile_id: null, access_token: 'fixture-access', refresh_token: 'fixture-refresh', expires_in: 900 };
 const json = (response, value, status = 200) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(value)); };
@@ -69,6 +71,7 @@ const server = https.createServer({
     }
     if (path === '/__control') {
       if ('liveCount' in body) liveCount = Math.max(0, Math.min(1000, Number(body.liveCount) || 0));
+      if ('categoryCount' in body) categoryCount = boundedCategoryCount(body.categoryCount);
       if ('copyUrl' in body) copyUrl = !!body.copyUrl;
       if ('delayPlayback' in body) delayPlayback = Math.max(0, Math.min(10000, Number(body.delayPlayback) || 0));
       if ('failPlayback' in body) failPlayback = !!body.failPlayback;
@@ -81,8 +84,10 @@ const server = https.createServer({
     if (path === '/__requests') return json(response, calls);
     const pageOffset = /^page_\d+$/.test(url.searchParams.get('cursor') ?? '') ? Number(url.searchParams.get('cursor').slice(5)) : 0;
     calls.push({ method: request.method, path, at: Date.now(), ...(path === '/api/v2/iptv/live/channels' ? { pageOffset } : {}) });
-    if (liveCount && path === '/api/v2/iptv/live/categories')
-      return json(response, { catalog_id: 1, generation: 1, items: [{ id: 'news', name: 'News' }], next_cursor: null, previous_cursor: null });
+    if ((liveCount || categoryCount) && path === '/api/v2/iptv/live/categories') {
+      const page = categoryFixturePage(url, categoryCount);
+      return json(response, page.body, page.status);
+    }
     if (liveCount && path === '/api/v2/iptv/live/channels') {
       const search = (url.searchParams.get('search') ?? '').toLowerCase();
       const items = Array.from({ length: liveCount }, (_, index) => ({ id: `channel-${index}`, name: `Channel ${index + 1}`, category_id: 'news', category: 'News' }))

@@ -14,6 +14,59 @@ import kotlin.test.*
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class GuideCategoryPagerTest {
+    @Test fun `row keys retain fixed controls through cancel and reject mismatched stale scope samples`() = runTest {
+        var active: GuideCategoryScope? = owner
+        var state = GuideCategoryPageState()
+        val pager = GuideCategoryPager(this, { query -> page(if (query.cursor == null) 0 else 1) },
+            { active }, { state = it }, { fail(it.message) })
+        pager.ensure(); runCurrent()
+        pager.rowViewport(state.revision,"fixed:all",0,4,"fixed:all")
+        assertTrue(state.awaitingAnchor); assertEquals(0,state.rowFirstIndex)
+        pager.viewport(state.revision,"cat-0","cat-6",0,allowPaging=false)
+        pager.rowViewport(state.revision,"fixed:search",203,12,"fixed:search")
+        pager.cancel(); pager.ensure()
+        assertEquals("fixed:search",state.rowFirstKey); assertEquals(203,state.rowFirstIndex)
+        assertEquals(12,state.rowScrollOffset); assertEquals("fixed:search",state.rowFocusKey)
+        val before = state
+        pager.rowViewport(state.revision,"fixed:all",203,0,"fixed:all")
+        pager.rowViewport(state.revision-1,"fixed:all",0,0,"fixed:all")
+        assertEquals(before,state)
+        active = owner.copy(profileId="other")
+        pager.rowViewport(state.revision,"fixed:all",0,0,"fixed:all")
+        assertEquals(before,state)
+        pager.ensure(); runCurrent()
+        assertNull(state.rowFirstKey); assertNull(state.rowFocusKey); assertEquals(0,state.rowScrollOffset)
+    }
+    @Test fun `replacement resets row anchors while an error keeps the old exact row`() = runTest {
+        var state = GuideCategoryPageState(); var reject = true
+        val pager = GuideCategoryPager(this, { query -> if(query.cursor!=null && reject) throw GatewayError(503,"Synthetic failure") else page(if(query.cursor==null) 0 else 1) },
+            { owner }, { state = it }, {})
+        pager.ensure(); runCurrent(); pager.viewport(state.revision,"cat-0","cat-6",0,allowPaging=false)
+        pager.rowViewport(state.revision,"fixed:search",203,9,"fixed:search")
+        pager.move(1,state.revision); runCurrent()
+        assertEquals("fixed:search",state.rowFirstKey); assertEquals(9,state.rowScrollOffset)
+        reject = false; pager.retry(); runCurrent()
+        assertNull(state.rowFirstKey); assertNull(state.rowFocusKey); assertEquals(0,state.rowFirstIndex)
+    }
+    @Test fun `observation-only viewport saves edges without stealing fixed-control navigation`() = runTest {
+        var state = GuideCategoryPageState(); var requests = 0
+        val pager = GuideCategoryPager(this, { query -> requests++; page(if (query.cursor == null) 0 else 1) },
+            { owner }, { state = it }, { fail(it.message) })
+        pager.ensure(); runCurrent()
+        pager.viewport(state.revision,"cat-0","cat-6",0,allowPaging=false)
+        pager.viewport(state.revision,"cat-194","cat-199",13,allowPaging=false); runCurrent()
+        assertEquals(1,requests); assertEquals(194,state.visibleFirst); assertEquals(13,state.scrollOffset)
+        pager.move(1,state.revision); runCurrent(); assertEquals(2,requests)
+        val revision = state.revision
+        pager.viewport(revision,"cat-394","cat-399",0,allowPaging=false)
+        assertTrue(state.awaitingAnchor)
+        pager.viewport(revision,"cat-200","cat-206",0,allowPaging=false)
+        assertFalse(state.awaitingAnchor)
+        pager.viewport(revision,"cat-200","cat-206",3,allowPaging=false); runCurrent()
+        assertEquals(2,requests)
+        pager.viewport(revision - 1,"cat-394","cat-399",0,allowPaging=false)
+        assertEquals(0,state.visibleFirst)
+    }
     private val owner = GuideCategoryScope("profile", "1", "7")
     private fun page(index: Int, count: Int = 200) = LiveCatalogCategories("1", "7",
         List(count) { LiveCatalogCategory("cat-${index * 200 + it}", "Category") },

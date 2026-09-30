@@ -1,5 +1,44 @@
 # BE-002 Android live cutover handoff — 2026-09-29
 
+## Isolated category screen wiring and quality-control retirement — 2026-09-30
+
+GuideScreen preserves its existing row, fixed All/My channels/Recent/Search
+actions, geometry, channel/time state and Back meaning. Existing Search-Right /
+All-Left TV terminal edges request category pages; normal provider-to-fixed-control
+focus movements remain available. Phone uses explicit continued user drag beyond
+the true row terminal, never provider visibility or inertial arrival alone.
+Observation-only pager callbacks retain captured revision/scope guards. Exact
+namespaced row key/index/offset and TV focus survive full Guide leave/reentry;
+new pages/scopes reset that state. Actual provider focus confirms TV anchors;
+three bounded frame attempts plus manual-focus confirmation recover failed requests.
+Touch anchors wait for drag/fling settlement and closed overlays before restoration.
+Settings removes only Maximum quality and its obsolete description; real decoder
+and source-quality facts remain unchanged. Generated Core/server wire is untouched.
+
+All 166 library/app host tests passed (eight added guard/row/focus cases), normal
+debug APK assembly and lint passed. Lint retains 74 warnings/three baseline-filtered
+errors. Core/design checks and the bounded/default/400-category opaque-cursor fixture
+checks passed. All three previously built Core8 ABIs remain packaged; normal APK
+has no fixture CA and its packaged network XML trusts system certificates only.
+Normal APK SHA256:
+`b4bfc60c1aaca0905d3e1165986b12a4c864d2e7248bc70f0b42aa9f3d7be8fb`.
+
+Dedicated API36 QA phone5574/TV5576 used fresh owned loopback HTTPS ports9447/9448
+and synthetic400 categories/400 channels. TV verified first-visible-channel Up to
+a composed category control, ordinary Search access, forward actual Category201
+focus, reverse actual Category200 focus, Search dialog Back, and noninitial All /
+Search full Guide-to-Home/reentry focus/row restoration. Phone verified Search
+activation/Back at the terminal, forward/reverse provider anchors, and a continued
+1.5-second terminal drag with exactly one category request and real201 at the left
+anchor after settlement. The earlier fast-response drag race was reproduced and
+fixed; ordinary short drag also restored201. Private screenshots were inspected
+under ignored qualification/artifacts; no captures or fixture-trusting APK ship.
+
+These are native emulator UI/Core checks with mocked API/art boundaries, not real
+provider/gateway media, physical remote/codec/HDR/DRM or production qualification.
+The owner's original Android UI checkout is untouched; this remains a separately
+reviewable/cherry-pickable handoff, not a merged or deployed UI update.
+
 ## Engine-free shared Core adoption — 2026-09-30
 
 The isolated handoff adopts published Core
