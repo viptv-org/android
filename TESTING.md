@@ -1,5 +1,19 @@
 # BE-002 Android live cutover handoff — 2026-09-29
 
+## Preference transport follow-up — 2026-09-30
+
+Preference PUTs now omit the retired `quality` field while sending the six active
+audio/subtitle/autoplay fields. The compatibility model remains until the UI
+owner removes its Maximum quality row; v2 playback already ignores that field
+and retains measured decoder dimensions. No settings layout, generated core
+binding or frozen v2 playback/catalog contract changed.
+
+JDK17 host preparation and all 148 library/app unit tests passed. The new actual
+HTTP adapter fixture verifies the outgoing body and decoding a backend response
+without quality; its synthetic partial-merge store retains a historical value.
+This is transport evidence, not a real backend migration or a device test.
+Normal APK/native build evidence is recorded after the build below.
+
 Isolated branch `refactor/android-backend-cutover`; core fba95c8, matching backend
 2c2eca2. Normal Home/recent/search/guide and exact live playback use v2. No native
 original URL is obtained from a source card: its opaque handle goes through the

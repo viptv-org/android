@@ -16,6 +16,34 @@ import kotlin.test.assertTrue
  * mocking the gateway or its JSON helpers.
  */
 class BackendGatewayWireTest {
+    @Test fun `preference writes omit retired quality and decode active backend preferences`() = runBlocking {
+        val stored = JSONObject("""{"audio_language":"en","subtitle_language":"en","subtitles_enabled":false,"subtitle_size":"normal","subtitle_style":"system","quality":"480p","autoplay":true}""")
+        FixtureServer(2) { request ->
+            assertEquals("/api/profiles/profile-one/preferences", request.target)
+            if (request.method == "PUT") {
+                val body = JSONObject(request.body)
+                assertFalse(body.has("quality"))
+                assertEquals(6, body.length())
+                for (name in body.keys()) stored.put(name, body.get(name))
+            } else assertEquals("GET", request.method)
+            val active = JSONObject(stored.toString()).also { it.remove("quality") }
+            FixtureResponse(active.toString())
+        }.use { server ->
+            val gateway = VipTvHttpGateway(server.origin)
+            gateway.savePreferences("profile-one", PlaybackPreferences(audioLanguage = "es", subtitleLanguage = "fr",
+                subtitlesEnabled = true, subtitleSize = "large", subtitleStyle = "shadow", quality = "720p", autoplay = false))
+            val active = gateway.preferences("profile-one")
+            assertEquals("es", active.audioLanguage)
+            assertEquals("fr", active.subtitleLanguage)
+            assertTrue(active.subtitlesEnabled)
+            assertEquals("large", active.subtitleSize)
+            assertEquals("shadow", active.subtitleStyle)
+            assertFalse(active.autoplay)
+            assertEquals("auto", active.quality)
+            assertEquals("480p", stored.getString("quality"))
+            server.assertHealthy()
+        }
+    }
     @Test fun `same source gateway options use shared mapping without changing title position or tracks`() = runBlocking {
         val ids = mutableSetOf<String>()
         FixtureServer(2) { request ->
