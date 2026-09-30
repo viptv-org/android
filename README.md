@@ -89,7 +89,36 @@ scripts/prepare-core.sh android
 ./gradlew --no-daemon :app:assembleDebug :app:lintDebug
 ```
 
-Hosted `app-review.yml` also builds the pinned native core for host tests and all three Android ABIs. A passing build does not qualify physical playback hardware. Current emulator and physical evidence is recorded separately in [TESTING.md](TESTING.md).
+Hosted `build.yml` also builds the pinned native core for host tests and all three Android ABIs. A passing build does not qualify physical playback hardware. Current emulator and physical evidence is recorded separately in [TESTING.md](TESTING.md).
+
+### Hosted Core8 handoff artifact — 2026-09-30
+
+The existing manual build was dispatched once on `refactor/android-backend-cutover`.
+[Run 36691357270](https://github.com/viptv-org/android/actions/runs/36691357270)
+and APK job `109809085239` succeeded at exact source
+`75bbacffe47eb96d7c93993e04b6a7c8f4ec722b`. Host preparation, library/app unit-test
+tasks, all three Android release native ABIs, normal debug APK assembly and lint
+passed. Lint retains 74 warnings and three baseline-filtered errors. The workflow
+does not upload unit-test XML; its task success is separate from the prior local
+158-test count recorded in TESTING.md.
+
+Downloaded `viptv-android-phone-tv-debug-75bbacff.apk` SHA256:
+`9127959d0aa0d5db1a4bcbabaf3154c6b8c472f1ed236c64b84b970d88109d44`.
+It matches the artifact SHA256SUMS; build.json records Core
+`8ae9f81bb753aaf2de53af5b594ead29845e1a8a`, the current design pin and stable
+development signing. APK archive/signature checks passed (one signer, v2 scheme).
+Manifest identity is `org.viptv.app`, version `0.1.0`, min SDK24/target SDK36.
+Packaged arm64-v8a/armeabi-v7a/x86_64 libraries have the correct ELF architectures,
+active Core/SmartCast bridges and no metadata exports for the eight retired
+provider functions. Fixture CA is absent; packaged network security XML trusts
+system certificates only.
+
+The APK and authoritative run/job evidence remain in the ignored local directory
+`qualification/artifacts/hosted-75bbacf-B9Jxt2`. Nothing was installed or deployed;
+no emulator/physical media, codec, remote or native playback qualification is
+implied. Category UI integration and existing hardware gates remain open. This
+evidence-only change leaves controller/UI/frozen wire and the owner's original
+Android checkout untouched.
 
 ## Design and native preview
 
