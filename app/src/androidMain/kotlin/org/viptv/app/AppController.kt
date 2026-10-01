@@ -24,7 +24,7 @@ import kotlinx.coroutines.sync.withPermit
 class AppController(context: Context, private val origin: String) {
     private val television = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
     private val store = context.getSharedPreferences("viptv.auth", Context.MODE_PRIVATE)
-    internal val gateway = VipTvHttpGateway(origin, store.getString("access", null), ::refreshAccessToken)
+    internal val gateway = VipTvHttpGateway(origin, store.getString("access", null), ::refreshAccessToken, television)
     internal val scope = CoroutineScope(Job() + Dispatchers.Main.immediate)
     private val coreSession = CoreSession(origin, store, scope, gateway::setAccessToken, ::renderSession)
     private val sessionRefreshMutex = Mutex()
@@ -77,12 +77,27 @@ class AppController(context: Context, private val origin: String) {
     internal var detailGeneration = 0L
     internal var guideGeneration = 0L
     internal var guideBrowseGeneration = 0L
+    internal var guideBrowseJob: Job? = null
+    internal var guideRowsJob: Job? = null
+    internal var guidePageJob: Job? = null
+    internal val guidePages = LivePageWindow()
+    internal val guideCategories by lazy {
+        GuideCategoryPager(scope, gateway::liveCategoriesV2, {
+            val state = _state.value
+            state.selectedProfile?.id?.takeIf { state.route is Route.Guide && !state.loading && state.preparingSourceId == null }
+                ?.let { GuideCategoryScope(it, state.guideUi.catalogId, state.guideUi.generation) }
+        }, { page ->
+            _state.value = _state.value.copy(guideUi = _state.value.guideUi.copy(categories = page.items, categoryPage = page))
+        }, ::fail)
+    }
     internal var discoverGeneration = 0L
     internal var managedRecoveryKey: String? = null
     /** Suppresses duplicate Media3 failure events while the one permitted same-source recovery is awaiting the server. */
     internal var managedRecoveryInFlightKey: String? = null
+    internal var activePlaybackDelivery = PlaybackDeliveryOptions()
     internal val playbackPrepareMutex = Mutex()
     internal var playbackGeneration = 0L
+    internal var playbackInteractionVersion = 0L
     internal val guideScheduleCache = mutableMapOf<String, GuideScheduleCache>()
     internal var explicitResumeAwaitingCompletionKey: String? = null
     internal var autoNextMediaKey: String? = null
@@ -230,8 +245,7 @@ class AppController(context: Context, private val origin: String) {
         detailGeneration++; detailJob?.cancel()
         searchJob?.cancel(); discoverJob?.cancel(); sourceDiscovery?.cancel()
         cancelPendingQueueContinuation()
-        guideBrowseGeneration++
-        guideGeneration++
+        cancelGuideWork()
         pendingCoreAction = { coreSession.select(profile.id) }
         coreSession.select(profile.id)
     }
@@ -241,6 +255,7 @@ class AppController(context: Context, private val origin: String) {
 
     fun signOut() = scope.launch { guarded("Enter parent PIN to sign out") { stopPlayback((_state.value.route as? Route.Player)?.media); pendingCoreAction = coreSession::signOut; coreSession.signOut() } }
     fun close() {
+        cancelGuideWork()
         loginJob?.cancel(); playbackStartJob?.cancel(); coreSession.close(); homeJob?.cancel(); detailJob?.cancel(); pairingPoll?.cancel(); sourceDiscovery?.cancel()
         queueContinuationJob?.cancel(); discoverJob?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel()
         if (playerDelegate.isInitialized()) { stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
@@ -268,6 +283,7 @@ class AppController(context: Context, private val origin: String) {
     /** The native player has errored/replaced; stop heartbeat before exposing recovery actions. */
     internal fun retirePlaybackSession() {
         heartbeatJob?.cancel()
+        progressJob?.cancel()
         val prior = playbackSessionId
         playbackSessionId = null
         prior?.let { id -> scope.launch { runCatching { gateway.stopPlayback(id) } } }
@@ -278,12 +294,47 @@ class AppController(context: Context, private val origin: String) {
         heartbeatJob?.cancel()
         playbackSessionId = sessionId
         heartbeatJob = scope.launch {
+            if (gateway.playbackRemainingMillis(sessionId) != null) {
+                maintainPlaybackLease(
+                    remaining = { gateway.playbackRemainingMillis(sessionId) },
+                    interval = { gateway.playbackRenewAfterMillis(sessionId) },
+                    renew = { gateway.heartbeat(sessionId) },
+                    failed = { error -> rejectPlaybackLease(sessionId, error) },
+                )
+                return@launch
+            }
             while (isActive) {
                 delay(15_000)
                 runCatching { gateway.heartbeat(sessionId) }
             }
         }
         if (prior != null && prior != sessionId) scope.launch { runCatching { gateway.stopPlayback(prior) } }
+    }
+    private suspend fun rejectPlaybackLease(sessionId: String, error: Throwable) {
+        if (playbackSessionId != sessionId) return
+        val route = (_state.value.route as? Route.Player)?.let { it.copy(media = snapshotPlaybackMedia(it)) }
+        runCatching { player.stop() }
+        if (playbackSessionId != sessionId) return
+        retirePlaybackSession()
+        fail(error)
+        route?.let(::showPlaybackRecovery)
+    }
+    fun validatePlaybackOnForeground() {
+        val id = playbackSessionId ?: return
+        if (gateway.playbackRemainingMillis(id) == null) return
+        val generation = playbackGeneration
+        scope.launch {
+            val wasPlaying = player.state.value.isPlaying
+            try {
+                if (wasPlaying) pausePlayback()
+                val interaction = playbackInteractionVersion
+                kotlinx.coroutines.withTimeout((gateway.playbackRemainingMillis(id) ?: 0).coerceAtLeast(1)) { gateway.heartbeat(id) }
+                if (playbackSessionId == id && playbackGeneration == generation && wasPlaying && playbackInteractionVersion == interaction) resumePlayback()
+            } catch (cancelled: CancellationException) {
+                if (cancelled is kotlinx.coroutines.TimeoutCancellationException) rejectPlaybackLease(id, GatewayError(410, "Playback authorization expired. Start playback again.", "playback_expired"))
+                else throw cancelled
+            } catch (error: Exception) { rejectPlaybackLease(id, error) }
+        }
     }
     internal fun startProgressPersistence(media: Media) {
         progressJob?.cancel()

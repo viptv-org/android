@@ -18,15 +18,15 @@ class StreamUrlCopyTest {
         FixtureServer(4) { request ->
             val index = sequence++ / 2
             if (request.method == "POST") {
-                assertEquals("/api/playback", request.target)
+                assertEquals("/api/v2/playback", request.target)
                 val body = JSONObject(request.body)
                 assertEquals("source-$index", body.getString("stream_id"))
                 assertEquals(0.0, body.getDouble("position"))
-                assertTrue(body.getJSONObject("capabilities").getBoolean("direct_urls"))
-                FixtureResponse("""{"id":"copy-$index","mode":"direct","format":"file","url":"https://provider.test/video-$index.mkv?token=synthetic%2Bvalue&x=1","authorization":{"headers":{"Authorization":"synthetic-header"}}}""")
+                assertTrue(body.getJSONObject("client").getBoolean("can_play_direct"))
+                FixtureResponse(v2Ready("copy-$index", """{"kind":"direct","format":"original","url":"https://provider.test/video-$index.mkv?token=synthetic%2Bvalue&x=1","position":0,"live":false,"headers":{"Authorization":"synthetic-header"}}"""))
             } else {
                 assertEquals("DELETE", request.method)
-                assertEquals("/api/playback/copy-$index", request.target)
+                assertEquals("/api/v2/playback/copy-$index", request.target)
                 FixtureResponse("{}")
             }
         }.use { server ->
@@ -44,10 +44,10 @@ class StreamUrlCopyTest {
             if (request.method == "POST") {
                 requested.complete(Unit)
                 Thread.sleep(150)
-                FixtureResponse("""{"id":"late","mode":"direct","url":"https://provider.test/video.mkv"}""")
+                FixtureResponse(v2Ready("late", """{"kind":"direct","format":"original","url":"https://provider.test/video.mkv","position":0,"live":false,"headers":{}}"""))
             } else {
                 assertEquals("DELETE", request.method)
-                assertEquals("/api/playback/late", request.target)
+                assertEquals("/api/v2/playback/late", request.target)
                 FixtureResponse("{}")
             }
         }.use { server ->
@@ -65,10 +65,10 @@ class StreamUrlCopyTest {
 
     @Test fun `session-bound URL cannot be copied and lease is still retired`() = runBlocking {
         FixtureServer(2) { request ->
-            if (request.method == "POST") FixtureResponse("""{"id":"managed","mode":"direct","url":"/media/managed/capability/index.m3u8"}""")
+            if (request.method == "POST") FixtureResponse(v2Ready("managed", """{"kind":"gateway","mode":"direct","format":"hls","url":"https://gateway.test/base/media/managed/capability/index.m3u8","position":0,"duration":120,"live":false,"video_mode":"copy","audio_mode":"copy","audio_tracks":[],"subtitle_tracks":[],"subtitles_supported":false}"""))
             else {
                 assertEquals("DELETE", request.method)
-                assertEquals("/api/playback/managed", request.target)
+                assertEquals("/api/v2/playback/managed", request.target)
                 FixtureResponse("{}")
             }
         }.use { server ->

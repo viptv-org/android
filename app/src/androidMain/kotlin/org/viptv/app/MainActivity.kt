@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (::model.isInitialized) model.remote.onForeground()
+        if (::model.isInitialized) model.controller.validatePlaybackOnForeground()
     }
     override fun onPause() {
         if (::model.isInitialized && !isChangingConfigurations) model.remote.onBackground()

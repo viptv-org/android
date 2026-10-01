@@ -76,6 +76,7 @@ internal fun AppController.open(media: Media) {
 }
 internal fun AppController.chooseSources(media: Media, resume: Boolean = false, origin: SourceReturn = sourceOrigin()) {
     val previous = _state.value.route
+    if (previous is Route.Guide) cancelGuideWork()
     val returnRoute = (previous as? Route.Sources)?.backRoute ?: previous.takeUnless { it is Route.Player }
     val route = Route.Sources(media, resume, origin, returnRoute)
     val profile = _state.value.selectedProfile?.id

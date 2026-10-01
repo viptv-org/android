@@ -6,15 +6,25 @@ package org.viptv.app
  * without making network decisions.
  */
 data class GuideUiState(
-    /** Exactly the server-selected 40-channel page, never a locally-filtered full catalogue. */
+    /** Bounded moving server-page window, not a playlist index. */
     val channels: List<LiveChannel> = emptyList(),
     val schedulesByChannelId: Map<String, List<GuideProgramme>> = emptyMap(),
     val selectedChannelId: String? = null,
     val page: Int = 0,
     val channelOffset: Int = 0,
-    val channelTotal: Int = 0,
+    val pageCursor: String? = null,
+    val nextCursor: String? = null,
+    val previousCursor: String? = null,
+    val catalogId: String? = null,
+    val generation: String? = null,
+    val paging: Boolean = false,
+    val pagingFailed: Boolean = false,
+    val visibleFirst: Int = 0,
+    val visibleEnd: Int = 7,
+    val visibleScrollOffset: Int = 0,
     val channelFilter: LiveChannelFilter = LiveChannelFilter.AllUs,
     val categories: List<LiveCategory> = emptyList(),
+    val categoryPage: GuideCategoryPageState = GuideCategoryPageState(),
     val searchScope: String? = null,
     val windowStartMillis: Long = 0,
     val followsNow: Boolean = true,
@@ -29,6 +39,15 @@ object LiveEntryPolicy {
 object GuidePolicy {
     const val PAGE_SIZE = 40
     const val VISIBLE_ROWS = 5
+    fun scheduleRows(state: GuideUiState): List<LiveChannel> = state.channels
+        .drop((state.visibleFirst - 2).coerceAtLeast(0))
+        .take((state.visibleEnd - state.visibleFirst + 4).coerceIn(1, 20))
+    fun movedSinceFailure(state: GuideUiState, first: Int, offset: Int): Boolean =
+        first != state.visibleFirst || kotlin.math.abs(offset.toLong() - state.visibleScrollOffset) >= 24
+    fun mayResumeSchedules(preparing: Boolean, activeJob: Boolean, cacheMissing: Boolean): Boolean =
+        !preparing && !activeJob && cacheMissing
+    fun suspended(state: GuideUiState): GuideUiState = state.copy(paging = false, loadingChannelIds = emptySet(),
+        categoryPage = state.categoryPage.copy(loading = false))
     private const val HALF_HOUR_MILLIS = 30 * 60 * 1_000L
     private const val MAX_AHEAD_MILLIS = 24 * 60 * 60 * 1_000L
 

@@ -36,6 +36,7 @@ kotlin {
             // Android AAR supplies device JNI libraries; host tests need the JAR dispatch resources.
             runtimeOnly("net.java.dev.jna:jna:5.17.0@jar")
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
             implementation(platform("androidx.compose:compose-bom:2025.04.01"))
             implementation(libs.androidx.compose.ui.test.junit4)
             // JVM unit tests exercise the real OkHttp/JSON boundary.

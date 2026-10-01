@@ -1,3 +1,256 @@
+# BE-002 Android live cutover handoff — 2026-09-29
+
+## Isolated category screen wiring and quality-control retirement — 2026-09-30
+
+GuideScreen preserves its existing row, fixed All/My channels/Recent/Search
+actions, geometry, channel/time state and Back meaning. Existing Search-Right /
+All-Left TV terminal edges request category pages; normal provider-to-fixed-control
+focus movements remain available. Phone uses explicit continued user drag beyond
+the true row terminal, never provider visibility or inertial arrival alone.
+Observation-only pager callbacks retain captured revision/scope guards. Exact
+namespaced row key/index/offset and TV focus survive full Guide leave/reentry;
+new pages/scopes reset that state. Actual provider focus confirms TV anchors;
+three bounded frame attempts plus manual-focus confirmation recover failed requests.
+Touch anchors wait for drag/fling settlement and closed overlays before restoration.
+Settings removes only Maximum quality and its obsolete description; real decoder
+and source-quality facts remain unchanged. Generated Core/server wire is untouched.
+
+All 166 library/app host tests passed (eight added guard/row/focus cases), normal
+debug APK assembly and lint passed. Lint retains 74 warnings/three baseline-filtered
+errors. Core/design checks and the bounded/default/400-category opaque-cursor fixture
+checks passed. All three previously built Core8 ABIs remain packaged; normal APK
+has no fixture CA and its packaged network XML trusts system certificates only.
+Normal APK SHA256:
+`b4bfc60c1aaca0905d3e1165986b12a4c864d2e7248bc70f0b42aa9f3d7be8fb`.
+
+Dedicated API36 QA phone5574/TV5576 used fresh owned loopback HTTPS ports9447/9448
+and synthetic400 categories/400 channels. TV verified first-visible-channel Up to
+a composed category control, ordinary Search access, forward actual Category201
+focus, reverse actual Category200 focus, Search dialog Back, and noninitial All /
+Search full Guide-to-Home/reentry focus/row restoration. Phone verified Search
+activation/Back at the terminal, forward/reverse provider anchors, and a continued
+1.5-second terminal drag with exactly one category request and real201 at the left
+anchor after settlement. The earlier fast-response drag race was reproduced and
+fixed; ordinary short drag also restored201. Private screenshots were inspected
+under ignored qualification/artifacts; no captures or fixture-trusting APK ship.
+
+These are native emulator UI/Core checks with mocked API/art boundaries, not real
+provider/gateway media, physical remote/codec/HDR/DRM or production qualification.
+The owner's original Android UI checkout is untouched; this remains a separately
+reviewable/cherry-pickable handoff, not a merged or deployed UI update.
+
+## Engine-free shared Core adoption — 2026-09-30
+
+The isolated handoff adopts published Core
+`8ae9f81bb753aaf2de53af5b594ead29845e1a8a` using `scripts/core-sync.mjs`.
+Host/Android preparation selects only `native`, removing the retired provider
+feature. Vendored changes are script-generated; the frozen Kotlin wire/model
+declarations are byte-identical. AppController, GuideModels, GuideCategoryPager,
+all application/library source and UI files are untouched in this adoption.
+
+JDK17 host preparation, fresh execution of all 158 library/app unit tests,
+three release native ABI builds (arm64-v8a, armeabi-v7a, x86_64), normal debug APK
+assembly and lint passed. Core/design integrity checks and diff checks passed.
+Lint retains 74 warnings and three baseline-filtered errors. The packaged APK
+contains all three native libraries, no fixture CA resource, and its packaged
+network security XML trusts system certificates only. Normal APK SHA256:
+`f52367af8207e5616cfe8e3e25b40d23370bec22788b08f3b6ad5c3727cca935`.
+
+No APK installation, emulator/physical playback, hosted build or production
+operation was performed. Existing category UI integration and hardware gates
+remain open. The owner's original Android checkout remains untouched.
+
+## Category controller preparation — 2026-09-30
+
+The authenticated category coordinator retains one replacement page of at most
+200 records and preserves the original implicit/explicit catalog query across
+opaque forward/reverse cursors. Profile/catalog/snapshot/revision guards cancel
+or reject late work; failures retain current categories and explicit retries use
+the same cursor. A 15-second page deadline clears busy state safely. Channel/EPG/
+time/playback state is independent, and new-page viewport acknowledgement avoids
+automatic forward/backward oscillation. Guide channel publication additionally
+rechecks the selected profile; controller disposal cancels guide work.
+
+JDK17 host preparation and all 158 library/app unit tests passed, including the
+final unchanged-viewport guard. New tests exercise five forward/back category pages,
+200-record retention, implicit and explicit queries, stale scope/revision,
+restoration acknowledgement, failed retry, metadata/duplicate/empty rejection,
+safe diagnostics and deadlines. A real HTTP/native-core wire fixture traverses
+400 synthetic categories forward and back without inserting a catalog override.
+
+This is controller/transport preparation, not visible UI or emulator acceptance.
+`GuideScreen.kt` has not been edited in this pass and still needs the owner's
+boundary/viewport integration described in README. The frozen v2 wire and core
+pin are unchanged; the root Android UI checkout remains untouched.
+
+All three native ABIs, normal debug APK and lint also passed at `76338e8`.
+Lint retains 74 warnings/three baseline-filtered errors; no fixture CA is in the
+normal APK. Artifact SHA256:
+`3e50663994d416d05f17f1b11bde0da814a8b80ef3eacdc12c4a6cb2413eb6d2`.
+The controller-only category addition was not re-emulated or installed.
+
+## Preference transport follow-up — 2026-09-30
+
+Preference PUTs now omit the retired `quality` field while sending the six active
+audio/subtitle/autoplay fields. The compatibility model remains until the UI
+owner removes its Maximum quality row; v2 playback already ignores that field
+and retains measured decoder dimensions. No settings layout, generated core
+binding or frozen v2 playback/catalog contract changed.
+
+JDK17 host preparation and all 148 library/app unit tests passed. The new actual
+HTTP adapter fixture verifies the outgoing body and decoding a backend response
+without quality; its synthetic partial-merge store retains a historical value.
+This is transport evidence, not a real backend migration or a device test.
+All three native ABIs, normal debug APK assembly and lint passed at source
+`c3ebe7b`; lint retains 74 warnings and its existing baseline constraints.
+The normal APK contains no `res/raw/viptv_fixture_ca.pem` (ZIP entries checked).
+Artifact SHA256:
+`8332e35f654a067f8e36393d04d62d73003d9b81516ed33ccc2a3825c45ec1eb`.
+No APK installation or repeat emulator qualification was performed for this
+transport-only change. The owner's root Android checkout remains unchanged.
+
+Isolated branch `refactor/android-backend-cutover`; core fba95c8, matching backend
+2c2eca2. Normal Home/recent/search/guide and exact live playback use v2. No native
+original URL is obtained from a source card: its opaque handle goes through the
+ordinary lease path. Gateway recovery retains the exact selected live channel;
+renewal/stop never fall back to legacy endpoints. Native HTTP stays supported.
+
+Guide channels retain at most three forty-row server pages, with reverse cursors
+for evicted pages and no local playlist index or fabricated totals. Schedule
+fetching covers the actual viewport plus bounded lookahead, with a 200-entry
+cache, debounced scrolling, generation guards and cancellation. Suspended guide
+work clears busy flags without losing its viewport; return resumes missing EPG.
+Paging errors retry on a later scroll action, not unchanged effect callbacks.
+Native responses reject missing reverse contracts, duplicate IDs and substituted
+explicit playlists. The existing viewing geometry is unchanged.
+
+Phone API36 emulator-5574 exercised synthetic 400-channel HTTPS input: lazy
+entry, forward cursor pages beyond channel300, backward retrieval to channel1,
+real H.264/AAC HLS frame decoding through Media3, exact source admission/release,
+and return to channel157 at the same scroll coordinates. Captures were inspected
+privately; no real provider or production account was used. These observations
+precede final defensive guide lifecycle guards, which additionally have host
+policy coverage; Android TV/physical-device qualification remains unperformed.
+The first playback fixture omitted mandatory direct headers and was corrected;
+the client validator was not relaxed. Native input used ADB, not host-window
+keyboard forwarding or a physical remote.
+
+JDK17: host preparation, all three Android ABIs, 147 library/app unit tests, debug
+APK and lint passed. Lint retains 74 warnings and three baseline-filtered errors.
+Earlier native RustBuffer crash stress qualification is still open. Categories
+currently expose one bounded 200-entry page; extended category traversal and real
+backend/gateway end-to-end tests remain gates. No deploy or production migration.
+
+# BE-002 raw live API preparation — 2026-09-29
+
+Core pin b75393e matches TV-web. New explicit transport methods use generated
+raw live/category DTOs, original default/cursor filters, exact live source cards
+and v2 guide routes. JNI/HTTP fixtures retain HTTP logos/provider order and safe
+catalog-change/parent errors without indexing a playlist or falling back to
+legacy responses. Source cards cannot supply playable URL/header authority.
+
+JDK17 host preparation, all 137 library/app tests, three native ABIs, debug APK
+and lint passed. A fresh rerun of all 108 app tests also passed. One actual
+adapter bug was fixed: bodyless canonical POST/PUT/PATCH requests now supply an
+empty native HTTP body instead of failing before network execution. Five new
+wire tests exercise these APIs; ordinary Guide/Home/live playback callers remain
+legacy pending the coordinated cursor/lease cutover. No viewing UI was added.
+
+The first full JVM run aborted with native RustBuffer assertions/SIGSEGV. C ABI
+checks against the same built library and later focused/full/fresh JVM reruns did
+not reproduce it. Its cause remains unproven; the crash record is kept privately,
+not committed. Passing reruns do not close native stress/device qualification.
+No APK installation, provider use or production deployment occurred.
+
+# BE-002 same-source gateway recovery — 2026-09-29
+
+Initial native open and active VOD failures use the same bounded delivery ladder:
+original delivery, authorized gateway auto output, then explicit conversion only
+after another native decoder refusal. The source, title position and manual tracks
+are unchanged; successful gateway/conversion intent survives seek/pause/track
+replacement. A new source starts direct-first again. Control errors never take
+the conversion path. Failed admissions release before retry under an independent
+five-second bound; cancelled/obsolete openings cannot advance to a new delivery.
+
+Media3 HTTP401/403/404/410/429 failures remain source/access causes rather than
+decoder/connection refusals. Error copy preserves the status without raw engine
+details. The existing recovery dialog remains the error/Retry/source-choice UI;
+no viewing layout or additional control was introduced.
+
+JDK17 host/JNI preparation, all 132 library/app tests (no failure/skips), three
+Android ABIs, debug APK assembly and lint passed. Lint reports 74 warnings and
+three pre-existing baseline-filtered errors; this is not a warning-free claim.
+Nine new pure/coroutine/HTTP fixtures cover bounded escalation, no-gateway refusal,
+release/cancellation/obsolescence and exact canonical request/position/track facts.
+The first wire fixture omitted required gateway fields and failed; the corrected
+complete envelope passed the full rerun. The APK is
+app/build/outputs/apk/debug/app-debug.apk; no install/deployment occurred.
+Live, emulator/device decoding, PiP, real gateway native integration and the
+remaining BE-002 checklist remain open. These are host tests, not codec acceptance.
+
+# BE-002 active Android VOD playback — 2026-09-29
+
+Movie/exact-episode playback now uses shared-core v2 intent/lease contracts with
+correct phone/TV platform facts. Startup is bounded to 45 seconds; cancellation
+and ambiguous admission use the identical request body for bounded five-second
+cleanup. Active leases renew, stop on refusal/expiry and validate on foreground
+return. Late renewal cannot restore a released cache entry. Recovery preserves
+the last title position and stops progress writes after retirement. A newer
+Pause action prevents foreground validation from resuming playback unexpectedly.
+
+Gateway processing `mode: direct` remains managed delivery: native start is zero,
+title offset is server-owned, and seek/pause policies use delivery kind. Valid
+native HTTP source headers remain intact. Server language/selected-track metadata
+feeds Media3 options. Copy URL rejects gateway capabilities and releases its own
+lease; canceled copy cannot deliver a clipboard value. Safe HTTP error codes are
+retained rather than discarded by the native transport.
+
+With JDK 17: host core preparation, all 123 library/app tests (zero failures or
+skips), three Android ABIs and debug APK assembly passed. Eleven new coroutine /
+JNI tests cover polling, ambiguous/canceled admission, startup/cleanup deadlines,
+late renewal, terminal provider errors, managed timeline and renewal lifetimes.
+HTTP fixtures verify platform facts, original headers, gateway metadata, progress
+and Copy URL cleanup. The APK is app/build/outputs/apk/debug/app-debug.apk and
+requires the matching v2 backend; it was not installed or deployed in this pass.
+
+This is host/wire validation, not emulator, codec, physical-TV or PiP acceptance.
+Live remains legacy. Automatic same-source gateway fallback after native decoder
+refusal, native/device integration and the rest of the original checklist remain
+open. No viewing layouts were added or reshaped.
+
+# BE-002 shared conversion/track mapping — 2026-09-29
+
+Core pin 4418f1ddb3c1640276f31b130deeb2d4ffa6873d matches TV-web. A real JNI /
+generated-Kotlin fixture verifies scoped audio conversion, Android TV identity,
+2160p decoder facts and preferred language from playbackV2Intent. Host preparation,
+both unit suites, all three Android native ABIs and debug APK assembly passed.
+Ordinary playback transport is not yet switched to v2; background lease recovery,
+profile-preference integration and device qualification remain open.
+
+# BE-002 shared playback lease types — 2026-09-29
+
+Core pin f48f983454b21ba637b4580b426ea8e1647ffbb8 matches TV-web and supplies
+generated v2 playback lease/request types and native normalization. Host native
+preparation, both unit suites, three Android ABIs and debug APK assembly passed.
+A JNI-to-generated-Kotlin fixture verifies native HTTP direct delivery, enum
+decoding, expiry units, source authorization and expired-session URL removal.
+The application has not yet switched its playback lifecycle to v2; polling,
+renewal/cancellation and conversion/track preference parity remain open. No
+emulator/device or deployment evidence is claimed for this checkpoint.
+
+# BE-002 VOD discovery adoption — 2026-09-29 (in progress)
+
+Adopted core 4817b07f985d23687ca54df888222f5af96c0cb2, matching TV-web. Movies
+and exact episodes use v2 discovery; terminal empty results retain safe provider
+failure codes/messages while partial success keeps healthy sources. Native
+fixtures check connection-limit text without exposing upstream URL credentials.
+Live discovery/playback and the rest of client cutover remain pending.
+
+With JDK 17, prepare-core host, both Gradle unit suites, prepare-core android
+(arm64-v8a, armeabi-v7a, x86_64) and app:assembleDebug passed. The debug APK is
+app/build/outputs/apk/debug/app-debug.apk. No emulator/device playback or
+production deployment is claimed for this checkpoint.
+
 # TV-038 Resume accent — 2026-09-26
 
 Home and detail Resume now retain the user's accent on Android TV. A white

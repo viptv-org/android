@@ -55,8 +55,15 @@ internal fun shouldRecoverMedia3BehindLiveWindow(
 
 internal fun PlaybackException.toAirError(): PlaybackError {
     val http = generateSequence<Throwable>(this) { it.cause }.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()
-    if (http != null) return PlaybackError(PlaybackErrorCode.Network, "The source returned HTTP ${http.responseCode}. Try another provider or check its access settings.", recoverable = true)
+    if (http != null) return media3HttpError(http.responseCode)
     return media3ErrorCodeToAir(errorCode)
+}
+
+internal fun media3HttpError(status: Int): PlaybackError = when (status) {
+    401, 403 -> PlaybackError(PlaybackErrorCode.Source, "The source refused playback access (HTTP $status). Check the provider credentials or access settings.", recoverable = false)
+    404, 410 -> PlaybackError(PlaybackErrorCode.Source, "This source is unavailable or has expired (HTTP $status). Choose another source.", recoverable = false)
+    429 -> PlaybackError(PlaybackErrorCode.Source, "The source is limiting requests (HTTP 429). Stop other streams or wait before retrying.", recoverable = false)
+    else -> PlaybackError(PlaybackErrorCode.Network, "The source returned HTTP $status. Try another provider or check its access settings.", recoverable = true)
 }
 
 internal fun media3ErrorCodeToAir(errorCode: Int): PlaybackError = when (errorCode) {

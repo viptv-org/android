@@ -30,7 +30,11 @@ class VipTvHttpGateway(
     private var accessToken: String? = null,
     /** Coalesced session refresh for an authenticated 401; returns a fresh access token or null. */
     private val onUnauthorized: (suspend (String?) -> String?)? = null,
+    private val television: Boolean = false,
 ) : BackendGateway {
+    private val playbackV2 = V2PlaybackControl(origin, ::json)
+    fun playbackRemainingMillis(id: String): Long? = playbackV2.remainingMillis(id)
+    fun playbackRenewAfterMillis(id: String): Long? = playbackV2.renewAfterMillis(id)
     fun setAccessToken(value: String?) { accessToken = value }
     private val titleArtwork = java.util.concurrent.ConcurrentHashMap<String, Media>()
     private val client = OkHttpClient.Builder()
@@ -96,7 +100,7 @@ class VipTvHttpGateway(
         }
         val queue = async { hydrate(optional { json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray("items") }, 0, "Continue watching", true) }
         val recent = async {
-            publish(1, HomeShelf("Recently watched live TV", optional { json("GET", "/live?view=us&collection=recent&limit=24").liveChannels().map(LiveChannel::asMedia) }))
+            publish(1, HomeShelf("Recently watched live TV", optional { liveV2(LiveCatalogQuery(collection = "recent", limit = 24)).items.map { CoreModels.mediaNormalized(it) } }))
         }
         val saved = async { hydrate(optional { favorites(profileId) }, 1000, "My List", false) }
         val live = async { publish(1001, HomeShelf("Live now", optional { this@VipTvHttpGateway.live().map(LiveChannel::asMedia) })) }
@@ -157,7 +161,7 @@ class VipTvHttpGateway(
             }
             val liveRequest = async {
                 publish(128, attempt {
-                    SearchSection("Live TV", json("GET", "/live?view=us&limit=80&search=" + enc(term)).liveChannels().map(LiveChannel::asMedia).distinctBy { it.id }.take(24))
+                    SearchSection("Live TV", liveV2(LiveCatalogQuery(search = term, limit = 24)).items.map { CoreModels.mediaNormalized(it) })
                 })
             }
             val catalogs = when (val result = attempt { catalogs() }) {
@@ -194,13 +198,14 @@ class VipTvHttpGateway(
         fallback
     }
     override suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit): List<Source> {
+        if (media.type == "live") return listOf(liveSourceV2(media.id)).also(onUpdate)
         // The discovery request body, poll path, cursor, deduplication, budget
         // and completion rules all come from the shared Rust core; this loop
         // owns only transport, the update callback, cancellation and the fixed
         // poll interval. Roku's three-minute discovery budget lives in Rust.
         val request = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.ApiRequest>(
             uniffi.viptv_core.normalize("request", JSONObject()
-                .put("operation", "sources")
+                .put("operation", "sourcesV2")
                 .put("item", JSONObject(media.normalizedJson())).toString(), origin)
         )
         val id = json(request.method, request.path.removePrefix("/api"), request.body?.let { JSONObject(org.viptv.core.wire.CoreJson.encode(it)) }).getString("id")
@@ -210,7 +215,11 @@ class VipTvHttpGateway(
             val output = step(state, poll)
             val accumulated = output.sources()
             onUpdate(accumulated)
-            if (output.optBoolean("done")) return accumulated
+            if (output.optBoolean("done")) {
+                val failure = output.optJSONObject("state")?.optJSONArray("errors")?.optJSONObject(0)
+                if (accumulated.isEmpty() && failure != null) throw GatewayError(502, failure.getString("message"), failure.optString("code").takeUnless { it.isBlank() || it == "null" })
+                return accumulated
+            }
             state = output.getJSONObject("state")
             delay(1_500)
         }
@@ -218,7 +227,7 @@ class VipTvHttpGateway(
     private fun pollPath(id: String, state: JSONObject): String {
         val request = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.ApiRequest>(
             uniffi.viptv_core.normalize("request", JSONObject()
-                .put("operation", "sourcesPoll")
+                .put("operation", "sourcesPollV2")
                 .put("id", id)
                 .put("after", state.optLong("after", 0L)).toString(), origin)
         )
@@ -257,19 +266,25 @@ class VipTvHttpGateway(
         audioTrackIndex: Int?,
         subtitleTrackIndex: Int?,
         subtitlesOff: Boolean,
+        delivery: PlaybackDeliveryOptions,
     ): PlaybackLaunch {
-        val body = JSONObject()
-            .put(if (source.channelId != null) "channel_id" else "stream_id", source.channelId ?: source.id)
-            .put("position", seconds(positionMillis))
-            .put("capabilities", capabilities.toWireJson())
-            .putOpt("audio_track_index", audioTrackIndex)
-            .putOpt("subtitle_track_index", subtitleTrackIndex)
-            .put("subtitles_off", subtitlesOff)
-        val root = json("POST", "/playback", body)
-        return CoreModels.playback(root, origin)
+        val selectedSource = source.channelId?.let { liveSourceV2(it) } ?: source
+            val intent = JSONObject().put("requestId", java.util.UUID.randomUUID().toString())
+                .put("platform", if (television) "android_tv" else "android")
+                .put("playback", JSONObject().put("streamId", selectedSource.id).put("position", if (source.channelId != null) 0.0 else seconds(positionMillis))
+                    .put("capabilities", capabilities.toCoreJson()).putOpt("audioTrackIndex", audioTrackIndex)
+                    .putOpt("subtitleTrackIndex", subtitleTrackIndex).put("subtitlesOff", subtitlesOff)
+                    .put("managedOnly", delivery.forceGateway).put("forceTranscode", delivery.forceTranscode))
+            val canonical = try { JSONObject(uniffi.viptv_core.normalize("playbackV2Intent", intent.toString(), origin)) }
+            catch (_: Exception) { throw GatewayError(400, "This device could not report a supported playback configuration.", "invalid_playback_request") }
+            return playbackV2.start(canonical)
     }
-    override suspend fun heartbeat(playbackId: String) { json("POST", "/playback/${enc(playbackId)}/heartbeat", JSONObject()) }
-    override suspend fun stopPlayback(playbackId: String) { json("DELETE", "/playback/${enc(playbackId)}") }
+    override suspend fun heartbeat(playbackId: String) {
+        playbackV2.renew(playbackId)
+    }
+    override suspend fun stopPlayback(playbackId: String) {
+        playbackV2.stop(playbackId)
+    }
     override suspend fun updateProgress(profileId: String, media: Media, positionMillis: Long) {
         coreRequest("saveProgress", profileId, media, JSONObject().put("position", seconds(positionMillis)).putOpt("duration", media.durationMillis?.let(::seconds)))
     }
@@ -295,20 +310,64 @@ class VipTvHttpGateway(
     override suspend fun correctProgress(profileId: String, media: Media, action: String) {
         coreRequest("correctProgress", profileId, media, JSONObject().put("action", action).putOpt("duration", media.durationMillis?.let(::seconds)))
     }
-    override suspend fun live(): List<LiveChannel> = json("GET", "/live?view=us&limit=80").liveChannels()
+    override suspend fun live(): List<LiveChannel> = liveV2(LiveCatalogQuery(limit = 24)).items.map { LiveChannel(it.id, it.name, it.poster) }
+    override suspend fun liveV2(query: LiveCatalogQuery): org.viptv.core.wire.LiveCatalogPage {
+        val page = liveV2Decode<org.viptv.core.wire.LiveCatalogPage>("liveCatalogV2", liveV2Control(query.coreInput("livePageV2")))
+        validateLivePage(query, page.catalogId, page.items.size)
+        if (page.items.map { it.id }.distinct().size != page.items.size)
+            throw GatewayError(502, "The server repeated live channel identifiers. Reload the guide.", "invalid_catalog_response")
+        return page
+    }
+    override suspend fun liveCategoriesV2(query: LiveCatalogQuery): org.viptv.core.wire.LiveCatalogCategories {
+        val page = liveV2Decode<org.viptv.core.wire.LiveCatalogCategories>("liveCategoriesV2", liveV2Control(query.coreInput("liveCategoriesV2")))
+        validateLivePage(query, page.catalogId, page.items.size)
+        if (page.items.map { it.id }.distinct().size != page.items.size)
+            throw GatewayError(502, "The server repeated live category identifiers. Reload the guide.", "invalid_catalog_response")
+        return page
+    }
+    private fun validateLivePage(query: LiveCatalogQuery, catalogId: String?, size: Int) {
+        if (size > query.limit || query.catalogId != null && query.catalogId != catalogId)
+            throw GatewayError(502, "The server returned the wrong live playlist page. Reload the guide.", "invalid_catalog_response")
+    }
+    override suspend fun liveSourceV2(channelId: String): Source = CoreModels.sourceNormalized(
+        liveV2Decode("liveSourceV2",liveV2Control(JSONObject().put("operation","liveSourceV2").put("id",channelId))))
+    override suspend fun guideV2(channelId: String): List<GuideProgramme> {
+        val response=liveV2Control(JSONObject().put("operation","liveGuideV2").put("id",channelId))
+        val normalized = try { JSONObject(uniffi.viptv_core.normalize("guide",response.toString(),origin)) }
+        catch (_: Exception) { throw GatewayError(502,"The server returned invalid guide data. Update the app/server or retry.","invalid_catalog_response") }
+        return guideView(normalized)
+    }
+    private suspend fun liveV2Control(input: JSONObject): JSONObject {
+        val request = try { org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.ApiRequest>(uniffi.viptv_core.normalize("request",input.toString(),origin)) }
+        catch (_: Exception) { throw GatewayError(400,"The live playlist request is invalid. Reload the guide.","invalid_catalog_query") }
+        val text = responseText(request.method,request.path.removePrefix("/api"),request.body?.let { JSONObject(org.viptv.core.wire.CoreJson.encode(it)) })
+        return try { JSONObject(text) }
+        catch (_: Exception) { throw GatewayError(502,"The server returned invalid live playlist data. Update the app/server or reload the guide.","invalid_catalog_response") }
+    }
+    private inline fun <reified T> liveV2Decode(kind: String,value: JSONObject): T = try {
+        if (kind in setOf("liveCatalogV2", "liveCategoriesV2") && !value.has("previous_cursor"))
+            throw IllegalArgumentException("Missing reverse paging contract")
+        org.viptv.core.wire.CoreJson.decode(uniffi.viptv_core.normalize(kind,value.toString(),origin))
+    } catch (_: Exception) { throw GatewayError(502,"The server returned invalid live playlist data. Update the app/server or reload the guide.","invalid_catalog_response") }
     override suspend fun livePage(request: LiveBrowseRequest): LiveBrowsePage {
-        val root = JSONObject(uniffi.viptv_core.normalize("live", json("GET", livePath(request)).toString(), origin))
+        val query = when (val filter = request.filter) {
+            LiveChannelFilter.AllUs -> LiveCatalogQuery()
+            LiveChannelFilter.MyChannels -> LiveCatalogQuery(collection = "favorites")
+            LiveChannelFilter.Recent -> LiveCatalogQuery(collection = "recent")
+            is LiveChannelFilter.Category -> LiveCatalogQuery(categoryId = filter.id)
+            is LiveChannelFilter.Search -> LiveCatalogQuery(search = filter.query)
+        }.copy(cursor = request.cursor, limit = request.limit, catalogId = request.catalogId)
+        val page = liveV2(query)
         return LiveBrowsePage(
-            channels = root.array("channels").mapNotNull { it.optJSONObject()?.normalizedChannel() },
-            total = root.optInt("total", 0).coerceAtLeast(0),
-            request = request,
-            searchScope = root.optString("searchScope").ifBlank { null },
+            channels = page.items.map { LiveChannel(it.id, it.name, it.poster,
+                (it.raw["category"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeUnless { category -> category == "null" }) },
+            request = request, catalogId = page.catalogId, generation = page.generation,
+            nextCursor = page.nextCursor, previousCursor = page.previousCursor,
         )
     }
-    override suspend fun liveCategories(): List<LiveCategory> = JSONObject(uniffi.viptv_core.normalize("liveCategories", json("GET", "/live/categories?view=us").toString(), origin))
-        .array("categories").mapNotNull { it.optJSONObject()?.let { item -> LiveCategory(item.getString("id"), item.getString("name"), item.getInt("count")) } }
-    override suspend fun guide(channelId: String): List<GuideProgramme> {
-        val response = JSONObject(uniffi.viptv_core.normalize("guide", json("GET", "/guide/${enc(channelId)}").toString(), origin))
+    override suspend fun liveCategories(): List<LiveCategory> = liveCategoriesV2(LiveCatalogQuery(limit = 200)).items.map { LiveCategory(it.id, it.name) }
+    override suspend fun guide(channelId: String): List<GuideProgramme> = guideV2(channelId)
+    private fun guideView(response: JSONObject): List<GuideProgramme> {
         val labels = response.array("timeline").mapNotNull { value -> value.optJSONObject()?.let { tick -> (tick.getDouble("time") * 1000).toLong() to tick.getString("displayTime") } }.toMap()
         return response.array("programs").mapNotNull { it.optJSONObject()?.let { programme ->
             GuideProgramme(programme.getString("title"), (programme.getDouble("start") * 1000).toLong(), (programme.getDouble("end") * 1000).toLong(), programme.optString("description").ifBlank { null }, displayTime = programme.optString("displayTime").ifBlank { null }, timezone = response.getString("timezone"), timelineLabels = labels)
@@ -344,7 +403,7 @@ class VipTvHttpGateway(
     private suspend fun jsonArray(method: String, path: String, body: JSONObject? = null): JSONArray = JSONArray(responseText(method, path, body))
     private sealed interface CallResult
     private class CallText(val text: String) : CallResult
-    private class CallFailure(val status: Int, val message: String) : CallResult
+    private class CallFailure(val status: Int, val message: String, val code: String?) : CallResult
 
     /**
      * A cancellable OkHttp boundary works in Android and host-JVM wire tests,
@@ -357,7 +416,8 @@ class VipTvHttpGateway(
                 .header("Accept", "application/json")
                 .apply { if (path == "/auth/device/login") header("Origin", origin) }
                 .apply { bearer?.let { header("Authorization", "Bearer $it") } }
-                .method(method, body?.toString()?.toRequestBody(JSON_MEDIA_TYPE))
+                .method(method, body?.toString()?.toRequestBody(JSON_MEDIA_TYPE)
+                    ?: if (method in listOf("POST", "PUT", "PATCH")) "".toRequestBody(null) else null)
                 .build()
             val call = client.newCall(request)
             continuation.invokeOnCancellation { call.cancel() }
@@ -377,12 +437,12 @@ class VipTvHttpGateway(
                             return
                         }
                         if (!it.isSuccessful) {
-                            val message = runCatching {
+                            val failure = runCatching {
                                 val error = runCatching { JSONObject(text.ifBlank { "{}" }) }.getOrDefault(JSONObject())
                                 error.put("status", it.code)
-                                JSONObject(uniffi.viptv_core.normalize("apiError", error.toString(), "")).getString("message")
-                            }.getOrDefault("The server could not complete this request.")
-                            if (continuation.isActive) continuation.resume(CallFailure(it.code, message))
+                                JSONObject(uniffi.viptv_core.normalize("apiError", error.toString(), ""))
+                            }.getOrDefault(JSONObject().put("message", "The server could not complete this request."))
+                            if (continuation.isActive) continuation.resume(CallFailure(it.code, failure.getString("message"), failure.optString("code").takeUnless { code -> code.isBlank() || code == "null" }))
                         } else if (continuation.isActive) {
                             continuation.resume(CallText(text))
                         }
@@ -407,18 +467,18 @@ class VipTvHttpGateway(
                     if (refreshed != null && refreshed != bearer) {
                         when (val retry = awaitResult(method, path, body, refreshed)) {
                             is CallText -> return retry.text
-                            is CallFailure -> throw GatewayError(retry.status, retry.message)
+                            is CallFailure -> throw GatewayError(retry.status, retry.message, retry.code)
                         }
                     }
                 }
-                throw GatewayError(first.status, first.message)
+                throw GatewayError(first.status, first.message, first.code)
             }
         }
     }
     private fun enc(value: String) = URLEncoder.encode(value, "UTF-8")
 
 }
-class GatewayError(val status: Int, override val message: String) : IllegalStateException(message)
+class GatewayError(val status: Int, override val message: String, val code: String? = null) : IllegalStateException(message)
 
 private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 /**
@@ -461,18 +521,6 @@ private fun discoverPath(
             append("&extras=").append(URLEncoder.encode(encoded, "UTF-8"))
         }
 }
-private fun livePath(request: LiveBrowseRequest): String = buildString {
-    append("/live?view=us")
-    when (val filter = request.filter) {
-        LiveChannelFilter.AllUs -> Unit
-        LiveChannelFilter.MyChannels -> append("&collection=favorites")
-        LiveChannelFilter.Recent -> append("&collection=recent")
-        is LiveChannelFilter.Category -> append("&category=").append(URLEncoder.encode(filter.id, "UTF-8"))
-        is LiveChannelFilter.Search -> append("&search=").append(URLEncoder.encode(filter.query, "UTF-8"))
-    }
-    append("&offset=").append(request.offset)
-    append("&limit=").append(request.limit)
-}
 private sealed interface SearchAttempt<out T> {
     data class Value<T>(val value: T) : SearchAttempt<T>
     data object Failure : SearchAttempt<Nothing>
@@ -497,10 +545,11 @@ private fun JSONObject.source(eventProvider: String? = null): Source = CoreModel
 private fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }
 private fun JSONObject.array(vararg keys: String): List<Any?> = (keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray()).let { array -> (0 until array.length()).map { index -> array.opt(index) } }
 private fun Any?.optJSONObject(): JSONObject? = this as? JSONObject
-private fun JSONObject.liveChannels(): List<LiveChannel> = JSONObject(uniffi.viptv_core.normalize("live", toString(), "")).array("channels").mapNotNull { it.optJSONObject()?.normalizedChannel() }
-private fun JSONObject.normalizedChannel() = LiveChannel(getString("id"), getString("name"), optString("poster").takeUnless { it.isBlank() || it == "null" }, optString("category").takeUnless { it.isBlank() || it == "null" })
 private fun JSONObject.addon() = Addon(get("id").toString(), optString("name"), optString("manifest_url"), optBoolean("enabled", true))
-private fun PlaybackPreferences.body() = JSONObject().put("audio_language", audioLanguage).put("subtitle_language", subtitleLanguage).put("subtitles_enabled", subtitlesEnabled).put("subtitle_size", subtitleSize).put("subtitle_style", subtitleStyle).put("quality", quality).put("autoplay", autoplay)
+// The retired profile quality cap is not an active backend preference. Retain
+// the compatibility model while the independently owned settings UI migrates,
+// but never rewrite a historical value or send it with ordinary preference edits.
+private fun PlaybackPreferences.body() = JSONObject().put("audio_language", audioLanguage).put("subtitle_language", subtitleLanguage).put("subtitles_enabled", subtitlesEnabled).put("subtitle_size", subtitleSize).put("subtitle_style", subtitleStyle).put("autoplay", autoplay)
 private fun JSONObject.preferences(): PlaybackPreferences {
     val item = JSONObject(uniffi.viptv_core.normalize("androidPreferences", toString(), ""))
     return PlaybackPreferences(item.getString("audioLanguage"), item.getString("subtitleLanguage"), item.getBoolean("subtitlesEnabled"), item.getString("subtitleSize"), item.getString("subtitleStyle"), item.getString("quality"), item.getBoolean("autoplay"))

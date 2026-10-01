@@ -11,7 +11,7 @@ internal fun AppController.navigate(destination: Destination) = scope.launch {
     }
     detailGeneration++; detailJob?.cancel()
     if (destination != Destination.Search) searchJob?.cancel()
-    if (destination != Destination.Live) { guideBrowseGeneration++; guideGeneration++ }
+    if (destination != Destination.Live) cancelGuideWork()
     if (destination != Destination.Home) cancelPendingQueueContinuation()
     if (destination != Destination.Discover) {
         discoverJob?.cancel()
@@ -91,8 +91,7 @@ internal fun AppController.handleBack(): Boolean {
             if (destination == Destination.Home) requestHomeFocusRestore()
         }
         is Route.Guide -> {
-            guideBrowseGeneration++
-            guideGeneration++
+            cancelGuideWork()
             _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null)
             requestHomeFocusRestore()
         }

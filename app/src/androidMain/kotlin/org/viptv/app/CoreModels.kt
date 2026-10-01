@@ -15,9 +15,10 @@ import kotlin.math.roundToLong
 internal object CoreModels {
     fun mediaNormalized(item: MediaItem): Media = item.view()
     fun media(value: JSONObject): Media = CoreJson.decode<MediaItem>(normalize("media", value.toString(), "")).view()
-    fun source(value: JSONObject): Source = CoreJson.decode<MediaSource>(normalize("source", value.toString(), "")).let {
+    fun source(value: JSONObject): Source = sourceNormalized(CoreJson.decode<MediaSource>(normalize("source", value.toString(), "")))
+    fun sourceNormalized(it: MediaSource): Source {
         val display = CoreJson.decode<org.viptv.core.wire.SourcePresentation>(normalize("sourceDisplay", CoreJson.encode(it), ""))
-        Source(it.id, it.provider.orEmpty(), display.title, display.body, it.sourceAddonId, it.sourceFingerprint, it.quality, it.audio, displayResolved = true, providerKey = display.providerKey, providerLabel = display.providerLabel)
+        return Source(it.id, it.provider.orEmpty(), display.title, display.body, it.sourceAddonId, it.sourceFingerprint, it.quality, it.audio, displayResolved = true, providerKey = display.providerKey, providerLabel = display.providerLabel)
     }
     fun catalog(value: JSONObject): DiscoverCatalog? {
         val item = CoreJson.decode<org.viptv.core.wire.Catalog>(normalize("catalog", value.toString(), ""))
@@ -32,8 +33,9 @@ internal object CoreModels {
         return Profile(item.id, item.name, item.avatar, item.kid == true, item.primary == true, item.avatarStyle.orEmpty(), item.avatarChoice?.toInt(), item.setupComplete == true)
     }
     fun profile(value: JSONObject): Profile = profileNormalized(CoreJson.decode<org.viptv.core.wire.Profile>(normalize("profile", value.toString(), "")))
-    fun playback(value: JSONObject, origin: String): PlaybackLaunch = CoreJson.decode<PlaybackSession>(normalize("playback", value.toString(), origin)).let {
-        PlaybackLaunch(it.id, it.url, headers = buildMap {
+    fun playback(value: JSONObject, origin: String): PlaybackLaunch = playbackNormalized(CoreJson.decode<PlaybackSession>(normalize("playback", value.toString(), origin)))
+    fun playbackNormalized(it: PlaybackSession): PlaybackLaunch {
+        return PlaybackLaunch(it.id, it.url, headers = buildMap {
             putAll(it.headers)
             it.authorization?.let { auth ->
                 putAll(auth.headers.orEmpty())
@@ -42,7 +44,9 @@ internal object CoreModels {
             }
         }, format = it.format, mode = it.mode, videoMode = it.videoMode, audioMode = it.audioMode,
             positionMillis = (it.position * 1000).roundToLong(), durationMillis = it.duration.takeIf { duration -> duration > 0 }?.let { duration -> (duration * 1000).roundToLong() }, live = it.live,
-            audioTracks = it.audioTracks.map(::track), subtitleTracks = it.subtitleTracks.map(::track), subtitlesSupported = it.subtitlesSupported)
+            audioTracks = it.audioTracks.map(::track), subtitleTracks = it.subtitleTracks.map(::track), subtitlesSupported = it.subtitlesSupported,
+            deliveryKind = it.deliveryKind?.name?.lowercase(), preferredAudioLanguage = it.preferredAudioLanguage, preferredSubtitleLanguage = it.preferredSubtitleLanguage,
+            subtitlesEnabled = it.deliveryKind?.let { _ -> it.preferredSubtitleLanguage != null || it.subtitleTracks.any { track -> track.selected } })
     }
     private fun track(item: MediaTrack) = PlaybackTrack(item.inputIndex.toInt(), item.codec, item.language, item.languageStatus, item.title, item.selected, item.supported, item.selectable)
     fun enrich(original: Media, metadata: Media): Media = CoreJson.decode<MediaItem>(normalize("enrichHome", JSONObject().put("original", JSONObject(original.normalizedJson())).put("metadata", JSONObject(metadata.normalizedJson())).toString(), "")).view()

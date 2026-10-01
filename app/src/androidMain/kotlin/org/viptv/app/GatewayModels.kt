@@ -3,33 +3,32 @@ package org.viptv.app
 import org.viptv.video.PlayerCapabilities
 import org.json.JSONObject
 
-/** `/live?view=us` paging inputs. Offset stays zero-based and page size is bounded by Rust's 200-channel limit. */
+/** Opaque server cursor; display positions must never become offset queries. */
 data class LiveBrowseRequest(
     val filter: LiveChannelFilter = LiveChannelFilter.AllUs,
-    val offset: Int = 0,
+    val cursor: String? = null,
     val limit: Int = GuidePolicy.PAGE_SIZE,
+    val catalogId: String? = null,
 ) {
     init {
-        require(offset >= 0)
         require(limit in 1..200)
     }
 }
 
 data class LiveBrowsePage(
     val channels: List<LiveChannel>,
-    val total: Int,
     val request: LiveBrowseRequest,
-    val searchScope: String? = null,
-) {
-    val nextOffset: Int? get() = (request.offset + channels.size).takeIf { it < total }
-    val hasMore: Boolean get() = nextOffset != null
-}
+    val catalogId: String?,
+    val generation: String?,
+    val nextCursor: String?,
+    val previousCursor: String?,
+)
 
-data class LiveCategory(val id: String, val name: String, val count: Int) {
+data class LiveCategory(val id: String, val name: String, val count: Int? = null) {
     init {
         require(id.isNotBlank())
         require(name.isNotBlank())
-        require(count >= 0)
+        require(count == null || count >= 0)
     }
 }
 
@@ -142,6 +141,10 @@ data class PlaybackClientCapabilities(
         .put("aac", aac)
         .put("direct_play", directPlay)
         .put("direct_urls", true)
+
+    fun toCoreJson(): JSONObject = JSONObject().put("maxWidth", maxWidth).put("maxHeight", maxHeight)
+        .put("h264", h264).put("hevc", hevc).put("hevcSdr", hevcSdr).put("aac", aac)
+        .put("directPlay", directPlay).put("directUrls", true)
 }
 
 /** Complete server-owned delivery facts. The controller decides the UX; it never guesses from a URL. */
@@ -159,7 +162,15 @@ data class PlaybackLaunch(
     val audioTracks: List<PlaybackTrack> = emptyList(),
     val subtitleTracks: List<PlaybackTrack> = emptyList(),
     val subtitlesSupported: Boolean = false,
-) { override fun toString() = "PlaybackLaunch(mode=$mode, format=$format, credentials=<redacted>)" }
+    val deliveryKind: String? = null,
+    val preferredAudioLanguage: String? = null,
+    val preferredSubtitleLanguage: String? = null,
+    val subtitlesEnabled: Boolean? = null,
+) {
+    val timelineMode: String get() = if (deliveryKind == "gateway") "managed" else mode
+    val nativeStartPositionMillis: Long get() = if (live || timelineMode != "direct") 0 else positionMillis
+    override fun toString() = "PlaybackLaunch(mode=$mode, format=$format, credentials=<redacted>)"
+}
 
 /** Input-stream track facts: index is server/ffprobe input index, never output order. */
 data class PlaybackTrack(

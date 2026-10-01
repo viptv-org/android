@@ -130,7 +130,7 @@ class BackendGatewayBrowseWireTest {
                     {"id":"movie-2","type":"movie","name":"Movie two"}
                 ]}""")
                 request.target.startsWith("/api/discover?type=series") -> FixtureResponse("""{"error":"provider failed"}""", 502)
-                request.target.startsWith("/api/live?") -> FixtureResponse("""{"channels":[{"id":"live-1","name":"Live one"}],"total":1}""")
+                request.target.startsWith("/api/v2/iptv/live/channels?") -> FixtureResponse("""{"catalog_id":1,"generation":1,"items":[{"id":"live-1","name":"Live one"}],"next_cursor":null,"previous_cursor":null}""")
                 else -> error("Unexpected request ${request.target}")
             }
         }.use { server ->
@@ -150,7 +150,7 @@ class BackendGatewayBrowseWireTest {
         FixtureServer(2) { request ->
             when {
                 request.target == "/api/catalogs" -> FixtureResponse("""{"error":"catalog index unavailable"}""", 503)
-                request.target.startsWith("/api/live?") -> FixtureResponse("""{"channels":[{"id":"live-2","name":"Still live"}],"total":1}""")
+                request.target.startsWith("/api/v2/iptv/live/channels?") -> FixtureResponse("""{"catalog_id":1,"generation":1,"items":[{"id":"live-2","name":"Still live"}],"next_cursor":null,"previous_cursor":null}""")
                 else -> error("Unexpected request ${request.target}")
             }
         }.use { server ->
@@ -164,36 +164,36 @@ class BackendGatewayBrowseWireTest {
     }
 
     @Test
-    fun `live guide browse uses canonical US filters categories and forty channel pages`() = runBlocking {
+    fun `live guide browse uses raw provider filters opaque cursors and no totals`() = runBlocking {
         FixtureServer(6) { request ->
             val query = queryParameters(request.target)
             when {
-                request.target.startsWith("/api/live/categories?") -> {
-                    assertEquals("us", query["view"])
-                    FixtureResponse("""{"total":2,"categories":[
-                        {"id":"section:News","name":"News","count":18},
-                        {"id":"section:Sports","name":"Sports","count":9}
+                request.target.startsWith("/api/v2/iptv/live/categories?") -> {
+                    assertNull(query["view"])
+                    FixtureResponse("""{"catalog_id":1,"generation":1,"next_cursor":null,"previous_cursor":null,"items":[
+                        {"id":"section:News","name":"News"},
+                        {"id":"section:Sports","name":"Sports"}
                     ]}""")
                 }
-                request.target.startsWith("/api/live?") -> {
-                    assertEquals("us", query["view"])
+                request.target.startsWith("/api/v2/iptv/live/channels?") -> {
+                    assertNull(query["view"])
+                    assertNull(query["offset"])
                     assertEquals("40", query["limit"])
                     when {
-                        query["collection"] == "favorites" -> assertEquals("40", query["offset"])
-                        query["collection"] == "recent" -> assertEquals("0", query["offset"])
-                        query["category"] == "section:News" -> assertEquals("0", query["offset"])
-                        query["search"] == "morning news" -> assertEquals("0", query["offset"])
+                        query["collection"] == "favorites" -> assertEquals("next_page", query["cursor"])
+                        query["collection"] == "recent" -> assertNull(query["cursor"])
+                        query["category_id"] == "section:News" -> assertNull(query["cursor"])
+                        query["search"] == "morning news" -> assertNull(query["cursor"])
                         else -> {
                             assertNull(query["collection"])
                             assertNull(query["category"])
                             assertNull(query["search"])
-                            assertEquals("0", query["offset"])
+                            assertNull(query["cursor"])
                         }
                     }
                     FixtureResponse("""{
-                        "channels":[{"id":"channel-1","name":"Fixture Channel","logo":"/logo.png","section":"News"}],
-                        "total":81,
-                        "search_scope":"US channels, sections and currently airing programmes with available guide data"
+                        "catalog_id":1,"generation":1,"items":[{"id":"channel-1","name":"Fixture Channel","logo":"http://art.example/logo.png","category":"News"}],
+                        "next_cursor":"next_page","previous_cursor":null
                     }""")
                 }
                 else -> error("Unexpected request ${request.target}")
@@ -201,19 +201,19 @@ class BackendGatewayBrowseWireTest {
         }.use { server ->
             val gateway = VipTvHttpGateway(server.origin)
             val all = gateway.livePage(LiveBrowseRequest())
-            val mine = gateway.livePage(LiveBrowseRequest(LiveChannelFilter.MyChannels, offset = 40))
+            val mine = gateway.livePage(LiveBrowseRequest(LiveChannelFilter.MyChannels, cursor = "next_page"))
             gateway.livePage(LiveBrowseRequest(LiveChannelFilter.Recent))
             gateway.livePage(LiveBrowseRequest(LiveChannelFilter.Category("section:News")))
             gateway.livePage(LiveBrowseRequest(LiveChannelFilter.Search("morning news")))
             val categories = gateway.liveCategories()
 
             assertEquals("News", all.channels.single().category)
-            assertEquals("/logo.png", all.channels.single().logo)
-            assertEquals(81, all.total)
-            assertEquals(1, all.nextOffset)
-            assertEquals(41, mine.nextOffset)
+            assertEquals("http://art.example/logo.png", all.channels.single().logo)
+            assertEquals("1", all.catalogId)
+            assertEquals("next_page", all.nextCursor)
+            assertEquals("next_page", mine.nextCursor)
             assertEquals(
-                listOf(LiveCategory("section:News", "News", 18), LiveCategory("section:Sports", "Sports", 9)),
+                listOf(LiveCategory("section:News", "News"), LiveCategory("section:Sports", "Sports")),
                 categories,
             )
             server.assertHealthy()
