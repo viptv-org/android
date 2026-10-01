@@ -79,21 +79,6 @@ internal fun AppController.setDiscoverFilter(key: String, value: String?) {
     startDiscoverRequest(catalog, filters, skip = 0, previousSkips = emptyList(), selectedType = current.selectedType)
 }
 
-internal fun AppController.changeDiscoverPage(delta: Int) {
-    val current = _state.value.discoverUi
-    val catalog = current.catalogs.firstOrNull { it.key == current.selectedCatalogKey } ?: return
-    when {
-        delta > 0 && current.nextSkip != null -> startDiscoverRequest(
-            catalog, current.selectedFilters, current.nextSkip,
-            current.previousSkips + current.requestedSkip, current.selectedType,
-        )
-        delta < 0 && current.previousSkips.isNotEmpty() -> startDiscoverRequest(
-            catalog, current.selectedFilters, current.previousSkips.last(),
-            current.previousSkips.dropLast(1), current.selectedType,
-        )
-    }
-}
-
 /** Append the server's cursor page without discarding the user's scroll/focus. */
 internal fun AppController.appendDiscoverPage() {
     val current = _state.value.discoverUi

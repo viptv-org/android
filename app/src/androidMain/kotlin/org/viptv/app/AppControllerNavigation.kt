@@ -4,6 +4,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 internal fun AppController.navigate(destination: Destination) = scope.launch {
+    cancelForegroundValidation()
     sourceDiscovery?.cancel()
     if (_state.value.route is Route.Player || _state.value.preparingSourceId != null) {
         val media = (_state.value.route as? Route.Player)?.media
@@ -37,6 +38,7 @@ internal fun AppController.invalidatePlaybackPreparation() {
 
 /** Native audio belongs to the visible player, never a hidden activity or old route. */
 internal fun AppController.stopForBackground() {
+    cancelForegroundValidation()
     nextEpisodeJob?.cancel(); queueContinuationJob?.cancel()
     val route = _state.value.route as? Route.Player
     if (route != null) exitPlayer(route, snapshotPlaybackMedia(route))
@@ -51,6 +53,7 @@ internal fun AppController.back() { handleBack() }
 internal fun AppController.consumesBack(state: AppState = _state.value): Boolean = BackAvailabilityPolicy.consumes(state)
 /** Returns false only when Android should handle app exit at a root gate/page. */
 internal fun AppController.handleBack(): Boolean {
+    cancelForegroundValidation()
     if (_state.value.upNext != null) { cancelUpNext(); return true }
     detailGeneration++; detailJob?.cancel()
     if (queueContinuationJob?.isActive == true) {

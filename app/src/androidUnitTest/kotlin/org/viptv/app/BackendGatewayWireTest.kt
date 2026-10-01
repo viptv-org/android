@@ -16,6 +16,39 @@ import kotlin.test.assertTrue
  * mocking the gateway or its JSON helpers.
  */
 class BackendGatewayWireTest {
+    @Test fun `profile replacement fetches metadata under the new authorization scope`() = runBlocking {
+        var selected = false
+        FixtureServer(3) { request ->
+            when (request.target) {
+                "/api/auth/profile" -> { selected = true; FixtureResponse("{}") }
+                "/api/meta/movie/tt-fixture" -> FixtureResponse("""{"meta":{"id":"tt-fixture","type":"movie","name":"Fixture","description":"${if (selected) "Child-authorized metadata" else "Parent metadata"}"}}""")
+                else -> error("Unexpected fixture route")
+            }
+        }.use { server ->
+            val gateway = VipTvHttpGateway(server.origin)
+            val media = Media("tt-fixture", "movie", "Fixture")
+            assertEquals("Parent metadata", gateway.metadata(media).description)
+            gateway.selectProfile("child-profile")
+            assertEquals("Child-authorized metadata", gateway.metadata(media).description)
+            server.assertHealthy()
+        }
+    }
+    @Test fun `foreground identity refreshes one expired bearer without pairing`() = runBlocking {
+        var refreshes = 0
+        FixtureServer(2) { request ->
+            assertEquals("/api/auth/me", request.target)
+            if (request.headers["authorization"] == "Bearer expired") FixtureResponse("{}", 401)
+            else FixtureResponse("""{"account":{"id":"account-one","username":"fixture","name":"Fixture","role":"member"},"profiles":[{"id":"profile-one","name":"Fixture","setup_complete":true}],"profile_id":"profile-one","restricted":false,"profile_setup_required":false}""")
+        }.use { server ->
+            val gateway = VipTvHttpGateway(server.origin, "expired", { refreshes++; "fresh" })
+            val identity = gateway.foregroundIdentity()
+            assertEquals("account-one", identity.account.id)
+            assertEquals(setOf("profile-one"), identity.profiles.map { it.id }.toSet())
+            assertEquals("profile-one", identity.profileId)
+            assertEquals(1, refreshes)
+            server.assertHealthy()
+        }
+    }
     @Test fun `preference writes omit retired quality and decode active backend preferences`() = runBlocking {
         val stored = JSONObject("""{"audio_language":"en","subtitle_language":"en","subtitles_enabled":false,"subtitle_size":"normal","subtitle_style":"system","quality":"480p","autoplay":true}""")
         FixtureServer(2) { request ->
@@ -31,7 +64,7 @@ class BackendGatewayWireTest {
         }.use { server ->
             val gateway = VipTvHttpGateway(server.origin)
             gateway.savePreferences("profile-one", PlaybackPreferences(audioLanguage = "es", subtitleLanguage = "fr",
-                subtitlesEnabled = true, subtitleSize = "large", subtitleStyle = "shadow", quality = "720p", autoplay = false))
+                subtitlesEnabled = true, subtitleSize = "large", subtitleStyle = "shadow", autoplay = false))
             val active = gateway.preferences("profile-one")
             assertEquals("es", active.audioLanguage)
             assertEquals("fr", active.subtitleLanguage)
@@ -39,7 +72,6 @@ class BackendGatewayWireTest {
             assertEquals("large", active.subtitleSize)
             assertEquals("shadow", active.subtitleStyle)
             assertFalse(active.autoplay)
-            assertEquals("auto", active.quality)
             assertEquals("480p", stored.getString("quality"))
             server.assertHealthy()
         }

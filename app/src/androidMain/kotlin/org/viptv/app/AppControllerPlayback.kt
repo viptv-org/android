@@ -158,11 +158,12 @@ internal fun AppController.onPlayerEvent(event: PlaybackEvent) {
     cancelUpNext()
     _state.value = _state.value.copy(message = event.error.message)
     val route = active.copy(media = snapshotPlaybackMedia(active))
+    val playWhenReady = player.state.value.playWhenReady
     val key = "${route.media.type}:${route.media.id}:${route.source.id}"
     if (managedRecoveryInFlightKey == key) return
+    player.stop()
     retirePlaybackSession()
-    val delivery = nextPlaybackDelivery(activePlaybackDelivery, _state.value.playbackDeliveryMode == "direct", event.error.code)
-    if (delivery == null && !ManagedRecoveryPolicy.shouldAttempt(
+    if (!ManagedRecoveryPolicy.shouldAttempt(
             serverManaged = SeekCommitPolicy.usesManagedReplacement(_state.value.playbackDeliveryMode),
             networkFailure = event.error.code == PlaybackErrorCode.Network,
             alreadyAttempted = managedRecoveryKey == key,
@@ -171,7 +172,6 @@ internal fun AppController.onPlayerEvent(event: PlaybackEvent) {
         showPlaybackRecovery(route)
         return
     }
-    val playWhenReady = player.state.value.playWhenReady
     val requestGeneration = playbackGeneration
     managedRecoveryKey = key
     managedRecoveryInFlightKey = key
@@ -186,7 +186,7 @@ internal fun AppController.onPlayerEvent(event: PlaybackEvent) {
                 playWhenReady = playWhenReady,
                 resetTrackChoices = false,
                 expectedGeneration = requestGeneration,
-                deliveryOptions = delivery ?: activePlaybackDelivery,
+                deliveryOptions = activePlaybackDelivery,
             )
             if (restored) managedRecoveryKey = null
             else if (PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) showPlaybackRecovery(route)

@@ -60,21 +60,21 @@ internal class V2PlaybackControl(
         var id: String? = null
         try {
             return withTimeout(45_000) {
-                var response = control("playbackV2", request = request)
-                id = identity(response)
-                while (true) {
-                    currentCoroutineContext().ensureActive()
-                    val lease = decode(response, id!!)
-                    if (ready(lease)) {
-                        if (lease.session!!.deliveryKind == PlaybackDeliveryKind.DIRECT &&
-                            (!request.getJSONObject("client").getBoolean("canPlayDirect") || request.optBoolean("forceGateway") || request.optString("conversion", "auto") != "auto")) throw invalid()
-                        leases[lease.id] = Entry(lease)
-                        return@withTimeout CoreModels.playbackNormalized(lease.session)
-                    }
+                val response = control("playbackV2", request = request)
+                val owned = identity(response).also { id = it }
+                currentCoroutineContext().ensureActive()
+                var lease = decode(response, owned)
+                while (!ready(lease)) {
                     delay(500)
-                    response = control("playbackV2Status", id)
+                    val status = control("playbackV2Status", owned)
+                    currentCoroutineContext().ensureActive()
+                    lease = decode(status, owned)
                 }
-                @Suppress("UNREACHABLE_CODE") error("Unreachable")
+                val session = lease.session!!
+                if (session.deliveryKind == PlaybackDeliveryKind.DIRECT &&
+                    (!request.getJSONObject("client").getBoolean("canPlayDirect") || request.optBoolean("forceGateway") || request.optString("conversion", "auto") != "auto")) throw invalid()
+                leases[lease.id] = Entry(lease)
+                CoreModels.playbackNormalized(session)
             }
         } catch (error: Exception) {
             val refused = error is GatewayError && error.status in 400..499 && error.status != 408

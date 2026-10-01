@@ -37,6 +37,8 @@ class VipTvHttpGateway(
     fun playbackRenewAfterMillis(id: String): Long? = playbackV2.renewAfterMillis(id)
     fun setAccessToken(value: String?) { accessToken = value }
     private val titleArtwork = java.util.concurrent.ConcurrentHashMap<String, Media>()
+    private var metadataEpoch = 0L
+    fun clearProfileCache() = synchronized(titleArtwork) { metadataEpoch++; titleArtwork.clear() }
     private val client = OkHttpClient.Builder()
         .followRedirects(false).followSslRedirects(false)
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -57,13 +59,18 @@ class VipTvHttpGateway(
             else -> throw error
         }
     }
-    override suspend fun refresh(refreshToken: String): DeviceSession = session(json("POST", "/auth/device/refresh", JSONObject().put("refresh_token", refreshToken)))
+    override suspend fun refresh(refreshToken: String): DeviceSession = session(json("POST", "/auth/device/refresh", JSONObject().put("refresh_token", refreshToken)), adopt = false)
+    suspend fun foregroundIdentity(): org.viptv.core.wire.Identity {
+        val root = json("GET", "/auth/me")
+        return org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.Identity>(
+            uniffi.viptv_core.normalize("identity", root.toString(), origin))
+    }
     override suspend fun profiles(): Pair<List<Profile>, String?> {
         val root = json("GET", "/auth/me")
         val array = root.optJSONArray("profiles") ?: JSONArray()
         return (0 until array.length()).map { index -> array.getJSONObject(index).profile() } to root.opt("profile_id")?.toString()
     }
-    override suspend fun selectProfile(profileId: String) { json("POST", "/auth/profile", JSONObject().put("profile_id", profileId)) }
+    override suspend fun selectProfile(profileId: String) { json("POST", "/auth/profile", JSONObject().put("profile_id", profileId)); clearProfileCache() }
     override suspend fun home(profileId: String, onUpdate: (List<HomeShelf>) -> Unit): List<HomeShelf> = coroutineScope {
         val rows = java.util.TreeMap<Int, HomeShelf>()
         val publisher = kotlinx.coroutines.sync.Mutex()
@@ -98,7 +105,7 @@ class VipTvHttpGateway(
                 }
             } }.awaitAll()
         }
-        val queue = async { hydrate(optional { json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray("items") }, 0, "Continue watching", true) }
+        val queue = async { hydrate(optional { json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray() }, 0, "Continue watching", true) }
         val recent = async {
             publish(1, HomeShelf("Recently watched live TV", optional { liveV2(LiveCatalogQuery(collection = "recent", limit = 24)).items.map { CoreModels.mediaNormalized(it) } }))
         }
@@ -116,7 +123,7 @@ class VipTvHttpGateway(
         queue.await(); recent.await(); saved.await(); live.await()
         rows.values.filter { it.items.isNotEmpty() }
     }
-    override suspend fun discover(type: String, search: String?): List<Media> = json("GET", discoverPath(type, search = search)).mediaArray("metas", "items", "rows")
+    override suspend fun discover(type: String, search: String?): List<Media> = json("GET", discoverPath(type, search = search)).mediaArray()
     override suspend fun catalogs(): List<DiscoverCatalog> = jsonArray("GET", "/catalogs")
         .objects()
         .mapNotNull(JSONObject::discoverCatalog)
@@ -138,7 +145,7 @@ class VipTvHttpGateway(
         val nextSkip = (root.opt("next_skip") as? Number)?.toInt()?.takeIf { it in 0..10_000 }
         return DiscoverPage(
             catalog = catalog.key,
-            items = root.mediaArray("metas", "items", "rows"),
+            items = root.mediaArray(),
             requestedSkip = request.skip,
             nextSkip = nextSkip,
             hasMore = hasMore,
@@ -183,10 +190,13 @@ class VipTvHttpGateway(
     override suspend fun metadata(media: Media): Media {
         val type = if (media.type == "episode") "series" else media.type
         val id = if (type == "series") media.seriesId ?: media.id else media.id
-        titleArtwork[type + "\u0000" + id]?.let { return it }
-        if (titleArtwork.size >= 256) titleArtwork.keys.firstOrNull()?.let { titleArtwork.remove(it) }
+        val key = type + "\u0000" + id
+        val epoch = synchronized(titleArtwork) { titleArtwork[key]?.let { return it }; metadataEpoch }
         val result = json("GET", "/meta/${enc(type)}/${enc(id)}").optJSONObject("meta")?.media() ?: media
-        titleArtwork[type + "\u0000" + id] = result
+        synchronized(titleArtwork) { if (epoch == metadataEpoch) {
+            if (titleArtwork.size >= 256) titleArtwork.keys.firstOrNull()?.let { titleArtwork.remove(it) }
+            titleArtwork[key] = result
+        } }
         return result
     }
     /** A failed enrichment lookup must never discard the item the caller already has. */
@@ -292,10 +302,10 @@ class VipTvHttpGateway(
         val result = coreRequest("nextEpisode", profileId, media)
         return NextResult(result.optString("status"), result.optJSONObject("item")?.media())
     }
-    override suspend fun favorites(profileId: String): List<Media> = json("GET", "/profiles/${enc(profileId)}/favorites/page?limit=40").mediaArray("items")
+    override suspend fun favorites(profileId: String): List<Media> = json("GET", "/profiles/${enc(profileId)}/favorites/page?limit=40").mediaArray()
     override suspend fun toggleFavorite(profileId: String, media: Media): Boolean = coreRequest("toggleFavorite", profileId, media).optBoolean("saved")
     override suspend fun queue(profileId: String): List<Media> = coroutineScope {
-        val items = json("GET", "/profiles/${enc(profileId)}/continue/page?limit=40").mediaArray("items")
+        val items = json("GET", "/profiles/${enc(profileId)}/continue/page?limit=40").mediaArray()
         val slots = Semaphore(3)
         items.map { item -> async {
             slots.withPermit {
@@ -389,9 +399,11 @@ class VipTvHttpGateway(
     override suspend fun deleteProfile(profile: Profile) { json("DELETE", "/profiles/${enc(profile.id)}") }
     override suspend fun unlockParent(pin: String) { json("POST", "/parent/unlock", JSONObject().put("pin", pin)) }
     override suspend fun logout() { json("POST", "/auth/logout", JSONObject()) }
-    private fun session(value: JSONObject): DeviceSession {
-        val token = value.getString("access_token"); accessToken = token
-        return DeviceSession(token, value.getString("refresh_token"), value.opt("profile_id")?.takeUnless { it == JSONObject.NULL }?.toString(), uniffi.viptv_core.normalize("tokens", value.toString(), origin))
+    private fun session(value: JSONObject, adopt: Boolean = true): DeviceSession {
+        val token = value.getString("access_token")
+        val session = DeviceSession(token, value.getString("refresh_token"), value.opt("profile_id")?.takeUnless { it == JSONObject.NULL }?.toString(), uniffi.viptv_core.normalize("tokens", value.toString(), origin))
+        if (adopt) { clearProfileCache(); accessToken = token }
+        return session
     }
     private suspend fun coreRequest(operation: String, profileId: String, media: Media, values: JSONObject = JSONObject()): JSONObject {
         values.put("operation", operation).put("profileId", profileId).put("item", JSONObject(media.normalizedJson()))
@@ -462,7 +474,7 @@ class VipTvHttpGateway(
             is CallText -> return first.text
             is CallFailure -> {
                 val refresher = onUnauthorized
-                if (first.status == 401 && refresher != null && !path.startsWith("/auth/")) {
+                if (first.status == 401 && refresher != null && (!path.startsWith("/auth/") || path == "/auth/me")) {
                     val refreshed = refresher(bearer)
                     if (refreshed != null && refreshed != bearer) {
                         when (val retry = awaitResult(method, path, body, refreshed)) {
@@ -535,7 +547,8 @@ private suspend fun <T> attempt(request: suspend () -> T): SearchAttempt<T> = tr
 private fun LiveChannel.asMedia() = Media(id, "live", name, poster = logo)
 
 private fun JSONObject.media(): Media = CoreModels.media(this)
-private fun JSONObject.mediaArray(vararg keys: String): List<Media> {
+/** Core owns the page-key order (`metas`, then `items`, then `rows`); callers do not choose keys. */
+private fun JSONObject.mediaArray(): List<Media> {
     val page = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.DiscoverPage>(uniffi.viptv_core.normalize("discover", toString(), ""))
     return page.items.map { CoreModels.mediaNormalized(it) }
 }
@@ -546,12 +559,11 @@ private fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNul
 private fun JSONObject.array(vararg keys: String): List<Any?> = (keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray()).let { array -> (0 until array.length()).map { index -> array.opt(index) } }
 private fun Any?.optJSONObject(): JSONObject? = this as? JSONObject
 private fun JSONObject.addon() = Addon(get("id").toString(), optString("name"), optString("manifest_url"), optBoolean("enabled", true))
-// The retired profile quality cap is not an active backend preference. Retain
-// the compatibility model while the independently owned settings UI migrates,
-// but never rewrite a historical value or send it with ordinary preference edits.
+// The retired profile quality cap is not modelled: a historical server value is
+// ignored on read and never rewritten or sent with ordinary preference edits.
 private fun PlaybackPreferences.body() = JSONObject().put("audio_language", audioLanguage).put("subtitle_language", subtitleLanguage).put("subtitles_enabled", subtitlesEnabled).put("subtitle_size", subtitleSize).put("subtitle_style", subtitleStyle).put("autoplay", autoplay)
 private fun JSONObject.preferences(): PlaybackPreferences {
     val item = JSONObject(uniffi.viptv_core.normalize("androidPreferences", toString(), ""))
-    return PlaybackPreferences(item.getString("audioLanguage"), item.getString("subtitleLanguage"), item.getBoolean("subtitlesEnabled"), item.getString("subtitleSize"), item.getString("subtitleStyle"), item.getString("quality"), item.getBoolean("autoplay"))
+    return PlaybackPreferences(item.getString("audioLanguage"), item.getString("subtitleLanguage"), item.getBoolean("subtitlesEnabled"), item.getString("subtitleSize"), item.getString("subtitleStyle"), item.getBoolean("autoplay"))
 }
 private fun seconds(millis: Long): Double = millis / 1_000.0
