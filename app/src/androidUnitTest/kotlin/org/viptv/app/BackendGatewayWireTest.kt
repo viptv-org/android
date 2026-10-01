@@ -64,7 +64,7 @@ class BackendGatewayWireTest {
         }.use { server ->
             val gateway = VipTvHttpGateway(server.origin)
             gateway.savePreferences("profile-one", PlaybackPreferences(audioLanguage = "es", subtitleLanguage = "fr",
-                subtitlesEnabled = true, subtitleSize = "large", subtitleStyle = "shadow", quality = "720p", autoplay = false))
+                subtitlesEnabled = true, subtitleSize = "large", subtitleStyle = "shadow", autoplay = false))
             val active = gateway.preferences("profile-one")
             assertEquals("es", active.audioLanguage)
             assertEquals("fr", active.subtitleLanguage)
@@ -72,7 +72,6 @@ class BackendGatewayWireTest {
             assertEquals("large", active.subtitleSize)
             assertEquals("shadow", active.subtitleStyle)
             assertFalse(active.autoplay)
-            assertEquals("auto", active.quality)
             assertEquals("480p", stored.getString("quality"))
             server.assertHealthy()
         }

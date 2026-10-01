@@ -105,7 +105,7 @@ class VipTvHttpGateway(
                 }
             } }.awaitAll()
         }
-        val queue = async { hydrate(optional { json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray("items") }, 0, "Continue watching", true) }
+        val queue = async { hydrate(optional { json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray() }, 0, "Continue watching", true) }
         val recent = async {
             publish(1, HomeShelf("Recently watched live TV", optional { liveV2(LiveCatalogQuery(collection = "recent", limit = 24)).items.map { CoreModels.mediaNormalized(it) } }))
         }
@@ -123,7 +123,7 @@ class VipTvHttpGateway(
         queue.await(); recent.await(); saved.await(); live.await()
         rows.values.filter { it.items.isNotEmpty() }
     }
-    override suspend fun discover(type: String, search: String?): List<Media> = json("GET", discoverPath(type, search = search)).mediaArray("metas", "items", "rows")
+    override suspend fun discover(type: String, search: String?): List<Media> = json("GET", discoverPath(type, search = search)).mediaArray()
     override suspend fun catalogs(): List<DiscoverCatalog> = jsonArray("GET", "/catalogs")
         .objects()
         .mapNotNull(JSONObject::discoverCatalog)
@@ -145,7 +145,7 @@ class VipTvHttpGateway(
         val nextSkip = (root.opt("next_skip") as? Number)?.toInt()?.takeIf { it in 0..10_000 }
         return DiscoverPage(
             catalog = catalog.key,
-            items = root.mediaArray("metas", "items", "rows"),
+            items = root.mediaArray(),
             requestedSkip = request.skip,
             nextSkip = nextSkip,
             hasMore = hasMore,
@@ -302,10 +302,10 @@ class VipTvHttpGateway(
         val result = coreRequest("nextEpisode", profileId, media)
         return NextResult(result.optString("status"), result.optJSONObject("item")?.media())
     }
-    override suspend fun favorites(profileId: String): List<Media> = json("GET", "/profiles/${enc(profileId)}/favorites/page?limit=40").mediaArray("items")
+    override suspend fun favorites(profileId: String): List<Media> = json("GET", "/profiles/${enc(profileId)}/favorites/page?limit=40").mediaArray()
     override suspend fun toggleFavorite(profileId: String, media: Media): Boolean = coreRequest("toggleFavorite", profileId, media).optBoolean("saved")
     override suspend fun queue(profileId: String): List<Media> = coroutineScope {
-        val items = json("GET", "/profiles/${enc(profileId)}/continue/page?limit=40").mediaArray("items")
+        val items = json("GET", "/profiles/${enc(profileId)}/continue/page?limit=40").mediaArray()
         val slots = Semaphore(3)
         items.map { item -> async {
             slots.withPermit {
@@ -547,7 +547,8 @@ private suspend fun <T> attempt(request: suspend () -> T): SearchAttempt<T> = tr
 private fun LiveChannel.asMedia() = Media(id, "live", name, poster = logo)
 
 private fun JSONObject.media(): Media = CoreModels.media(this)
-private fun JSONObject.mediaArray(vararg keys: String): List<Media> {
+/** Core owns the page-key order (`metas`, then `items`, then `rows`); callers do not choose keys. */
+private fun JSONObject.mediaArray(): List<Media> {
     val page = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.DiscoverPage>(uniffi.viptv_core.normalize("discover", toString(), ""))
     return page.items.map { CoreModels.mediaNormalized(it) }
 }
@@ -558,12 +559,11 @@ private fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNul
 private fun JSONObject.array(vararg keys: String): List<Any?> = (keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray()).let { array -> (0 until array.length()).map { index -> array.opt(index) } }
 private fun Any?.optJSONObject(): JSONObject? = this as? JSONObject
 private fun JSONObject.addon() = Addon(get("id").toString(), optString("name"), optString("manifest_url"), optBoolean("enabled", true))
-// The retired profile quality cap is not an active backend preference. Retain
-// the compatibility model while the independently owned settings UI migrates,
-// but never rewrite a historical value or send it with ordinary preference edits.
+// The retired profile quality cap is not modelled: a historical server value is
+// ignored on read and never rewritten or sent with ordinary preference edits.
 private fun PlaybackPreferences.body() = JSONObject().put("audio_language", audioLanguage).put("subtitle_language", subtitleLanguage).put("subtitles_enabled", subtitlesEnabled).put("subtitle_size", subtitleSize).put("subtitle_style", subtitleStyle).put("autoplay", autoplay)
 private fun JSONObject.preferences(): PlaybackPreferences {
     val item = JSONObject(uniffi.viptv_core.normalize("androidPreferences", toString(), ""))
-    return PlaybackPreferences(item.getString("audioLanguage"), item.getString("subtitleLanguage"), item.getBoolean("subtitlesEnabled"), item.getString("subtitleSize"), item.getString("subtitleStyle"), item.getString("quality"), item.getBoolean("autoplay"))
+    return PlaybackPreferences(item.getString("audioLanguage"), item.getString("subtitleLanguage"), item.getBoolean("subtitlesEnabled"), item.getString("subtitleSize"), item.getString("subtitleStyle"), item.getBoolean("autoplay"))
 }
 private fun seconds(millis: Long): Double = millis / 1_000.0

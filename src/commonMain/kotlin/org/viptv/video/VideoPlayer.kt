@@ -139,8 +139,6 @@ data class PlaybackStatistics(
     }
 }
 
-enum class TrackType { Audio, Subtitle, Video }
-
 sealed interface MediaTrack {
     val id: String
     val label: String

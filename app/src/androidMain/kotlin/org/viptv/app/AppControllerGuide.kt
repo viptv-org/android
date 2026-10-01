@@ -56,22 +56,12 @@ internal fun AppController.loadGuidePage(filter: LiveChannelFilter, offset: Int,
         catch (error: Throwable) { if (ticket == guideBrowseGeneration && _state.value.selectedProfile?.id == profile && _state.value.route is Route.Guide) fail(error) }
     }
 }
-internal fun AppController.openGuide(channel: LiveChannel) {
-    if (_state.value.route is Route.Guide) selectGuideChannel(channel)
-    else loadGuidePage(LiveChannelFilter.AllUs, 0, channel.id)
-}
 internal fun AppController.selectGuideChannel(channel: LiveChannel) {
     if (_state.value.route !is Route.Guide || _state.value.preparingSourceId != null) return
     val current = _state.value.guideUi
     if (current.selectedChannelId == channel.id || current.channels.none { it.id == channel.id }) return
     val guide = current.copy(selectedChannelId = channel.id)
     _state.value = _state.value.copy(route = Route.Guide(channel), guideUi = guide, guide = guide.schedulesByChannelId[channel.id].orEmpty())
-}
-internal fun AppController.changeGuidePage(delta: Int) {
-    val current = _state.value.guideUi
-    val cursor = if (delta > 0) current.nextCursor else if (delta < 0) current.previousCursor else null
-    if (cursor == null || _state.value.loading || current.paging) return
-    loadGuidePage(current.channelFilter, (current.channelOffset + delta.coerceIn(-1, 1) * GuidePolicy.PAGE_SIZE).coerceAtLeast(0), cursor = cursor)
 }
 /** UI reports its actual lazy-list viewport; controllers own paging and EPG I/O. */
 internal fun AppController.onGuideViewport(first: Int, last: Int, scrollOffset: Int = 0) {
@@ -91,7 +81,6 @@ internal fun AppController.onGuideViewport(first: Int, last: Int, scrollOffset: 
     if (start <= 2 && current.previousCursor != null) loadAdjacentGuidePage(true)
     else if (end >= current.channels.size - 5 && current.nextCursor != null) loadAdjacentGuidePage(false)
 }
-internal fun AppController.appendGuidePage() = loadAdjacentGuidePage(false)
 internal fun AppController.changeGuideCategoryPage(delta: Int, renderedRevision: Long) = guideCategories.move(delta, renderedRevision)
 internal fun AppController.retryGuideCategories() = guideCategories.retry()
 internal fun AppController.onGuideCategoryViewport(renderedRevision: Long, firstId: String, lastId: String, offset: Int = 0, allowPaging: Boolean = true) =
