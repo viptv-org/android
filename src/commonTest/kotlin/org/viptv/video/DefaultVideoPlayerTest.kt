@@ -1,6 +1,10 @@
 package org.viptv.video
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -204,6 +208,105 @@ class DefaultVideoPlayerTest {
         player.stop()
         assertEquals(PlaybackStatistics(), player.statistics.value)
         player.close()
+    }
+
+    @Test
+    fun cancellingAPendingOpenCancelsTheBackendAndReturnsToIdleWithoutFailure() = runTest {
+        val backend = GatedBackend()
+        val player = DefaultVideoPlayer(backend, StandardTestDispatcher(testScheduler))
+        val failures = mutableListOf<PlaybackEvent>()
+        val collector = launch { player.events.collect { failures += it } }
+        val open = launch { player.open(PlaybackSource("https://example.invalid/slow.m3u8")) }
+        testScheduler.runCurrent()
+        assertEquals(PlaybackStatus.Opening, player.state.value.status)
+
+        open.cancel()
+        testScheduler.runCurrent()
+
+        assertTrue(backend.openCancelled)
+        assertEquals(1, backend.stopCalls)
+        assertEquals(PlaybackStatus.Idle, player.state.value.status)
+        assertTrue(failures.isEmpty())
+
+        backend.gate = null
+        player.open(PlaybackSource("https://example.invalid/next.m3u8"))
+        assertEquals(PlaybackStatus.Ready, player.state.value.status)
+        collector.cancel()
+        player.close()
+    }
+
+    @Test
+    fun stopEndsAPendingOpenPromptlyAndItsLateFailureIsNeverPublished() = runTest {
+        val backend = GatedBackend(failWhenCancelled = true)
+        val player = DefaultVideoPlayer(backend, StandardTestDispatcher(testScheduler))
+        val failures = mutableListOf<PlaybackEvent>()
+        val collector = launch { player.events.collect { failures += it } }
+        val open = async { runCatching { player.open(PlaybackSource("https://example.invalid/slow.m3u8")) } }
+        testScheduler.runCurrent()
+
+        player.stop()
+        testScheduler.runCurrent()
+
+        assertTrue(backend.openCancelled)
+        assertIs<CancellationException>(open.await().exceptionOrNull())
+        assertEquals(PlaybackStatus.Idle, player.state.value.status)
+        assertTrue(failures.isEmpty())
+        collector.cancel()
+        player.close()
+    }
+
+    @Test
+    fun closeDuringOpenStaysReleased() = runTest {
+        val backend = GatedBackend()
+        val player = DefaultVideoPlayer(backend, StandardTestDispatcher(testScheduler))
+        val open = async { runCatching { player.open(PlaybackSource("https://example.invalid/slow.m3u8")) } }
+        testScheduler.runCurrent()
+
+        player.close()
+        testScheduler.runCurrent()
+
+        assertTrue(backend.openCancelled)
+        assertIs<CancellationException>(open.await().exceptionOrNull())
+        assertEquals(PlaybackStatus.Released, player.state.value.status)
+        assertFalse(player.seekTo(0))
+        assertEquals(TrackSelectionResult.NotSupported, player.selectAudioTrack(null))
+    }
+
+    private class GatedBackend(
+        private val failWhenCancelled: Boolean = false,
+    ) : VideoBackend {
+        override val capabilities = PlayerCapabilities()
+        override val events: Flow<BackendEvent> = MutableSharedFlow()
+        var gate: CompletableDeferred<Unit>? = CompletableDeferred()
+        var openCancelled = false
+        var stopCalls = 0
+
+        override suspend fun open(
+            sessionId: PlaybackSessionId,
+            source: PlaybackSource,
+            playWhenReady: Boolean,
+        ): OpenedMedia {
+            gate?.let { pending ->
+                try {
+                    pending.await()
+                } catch (error: CancellationException) {
+                    openCancelled = true
+                    if (failWhenCancelled) {
+                        throw PlaybackFailure(PlaybackError(PlaybackErrorCode.Network, "late", recoverable = true))
+                    }
+                    throw error
+                }
+            }
+            return OpenedMedia(PlaybackTimeline(PlaybackKind.Live))
+        }
+        override fun play() = Unit
+        override fun pause() = Unit
+        override fun seekTo(positionMillis: Long) = Unit
+        override fun selectAudioTrack(id: String?): TrackSelectionResult = TrackSelectionResult.NotSupported
+        override fun selectSubtitleTrack(id: String?): TrackSelectionResult = TrackSelectionResult.NotSupported
+        override fun selectVideoTrack(id: String?): TrackSelectionResult = TrackSelectionResult.NotSupported
+        override fun stop() { stopCalls += 1 }
+        override fun close() = Unit
     }
 
     private class FakeBackend(

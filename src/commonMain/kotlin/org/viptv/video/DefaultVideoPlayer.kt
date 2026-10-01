@@ -1,10 +1,14 @@
 package org.viptv.video
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -103,7 +107,7 @@ interface VideoBackend : AutoCloseable {
 
 class DefaultVideoPlayer(
     private val backend: VideoBackend,
-    dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : VideoPlayer {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val openMutex = Mutex()
@@ -117,6 +121,7 @@ class DefaultVideoPlayer(
     private var released = false
     private var nextSessionValue = 0L
     private var activeSessionId: PlaybackSessionId? = null
+    private var pendingOpen: Job? = null
 
     override val state: StateFlow<PlaybackState> = _state.asStateFlow()
     override val events: SharedFlow<PlaybackEvent> = _events.asSharedFlow()
@@ -130,11 +135,21 @@ class DefaultVideoPlayer(
         scope.launch { backend.events.collect(::applyBackendEvent) }
     }
 
+    /**
+     * Opens one session. Opens are serialized. The pending open is cancelled when the caller is
+     * cancelled or when [stop]/[close] ends its session; a cancelled or superseded open never
+     * publishes Ready, Error or [PlaybackEvent.Failed]. A caller-cancelled open returns to Idle.
+     */
     override suspend fun open(source: PlaybackSource, playWhenReady: Boolean) = openMutex.withLock {
-        ensureActive()
-        withContext(scope.coroutineContext) {
+        checkNotReleased()
+        // Only the dispatcher is borrowed: the open stays a child of the caller so caller
+        // cancellation reaches the backend instead of leaving it waiting for its own timeout.
+        withContext(dispatcher) {
+            checkNotReleased()
+            val openJob = coroutineContext.job
             val sessionId = PlaybackSessionId(++nextSessionValue)
             activeSessionId = sessionId
+            pendingOpen = openJob
             _state.value = PlaybackState(
                 status = PlaybackStatus.Opening,
                 playWhenReady = playWhenReady,
@@ -143,6 +158,8 @@ class DefaultVideoPlayer(
             _statistics.value = PlaybackStatistics()
             try {
                 val opened = backend.open(sessionId, source, playWhenReady)
+                coroutineContext.ensureActive()
+                if (!isCurrent(sessionId)) throw CancellationException("Playback session ended before it opened")
                 _audioTracks.value = opened.audioTracks
                 _subtitleTracks.value = opened.subtitleTracks
                 _videoTracks.value = opened.videoTracks
@@ -157,7 +174,16 @@ class DefaultVideoPlayer(
                     selectedSubtitleTrackId = opened.selectedSubtitleTrackId,
                     selectedVideoTrackId = opened.selectedVideoTrackId,
                 )
+            } catch (error: CancellationException) {
+                if (isCurrent(sessionId)) {
+                    activeSessionId = null
+                    backend.stop()
+                    clearMedia(PlaybackStatus.Idle)
+                }
+                throw error
             } catch (error: Throwable) {
+                // A stopped, replaced or released session reports only cancellation.
+                if (!isCurrent(sessionId)) throw CancellationException("Playback session ended before it opened", error)
                 val playbackError = (error as? PlaybackFailure)?.error ?: PlaybackError(
                     code = PlaybackErrorCode.Internal,
                     message = "Playback source could not be opened",
@@ -166,6 +192,8 @@ class DefaultVideoPlayer(
                 _state.value = PlaybackState(status = PlaybackStatus.Error, error = playbackError)
                 _events.tryEmit(PlaybackEvent.Failed(playbackError))
                 throw error
+            } finally {
+                if (pendingOpen === openJob) pendingOpen = null
             }
         }
     }
@@ -225,6 +253,7 @@ class DefaultVideoPlayer(
     override fun stop() {
         if (released) return
         activeSessionId = null
+        pendingOpen?.cancel()
         backend.stop()
         clearMedia(PlaybackStatus.Idle)
     }
@@ -233,6 +262,7 @@ class DefaultVideoPlayer(
         if (released) return
         released = true
         activeSessionId = null
+        pendingOpen?.cancel()
         backend.close()
         clearMedia(PlaybackStatus.Released)
         scope.cancel()
@@ -313,7 +343,9 @@ class DefaultVideoPlayer(
 
     private fun canControl(): Boolean = !released && state.value.status in setOf(PlaybackStatus.Ready, PlaybackStatus.Ended)
 
-    private fun ensureActive() {
+    private fun isCurrent(sessionId: PlaybackSessionId): Boolean = !released && activeSessionId == sessionId
+
+    private fun checkNotReleased() {
         check(!released) { "VideoPlayer has been released" }
     }
 }
