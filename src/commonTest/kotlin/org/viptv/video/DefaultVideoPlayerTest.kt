@@ -272,6 +272,63 @@ class DefaultVideoPlayerTest {
         assertEquals(TrackSelectionResult.NotSupported, player.selectAudioTrack(null))
     }
 
+    @Test
+    fun subtitleCuesFollowTheActiveSessionAndClearOnOffStopAndReplace() = runTest {
+        val opened = OpenedMedia(
+            timeline = PlaybackTimeline(PlaybackKind.OnDemand, durationMillis = 60_000),
+            subtitleTracks = listOf(SubtitleTrack("s1", "English"), SubtitleTrack("s2", "Spanish")),
+            selectedSubtitleTrackId = "s1",
+        )
+        val backend = FakeBackend(opened)
+        val player = DefaultVideoPlayer(backend, StandardTestDispatcher(testScheduler))
+        player.open(PlaybackSource("https://example.invalid/movie.mkv"))
+        testScheduler.runCurrent()
+        val first = checkNotNull(backend.lastSessionId)
+        val cue = SubtitleCue("Hello", line = 0.9f)
+
+        backend.eventsFlow.emit(BackendEvent.CuesChanged(first, listOf(cue)))
+        testScheduler.runCurrent()
+        assertEquals(listOf(cue), player.subtitleCues.value)
+
+        // Switching track drops the old track's cue until the new one reports.
+        assertIs<TrackSelectionResult.Selected>(player.selectSubtitleTrack("s2"))
+        assertEquals(emptyList(), player.subtitleCues.value)
+        backend.eventsFlow.emit(BackendEvent.CuesChanged(first, listOf(cue)))
+        testScheduler.runCurrent()
+        assertEquals(TrackSelectionResult.Disabled, player.selectSubtitleTrack(null))
+        assertEquals(emptyList(), player.subtitleCues.value)
+
+        // A native track change that deselects text also clears.
+        backend.eventsFlow.emit(BackendEvent.CuesChanged(first, listOf(cue)))
+        backend.eventsFlow.emit(BackendEvent.TracksChanged(first, emptyList(), opened.subtitleTracks, emptyList(), null, null, null))
+        testScheduler.runCurrent()
+        assertEquals(emptyList(), player.subtitleCues.value)
+
+        // Replacing the session ignores late cues from the old one.
+        backend.eventsFlow.emit(BackendEvent.CuesChanged(first, listOf(cue)))
+        testScheduler.runCurrent()
+        player.open(PlaybackSource("https://example.invalid/next.mkv"))
+        testScheduler.runCurrent()
+        assertEquals(emptyList(), player.subtitleCues.value)
+        backend.eventsFlow.emit(BackendEvent.CuesChanged(first, listOf(SubtitleCue("stale"))))
+        testScheduler.runCurrent()
+        assertEquals(emptyList(), player.subtitleCues.value)
+
+        val second = checkNotNull(backend.lastSessionId)
+        backend.eventsFlow.emit(BackendEvent.CuesChanged(second, listOf(cue)))
+        testScheduler.runCurrent()
+        assertEquals(listOf(cue), player.subtitleCues.value)
+        player.stop()
+        assertEquals(emptyList(), player.subtitleCues.value)
+        player.close()
+    }
+
+    @Test
+    fun subtitleCueRejectsPositionsOutsideTheViewport() {
+        kotlin.test.assertFailsWith<IllegalArgumentException> { SubtitleCue("x", line = 1.5f) }
+        kotlin.test.assertFailsWith<IllegalArgumentException> { SubtitleCue(" ") }
+    }
+
     private class GatedBackend(
         private val failWhenCancelled: Boolean = false,
     ) : VideoBackend {
