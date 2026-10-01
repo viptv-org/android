@@ -1,3 +1,20 @@
+# Playback contract, capability claims and open cancellation — 2026-09-30
+
+SPEC.md is now the Android playback library contract (android#1). Capability
+probing is a pure, unit-tested mapping over runtime facts: PiP needs API 26 and
+FEATURE_PICTURE_IN_PICTURE; hardware decode comes only from API 29+
+`isHardwareAccelerated`/`isSoftwareOnly` and is reported as Decode; subtitle
+formats are text-only; seekable live, surface reattachment and playback rate are
+`false` until the SPEC.md validation matrix is satisfied. Pending opens are now
+cancelled by caller cancellation, `stop()` and `close()`, and a stopped session's
+late failure is never published. Dead controller paths, the unused TrackType enum
+and the retired quality preference field were removed.
+
+JDK17 host tasks passed 183 tests (library 38, app 145) with zero
+failures/errors/skips. Library lint found no issues; app lint keeps 73 warnings
+and the three baseline-filtered UniFFI errors (baseline unchanged). No APK,
+emulator or device run: no new device capability is claimed.
+
 # AND-041 foreground implementation checkpoint — 2026-09-30
 
 The isolated `fix/android-foreground-lifecycle` candidate adopts design
