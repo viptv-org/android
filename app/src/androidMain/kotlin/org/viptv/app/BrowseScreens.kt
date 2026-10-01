@@ -43,9 +43,10 @@ import org.viptv.app.theme.ViptvColor as C
             }
         }
         if (ui.error != null && ui.items.isNotEmpty()) VText(ui.error, if (tv) 24 else 14, Modifier.padding(bottom = 16.dp), C.statusDanger)
-        if (ui.items.isEmpty()) EmptyState(if (ui.loading) "Finding titles…" else "No titles yet",
+        if (ui.items.isEmpty() && ui.loading) PosterSkeletonGrid(if (tv) 4 else 3)
+        else if (ui.items.isEmpty()) EmptyState("No titles yet",
             ui.error ?: if (ui.catalogs.isEmpty()) "Add or enable a catalog addon in Settings." else "Choose another catalog or filter.", "discover",
-            retry = if (ui.loading) null else { { claimedFocus = false; controller.openDiscover() } },
+            retry = { claimedFocus = false; controller.openDiscover() },
             retryModifier = Modifier.focusRequester(first).focusProperties { if (tv) left = rail })
         else MediaGrid(ui.items, onClick = { controller.activateCard(it) }, onHold = { controller.requestDialog(DialogKind.MyListManage, it.name, it) },
             hasMore = ui.nextSkip != null, loading = ui.loading, onMore = { controller.appendDiscoverPage() })
@@ -95,6 +96,12 @@ import org.viptv.app.theme.ViptvColor as C
             MediaCard(media, Modifier.then(if (tv && index % 4 == 0) Modifier.focusProperties { left = rail } else Modifier), queue,
                 onClick = { keyboard?.hide(); onClick(media) }, onHold = { onHold(media) }, portrait = !tv, wide = tv)
         }
-        if (loading) item(span = { GridItemSpan(maxLineSpan) }) { VText("Loading more titles…", if (tv) 22 else 14, Modifier.padding(16.dp), C.textTertiary) }
+        // AND-042-SKELETON: an appending page shows one row of placeholders, never copy.
+        if (loading) items(if (tv) 4 else 3, key = { "skeleton:$it" }) {
+            Column {
+                SkeletonBlock(Modifier.fillMaxWidth().aspectRatio(if (tv) 16f / 9 else 2f / 3))
+                SkeletonBlock(Modifier.padding(top = 10.dp).fillMaxWidth(.7f).height(12.dp), 6.dp)
+            }
+        }
     }
 }

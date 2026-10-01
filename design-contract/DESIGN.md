@@ -2,7 +2,7 @@
 
 Native Roku adopts the current TV design through [ROK-042](ROKU_DESIGN.md).
 
-This repository is the source of truth for viptv product UI, UX and app assets. The normative baseline is the actual Roku implementation at `vynxc/viptv@7d6b413`; historical notes are evidence, not overrides. This migration makes no Roku runtime changes.
+This repository is the source of truth for viptv product UI, UX and app assets. The behavioral baseline is the actual Roku implementation at `vynxc/viptv@7d6b413`; historical notes are evidence, not overrides. The visual source for the redesign is the [VIPTV Redesign canvas](https://claude.ai/artifact/UX1E5AtPUoSKnaSLPou3Pp) together with its committed export in [viptv-design-system/](viptv-design-system/README.md); resolve visual questions from the canvas and import changes here before implementation.
 
 ## Reading order
 1. CONTEXT.md defines shared product terms.
@@ -21,7 +21,12 @@ State its stable identifier, status (baseline or proposed), source revision, use
 A design issue describes the before/after user experience, affected platforms and assets. Update the normative spec, acceptance scenarios and change log before implementation. Implementation issues reference an immutable design commit. A platform exception needs its reason, equivalent discoverable action and parity test; it must not silently remove a familiar feature. The Roku baseline is frozen during extraction. Proposed behavior does not become baseline until implementation and validation evidence are recorded.
 
 ## Reconstruction standard
-An implementing agent should be able to build screens and interaction flows from these specifications and packaged assets alone. Source citations support auditing, not an instruction to reverse-engineer omitted behavior. Screenshots are not checked in or embedded. Inspect them privately only to resolve visual facts; UI source supplies geometry and state logic.
+An implementing agent should be able to build screens and interaction flows from these specifications and packaged assets alone. Source citations support auditing, not an instruction to reverse-engineer omitted behavior.
+
+Two kinds of image are distinguished:
+
+- **Canvas renders are allowed.** The reference screens and component sheets in `viptv-design-system/reference/` are renders exported from the design canvas. They are normative design artifacts, inventoried with SHA-256 hashes and their source in `reference/FILES.json`, and checked by `scripts/validate.py`.
+- **App and device captures are forbidden.** Screenshots or recordings of a running app, emulator, browser build or physical device are never checked in or embedded. Inspect them privately only to resolve visual facts and record the result as text measurements; UI source supplies geometry and state logic.
 
 ## Platform consistency
 TV layouts use the Roku reference canvas and focus model. Phone and desktop layouts may adapt density and pointer/touch navigation while preserving action meaning, queue/source intent, resume position, Back/cancel and next-episode semantics. Hold-only actions need an accessible visible menu/keyboard equivalent. Platform decoder limitations affect the playback adapter, not unrelated product behavior.
@@ -34,7 +39,7 @@ Browser HTTPS playback and conversion: [BROWSER_MEDIA_PIPELINE.md](BROWSER_MEDIA
 
 ## Visual design system
 
-Phone, desktop (Tauri), web and TV share one design system: [viptv-design-system/](viptv-design-system/README.md). Build every screen from its reference image and HTML (`reference/screens/`), the rules in `components.md`, the strings in `copy.md` and the decisions in `decisions.md`. Platform theme files are generated from `tokens/tokens.json` by `tools/gen-themes.mjs`; never hand-edit a generated theme or hard-code a value.
+Phone, desktop (Tauri), web and TV share one design system: [viptv-design-system/](viptv-design-system/README.md), exported from the [VIPTV Redesign canvas](https://claude.ai/artifact/UX1E5AtPUoSKnaSLPou3Pp). The canvas is the visual source for the redesign; a missing screen is designed there first and then exported here with an updated `reference/FILES.json`. Build every screen from its reference image and HTML (`reference/screens/`), the rules in `components.md`, the strings in `copy.md` and the decisions in `decisions.md`. Platform theme files are generated from `tokens/tokens.json` by `tools/gen-themes.mjs`; never hand-edit a generated theme or hard-code a value.
 
 ## Local addon mode
 

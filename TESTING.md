@@ -1,3 +1,41 @@
+# AND-042 phone presentation and track menus (design#6) — 2026-09-30
+
+Adopts design `6da30a58c839e4e66465a76c8f80471139147f27` (AND-042). Phone Home
+has no header bar and opens on the rounded hero. Bottom navigation is
+icon-only and keeps accessible names. Phone cards show only S1 E1 or the year,
+with a 6dp lifted progress bar. Home catalog shelves are headed by content
+type ("Movies · Popular"), and phone Home live shelves use 104×72dp logo tiles.
+Home, Discover/catalog grids, appended pages, Search and the phone Live list
+use skeletons instead of loading copy. Audio/Subtitles open the anchored
+PhPlayerSubs panel on phones and the TvPlayerSubs row panel on TV, with
+current/unavailable markers and key hints.
+
+JDK 17 host tasks passed 202 tests (library 47, app 155), including the new
+`PhonePresentationPolicyTest`, with zero failures/errors/skips. Library lint is
+clean. App lint reports 74 warnings plus three baseline-filtered UniFFI
+errors. The normal debug APK assembled without `viptv_fixture_ca`.
+
+Emulator checks (fixture-trusting debug APK against the HTTPS fixture; private
+captures, not committed):
+- `air-phone-api36` at 780×1688/320dpi: the Home hero sits directly under the
+  status bar with no header; icon-only nav; "Movies · Popular"/"Movies ·
+  Seasonal" headings; monogram live tiles; year captions. Fixture media played.
+  The Subtitles panel was anchored above the timeline with Off · Current.
+  Choosing Subtitles 1 closed it, reopening marked it Current, and Back closed
+  the panel while the player stayed open. The phone Live list showed
+  now/next/progress rows.
+- `air-tv-api36` at 1920×1080: the Home hero and Continue watching were
+  unchanged. Player Info → Right → OK opened the right Subtitles panel: the
+  focused off-white row was "Off · Current", followed by Subtitles 1 and the
+  ▲▼/OK/BACK hints. Selecting a track restarted the fixture output and reset
+  control focus to Play/Pause, which predates this change. Back focus return
+  to the Subtitles control was not observed, because the 5-second fixture media
+  kept ending and restarting.
+
+Not claimed: physical phone/TV evidence (android#3), long-list TV panel
+scrolling with real multi-track media, and a pixel metric against the canvas
+boards.
+
 # Subtitle cue rendering (android#8) — 2026-09-30
 
 The library now publishes `VideoPlayer.subtitleCues` (backend-neutral, session

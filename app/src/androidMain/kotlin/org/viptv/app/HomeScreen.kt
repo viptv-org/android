@@ -55,7 +55,7 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
         LazyColumn(state = list, modifier = Modifier.fillMaxSize().onPreviewKeyEvent {
             if (it.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) controller.recordHomeDirectionalInput()
             false
-        }, contentPadding = PaddingValues(start = measure(0, 16), end = measure(0, 16), top = 0.dp, bottom = measure(54, 164)),
+        }, contentPadding = PaddingValues(start = measure(0, 16), end = measure(0, 16), top = measure(0, 8), bottom = measure(54, 164)),
             verticalArrangement = Arrangement.spacedBy(measure(36, 20))) {
             item(key = "featured") {
                 if (tv) {
@@ -65,15 +65,9 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
                     }
                     else EmptyState(if (state.homeLoading) "Starting VIPTV…" else "Your library is ready", "Browse Discover to find something to watch.", "home", Modifier.height(540.dp))
                 } else {
-                    Row(Modifier.fillMaxWidth().padding(bottom = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                        VText("VIPTV", 23, Modifier.weight(1f), display = true)
-                        PhoneRemoteButton()
-                        Spacer(Modifier.width(8.dp))
-                        Holdable({ controller.navigate(Destination.Settings) }, modifier = Modifier.size(44.dp).clip(CircleShape)) {
-                            ProfileAvatar(state.selectedProfile, Modifier.fillMaxSize())
-                        }
-                    }
-                    if (featured.isEmpty()) EmptyState(if (state.homeLoading) "Finding your next watch" else "Your library is empty", "Browse Discover to find movies and series.", "home")
+                    // AND-042-HOME: no header bar; the rounded hero is the first element.
+                    if (featured.isEmpty() && state.homeLoading) PhoneHomeSkeleton(shelves.isEmpty())
+                    else if (featured.isEmpty()) EmptyState("Your library is empty", "Browse Discover to find movies and series.", "home")
                     else {
                         val pager = rememberPagerState(pageCount = { featured.size })
                         HorizontalPager(pager, pageSpacing = 16.dp, key = { featured[it].id }) { index ->
@@ -164,15 +158,17 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
     }
     Column {
         Row(Modifier.fillMaxWidth().padding(bottom = measure(18, 12)), verticalAlignment = Alignment.CenterVertically) {
-            VText(if (shelf.isQueueShelf) "Continue watching" else shelf.title, if (tv) 32 else 20, Modifier.weight(1f), display = true, lines = 1)
+            VText(if (shelf.isQueueShelf) "Continue watching" else if (tv) shelf.title else PhonePresentationPolicy.shelfHeading(shelf), if (tv) 32 else 20, Modifier.weight(1f), display = true, lines = 1)
             if (!tv && shelf.isQueueShelf) Holdable({ controller.openContinueWatching() }, modifier = Modifier.height(44.dp).padding(start = 12.dp)) { VText("See all", 13, color = C.textSecondary) }
         }
-        LazyRow(state = horizontal, modifier = Modifier.fillMaxWidth().focusGroup(), horizontalArrangement = Arrangement.spacedBy(measure(36, 12)), contentPadding = PaddingValues(4.dp)) {
+        // Phone rows start exactly on the heading edge (AND-042-CARDS).
+        LazyRow(state = horizontal, modifier = Modifier.fillMaxWidth().focusGroup(), horizontalArrangement = Arrangement.spacedBy(measure(36, if (shelf.items.firstOrNull()?.type == "live") 10 else 12)), contentPadding = if (tv) PaddingValues(4.dp) else PaddingValues(vertical = 4.dp)) {
             itemsIndexed(shelf.items, key = { _, item -> HomeFocusPolicy.mediaKey(item) }) { column, media ->
                 val action = { controller.activateCard(media, shelf.isQueueShelf, SourceReturn.Home) }
                 val hold = { if (shelf.isQueueShelf) controller.requestQueueManage(media) else controller.requestDialog(DialogKind.MyListManage, media.name, media) }
                 LaunchedEffect(media.id, state.homeLoading) { controller.enrichVisibleHomeItem(media) }
                 if (!tv && shelf.isQueueShelf) QueueCard(media, action, hold)
+                else if (!tv && media.type == "live") LiveLogoTile(media, action, hold)
                 else MediaCard(media, Modifier.focusRequester(focuses[column]).then(if (column == 0 && tv) Modifier.focusProperties { left = rail } else Modifier),
                     shelf.isQueueShelf, action, hold, onFocused = { controller.recordHomeFocus(index, shelf.id, media) })
             }
@@ -187,10 +183,25 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
             Artwork(card.image, null, Modifier.size(58.dp, 76.dp).clip(RoundedCornerShape(12.dp)))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 VText(card.title, 15, bold = true, lines = 1)
-                VText(card.subtitle, 12, color = C.textSecondary, lines = 1)
+                VText(PhonePresentationPolicy.cardContext(media), 12, color = C.textSecondary, lines = 1)
                 ProgressLine(card.progress?.toFloat() ?: 0f)
             }
             Holdable(onHold, modifier = Modifier.size(44.dp).clip(CircleShape).background(C.surfaceN3)) { VIcon("more", "More options", color = LocalAccent.current) }
+        }
+    }
+}
+
+/** AND-042-SKELETON: the phone Home hero and shelves before the first row arrives. */
+@Composable private fun PhoneHomeSkeleton(withShelves: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        SkeletonBlock(Modifier.fillMaxWidth().height(410.dp), 28.dp)
+        if (withShelves) repeat(2) {
+            Column {
+                SkeletonBlock(Modifier.padding(bottom = 12.dp).width(160.dp).height(20.dp), 8.dp)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    repeat(2) { SkeletonBlock(Modifier.width(232.dp).aspectRatio(16f / 9)) }
+                }
+            }
         }
     }
 }
