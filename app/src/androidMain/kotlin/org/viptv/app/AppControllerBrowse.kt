@@ -91,7 +91,7 @@ internal fun AppController.chooseSources(media: Media, resume: Boolean = false, 
         if (origin == SourceReturn.Home) detailReturnDestination = Destination.Home
         _state.value = _state.value.copy(route = route, sources = emptyList(), loading = true, sourceLoading = true, message = null)
         try {
-            val discovered = gateway.sources(media) { arriving ->
+            val discovered = discoverSourcesFor(media) { arriving ->
                 if (ownsResults()) _state.value = _state.value.copy(sources = arriving)
             }
             if (!ownsResults()) return@launch

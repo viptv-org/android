@@ -45,8 +45,9 @@ class AppController(context: Context, private val origin: String) {
     internal val _state = MutableStateFlow(AppState(loading = true))
     val state: StateFlow<AppState> = _state.asStateFlow()
     private val foregroundValidation = ForegroundValidation(scope, gateway::foregroundIdentity)
+    internal val backendFactory = AndroidMedia3BackendFactory(context)
     private val playerDelegate = lazy {
-        AndroidMedia3BackendFactory(context).createAndroidPlayer().also { instance ->
+        backendFactory.createAndroidPlayer().also { instance ->
             scope.launch { instance.events.collect(::onPlayerEvent) }
         }
     }
@@ -56,6 +57,13 @@ class AppController(context: Context, private val origin: String) {
     private var loginJob: Job? = null
     internal var playbackStartJob: Job? = null
     internal var sourceDiscovery: Job? = null
+    internal var sourcePreview: SourcePreviewEntry? = null
+    internal val sourcePreviewCache = LinkedHashMap<String, SourcePreviewEntry>()
+    internal var probedCapabilities: PlaybackClientCapabilities? = null
+    internal var capabilityProbe: Job? = null
+    /** The active player's facts once it exists; otherwise the measured probe. */
+    internal fun rankCapabilities(): PlaybackClientCapabilities? =
+        if (playerDelegate.isInitialized()) PlaybackClientCapabilities.from(player.capabilities.value) else probedCapabilities
     internal var queueContinuationJob: Job? = null
     /** Last queue/Home refresh wins over any earlier response racing Undo. */
     internal var homeRefreshGeneration = 0L
@@ -116,6 +124,7 @@ class AppController(context: Context, private val origin: String) {
 
     init {
         scope.launch { foregroundValidation.result.collect(::acceptForegroundResult) }
+        scope.launch { var last: Route? = null; state.collect { if (it.route != last) { last = it.route; pruneSourcePreview() } } }
         coreSession.begin()
     }
     private fun acceptForegroundResult(result: ForegroundValidationResult?) {
@@ -166,7 +175,7 @@ class AppController(context: Context, private val origin: String) {
         cancelGuideWork(); cancelPendingQueueContinuation(); cancelUpNext()
         homeRefreshGeneration++; homeJob?.cancel()
         detailGeneration++; detailJob?.cancel()
-        discoverGeneration++; discoverJob?.cancel(); searchJob?.cancel(); sourceDiscovery?.cancel()
+        discoverGeneration++; discoverJob?.cancel(); searchJob?.cancel(); sourceDiscovery?.cancel(); cancelSourcePreviews()
         nextEpisodeJob?.cancel(); queueContinuationJob?.cancel()
     }
     fun beginPairing() = scope.launch {
@@ -359,7 +368,7 @@ class AppController(context: Context, private val origin: String) {
         homeJob?.cancel()
         homeRefreshGeneration++
         detailGeneration++; detailJob?.cancel()
-        searchJob?.cancel(); discoverJob?.cancel(); sourceDiscovery?.cancel()
+        searchJob?.cancel(); discoverJob?.cancel(); sourceDiscovery?.cancel(); cancelSourcePreviews()
         cancelPendingQueueContinuation()
         cancelGuideWork()
         pendingCoreAction = { coreSession.select(profile.id) }
@@ -373,7 +382,7 @@ class AppController(context: Context, private val origin: String) {
     fun close() {
         foregroundValidation.close(); authenticationGeneration++; sessionRefreshJob?.cancel(); pendingProfileRefreshWait?.cancel()
         cancelGuideWork()
-        loginJob?.cancel(); playbackStartJob?.cancel(); coreSession.close(); homeJob?.cancel(); detailJob?.cancel(); pairingPoll?.cancel(); sourceDiscovery?.cancel()
+        loginJob?.cancel(); playbackStartJob?.cancel(); coreSession.close(); homeJob?.cancel(); detailJob?.cancel(); pairingPoll?.cancel(); sourceDiscovery?.cancel(); stopSourcePreview(); capabilityProbe?.cancel()
         queueContinuationJob?.cancel(); discoverJob?.cancel(); searchJob?.cancel(); nextEpisodeJob?.cancel(); playerChromeJob?.cancel()
         if (playerDelegate.isInitialized()) { stopPlayback((_state.value.route as? Route.Player)?.media); player.close() }
         scope.launch { delay(5000); scope.cancel() }

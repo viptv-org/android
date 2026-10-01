@@ -118,6 +118,9 @@ data class DialogState(val kind: DialogKind, val title: String, val media: Media
 data class PinPrompt(val title: String)
 data class SeekPreview(val targetMillis: Long)
 
+/** The play target's discovered sources, ranked by shared Rust `sourceMatch`; never a playback choice. */
+data class SourceSummary(val key: String, val best: Source?, val count: Int, val done: Boolean)
+
 data class AppState(
     val foregroundError: String? = null,
     val sessionRestoring: Boolean = true,
@@ -161,6 +164,8 @@ data class AppState(
     val loading: Boolean = false,
     val homeLoading: Boolean = false,
     val sourceLoading: Boolean = false,
+    /** Background discovery for the title's best-source line (AND-043); keyed by profile and item. */
+    val sourceSummary: SourceSummary? = null,
     val preparingSourceId: String? = null,
     val pairingRequested: Boolean = false,
     val message: String? = null,
