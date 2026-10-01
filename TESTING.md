@@ -1,3 +1,21 @@
+# Subtitle cue rendering (android#8) — 2026-09-30
+
+The library now publishes `VideoPlayer.subtitleCues` (backend-neutral, session
+scoped) from Media3 `onCues`, and the app draws them over the video viewport with
+the profile's Subtitle size/appearance preferences. Host tests cover cue mapping
+(positions, numbered lines, blank/bitmap drop), session scoping (cleared on open,
+stop, track switch, Off and native deselection; stale-session cues ignored),
+sideload ID matching and the appearance/chrome-lift mapping.
+
+Emulator `air-phone-api36` (API 36, x86_64), corpus from `corpus/generate.sh`
+served over local HTTP through `adb reverse`:
+`./gradlew :connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=org.viptv.video.AndroidMedia3SubtitleCueTest -Pandroid.testInstrumentationRunnerArguments.airCorpusUrl=http://127.0.0.1:18090`
+passed 3/3: in-stream default SubRip, default+forced SubRip chosen without an
+explicit selection, sideloaded WebVTT and SRT, and Off clearing cues. The run
+found and fixed sideloaded tracks reporting `external = false` (Media3 prefixes
+merged format IDs with the source index). Not yet claimed: in-app visual display
+on a physical phone/TV (needs an authenticated playback session).
+
 # Playback contract, capability claims and open cancellation — 2026-09-30
 
 SPEC.md is now the Android playback library contract (android#1). Capability

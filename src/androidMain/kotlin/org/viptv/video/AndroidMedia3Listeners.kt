@@ -6,6 +6,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.Tracks
+import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 
@@ -67,6 +68,12 @@ internal fun AndroidMedia3Backend.createListener(callbackPlayer: ExoPlayer): Pla
                     snapshot.selectedVideo,
                 ),
             )
+        }
+
+        override fun onCues(cueGroup: CueGroup) {
+            if (callbackPlayer !== player || released) return
+            val active = sessionId ?: return
+            eventsFlow.tryEmit(BackendEvent.CuesChanged(active, cueGroup.cues.mapNotNull { it.toSubtitleCue() }))
         }
 
         override fun onPositionDiscontinuity(

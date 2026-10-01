@@ -41,6 +41,8 @@ private enum class TrackMenu { Audio, Subtitles }
     val videoTracks by controller.player.videoTracks.collectAsState()
     val nativeAudio by controller.player.audioTracks.collectAsState()
     val nativeSubtitles by controller.player.subtitleTracks.collectAsState()
+    val subtitleCues by controller.player.subtitleCues.collectAsState()
+    val systemCaptions = rememberSystemCaptionStyle()
     val app by controller.state.collectAsState()
     val scope = rememberCoroutineScope()
     val activity = LocalActivity.current
@@ -151,6 +153,9 @@ private enum class TrackMenu { Audio, Subtitles }
         } })
         val density = LocalDensity.current
         var controlsHeight by remember(portrait) { mutableStateOf(if (portrait) 230.dp else 140.dp) }
+        val videoHeight = if (maxWidth / maxHeight > aspect) maxHeight else maxWidth / aspect
+        SubtitleLayer(subtitleCues, subtitleAppearance(app.preferences.subtitleSize, app.preferences.subtitleStyle, systemCaptions),
+            subtitleChromeLift(shown, controlsHeight, maxHeight, videoHeight), videoModifier)
         if (shown) {
             if (!portrait) Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .6f), Color.Transparent, Color.Black.copy(alpha = .85f)))))
             Row(Modifier.align(Alignment.TopStart).fillMaxWidth().then(if (tv) Modifier.padding(96.dp, 76.dp) else Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)).padding(16.dp)), verticalAlignment = Alignment.CenterVertically) {

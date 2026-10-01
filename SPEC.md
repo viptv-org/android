@@ -27,7 +27,7 @@ implementation and its tests; where they disagree, the code is the bug.
 | `PlaybackSource` | `uri`, optional `mimeType`, `headers`, `title`, `externalSubtitles`, `kindHint`, `options`, `startPositionMillis`. `headers` and `externalSubtitles` are copied at construction, so later caller mutation cannot change an open session. Not a data class: no `equals`/`copy` that could spread a URI. |
 | `PlaybackOptions` | `livePolicy` (default `Balanced`), `preferredAudioLanguage`, `preferredSubtitleLanguage`, `subtitlesEnabled` (`null` = leave Media3's default). |
 | `ExternalSubtitleSource` | Sideloaded text subtitle: `id`, `uri`, `mimeType`, `language`, `label`, `isDefault`, `isForced`. |
-| `VideoPlayer` | Level-triggered `StateFlow`s: `state`, `capabilities`, `audioTracks`, `subtitleTracks`, `videoTracks`, `statistics`. One-off `events`. Commands: `open` (suspending), `play`, `pause`, `seekTo`, `selectAudioTrack`/`selectSubtitleTrack`/`selectVideoTrack`, `stop`, `close`. |
+| `VideoPlayer` | Level-triggered `StateFlow`s: `state`, `capabilities`, `audioTracks`, `subtitleTracks`, `videoTracks`, `statistics`, `subtitleCues`. One-off `events`. Commands: `open` (suspending), `play`, `pause`, `seekTo`, `selectAudioTrack`/`selectSubtitleTrack`/`selectVideoTrack`, `stop`, `close`. |
 | `VideoBackendFactory` | Stable lowercase `id`, `probe()` returning runtime capabilities, `create()`. |
 | `VideoBackendRouter` | Probes factories lazily in caller priority order, caches probes (`invalidateProbes`/`refreshProbes` re-probe), and returns `BackendSelection.Selected` for the first backend with no `BackendRejection`, otherwise `Unavailable` with every candidate's rejections. A throwing probe becomes `ProbeFailed`; cancellation propagates. IDs must be unique and match `[a-z0-9][a-z0-9._-]{0,63}`. |
 | `AndroidMedia3BackendFactory` | `id = "media3"`. `openTimeoutMillis` (default 20 000) and `AndroidMedia3ResilientBufferConfig`. `createAndroidPlayer()` builds on the main thread (blocking up to 10 s when called elsewhere). |
@@ -162,9 +162,19 @@ Android has no MPV backend; `:app` must not treat it as an available fallback.
   Media3's default (forced/default flags may still select a track).
 - Reported subtitle formats are the text formats Media3 parses: `vtt`, `srt`, `ssa`, `ass`, `ttml`,
   `tx3g`, `cea608`, `cea708`. Bitmap formats (PGS, DVB, VobSub) are not claimed.
-- **Known gap:** the API exposes no cue output and the Media3 backend does not render cues onto the
-  attached surface, so selecting a direct-play text track does not by itself display text. A cue
-  presentation path must exist before any subtitle rendering claim.
+- `subtitleCues` is the level-triggered set of text cues active now (`SubtitleCue`: plain `text`,
+  optional `line`/`position` viewport fractions, `alignment`). The Media3 backend maps `onCues`
+  for the active session only; bitmap and blank cues are dropped, styling spans are flattened,
+  numbered lines map onto a 15-row caption grid and Media3's default bottom row reports `null`
+  (renderer default placement). Cues clear on open, stop, close, a track change, Off, and any
+  native track update that deselects text. Late cues from a replaced session are dropped.
+- A merged sideload's native format ID is prefixed with its source index (`1:<id>`); it still
+  reports `external = true`. Extraction-parsed tracks report their original subtitle MIME type.
+- The app draws cues over the video viewport in Compose: default cues sit bottom-centred with a
+  6% inset and rise above visible player chrome; positioned cues keep their fractions. Size:
+  Small 0.75x, System default (device caption font scale) or Large 1.35x of 5.33% of the video
+  height. Appearance: System default (device caption colours/edge), Text with shadow, or White
+  text on black.
 
 ## Live and DVR
 
@@ -247,6 +257,6 @@ version, build SHA). Emulator evidence never qualifies codec, HDR, DRM, PiP or r
 | `SeekableLive` / DVR seeking | Physical TV seeking within a real DVR window; then `supportsSeekableLive` may become `true`. |
 | Surface reattachment (background/foreground, surface recreate) | Physical phone and TV resuming video on a recreated surface without re-open; then `supportsSurfaceReattachment` may become `true`. |
 | Track switching (audio/video) | Device playback with multiple renditions, confirmed by the next track snapshot. |
-| Subtitle display | A cue presentation path, then device display of sideloaded and in-stream text subtitles including forced/default. |
+| Subtitle display | Cue path done: connected `AndroidMedia3SubtitleCueTest` (corpus, emulator) delivers in-stream default, forced and sideloaded WebVTT/SRT cues and clears on Off. Remaining: in-app visual check on a physical phone and TV. |
 | Picture-in-picture | Physical phone entering PiP with the activity opted in. |
 | Remote/media keys, focus | Physical Android TV remote (owned by the design contract). |

@@ -179,6 +179,31 @@ data class VideoTrack(
     val codec: String? = null,
 ) : MediaTrack
 
+/** Horizontal alignment of a cue's text block. */
+enum class SubtitleCueAlignment { Start, Center, End }
+
+/**
+ * One displayable text cue from the selected subtitle track. Cues are level-triggered: a player's
+ * `subtitleCues` holds exactly the cues active at the current playback position and the backend
+ * replaces the list at every cue boundary, so cue timing is carried by when the list changes.
+ *
+ * [line] and [position] are fractions of the video viewport (0 = top/left, 1 = bottom/right) for
+ * the cue's anchor; `null` means the renderer's default bottom-centred placement. Bitmap cues
+ * (PGS, DVB, VobSub) are never reported because this library does not claim those formats.
+ */
+data class SubtitleCue(
+    val text: String,
+    val line: Float? = null,
+    val position: Float? = null,
+    val alignment: SubtitleCueAlignment = SubtitleCueAlignment.Center,
+) {
+    init {
+        require(text.isNotBlank())
+        require(line == null || line in 0f..1f)
+        require(position == null || position in 0f..1f)
+    }
+}
+
 sealed interface TrackSelectionResult {
     data class Selected(val trackId: String) : TrackSelectionResult
     /** Backend accepted an asynchronous selection; state changes only after native confirmation. */
@@ -243,6 +268,8 @@ interface VideoPlayer : AutoCloseable {
     val subtitleTracks: StateFlow<List<SubtitleTrack>>
     val videoTracks: StateFlow<List<VideoTrack>>
     val statistics: StateFlow<PlaybackStatistics>
+    /** Text cues to draw over the video now; empty when subtitles are off or between cues. */
+    val subtitleCues: StateFlow<List<SubtitleCue>>
 
     suspend fun open(source: PlaybackSource, playWhenReady: Boolean = true)
     fun play()

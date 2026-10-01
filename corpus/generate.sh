@@ -32,6 +32,13 @@ ffmpeg -hide_banner -loglevel error -y \
   -disposition:s:0 default -disposition:s:1 0 \
   "$air_output_dir/h264-multitrack.mkv"
 
+# Same picture/audio with only the English SubRip track, flagged default+forced.
+ffmpeg -hide_banner -loglevel error -y \
+  -i "$air_output_dir/h264-multitrack.mkv" \
+  -map 0:v:0 -map 0:a:0 -map 0:s:0 -c copy \
+  -disposition:s:0 default+forced \
+  "$air_output_dir/h264-forced-subtitle.mkv"
+
 ffmpeg -hide_banner -loglevel error -y -threads 4 \
   "${air_video_input[@]}" "${air_audio_one[@]}" \
   -map 0:v:0 -map 1:a:0 \

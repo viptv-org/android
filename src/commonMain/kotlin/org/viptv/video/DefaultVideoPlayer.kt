@@ -75,6 +75,11 @@ sealed interface BackendEvent {
         override val sessionId: PlaybackSessionId,
         val statistics: PlaybackStatistics,
     ) : BackendEvent
+    /** The complete set of text cues active now for the selected subtitle track. */
+    data class CuesChanged(
+        override val sessionId: PlaybackSessionId,
+        val cues: List<SubtitleCue>,
+    ) : BackendEvent
     data class SeekFinished(
         override val sessionId: PlaybackSessionId,
         val positionMillis: Long,
@@ -118,6 +123,7 @@ class DefaultVideoPlayer(
     private val _subtitleTracks = MutableStateFlow<List<SubtitleTrack>>(emptyList())
     private val _videoTracks = MutableStateFlow<List<VideoTrack>>(emptyList())
     private val _statistics = MutableStateFlow(PlaybackStatistics())
+    private val _subtitleCues = MutableStateFlow<List<SubtitleCue>>(emptyList())
     private var released = false
     private var nextSessionValue = 0L
     private var activeSessionId: PlaybackSessionId? = null
@@ -130,6 +136,7 @@ class DefaultVideoPlayer(
     override val subtitleTracks: StateFlow<List<SubtitleTrack>> = _subtitleTracks.asStateFlow()
     override val videoTracks: StateFlow<List<VideoTrack>> = _videoTracks.asStateFlow()
     override val statistics: StateFlow<PlaybackStatistics> = _statistics.asStateFlow()
+    override val subtitleCues: StateFlow<List<SubtitleCue>> = _subtitleCues.asStateFlow()
 
     init {
         scope.launch { backend.events.collect(::applyBackendEvent) }
@@ -156,6 +163,7 @@ class DefaultVideoPlayer(
                 isBuffering = true,
             )
             _statistics.value = PlaybackStatistics()
+            _subtitleCues.value = emptyList()
             try {
                 val opened = backend.open(sessionId, source, playWhenReady)
                 coroutineContext.ensureActive()
@@ -239,7 +247,11 @@ class DefaultVideoPlayer(
         supported = capabilities.value.supportsSubtitleTrackSelection,
         available = subtitleTracks.value.map(SubtitleTrack::id),
         backendSelection = backend::selectSubtitleTrack,
-        update = { selected -> _state.update { it.copy(selectedSubtitleTrackId = selected) } },
+        update = { selected ->
+            // Off always clears current cues; a new track's cues arrive from the backend.
+            if (selected != _state.value.selectedSubtitleTrackId) _subtitleCues.value = emptyList()
+            _state.update { it.copy(selectedSubtitleTrackId = selected) }
+        },
     )
 
     override fun selectVideoTrack(id: String?): TrackSelectionResult = selectTrack(
@@ -309,6 +321,7 @@ class DefaultVideoPlayer(
                 _audioTracks.value = event.audio
                 _subtitleTracks.value = event.subtitles
                 _videoTracks.value = event.video
+                if (event.selectedSubtitleTrackId == null) _subtitleCues.value = emptyList()
                 _state.update {
                     it.copy(
                         selectedAudioTrackId = event.selectedAudioTrackId,
@@ -318,6 +331,7 @@ class DefaultVideoPlayer(
                 }
             }
             is BackendEvent.StatisticsChanged -> _statistics.value = event.statistics
+            is BackendEvent.CuesChanged -> _subtitleCues.value = event.cues
             is BackendEvent.SeekFinished -> {
                 _state.update { it.copy(positionMillis = event.positionMillis.coerceAtLeast(0)) }
                 _events.tryEmit(PlaybackEvent.SeekCompleted(event.positionMillis))
@@ -338,6 +352,7 @@ class DefaultVideoPlayer(
         _subtitleTracks.value = emptyList()
         _videoTracks.value = emptyList()
         _statistics.value = PlaybackStatistics()
+        _subtitleCues.value = emptyList()
         _state.value = PlaybackState(status = status)
     }
 
