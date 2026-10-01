@@ -322,7 +322,7 @@ internal object TrackMenuPolicy {
                 Holdable({ choose(track) }, modifier = Modifier.fillMaxWidth().height(72.dp).then(if (index == selected) Modifier.focusRequester(focus) else Modifier)
                     .onFocusChanged { focused = it.isFocused }.clip(RoundedCornerShape(12.dp)).background(if (focused) C.textPrimary else Color.Transparent)) {
                     Row(Modifier.fillMaxSize().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
-                        VText(TrackMenuPolicy.label(track), 26, color = if (focused) C.onLight else if (unavailable) C.textTertiary else C.textPrimary, bold = true, lines = 1)
+                        VText(TrackMenuPolicy.label(track), 26, Modifier.weight(1f), color = if (focused) C.onLight else if (unavailable) C.textTertiary else C.textPrimary, bold = true, lines = 1)
                         val suffix = if (unavailable) " · unavailable" else if (TrackMenuPolicy.current(track, entries)) " · Current" else ""
                         if (suffix.isNotEmpty()) VText(suffix, 24, color = if (focused) C.textOnLightSecondary else C.textSecondary, lines = 1)
                     }

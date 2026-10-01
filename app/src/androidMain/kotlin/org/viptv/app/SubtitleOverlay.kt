@@ -7,9 +7,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.BiasAlignment
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -22,6 +22,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import kotlin.math.roundToInt
 import org.viptv.video.SubtitleCue
 import org.viptv.video.SubtitleCueAlignment
 
@@ -98,6 +101,28 @@ internal fun subtitleChromeLift(chromeVisible: Boolean, controlsHeight: Dp, cont
     }
 }
 
+internal fun subtitleUsesAutomaticLine(cue: SubtitleCue): Boolean = cue.line == null
+
+/** The automatic stack is measured only in the space above controls and below the top inset. */
+internal fun subtitleAutomaticHeightLimit(viewportHeight: Int, topInset: Int, bottomInset: Int): Int =
+    (viewportHeight - topInset - bottomInset).coerceAtLeast(0)
+
+internal fun subtitleCueOffset(cue: SubtitleCue, viewport: IntSize, text: IntSize, inset: IntOffset, bottomInset: Int): IntOffset {
+    val anchor = when (cue.alignment) {
+        SubtitleCueAlignment.Start -> 0f
+        SubtitleCueAlignment.End -> 1f
+        SubtitleCueAlignment.Center -> 0.5f
+    }
+    val x = (viewport.width * (cue.position ?: anchor) - text.width * anchor).roundToInt()
+    val y = cue.line?.let { (viewport.height * it - text.height / 2f).roundToInt() }
+        ?: (viewport.height - bottomInset - text.height)
+    val left = inset.x.coerceAtMost((viewport.width - text.width).coerceAtLeast(0))
+    val top = inset.y.coerceAtMost((viewport.height - text.height).coerceAtLeast(0))
+    val right = (viewport.width - inset.x - text.width).coerceAtLeast(left)
+    val bottom = (viewport.height - (if (cue.line == null) bottomInset else inset.y) - text.height).coerceAtLeast(top)
+    return IntOffset(x.coerceIn(left, right), y.coerceIn(top, bottom))
+}
+
 /** Draws the player's active text cues inside the video viewport ([modifier] gives its bounds). */
 @Composable internal fun SubtitleLayer(cues: List<SubtitleCue>, appearance: SubtitleAppearance, lift: Dp, modifier: Modifier) {
     if (cues.isEmpty()) return
@@ -105,29 +130,44 @@ internal fun subtitleChromeLift(chromeVisible: Boolean, controlsHeight: Dp, cont
         val density = LocalDensity.current
         val textSize = with(density) { max(maxHeight * appearance.textFraction, 12.dp).toSp() }
         val inset = maxHeight * 0.06f
-        val defaults = cues.filter { it.line == null }
-        if (defaults.isNotEmpty()) Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth(.9f).padding(bottom = max(inset, lift)),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) { defaults.forEach { CueText(it, appearance, textSize) } }
-        cues.filter { it.line != null }.forEach { cue ->
-            val vertical = checkNotNull(cue.line) * 2f - 1f
-            val horizontal = cue.position?.let { it * 2f - 1f } ?: when (cue.alignment) {
-                SubtitleCueAlignment.Start -> -1f
-                SubtitleCueAlignment.End -> 1f
-                SubtitleCueAlignment.Center -> 0f
-            }
-            Box(Modifier.fillMaxSize().padding(horizontal = maxWidth * .05f, vertical = inset / 2)) {
-                Box(Modifier.align(BiasAlignment(horizontal, vertical)).fillMaxWidth(.9f), contentAlignment = Alignment.Center) {
-                    CueText(cue, appearance, textSize)
+        val automatic = cues.filter(::subtitleUsesAutomaticLine)
+        val bottomInset = with(density) { max(inset, lift).roundToPx() }
+        if (automatic.isNotEmpty()) Column(
+            Modifier.fillMaxWidth().layout { measurable, constraints ->
+                val topInset = (constraints.maxHeight * .03f).roundToInt()
+                val height = subtitleAutomaticHeightLimit(constraints.maxHeight, topInset, bottomInset)
+                val stack = measurable.measure(constraints.copy(minHeight = 0, maxHeight = height))
+                layout(constraints.maxWidth, constraints.maxHeight) {
+                    stack.place(0, (constraints.maxHeight - bottomInset - stack.height).coerceAtLeast(topInset))
                 }
+            }.clipToBounds(),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            automatic.forEach { cue ->
+                CueText(cue, appearance, textSize, Modifier.layout { measurable, constraints ->
+                    val width = constraints.maxWidth
+                    val text = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0, maxWidth = (width * .9f).roundToInt()))
+                    val x = if (cue.position == null) (width - text.width) / 2 else subtitleCueOffset(
+                        cue, IntSize(width, text.height), IntSize(text.width, text.height),
+                        IntOffset((width * .05f).roundToInt(), 0), 0,
+                    ).x
+                    layout(width, text.height) { text.place(x, 0) }
+                })
             }
+        }
+        cues.filterNot(::subtitleUsesAutomaticLine).forEach { cue ->
+            CueText(cue, appearance, textSize, Modifier.layout { measurable, constraints ->
+                val viewport = IntSize(constraints.maxWidth, constraints.maxHeight)
+                val text = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0, maxWidth = (viewport.width * .9f).roundToInt()))
+                val safeInset = IntOffset((viewport.width * .05f).roundToInt(), (viewport.height * .03f).roundToInt())
+                val offset = subtitleCueOffset(cue, viewport, IntSize(text.width, text.height), safeInset, bottomInset)
+                layout(viewport.width, viewport.height) { text.place(offset.x, offset.y) }
+            })
         }
     }
 }
 
-@Composable private fun CueText(cue: SubtitleCue, appearance: SubtitleAppearance, textSize: androidx.compose.ui.unit.TextUnit) {
+@Composable private fun CueText(cue: SubtitleCue, appearance: SubtitleAppearance, textSize: androidx.compose.ui.unit.TextUnit, modifier: Modifier = Modifier) {
     val shadow = when (appearance.edge) {
         SubtitleEdge.None -> null
         SubtitleEdge.Shadow -> Shadow(Color.Black.copy(alpha = .9f), Offset(2f, 2f), 6f)
@@ -135,7 +175,7 @@ internal fun subtitleChromeLift(chromeVisible: Boolean, controlsHeight: Dp, cont
     }
     Text(
         cue.text,
-        Modifier
+        modifier
             .then(if (appearance.background.alpha > 0f) Modifier.background(appearance.background, RoundedCornerShape(4.dp)) else Modifier)
             .padding(horizontal = 8.dp, vertical = 2.dp),
         style = TextStyle(

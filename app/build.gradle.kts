@@ -46,6 +46,9 @@ kotlin {
         androidInstrumentedTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.androidx.test.runner)
+            implementation("androidx.test.ext:junit:1.3.0")
+            implementation(platform("androidx.compose:compose-bom:2025.04.01"))
+            implementation(libs.androidx.compose.ui.test.junit4)
             implementation(libs.kotlinx.coroutines.test)
         }
     }
@@ -90,6 +93,9 @@ android {
     }
 }
 
+dependencies {
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
 val verifyDesign by tasks.registering(Exec::class) {
     workingDir(rootProject.projectDir)
     commandLine("node", "scripts/design-sync.mjs", "check")
