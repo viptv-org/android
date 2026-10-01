@@ -66,3 +66,26 @@ object HomeShelfFocusPolicy {
         )
     }
 }
+
+/** AND-042 phone presentation: content-type shelf headings and minimal card context. */
+object PhonePresentationPolicy {
+    fun shelfHeading(shelf: HomeShelf): String {
+        if (shelf.isQueueShelf) return "Continue watching"
+        val type = shelf.contentType?.takeIf { it.isNotBlank() } ?: return shelf.title
+        val group = DiscoverPolicy.typeGroup(type)
+        val label = if (group == "other") contentTypeLabel(type) else DiscoverPolicy.groupLabel(group)
+        return listOfNotNull(label, shelf.catalogName?.takeIf { it.isNotBlank() }).joinToString(" · ")
+    }
+
+    fun contentTypeLabel(type: String): String = when (type) {
+        "movie" -> "Movie"
+        "series" -> "Series"
+        "anime" -> "Anime"
+        "live" -> "Live TV"
+        else -> type.split('.', '_').filter { it.isNotBlank() }.joinToString(" ") { word -> word.replaceFirstChar(Char::titlecase) }
+    }
+
+    /** One line under phone art: S1 E1 for an episode, otherwise the year (or nothing). */
+    fun cardContext(media: Media): String =
+        if (media.season != null && media.episode != null) "S${media.season} E${media.episode}" else media.year.orEmpty()
+}

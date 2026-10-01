@@ -55,7 +55,8 @@ import org.viptv.app.theme.ViptvColor as C
         } else {
             AppField(state.searchQuery, controller::search, "Search movies and series", Modifier.focusRequester(first))
             FilterTabs(listOf("All", "Movies", "Series", "Live TV"), filter, { filter = it }, Modifier.padding(vertical = 18.dp))
-            if (results.isEmpty()) EmptyState(if (state.searchQuery.isBlank()) "Find your next favorite" else "No matching titles", if (state.searchQuery.isBlank()) "Search movies, series and live TV." else state.searchStatus, "search")
+            if (results.isEmpty() && state.searchQuery.isNotBlank() && state.searchStatus == "Searching…") PosterSkeletonGrid(3)
+            else if (results.isEmpty()) EmptyState(if (state.searchQuery.isBlank()) "Find your next favorite" else "No matching titles", if (state.searchQuery.isBlank()) "Search movies, series and live TV." else state.searchStatus, "search")
             else MediaGrid(results, onClick = { controller.activateCard(it) }, onHold = { controller.requestDialog(DialogKind.MyListManage, it.name, it) })
         }
     }

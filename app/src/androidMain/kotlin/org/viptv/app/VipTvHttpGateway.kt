@@ -118,7 +118,7 @@ class VipTvHttpGateway(
         catalogs.mapIndexed { index, catalog -> async {
             val items = optional { catalogGate.withPermit { discover(DiscoverPolicy.request(catalog, DiscoverPolicy.defaults(catalog), 0)).items } }
             val title = listOfNotNull(catalog.addonName, catalog.name).joinToString(" · ")
-            publish(index + 2, HomeShelf(title, items, id = catalog.key.stableId))
+            publish(index + 2, HomeShelf(title, items, id = catalog.key.stableId, contentType = catalog.key.type, catalogName = catalog.name))
         } }.awaitAll()
         queue.await(); recent.await(); saved.await(); live.await()
         rows.values.filter { it.items.isNotEmpty() }

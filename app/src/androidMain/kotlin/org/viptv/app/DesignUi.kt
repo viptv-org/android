@@ -3,6 +3,7 @@ package org.viptv.app
 
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -199,8 +200,8 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
     }
 }
 
-@Composable internal fun ProgressLine(progress: Float, modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxWidth().height(measure(6, 4)).clip(CircleShape).background(C.lineStrong)) {
+@Composable internal fun ProgressLine(progress: Float, modifier: Modifier = Modifier, height: Dp = measure(6, 4)) {
+    Box(modifier.fillMaxWidth().height(height).clip(CircleShape).background(C.lineStrong)) {
         Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).fillMaxHeight().background(LocalAccent.current))
     }
 }
@@ -225,7 +226,8 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
             else AsyncImage(image, card.title, Modifier.fillMaxSize(), contentScale = if (!portrait && card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
                 onError = { image.let { failed = failed + it } })
             val progress = card.progress?.toFloat() ?: 0f
-            if (progress > 0f) ProgressLine(progress, Modifier.align(Alignment.BottomCenter).padding(measure(14, 10)))
+            // AND-042: phones use a 6dp bar lifted 10dp off the art's sides and bottom.
+            if (progress > 0f) ProgressLine(progress, Modifier.align(Alignment.BottomCenter).padding(measure(14, 10)), height = 6.dp)
             if (!tv) Box(Modifier.align(Alignment.TopEnd).padding(6.dp)) {
                 Holdable(onHold, modifier = Modifier.size(44.dp)) {
                     Box(Modifier.size(28.dp).clip(CircleShape).background(C.fillOverflowDisc), contentAlignment = Alignment.Center) { VIcon("more", "More options", Modifier.size(18.dp)) }
@@ -233,9 +235,40 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
             }
         }
         VText(card.title, if (tv) 24 else if (portrait) 12 else 15, Modifier.padding(top = measure(14, 10)), bold = true, lines = 1)
-        if (card.subtitle.isNotBlank()) VText(if (portrait) media.year.orEmpty() else card.subtitle, if (tv) 20 else if (portrait) 12 else 13, Modifier.padding(top = 4.dp), C.textSecondary, lines = 1)
+        val context = if (tv) card.subtitle else PhonePresentationPolicy.cardContext(media)
+        if (context.isNotBlank()) VText(context, if (tv) 20 else if (portrait) 12 else 13, Modifier.padding(top = 4.dp), C.textSecondary, lines = 1)
     }
   }
+}
+
+/** AND-042 phone Home live channel: a small logo tile; the name is the accessible label only. */
+@Composable internal fun LiveLogoTile(media: Media, onClick: () -> Unit, onHold: () -> Unit, modifier: Modifier = Modifier) {
+    Holdable(onClick, onHold, modifier.size(104.dp, 72.dp).semantics { contentDescription = media.name }.clip(RoundedCornerShape(18.dp))
+        .background(C.surfaceN1).border(1.dp, C.lineOutline, RoundedCornerShape(18.dp))) {
+        val logo = media.poster
+        if (!logo.isNullOrBlank()) Artwork(logo, null, Modifier.fillMaxSize().padding(12.dp), ContentScale.Fit)
+        else VText(media.name.split(" ").mapNotNull { it.firstOrNull() }.take(3).joinToString(""), 14, color = C.textPrimary, bold = true, lines = 1)
+    }
+}
+
+/** Layout-matching loading placeholder (AND-042); never a "Loading…" label. */
+@Composable internal fun SkeletonBlock(modifier: Modifier, radius: Dp = measure(16, 16)) {
+    val pulse = rememberInfiniteTransition(label = "skeleton")
+    val alpha by pulse.animateFloat(.55f, 1f, infiniteRepeatable(androidx.compose.animation.core.tween(900), androidx.compose.animation.core.RepeatMode.Reverse), label = "skeleton-alpha")
+    Box(modifier.alpha(alpha).clip(RoundedCornerShape(radius)).background(C.surfaceN1))
+}
+
+@Composable internal fun PosterSkeletonGrid(columns: Int, rows: Int = 3, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(measure(40, 24))) {
+        repeat(rows) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(measure(36, 12))) {
+                repeat(columns) { Column(Modifier.weight(1f)) {
+                    SkeletonBlock(Modifier.fillMaxWidth().aspectRatio(if (LocalTv.current) 16f / 9 else 2f / 3))
+                    SkeletonBlock(Modifier.padding(top = 10.dp).fillMaxWidth(.7f).height(12.dp), 6.dp)
+                } }
+            }
+        }
+    }
 }
 
 @Composable internal fun ScreenHeader(title: String, onBack: (() -> Unit)? = null, trailing: @Composable RowScope.() -> Unit = {}) {

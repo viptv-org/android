@@ -1,5 +1,74 @@
 # AND-035 — Native Android phone and TV design adoption
 
+## AND-042 — phone presentation and player track menus (2026-09-30)
+
+Status: approved implementation scope for design issue 6. Emulator visual
+evidence is recorded in Android TESTING.md; physical-device proof stays in
+Android issue 3. Phone rules apply to the phone layout only. TV changes are
+limited to the player track panel. Visual sources are the Main, Live,
+PhPlayerSubs and TvPlayerSubs canvas boards. Where the phone rules below
+differ from those boards, these rules win.
+
+- AND-042-HOME: Home has no header bar. Its first element is the Main hero
+  card: 16dp gutters, 28dp radius on every corner, starting at the system top
+  inset plus 8dp. The profile and Watch on TV entries leave Home. Settings
+  stays reachable from the Discover, Live and My List headers. Watch on TV
+  stays in Settings › This device. A paired TV's remote button stays in those
+  three headers. This replaces only AND-038's Home header remote button.
+- AND-042-NAV: the floating bar keeps the Main geometry: a 64dp glass bar,
+  52dp segments and a separate 64dp Search disc. Segments show 22dp icons
+  only, with no text, and keep accessible names (Home, Discover, Live TV,
+  My List). The active segment keeps the off-white fill.
+- AND-042-CARDS: phone media cards keep the caption under the art: the title,
+  then one line of minimal context, S1 E1 for an episode, otherwise the year.
+  They show no genres, runtime or resume times. Progress is 6dp with rounded
+  ends, lifted 10dp off the art's sides and bottom edge. The first card of a
+  row aligns with its shelf heading's 16dp edge. Shelves are 20dp apart with
+  12dp between a heading and its row.
+- AND-042-HEADINGS: a Home catalog shelf heading names the content type, then
+  the catalog ("Series · Trending"), not the addon. Continue watching, My
+  List, Live now and Recently watched live TV keep their names.
+- AND-042-LIVE-TILES: phone Home live shelves show small logo tiles: 104×72dp,
+  18dp radius, surface-1 with a hairline outline, and the channel logo fitted
+  with 12dp padding. A channel without a logo shows a monogram. Tiles show no
+  visible name; the channel name is the accessible label. Tap starts the live
+  path; long press and the ⋯ action keep the existing channel menu.
+- AND-042-SKELETON: loading uses layout-matching skeletons on surface-1 and
+  never "Loading…"/"Finding…" copy. Home shows a hero block and two shelves
+  of card placeholders until its first row arrives. Discover, catalog grids
+  and Search show poster placeholders. The phone Live list shows channel-row
+  placeholders. A grid that is appending its next page shows one row of
+  placeholders at its end. More items load automatically; there is never a
+  Load more control.
+- AND-042-TRACKS-PHONE: Audio and Subtitles open an anchored panel
+  (PhPlayerSubs), not a bottom sheet. The panel is surface-1 with a 20dp
+  radius and a hairline outline. It sits 16dp from the screen sides, its
+  bottom 12dp above the timeline, at most 360dp tall, and scrolls. The header
+  is the title (17 bold) with a 44dp close disc. Rows are 48dp tall with 16
+  text: Off first for subtitles, then the tracks. The current row ends with a
+  check and "Current" (13, secondary). An unsupported track reads
+  "<label> (unavailable)" in tertiary text. Tapping it keeps the panel open
+  and shows "This track is not supported on this device." Choosing a track
+  applies it and closes the panel. Tapping outside, close or Back closes it.
+  Playback, the controls and the subtitle layer stay visible behind it.
+- AND-042-TRACKS-TV: the right 820px panel (TvPlayerSubs) lists rows, not pill
+  buttons. Rows are 72px with a 12px radius and are transparent unless
+  focused; the focused row has the off-white fill and on-light text. The
+  current row adds " · Current". Unsupported rows use tertiary text plus
+  " · unavailable". They stay focusable, and OK shows the existing notice.
+  The footer shows key hints: ▲▼ Move, OK Select, BACK Close. Focus starts on
+  the current row; Back closes and restores focus to the control that opened
+  the panel.
+
+Acceptance AND-042-01: phone Home starts with the rounded hero under the status
+bar, shows no header, and keeps Settings and Watch on TV reachable. AND-042-02:
+icon-only nav with accessible names, content-type headings, live logo tiles,
+6dp lifted progress and year/episode captions. AND-042-03: skeletons for
+Home, Discover, Search and Live, with no loading copy and automatic paging.
+AND-042-04: on phone and TV, select, turn off and reject an unavailable
+subtitle, select audio, then Back/close and confirm focus or controls are
+restored. Emulator evidence is not physical-device parity.
+
 ## AND-041 — silent foreground backend validation (2026-09-30)
 
 Status: approved implementation scope for Android issue 4; native media and

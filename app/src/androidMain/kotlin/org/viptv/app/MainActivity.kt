@@ -258,10 +258,8 @@ private fun destination(route: Route) = when (route) {
                 listOf(Destination.Home to "home", Destination.Discover to "discover", Destination.Live to "live", Destination.MyList to "list").forEach { (item, icon) ->
                     val active = item == current
                     Holdable({ controller.navigate(item) }, modifier = Modifier.weight(1f).fillMaxHeight().clip(CircleShape).background(if (active) C.textPrimary else Color.Transparent)) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            VIcon(icon, modifier = Modifier.size(22.dp), color = if (active) C.onLight else C.textSecondary)
-                            VText(if (item == Destination.Live) "Live" else item.label, 10, color = if (active) C.onLight else C.textSecondary, lines = 1)
-                        }
+                        // AND-042-NAV: icons only; the destination stays the accessible name.
+                        VIcon(icon, item.label, Modifier.size(22.dp), if (active) C.onLight else C.textSecondary)
                     }
                 }
             }

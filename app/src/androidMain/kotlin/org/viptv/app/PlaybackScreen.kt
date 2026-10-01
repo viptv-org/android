@@ -9,6 +9,9 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.unit.Dp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -211,7 +214,7 @@ private enum class TrackMenu { Audio, Subtitles }
             subtitlesSupported = true) else serverTracks
         menu?.let { kind -> TrackPanel(kind, if (kind == TrackMenu.Audio) nativeTracks.audio else nativeTracks.subtitles, kind == TrackMenu.Subtitles && nativeTracks.subtitlesSupported,
             onChoose = { track -> if (kind == TrackMenu.Audio && track != null) controller.selectAudioTrack(track) else controller.selectSubtitleTrack(track); menu = null },
-            onClose = { menu = null }) }
+            onClose = { menu = null }, bottomOffset = controlsHeight) }
         if (info) FullInfo("Playback info", "Decoder · Media3\nDelivery · " + app.playbackDeliveryMode + "\nMedia · " + (playback.timeline?.kind?.name ?: "Unknown"), { info = false })
     }
 }
@@ -253,25 +256,89 @@ private enum class TrackMenu { Audio, Subtitles }
     }
 }
 
-@Composable private fun TrackPanel(kind: TrackMenu, tracks: List<PlaybackTrack>, off: Boolean, onChoose: (PlaybackTrack?) -> Unit, onClose: () -> Unit) {
+/** AND-042 track menu rows: label, current marker and unavailable suffix per platform. */
+internal object TrackMenuPolicy {
+    fun label(track: PlaybackTrack?): String = track?.title?.ifBlank { track.language ?: "Track " + (track.inputIndex + 1) } ?: "Off"
+    fun unavailable(track: PlaybackTrack?): Boolean = track != null && (!track.selectable || !track.supported)
+    fun current(track: PlaybackTrack?, entries: List<PlaybackTrack?>): Boolean =
+        if (track == null) entries.none { it?.selected == true } else track.selected
+    fun text(track: PlaybackTrack?, tv: Boolean): String = label(track) + when {
+        !unavailable(track) -> ""
+        tv -> " · unavailable"
+        else -> " (unavailable)"
+    }
+    const val unsupportedNotice = "This track is not supported on this device."
+}
+
+@Composable private fun TrackPanel(kind: TrackMenu, tracks: List<PlaybackTrack>, off: Boolean, onChoose: (PlaybackTrack?) -> Unit, onClose: () -> Unit, bottomOffset: Dp = 0.dp) {
     val tv = LocalTv.current
     val entries = if (off) listOf<PlaybackTrack?>(null) + tracks else tracks
-    val selected = entries.indexOfFirst { it?.selected == true }.coerceAtLeast(0)
+    val selected = entries.indexOfFirst { TrackMenuPolicy.current(it, entries) }.coerceAtLeast(0)
     val list = rememberLazyListState()
     val focus = remember { FocusRequester() }
     var notice by remember { mutableStateOf<String?>(null) }
-    AppOverlay(if (kind == TrackMenu.Audio) "Audio" else "Subtitles", onClose) {
-        if (entries.isEmpty()) EmptyState("No selectable tracks", "This stream supplies no available tracks.", if (kind == TrackMenu.Audio) "audio" else "captions")
-        else LazyColumn(state = list, modifier = Modifier.heightIn(max = measure(800, 480)), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            itemsIndexed(entries) { index, track ->
-                val unavailable = track != null && (!track.selectable || !track.supported)
-                val label = track?.title?.ifBlank { track.language ?: "Track " + (track.inputIndex + 1) } ?: "Off"
-                AppButton((if (track?.selected == true) "✓ " else "") + label + if (unavailable) " · Unavailable" else "", {
-                    if (unavailable) notice = "This track is not supported on this device." else onChoose(track)
-                }, Modifier.fillMaxWidth().then(if (index == selected && tv) Modifier.focusRequester(focus) else Modifier), selected = track?.selected == true)
+    val title = if (kind == TrackMenu.Audio) "Audio" else "Subtitles"
+    fun choose(track: PlaybackTrack?) { if (TrackMenuPolicy.unavailable(track)) notice = TrackMenuPolicy.unsupportedNotice else onChoose(track) }
+    if (!tv) {
+        // AND-042-TRACKS-PHONE: anchored panel above the timeline; video and controls stay visible.
+        BackHandler { onClose() }
+        Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { onClose() } }) {
+            Column(Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                .padding(start = 16.dp, end = 16.dp, bottom = bottomOffset + 12.dp).fillMaxWidth().heightIn(max = 360.dp)
+                .clip(RoundedCornerShape(20.dp)).background(C.surfaceN1).border(1.dp, C.lineOutline, RoundedCornerShape(20.dp))
+                .pointerInput(Unit) { detectTapGestures {} }.padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    VText(title, 17, Modifier.weight(1f), bold = true)
+                    AppIconButton("close", "Close", onClose, Modifier.size(44.dp))
+                }
+                if (entries.isEmpty()) VText("This stream supplies no available tracks.", 15, Modifier.padding(vertical = 12.dp), C.textSecondary)
+                else LazyColumn(state = list, modifier = Modifier.weight(1f, fill = false)) {
+                    itemsIndexed(entries) { _, track ->
+                        val unavailable = TrackMenuPolicy.unavailable(track)
+                        Holdable({ choose(track) }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                            Row(Modifier.fillMaxSize().padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                VText(TrackMenuPolicy.text(track, false), 16, Modifier.weight(1f), if (unavailable) C.textTertiary else C.textPrimary, lines = 1)
+                                if (TrackMenuPolicy.current(track, entries)) {
+                                    VIcon("check", null, Modifier.size(16.dp), C.textSecondary)
+                                    VText("Current", 13, Modifier.padding(start = 6.dp), C.textSecondary)
+                                }
+                            }
+                        }
+                    }
+                }
+                notice?.let { VText(it, 13, Modifier.padding(top = 4.dp, bottom = 4.dp), C.textSecondary) }
             }
         }
-        notice?.let { VText(it, if (tv) 22 else 14, Modifier.padding(top = 20.dp), C.textSecondary) }
-        LaunchedEffect(kind) { if (tv && entries.isNotEmpty()) { list.scrollToItem(selected); withFrameNanos {}; runCatching { focus.requestFocus() } } }
+        LaunchedEffect(kind) { if (entries.isNotEmpty()) list.scrollToItem(selected) }
+        return
+    }
+    // AND-042-TRACKS-TV: right panel rows, focus fill only, key hints.
+    AppOverlay(title, onClose) {
+        if (entries.isEmpty()) EmptyState("No selectable tracks", "This stream supplies no available tracks.", if (kind == TrackMenu.Audio) "audio" else "captions")
+        else LazyColumn(state = list, modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            itemsIndexed(entries) { index, track ->
+                var focused by remember { mutableStateOf(false) }
+                val unavailable = TrackMenuPolicy.unavailable(track)
+                Holdable({ choose(track) }, modifier = Modifier.fillMaxWidth().height(72.dp).then(if (index == selected) Modifier.focusRequester(focus) else Modifier)
+                    .onFocusChanged { focused = it.isFocused }.clip(RoundedCornerShape(12.dp)).background(if (focused) C.textPrimary else Color.Transparent)) {
+                    Row(Modifier.fillMaxSize().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                        VText(TrackMenuPolicy.label(track), 26, color = if (focused) C.onLight else if (unavailable) C.textTertiary else C.textPrimary, bold = true, lines = 1)
+                        val suffix = if (unavailable) " · unavailable" else if (TrackMenuPolicy.current(track, entries)) " · Current" else ""
+                        if (suffix.isNotEmpty()) VText(suffix, 24, color = if (focused) C.textOnLightSecondary else C.textSecondary, lines = 1)
+                    }
+                }
+            }
+        }
+        notice?.let { VText(it, 22, Modifier.padding(top = 20.dp), C.textSecondary) }
+        Spacer(Modifier.height(24.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+            listOf("▲▼" to "Move", "OK" to "Select", "BACK" to "Close").forEach { (key, action) ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    VText(key, 16, Modifier.border(2.dp, C.textSecondary, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp), C.textPrimary, bold = true)
+                    VText(action, 20, color = C.textSecondary)
+                }
+            }
+        }
+        LaunchedEffect(kind) { if (entries.isNotEmpty()) { list.scrollToItem(selected); withFrameNanos {}; runCatching { focus.requestFocus() } } }
     }
 }

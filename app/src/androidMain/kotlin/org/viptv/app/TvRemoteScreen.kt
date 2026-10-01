@@ -45,7 +45,7 @@ internal val LocalTvRemote = staticCompositionLocalOf<TvRemoteController?> { nul
         DropdownMenu(remote.tip && remote.page.isEmpty(), remote::dismissTip, containerColor = C.textPrimary) {
             Column(Modifier.width(260.dp).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 VText("Your TV remote", 20, color = C.onLight, display = true)
-                VText("It stays up here on Home, Discover, Live and My List. Turn it off in Settings › Watch on TV.", 14, color = C.onLight)
+                VText("It stays up here on Discover, Live and My List. Turn it off in Settings › Watch on TV.", 14, color = C.onLight)
                 TextButton(remote::dismissTip) { VText("Got it", color = C.onLight, bold = true) }
             }
         }

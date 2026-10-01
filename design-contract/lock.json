@@ -1,18 +1,18 @@
 {
   "repository": "viptv-org/design",
-  "revision": "9bb130ae80af18d41c411c137c6a515b175a5991",
+  "revision": "6da30a58c839e4e66465a76c8f80471139147f27",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
-      "sha256": "bd4e741fff4d2033ec6d502ecac9981baadc539e8d1da0fd3d73cde3ff664912"
+      "sha256": "ede13aecbcc874553962c5aa9928e3773c25769a24e0ff0556dbcec4f77a54cc"
     },
     "design-contract/DESIGN_SYNC.md": {
       "source": "DESIGN_SYNC.md",
-      "sha256": "a9c136ab42d220842d2f6d8cf77a797905fb07e2893653a94a7bb27704e6ee61"
+      "sha256": "044b680d502ad7984bc00fb10b2a4a876d26d40956c456cef317efc7bbfff9e4"
     },
     "design-contract/ANDROID_DESIGN.md": {
       "source": "ANDROID_DESIGN.md",
-      "sha256": "39e0a8afc3d877eae9ec638d1fa6c5e5b3576c9aab6ccd5248017bdadd53aec1"
+      "sha256": "a1d9c15efae3b8e1384e90252ba908f7a1957b1a5913aa59ec8ac0e701b5af7f"
     },
     "design-contract/TV_POLISH.md": {
       "source": "TV_POLISH.md",

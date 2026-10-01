@@ -84,7 +84,8 @@ data class DeviceSession(val accessToken: String, val refreshToken: String, val 
  * Home rows carry their role separately from server-provided display copy.
  * Queue controls follow this flag even when the row has just become empty.
  */
-data class HomeShelf(val title: String, val items: List<Media>, val isQueueShelf: Boolean = false, val id: String = title)
+/** [contentType]/[catalogName] identify a catalog shelf so phones can head it by content type (AND-042). */
+data class HomeShelf(val title: String, val items: List<Media>, val isQueueShelf: Boolean = false, val id: String = title, val contentType: String? = null, val catalogName: String? = null)
 
 data class NextResult(val status: String, val item: Media? = null)
 data class Addon(val id: String, val name: String, val manifestUrl: String, val enabled: Boolean)

@@ -198,7 +198,18 @@ import org.viptv.app.theme.ViptvColor as C
             AppChip("Now", controller::followGuideNow)
             AppChip("Later", { controller.shiftGuideWindow(1) })
         }
-        if (ui.channels.isEmpty()) EmptyState(if (state.loading) "Finding channels…" else "No channels here yet.", "Choose another category or search.", "live", retry = if (state.loading) null else controller::retryGuidePage)
+        if (ui.channels.isEmpty() && state.loading && !tv) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // AND-042-SKELETON: phone channel-row placeholders.
+            repeat(6) { Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                SkeletonBlock(Modifier.size(62.dp), 16.dp)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SkeletonBlock(Modifier.fillMaxWidth(.4f).height(12.dp), 6.dp)
+                    SkeletonBlock(Modifier.fillMaxWidth(.8f).height(16.dp), 6.dp)
+                    SkeletonBlock(Modifier.fillMaxWidth().height(4.dp), 2.dp)
+                }
+            } }
+        }
+        else if (ui.channels.isEmpty()) EmptyState(if (state.loading) "Finding channels…" else "No channels here yet.", "Choose another category or search.", "live", retry = if (state.loading) null else controller::retryGuidePage)
         else LazyColumn(state = rows, contentPadding = PaddingValues(bottom = measure(0, 160)), verticalArrangement = Arrangement.spacedBy(measure(10, 16))) {
             itemsIndexed(ui.channels, key = { _, item -> item.id }) { index, item ->
                 val schedule = ui.schedulesByChannelId[item.id].orEmpty()
