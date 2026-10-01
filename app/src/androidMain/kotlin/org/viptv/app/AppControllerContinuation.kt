@@ -263,10 +263,6 @@ internal fun AppController.recordHomeDirectionalInput() {
         _state.value = _state.value.copy(homeFocus = HomeFocusPolicy.afterDirectionalInput(_state.value.homeFocus))
     }
 }
-/** UI modal dismissal uses this when its remembered Home card remains valid. */
-internal fun AppController.restoreHomeFocus() {
-    requestHomeFocusRestore()
-}
 internal fun AppController.requestHomeFocusRestore() {
     _state.value = _state.value.copy(homeFocus = HomeFocusPolicy.requestRestore(_state.value.homeFocus))
 }

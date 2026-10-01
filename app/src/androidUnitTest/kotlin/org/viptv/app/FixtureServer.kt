@@ -8,7 +8,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /** Minimal in-process HTTP fixture speaking the backend's JSON wire shape. */
-internal data class FixtureRequest(val method: String, val target: String, val body: String)
+internal data class FixtureRequest(val method: String, val target: String, val body: String, val headers: Map<String, String> = emptyMap())
 internal data class FixtureResponse(val body: String, val status: Int = 200)
 internal class FixtureServer(
     private val expectedRequests: Int,
@@ -34,10 +34,12 @@ internal class FixtureServer(
         val parts = requestLine.split(' ', limit = 3)
         require(parts.size >= 2) { "Malformed request line: $requestLine" }
         var contentLength = 0
+        val headers = mutableMapOf<String, String>()
         while (true) {
             val line = input.readLine() ?: error("Unexpected end of headers")
             if (line.isEmpty()) break
             val separator = line.indexOf(':')
+            if (separator > 0) headers[line.substring(0, separator).lowercase()] = line.substring(separator + 1).trim()
             if (separator > 0 && line.substring(0, separator).equals("Content-Length", ignoreCase = true)) {
                 contentLength = line.substring(separator + 1).trim().toInt()
             }
@@ -49,7 +51,7 @@ internal class FixtureServer(
             if (count < 0) error("Unexpected end of request body")
             read += count
         }
-        val request = FixtureRequest(parts[0], parts[1], body.concatToString())
+        val request = FixtureRequest(parts[0], parts[1], body.concatToString(), headers)
         requests += request
         val response = respond(request)
         val bytes = response.body.toByteArray(StandardCharsets.UTF_8)

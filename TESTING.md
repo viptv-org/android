@@ -1,3 +1,37 @@
+# Playback contract, capability claims and open cancellation — 2026-09-30
+
+SPEC.md is now the Android playback library contract (android#1). Capability
+probing is a pure, unit-tested mapping over runtime facts: PiP needs API 26 and
+FEATURE_PICTURE_IN_PICTURE; hardware decode comes only from API 29+
+`isHardwareAccelerated`/`isSoftwareOnly` and is reported as Decode; subtitle
+formats are text-only; seekable live, surface reattachment and playback rate are
+`false` until the SPEC.md validation matrix is satisfied. Pending opens are now
+cancelled by caller cancellation, `stop()` and `close()`, and a stopped session's
+late failure is never published. Dead controller paths, the unused TrackType enum
+and the retired quality preference field were removed.
+
+JDK17 host tasks passed 183 tests (library 38, app 145) with zero
+failures/errors/skips. Library lint found no issues; app lint keeps 73 warnings
+and the three baseline-filtered UniFFI errors (baseline unchanged). No APK,
+emulator or device run: no new device capability is claimed.
+
+# AND-041 foreground implementation checkpoint — 2026-09-30
+
+The isolated `fix/android-foreground-lifecycle` candidate adopts design
+`9bb130ae80af18d41c411c137c6a515b175a5991`. Host tests exercise bounded/coalesced
+foreground identity, explicit denial, late cancellation, profile/account authority
+changes and profile-scoped metadata. Decoder/network failures now retire the exact
+lease and expose explicit recovery rather than silently requesting gateway or
+transcode delivery. Same-delivery managed network recovery remains unchanged.
+
+JDK17 library/app host tasks passed with 174 tests and zero failures/errors.
+Core8 remains unchanged. This is an implementation/review checkpoint, not final
+native-media qualification. Earlier phone/TV synthetic-account delay/timeout/Retry
+observations do not qualify later authority/readiness changes. Accepted token
+rotation cancellation, actual required-header/nonzero Resume media, native/backend
+cleanup and the final normal system-trust APK remain pending. Fixture-trusting
+QA APKs must not be distributed. No production operation or ARM/device claim.
+
 # BE-002 Android live cutover handoff — 2026-09-29
 
 ## Isolated category screen wiring and quality-control retirement — 2026-09-30

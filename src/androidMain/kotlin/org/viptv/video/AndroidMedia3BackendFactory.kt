@@ -29,7 +29,7 @@ class AndroidMedia3BackendFactory(
     override val id: String = "media3"
 
     override suspend fun probe(): PlayerCapabilities = withContext(Dispatchers.Default) {
-        probeMedia3Capabilities()
+        probeMedia3Capabilities(applicationContext)
     }.also { probedCapabilities = it }
 
     override fun create(): VideoPlayer = createAndroidPlayer()
@@ -39,7 +39,7 @@ class AndroidMedia3BackendFactory(
             AndroidMedia3Backend(
                 applicationContext,
                 openTimeoutMillis,
-                probedCapabilities ?: probeMedia3Capabilities(),
+                probedCapabilities ?: probeMedia3Capabilities(applicationContext),
                 resilientBufferConfig,
             ),
         )

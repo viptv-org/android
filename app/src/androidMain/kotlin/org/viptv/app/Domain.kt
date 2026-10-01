@@ -97,7 +97,7 @@ data class SearchResults(val sections: List<SearchSection>, val partialFailure: 
 
 data class PlaybackPreferences(
     val audioLanguage: String = "en", val subtitleLanguage: String = "en", val subtitlesEnabled: Boolean = false,
-    val subtitleSize: String = "normal", val subtitleStyle: String = "system", val quality: String = "auto", val autoplay: Boolean = true,
+    val subtitleSize: String = "normal", val subtitleStyle: String = "system", val autoplay: Boolean = true,
 )
 /** Safe server-owned track facts only; URLs and request headers never enter UI state. */
 data class PlaybackTrackChoices(
@@ -118,6 +118,7 @@ data class PinPrompt(val title: String)
 data class SeekPreview(val targetMillis: Long)
 
 data class AppState(
+    val foregroundError: String? = null,
     val sessionRestoring: Boolean = true,
     val route: Route = Route.Pairing,
     val profiles: List<Profile> = emptyList(),

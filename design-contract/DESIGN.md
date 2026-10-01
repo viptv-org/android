@@ -38,4 +38,7 @@ Phone, desktop (Tauri), web and TV share one design system: [viptv-design-system
 
 ## Local addon mode
 
-[LOCAL_MODE.md](LOCAL_MODE.md) proposes account-free operation of the shared viewing client from an on-device addon registry: availability gating, addon management, discover reuse of the RUI-030 hierarchy, direct-first playback without server preparation, and the persistence/privacy contract. Status is proposed; no platform claims adoption until its implementation records evidence.
+[LOCAL_MODE.md](LOCAL_MODE.md) is superseded for the upcoming v2 cutover by
+[BE-002](BACKEND_V2.md): accounts and providers require the backend. Existing
+runtime removal is tracked in the [implementation ledger](IMPLEMENTATION_V2.md).
+The [ADM-002 admin rebuild](ADMIN_V2.md) does not redesign viewing clients.
