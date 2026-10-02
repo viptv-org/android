@@ -54,7 +54,18 @@ import org.viptv.app.theme.ViptvColor as C
     val shown = sources.filter { (provider == null || groups[it]?.first == provider) && (quality == null || it.quality == quality) }
     val first = remember(media.id, provider, quality) { FocusRequester() }
     var claimed by remember(media.id, provider, quality) { mutableStateOf(false) }
-    val providerLabels = groups.values.associate { it.first to it.second }
+    val providerLabels = groups.values.associate { it.first to it.second } +
+        state.sourceProducers.associate { it.providerKey to it.label }
+    val selectedProducer = state.sourceProducers.firstOrNull { it.providerKey == provider }
+    val selectedHasSources = sources.any { groups[it]?.first == provider }
+    val emptyMessage = when {
+        provider == null -> if (state.sourceLoading) "Sources appear here as they arrive." else if (sources.isEmpty()) "No sources available" else "No matching sources"
+        selectedHasSources -> "No matching sources"
+        selectedProducer?.errorCode == "source_format_unsupported" -> "${selectedProducer.label} returned formats this app cannot play. Only HTTP(S) streams are supported here."
+        selectedProducer?.errorMessage != null -> selectedProducer.errorMessage
+        state.sourceLoading -> "Still checking ${providerLabels[provider] ?: "provider"}"
+        else -> "No playable sources from ${providerLabels[provider] ?: "provider"}"
+    }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var resumed by remember(lifecycle) { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
     DisposableEffect(lifecycle) {
@@ -81,8 +92,8 @@ import org.viptv.app.theme.ViptvColor as C
         }
         SourceDiscoveryStatus(state.sourceLoading, sources.isNotEmpty())
         if (shown.isEmpty()) EmptyState(
-            if (state.sourceLoading) "Sources appear here as they arrive." else if (sources.isEmpty()) "No sources available" else "No matching sources",
-            if (state.sourceLoading) "" else "Choose another provider or check your addons in Settings.", "list",
+            emptyMessage,
+            if (state.sourceLoading) "" else "Choose another provider or quality, or check your addons in Settings.", "list",
             retry = if (state.sourceLoading) null else { { val route = state.route as? Route.Sources; controller.chooseSources(media, route?.resume == true, route?.origin ?: SourceReturn.Details, queueEpisodeReturn = route?.queueEpisodeReturn == true) } })
         else LazyColumn(Modifier.fillMaxWidth().then(if (tv) Modifier.weight(1f) else Modifier.heightIn(max = 440.dp)), verticalArrangement = Arrangement.spacedBy(measure(14, 12)), contentPadding = PaddingValues(4.dp)) {
             itemsIndexed(shown, key = { _, source -> source.id }) { index, source ->

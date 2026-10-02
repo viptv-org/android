@@ -92,17 +92,29 @@ internal fun AppController.chooseSources(media: Media, resume: Boolean = false, 
     val beforeStart = playbackGeneration
     fun ownsResults(): Boolean {
         val active = _state.value.route
-        val item = when (active) { is Route.Sources -> active.media; is Route.Player -> active.media; else -> null }
-        return _state.value.selectedProfile?.id == profile && item != null && item.id == media.id && item.type == media.type
+        return _state.value.selectedProfile?.id == profile &&
+            (active === route || (active is Route.Player && active.sourceRoute === route))
     }
     sourceDiscovery?.cancel()
     sourceDiscovery = scope.launch {
         if (origin == SourceReturn.Home) detailReturnDestination = Destination.Home
-        _state.value = _state.value.copy(route = route, sources = emptyList(), loading = true, sourceLoading = true, message = null)
+        _state.value = _state.value.copy(route = route, sources = emptyList(), sourceProducers = emptyList(), loading = true, sourceLoading = true, message = null)
+        var observed = emptyList<SourceProducerOutcome>()
+        var configuredAddons = emptyList<Addon>()
+        fun publishProducers() {
+            if (ownsResults()) _state.value = _state.value.copy(
+                sourceProducers = namedSourceProducers(observed, configuredAddons, _state.value.sources))
+        }
+        launch {
+            configuredAddons = try { gateway.addons() }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { emptyList() }
+            publishProducers()
+        }
         try {
-            val discovered = gateway.sources(media) { arriving ->
-                if (ownsResults()) _state.value = _state.value.copy(sources = arriving)
-            }
+            val discovered = gateway.sources(media, onUpdate = { arriving ->
+                if (ownsResults()) { _state.value = _state.value.copy(sources = arriving); publishProducers() }
+            }, onProducerUpdate = { outcomes -> observed = outcomes; publishProducers() })
             if (!ownsResults()) return@launch
             _state.value = _state.value.copy(sources = discovered, sourceLoading = false,
                 loading = _state.value.preparingSourceId != null)

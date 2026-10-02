@@ -58,6 +58,26 @@ data class Source(
     val providerLabel: String = "",
 )
 
+/** Safe, Rust-normalized discovery event facts for a configured producer. */
+data class SourceProducerOutcome(
+    val sourceId: String,
+    val label: String = sourceId,
+    val errorCode: String? = null,
+    val errorMessage: String? = null,
+) {
+    val providerKey: String get() = "addon:$sourceId"
+}
+
+/** Join observed producer IDs to account-configured labels; never create a choice from settings alone. */
+internal fun namedSourceProducers(observed: List<SourceProducerOutcome>, addons: List<Addon>, sources: List<Source>): List<SourceProducerOutcome> {
+    val names = addons.associate { "addon:${it.id}" to it.name }
+    return observed.map { producer ->
+        val rowLabel = sources.firstOrNull { SourceDisplayPolicy.providerKey(it) == producer.providerKey }
+            ?.let(SourceDisplayPolicy::providerLabel)
+        producer.copy(label = names[producer.sourceId] ?: rowLabel ?: producer.label)
+    }
+}
+
 object SourceDisplayPolicy {
     private fun display(source: Source): JSONObject = CorePolicy.value("sourceDisplay", JSONObject().put("name", source.name).put("description", source.description).put("provider", source.provider).putOpt("sourceAddonId", source.addonId)) as JSONObject
     fun title(source: Source): String = if (source.displayResolved) source.name else display(source).getString("title")
@@ -131,6 +151,7 @@ data class AppState(
     val homeFocus: HomeFocusSnapshot = HomeFocusSnapshot(),
     val catalog: List<Media> = emptyList(),
     val sources: List<Source> = emptyList(),
+    val sourceProducers: List<SourceProducerOutcome> = emptyList(),
     val favorites: List<Media> = emptyList(),
     val queue: List<Media> = emptyList(),
     val libraryQueue: Boolean = false,

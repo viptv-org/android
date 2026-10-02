@@ -215,7 +215,7 @@ class VipTvHttpGateway(
     } catch (_: Exception) {
         fallback
     }
-    override suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit): List<Source> {
+    override suspend fun sources(media: Media, onProducerUpdate: (List<SourceProducerOutcome>) -> Unit, onUpdate: (List<Source>) -> Unit): List<Source> {
         if (media.type == "live") return listOf(liveSourceV2(media.id)).also(onUpdate)
         // The discovery request body, poll path, cursor, deduplication, budget
         // and completion rules all come from the shared Rust core; this loop
@@ -228,8 +228,21 @@ class VipTvHttpGateway(
         )
         val id = json(request.method, request.path.removePrefix("/api"), request.body?.let { JSONObject(org.viptv.core.wire.CoreJson.encode(it)) }).getString("id")
         var state = jsonStepState()
+        val producers = linkedMapOf<String, SourceProducerOutcome>()
         while (true) {
             val poll = json("GET", pollPath(id, state))
+            val events = JSONObject(uniffi.viptv_core.normalize("streamPoll", poll.toString(), origin)).optJSONArray("events")
+            if (events != null) for (index in 0 until events.length()) {
+                val event = events.optJSONObject(index) ?: continue
+                val producer = event.optString("source")
+                if (!producer.matches(Regex("(?:addon|iptv):[0-9]+"))) continue
+                val prior = producers[producer]
+                val code = event.optString("errorCode").takeUnless { it.isBlank() || it == "null" }
+                val message = event.optString("error").takeUnless { it.isBlank() || it == "null" }
+                producers[producer] = SourceProducerOutcome(producer, errorCode = code ?: prior?.errorCode,
+                    errorMessage = message ?: prior?.errorMessage)
+            }
+            onProducerUpdate(producers.values.toList())
             val output = step(state, poll)
             val accumulated = output.sources()
             onUpdate(accumulated)

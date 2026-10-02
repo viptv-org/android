@@ -16,7 +16,7 @@ interface BackendGateway {
     suspend fun search(query: String, onUpdate: (SearchResults) -> Unit = {}): SearchResults
     suspend fun metadata(media: Media): Media
     suspend fun seriesProgress(profileId: String, seriesId: String): List<Media> = emptyList()
-    suspend fun sources(media: Media, onUpdate: (List<Source>) -> Unit = {}): List<Source>
+    suspend fun sources(media: Media, onProducerUpdate: (List<SourceProducerOutcome>) -> Unit = {}, onUpdate: (List<Source>) -> Unit = {}): List<Source>
     suspend fun playback(
         source: Source,
         positionMillis: Long,
