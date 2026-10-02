@@ -10,15 +10,18 @@ still returning. Arrived sources remain selectable.
 **Owner:** source_picker_android and source_picker_tv (GPT-6 Sol, low).
 **Contract:** SRC-OVERFLOW-001 at design ce7084ff80d0541257509748ea772ef0f95d8058.
 
-- [ ] Initial pending discovery shows a spinner and Finding sources status.
-- [ ] Partial discovery retains selectable rows and visible Still checking sources status.
-- [ ] Completion, failure and cancellation stop the discovery indicator.
-- [ ] Loading does not steal focus or trigger source selection.
-- [ ] Rendering/browser checks cover initial, partial and finished states.
+- [x] Initial pending discovery shows a spinner and Finding sources status.
+- [x] Partial discovery retains selectable rows and visible Still checking sources status.
+- [x] Completion, failure and cancellation stop the discovery indicator.
+- [x] Loading does not steal focus or trigger source selection.
+- [x] Rendering/browser checks cover initial, partial and finished states.
 
 ## Commits and evidence
 
 Android implementation: `5be0b0e`. The isolated API 36 TV emulator passed the
 Finding sources -> Still checking sources -> completed status/spinner test,
-including stable allocated height. TV-web implementation: `faf203c`; final
-browser/build evidence is being recorded.
+including stable allocated height. TV-web implementation: `faf203c`, qualified
+through `0545d52` with the production build, 251 unit tests, React partial-status
+browser checks and SolidTV source previews. Real-account sources settled before
+the native screenshot, so that run does not prove its initial loading frame;
+the isolated Compose test provides that scoped evidence. Final review pending.
