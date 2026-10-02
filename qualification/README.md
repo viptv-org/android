@@ -164,8 +164,22 @@ control. Reset sourceDelay to zero and sourceError to false after checking.
 `GuideProgrammeFocusReturnTest` uses the actual Guide composition/controller,
 one initial public focus setup and remote/native Back. Its synthetic EPG uses
 the current clock so the future cell stays in the two-hour window. This is a
-focused programme-details return regression; full Guide filter/Search remote
-acceptance and visual parity remain separate.
+focused programme-details return regression; the broader opt-in chain below
+extends functional acceptance, while visual parity remains separate.
+
+For the full Guide functional chain, start the local TV HTTPS fixture on port
+9444, install its explicitly fixture-trusting debug APK on the owned emulator
+5576, and retain/select a synthetic paired profile. Build/install the app test
+APK and run only `org.viptv.app.GuideRemoteFixtureTest` with instrumentation
+argument `-e viptvGuideFixture true`. The class skips by default, asserts actual
+television mode, and never connects outside the isolated fixture origin. It
+uses one initial focus setup; News/Search/CNBC/future-details/native-Back are
+then real controller/HTTP with Compose remote key input. Editable text and IME
+submission use Compose semantics; Back is an actual Android instrumentation key
+event. The OS keyboard UI is not clicked or qualified. The test checks
+the exact restored programme node/bounds and zero playback admissions. This
+qualifies that public composition/remote chain, not the app rail, actual gateway
+delivery, pixel parity or physical input. Normal APKs must omit fixture trust.
 
 # Reliability follow-up checks
 
