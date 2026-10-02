@@ -8,6 +8,8 @@ interface BackendGateway {
     suspend fun profiles(): Pair<List<Profile>, String?>
     suspend fun selectProfile(profileId: String)
     suspend fun home(profileId: String, onUpdate: (List<HomeShelf>) -> Unit = {}): List<HomeShelf>
+    suspend fun refreshHome(profileId: String, previous: List<HomeShelf>, onIncomplete: () -> Unit = {}, onUpdate: (List<HomeShelf>) -> Unit = {}): List<HomeShelf> = home(profileId, onUpdate)
+    suspend fun catalogRevision(): String? = null
     suspend fun discover(type: String = "movie", search: String? = null): List<Media>
     suspend fun catalogs(): List<DiscoverCatalog>
     suspend fun discover(request: CatalogDiscoverRequest): DiscoverPage

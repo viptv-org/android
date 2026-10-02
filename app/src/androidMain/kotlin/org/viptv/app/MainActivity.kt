@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
         if (::model.isInitialized) model.controller.onForeground()
     }
     override fun onPause() {
-        if (::model.isInitialized && !isChangingConfigurations) { model.remote.onBackground(); model.controller.cancelForegroundValidation() }
+        if (::model.isInitialized && !isChangingConfigurations) { model.remote.onBackground(); model.controller.onBackground() }
         super.onPause()
     }
     override fun onStop() {

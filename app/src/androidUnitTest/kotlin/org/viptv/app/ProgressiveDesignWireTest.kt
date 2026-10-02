@@ -7,11 +7,76 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.*
 import kotlin.test.*
 
 /** The real HTTP/JSON/native-core path, with independent upstream latency. */
 class ProgressiveDesignWireTest {
+    @Test fun failedExistingCatalogKeepsItsRowWhileNewCatalogAppears() = runBlocking {
+        val includeOld = AtomicBoolean(true)
+        val failOld = AtomicBoolean(true)
+        val failNew = AtomicBoolean(false)
+        val executor = Executors.newFixedThreadPool(8)
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            this.executor = executor
+            createContext("/") { exchange ->
+                val path = exchange.requestURI.path
+                val query = exchange.requestURI.rawQuery.orEmpty()
+                val failed = path == "/api/discover" &&
+                    ((query.contains("catalog=old") && failOld.get()) || (query.contains("catalog=new") && failNew.get()))
+                val body = when {
+                    path == "/api/catalogs" -> if (includeOld.get()) """[{"id":"old","type":"movie","name":"Old","addon_id":1},{"id":"new","type":"movie","name":"New","addon_id":2}]""" else """[{"id":"new","type":"movie","name":"New","addon_id":2}]"""
+                    failed -> """{"message":"Temporarily unavailable"}"""
+                    path == "/api/discover" -> """{"metas":[{"id":"new-title","type":"movie","name":"New title"}]}"""
+                    path.endsWith("/continue/page") || path.endsWith("/favorites/page") -> """{"items":[]}"""
+                    path == "/api/live" -> """{"channels":[]}"""
+                    else -> """{"items":[]}"""
+                }.toByteArray()
+                exchange.responseHeaders.add("Content-Type", "application/json")
+                exchange.sendResponseHeaders(if (failed) 503 else 200, body.size.toLong())
+                exchange.responseBody.use { it.write(body) }
+            }
+            start()
+        }
+        try {
+            val old = Media("old-title", "movie")
+            val previous = listOf(HomeShelf("Old", listOf(old), id = "1\u0000movie\u0000old"))
+            val gateway = VipTvHttpGateway("http://127.0.0.1:${server.address.port}")
+            var incomplete = false
+            val rows = gateway.refreshHome("1", previous, { incomplete = true })
+            assertTrue(incomplete)
+            assertEquals(listOf("old-title"), rows.first { it.id == "1\u0000movie\u0000old" }.items.map { it.id })
+            assertEquals(listOf("new-title"), rows.first { it.id == "2\u0000movie\u0000new" }.items.map { it.id })
+            failOld.set(false)
+            failNew.set(true)
+            incomplete = false
+            val partial = gateway.refreshHome("1", previous, { incomplete = true })
+            assertTrue(incomplete)
+            assertTrue(partial.none { it.id == "2\u0000movie\u0000new" })
+            failNew.set(false)
+            incomplete = false
+            val recovered = gateway.refreshHome("1", partial, { incomplete = true })
+            assertTrue(!incomplete)
+            assertEquals(listOf("new-title"), recovered.first { it.id == "2\u0000movie\u0000new" }.items.map { it.id })
+            includeOld.set(false)
+            val removed = gateway.refreshHome("1", recovered)
+            assertEquals(listOf("2\u0000movie\u0000new"), removed.map { it.id })
+        } finally { server.stop(0); executor.shutdownNow() }
+    }
+    @Test fun revisionCheckUsesThePrivateEndpointWithoutLoadingCatalogs() = runBlocking {
+        val paths = mutableListOf<String>()
+        ParallelFixture { path, _ ->
+            synchronized(paths) { paths += path }
+            assertEquals("/api/catalogs/revision", path)
+            """{"revision":"opaque-2"}"""
+        }.use { server ->
+            val gateway = VipTvHttpGateway(server.origin, "private-token")
+            assertEquals("opaque-2", gateway.catalogRevision())
+            assertEquals("opaque-2", gateway.catalogRevision())
+            assertEquals(listOf("/api/catalogs/revision", "/api/catalogs/revision"), paths)
+        }
+    }
     @Test fun initialHomeMetadataIsBoundedToVisibleCardsAndLookahead() = runBlocking {
         val metadata = AtomicInteger()
         val items = (1..30).joinToString(",") { """{"id":"movie-$it","type":"movie","name":"Movie $it"}""" }

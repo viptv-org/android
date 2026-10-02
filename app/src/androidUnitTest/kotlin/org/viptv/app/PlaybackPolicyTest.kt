@@ -150,6 +150,22 @@ class MediaCardPolicyTest {
 }
 
 class HomeQueuePolicyTest {
+    @Test fun `catalog replacement retains surviving focus and chooses nearest card when removed`() {
+        val a = Media("a", "movie")
+        val b = Media("b", "movie")
+        val c = Media("c", "movie")
+        val before = listOf(HomeShelf("One", listOf(a, b), id = "one"), HomeShelf("Two", listOf(c), id = "two"))
+        val focused = HomeFocusPolicy.record(HomeFocusSnapshot(), 0, "one", b)
+        assertEquals(focused, HomeFocusPolicy.reconcile(focused, before, before))
+        val after = listOf(HomeShelf("Two", listOf(c), id = "two"))
+        val recovered = HomeFocusPolicy.reconcile(focused, before, after)
+        assertEquals("two", recovered.shelfTitle)
+        assertEquals(HomeFocusPolicy.mediaKey(c), recovered.mediaKey)
+        assertEquals(0, recovered.shelfIndex)
+        assertEquals(null, HomeFocusPolicy.reconcile(focused, before, emptyList()).mediaKey)
+        assertEquals(focused.restoreRequest,
+            HomeFocusPolicy.reconcile(focused, before, after, restoreFocusedCard = false).restoreRequest)
+    }
     @Test fun `Home source cancel preserves its Home origin while title source keeps detail`() {
         val movie = Media("movie", "movie", positionMillis = 60_000)
         assertEquals(Route.Browse(Destination.Home), SourceReturnPolicy.cancelRoute(SourceReturn.Home, movie))

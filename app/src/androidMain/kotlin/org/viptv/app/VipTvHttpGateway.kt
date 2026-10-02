@@ -71,22 +71,30 @@ class VipTvHttpGateway(
         return (0 until array.length()).map { index -> array.getJSONObject(index).profile() } to root.opt("profile_id")?.toString()
     }
     override suspend fun selectProfile(profileId: String) { json("POST", "/auth/profile", JSONObject().put("profile_id", profileId)); clearProfileCache() }
-    override suspend fun home(profileId: String, onUpdate: (List<HomeShelf>) -> Unit): List<HomeShelf> = coroutineScope {
+    override suspend fun catalogRevision(): String? = try {
+        json("GET", "/catalogs/revision").getString("revision")
+    } catch (error: GatewayError) {
+        if (error.status == 404) null else throw error
+    }
+    override suspend fun home(profileId: String, onUpdate: (List<HomeShelf>) -> Unit): List<HomeShelf> = loadHome(profileId, onUpdate, null, {})
+    override suspend fun refreshHome(profileId: String, previous: List<HomeShelf>, onIncomplete: () -> Unit, onUpdate: (List<HomeShelf>) -> Unit): List<HomeShelf> = loadHome(profileId, onUpdate, previous, onIncomplete)
+    private suspend fun loadHome(profileId: String, onUpdate: (List<HomeShelf>) -> Unit, previous: List<HomeShelf>?, onIncomplete: () -> Unit): List<HomeShelf> = coroutineScope {
         val rows = java.util.TreeMap<Int, HomeShelf>()
         val publisher = kotlinx.coroutines.sync.Mutex()
         suspend fun publish(order: Int, shelf: HomeShelf) = publisher.withLock {
             rows[order] = shelf
             onUpdate(rows.values.filter { it.items.isNotEmpty() })
         }
-        suspend fun optional(load: suspend () -> List<Media>): List<Media> = try { load() }
+        fun prior(id: String): List<Media> = previous?.firstOrNull { it.id == id }?.items.orEmpty()
+        suspend fun optional(fallback: List<Media> = emptyList(), failed: () -> Unit = {}, load: suspend () -> List<Media>): List<Media> = try { load() }
         catch (cancelled: CancellationException) { throw cancelled }
-        catch (error: GatewayError) { if (error.status in listOf(401, 403)) throw error else emptyList() }
-        catch (_: IOException) { emptyList() }
+        catch (error: GatewayError) { if (error.status in listOf(401, 403)) throw error else { failed(); fallback } }
+        catch (_: IOException) { failed(); fallback }
         val catalogList = async {
             try { catalogs() }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: GatewayError) { if (error.status in listOf(401, 403)) throw error else emptyList() }
-            catch (_: IOException) { emptyList() }
+            catch (error: GatewayError) { if (previous != null || error.status in listOf(401, 403)) throw error else emptyList() }
+            catch (error: IOException) { if (previous != null) throw error else emptyList() }
         }
         val metadata = mutableMapOf<String, kotlinx.coroutines.Deferred<Media>>()
         val metadataLock = kotlinx.coroutines.sync.Mutex()
@@ -105,18 +113,18 @@ class VipTvHttpGateway(
                 }
             } }.awaitAll()
         }
-        val queue = async { hydrate(optional { json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray() }, 0, "Continue watching", true) }
+        val queue = async { hydrate(optional(prior("Continue watching")) { json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray() }, 0, "Continue watching", true) }
         val recent = async {
-            publish(1, HomeShelf("Recently watched live TV", optional { liveV2(LiveCatalogQuery(collection = "recent", limit = 24)).items.map { CoreModels.mediaNormalized(it) } }))
+            publish(1, HomeShelf("Recently watched live TV", optional(prior("Recently watched live TV")) { liveV2(LiveCatalogQuery(collection = "recent", limit = 24)).items.map { CoreModels.mediaNormalized(it) } }))
         }
-        val saved = async { hydrate(optional { favorites(profileId) }, 1000, "My List", false) }
-        val live = async { publish(1001, HomeShelf("Live now", optional { this@VipTvHttpGateway.live().map(LiveChannel::asMedia) })) }
+        val saved = async { hydrate(optional(prior("My List")) { favorites(profileId) }, 1000, "My List", false) }
+        val live = async { publish(1001, HomeShelf("Live now", optional(prior("Live now")) { this@VipTvHttpGateway.live().map(LiveChannel::asMedia) })) }
         val catalogs = catalogList.await().filter { catalog ->
             catalog.key.type != "live" && catalog.filters.none { it.required && DiscoverPolicy.defaults(catalog)[it.name].isNullOrBlank() }
         }
         val catalogGate = Semaphore(3)
         catalogs.mapIndexed { index, catalog -> async {
-            val items = optional { catalogGate.withPermit { discover(DiscoverPolicy.request(catalog, DiscoverPolicy.defaults(catalog), 0)).items } }
+            val items = optional(prior(catalog.key.stableId), onIncomplete) { catalogGate.withPermit { discover(DiscoverPolicy.request(catalog, DiscoverPolicy.defaults(catalog), 0)).items } }
             val title = listOfNotNull(catalog.addonName, catalog.name).joinToString(" · ")
             publish(index + 2, HomeShelf(title, items, id = catalog.key.stableId, contentType = catalog.key.type, catalogName = catalog.name))
         } }.awaitAll()

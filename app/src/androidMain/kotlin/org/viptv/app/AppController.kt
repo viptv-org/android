@@ -52,6 +52,12 @@ class AppController(context: Context, private val origin: String) {
     }
     val player: AndroidMedia3VideoPlayer get() = playerDelegate.value
     internal var homeJob: Job? = null
+    internal var homeContentFocused = false
+    private var homeRevisionJob: Job? = null
+    private var homeWatcherKey: String? = null
+    private var homeForeground = true
+    private var renderedCatalogRevision: String? = null
+    private var revisionOwner: String? = null
     private var pairingPoll: Job? = null
     private var loginJob: Job? = null
     internal var playbackStartJob: Job? = null
@@ -116,6 +122,7 @@ class AppController(context: Context, private val origin: String) {
 
     init {
         scope.launch { foregroundValidation.result.collect(::acceptForegroundResult) }
+        scope.launch { state.collect { updateHomeRevisionWatcher() } }
         coreSession.begin()
     }
     private fun acceptForegroundResult(result: ForegroundValidationResult?) {
@@ -150,6 +157,8 @@ class AppController(context: Context, private val origin: String) {
             }
         }
     fun onForeground() {
+        homeForeground = true
+        updateHomeRevisionWatcher()
         if (_state.value.route == Route.Pairing || _state.value.sessionRestoring) return
         val identity = verifiedIdentity ?: return
         foregroundValidation.onForeground(identity, _state.value.selectedProfile?.id)
@@ -161,7 +170,60 @@ class AppController(context: Context, private val origin: String) {
         pendingProfileAfterRefresh = null; pendingProfileRefreshWait?.cancel(); pendingProfileRefreshWait = null
         _state.value = _state.value.copy(foregroundError = null)
     }
+    internal fun onBackground() {
+        homeForeground = false
+        homeRevisionJob?.cancel(); homeRevisionJob = null
+        homeWatcherKey = null
+        cancelForegroundValidation()
+    }
+    private fun updateHomeRevisionWatcher() {
+        val state = _state.value
+        val visible = homeForeground && state.route == Route.Browse(Destination.Home) &&
+            state.selectedProfile != null && verifiedIdentity != null
+        if (!visible) { homeRevisionJob?.cancel(); homeRevisionJob = null; homeWatcherKey = null; return }
+        val profile = state.selectedProfile ?: return
+        val account = verifiedIdentity?.account?.id ?: return
+        val owner = "$origin\u0000$account\u0000${profile.id}"
+        val watcherKey = "$owner\u0000$sessionRenderGeneration"
+        if (homeRevisionJob?.isActive == true && homeWatcherKey == watcherKey) return
+        homeRevisionJob?.cancel()
+        homeWatcherKey = watcherKey
+        if (revisionOwner != owner) { revisionOwner = owner; renderedCatalogRevision = null }
+        val generation = sessionRenderGeneration
+        homeRevisionJob = scope.launch {
+            val watcherJob = currentCoroutineContext()[Job]
+            val polling = HomeRevisionPolling(
+                revision = gateway::catalogRevision,
+                renderedRevision = { renderedCatalogRevision },
+                activeLoad = { homeJob?.takeIf { it.isActive && it != watcherJob } },
+                valid = { homeForeground && _state.value.route == Route.Browse(Destination.Home) &&
+                    _state.value.selectedProfile?.id == profile.id &&
+                    verifiedIdentity?.account?.id == account && generation == sessionRenderGeneration },
+                refresh = { async { loadHome(profile, generation, atomicRefresh = true) }.await() },
+            )
+            var first = true
+            var immediate = false
+            while (isActive) {
+                if (!first && !immediate) delay(15_000)
+                first = false
+                immediate = false
+                try {
+                    when (polling.check()) {
+                        HomeRevisionCheck.Refreshed -> immediate = renderedCatalogRevision != null
+                        HomeRevisionCheck.Unsupported, HomeRevisionCheck.ScopeLost -> break
+                        HomeRevisionCheck.Unchanged, HomeRevisionCheck.RetryLater -> Unit
+                    }
+                } catch (cancelled: CancellationException) {
+                    if (!currentCoroutineContext().isActive) throw cancelled
+                }
+                catch (_: Exception) { /* Keep the current Home; the next interval retries. */ }
+            }
+        }
+    }
     private fun cancelAuthenticatedWork() {
+        homeRevisionJob?.cancel(); homeRevisionJob = null
+        homeWatcherKey = null
+        renderedCatalogRevision = null; revisionOwner = null
         gateway.clearProfileCache()
         cancelGuideWork(); cancelPendingQueueContinuation(); cancelUpNext()
         homeRefreshGeneration++; homeJob?.cancel()
@@ -293,16 +355,22 @@ class AppController(context: Context, private val origin: String) {
             else -> if (!quietSessionAdoption) _state.value = _state.value.copy(loading = true, message = null)
         }
     }
-    internal suspend fun loadHome(profile: Profile, generation: Long = sessionRenderGeneration, enter: Boolean = false) {
+    internal suspend fun loadHome(profile: Profile, generation: Long = sessionRenderGeneration, enter: Boolean = false, atomicRefresh: Boolean = false): Boolean {
         val job = currentCoroutineContext()[Job]
         if (homeJob !== job) homeJob?.cancel()
         homeJob = job
         val refresh = ++homeRefreshGeneration
         homeMetadataRequested.clear()
         val library = libraryRevision
-        _state.value = _state.value.copy(homeLoading = true)
+        if (!atomicRefresh) _state.value = _state.value.copy(homeLoading = true)
         if (enter) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), selectedProfile = profile, loading = false)
-        runCatching { gateway.home(profile.id) { shelves ->
+        // This must precede /catalogs, including on the first Home load.
+        val loadRevision = try { gateway.catalogRevision() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
+        var staged: List<HomeShelf>? = null
+        val partial = java.util.concurrent.atomic.AtomicBoolean(false)
+        val result = runCatching { (if (atomicRefresh) gateway.refreshHome(profile.id, _state.value.shelves, { partial.set(true) }) { shelves ->
+            if (generation == sessionRenderGeneration && refresh == homeRefreshGeneration && _state.value.selectedProfile?.id == profile.id) staged = shelves
+        } else gateway.home(profile.id) { shelves ->
             if (generation == sessionRenderGeneration && refresh == homeRefreshGeneration && _state.value.selectedProfile?.id == profile.id) {
                 _state.value = _state.value.copy(
                     shelves = if (library == libraryRevision) shelves else shelves.map { if (it.id == "My List") it.copy(items = _state.value.favorites) else it },
@@ -311,8 +379,28 @@ class AppController(context: Context, private val origin: String) {
                     loading = if (_state.value.route == Route.Browse(Destination.Home)) false else _state.value.loading,
                 )
             }
-        } }.onFailure { if (generation == sessionRenderGeneration && refresh == homeRefreshGeneration && it !is CancellationException) fail(it) }
-        if (generation == sessionRenderGeneration && refresh == homeRefreshGeneration) _state.value = _state.value.copy(homeLoading = false)
+        }) }
+        if (atomicRefresh && result.isSuccess && generation == sessionRenderGeneration && refresh == homeRefreshGeneration &&
+            _state.value.selectedProfile?.id == profile.id && homeForeground && _state.value.route == Route.Browse(Destination.Home)) {
+            val shelves = staged ?: result.getOrThrow()
+            val previous = _state.value
+            val presented = if (library == libraryRevision) shelves else shelves.map { if (it.id == "My List") it.copy(items = previous.favorites) else it }
+            _state.value = previous.copy(shelves = presented,
+                queue = shelves.firstOrNull { it.isQueueShelf }?.items.orEmpty(),
+                favorites = if (library == libraryRevision) shelves.firstOrNull { it.id == "My List" }?.items.orEmpty() else previous.favorites,
+                homeFocus = HomeFocusPolicy.reconcile(previous.homeFocus, previous.shelves, presented,
+                    restoreFocusedCard = homeContentFocused && previous.dialog == null && previous.pinPrompt == null))
+        }
+        result.onFailure { if (!atomicRefresh && generation == sessionRenderGeneration && refresh == homeRefreshGeneration && it !is CancellationException) fail(it) }
+        if (!atomicRefresh && generation == sessionRenderGeneration && refresh == homeRefreshGeneration) _state.value = _state.value.copy(homeLoading = false)
+        val accepted = result.isSuccess && generation == sessionRenderGeneration && refresh == homeRefreshGeneration &&
+            _state.value.selectedProfile?.id == profile.id &&
+            (!atomicRefresh || (homeForeground && _state.value.route == Route.Browse(Destination.Home)))
+        if (accepted && !partial.get() && loadRevision != null && verifiedIdentity?.account?.id != null) {
+            val owner = "$origin\u0000${verifiedIdentity?.account?.id}\u0000${profile.id}"
+            if (revisionOwner == owner) renderedCatalogRevision = loadRevision
+        }
+        return accepted && !partial.get()
     }
     internal fun refreshProfileIdentity() { keepProfilesOnIdentityRefresh = true; coreSession.retry() }
     internal fun enrichVisibleHomeItem(media: Media) {
@@ -336,6 +424,8 @@ class AppController(context: Context, private val origin: String) {
         }
     }
     fun chooseProfile(profile: Profile) {
+        homeRevisionJob?.cancel(); homeRevisionJob = null
+        renderedCatalogRevision = null; revisionOwner = null
         cancelForegroundValidation()
         gateway.clearProfileCache()
         val refresh = sessionRefreshJob?.takeIf { it.isActive }
@@ -369,8 +459,9 @@ class AppController(context: Context, private val origin: String) {
     fun openProfileManagement() { _state.value = _state.value.copy(managingProfiles = true); navigate(Destination.Profile) }
     fun toggleProfileManagement() { _state.value = _state.value.copy(managingProfiles = !_state.value.managingProfiles) }
 
-    fun signOut() = scope.launch { cancelForegroundValidation(); guarded("Enter parent PIN to sign out") { quietSessionAdoption = false; authenticationGeneration++; stopPlayback((_state.value.route as? Route.Player)?.media); pendingCoreAction = coreSession::signOut; coreSession.signOut() } }
+    fun signOut() = scope.launch { cancelForegroundValidation(); guarded("Enter parent PIN to sign out") { homeRevisionJob?.cancel(); homeRevisionJob = null; renderedCatalogRevision = null; revisionOwner = null; quietSessionAdoption = false; authenticationGeneration++; stopPlayback((_state.value.route as? Route.Player)?.media); pendingCoreAction = coreSession::signOut; coreSession.signOut() } }
     fun close() {
+        homeRevisionJob?.cancel(); homeRevisionJob = null
         foregroundValidation.close(); authenticationGeneration++; sessionRefreshJob?.cancel(); pendingProfileRefreshWait?.cancel()
         cancelGuideWork()
         loginJob?.cancel(); playbackStartJob?.cancel(); coreSession.close(); homeJob?.cancel(); detailJob?.cancel(); pairingPoll?.cancel(); sourceDiscovery?.cancel()

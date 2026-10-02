@@ -39,10 +39,14 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
     val queue = shelves.firstOrNull { it.isQueueShelf }
     val firstShelf = shelves.firstOrNull()
     val featured = if (tv) firstShelf?.items.orEmpty().take(1) else shelves.firstOrNull { !it.isQueueShelf && it.items.firstOrNull()?.type != "live" }?.items.orEmpty().take(5).ifEmpty { queue?.items.orEmpty().take(1) }
-    val hero = if (tv && state.homeFocus.shelfIndex == 0) firstShelf?.items?.firstOrNull { HomeFocusPolicy.mediaKey(it) == state.homeFocus.mediaKey } ?: featured.firstOrNull() else featured.firstOrNull()
+    val retainedHeroShelf = shelves.firstOrNull { shelf -> shelf.id == state.homeFocus.shelfTitle &&
+        shelf.items.any { HomeFocusPolicy.mediaKey(it) == state.homeFocus.mediaKey } }
+    val heroShelf = if (tv) retainedHeroShelf ?: firstShelf else firstShelf
+    val hero = if (tv) retainedHeroShelf?.items?.firstOrNull { HomeFocusPolicy.mediaKey(it) == state.homeFocus.mediaKey }
+        ?: featured.firstOrNull() else featured.firstOrNull()
     val initial = LocalContentFocus.current
     val rail = LocalRailFocus.current
-    LaunchedEffect(state.homeFocus.surface, state.homeFocus.shelfIndex, tv) {
+    LaunchedEffect(state.homeFocus.surface, state.homeFocus.mediaKey, tv) {
         if (tv && (state.homeFocus.surface == HomeFocusSurface.Hero || state.homeFocus.shelfIndex == 0)) list.scrollToItem(0)
     }
     LaunchedEffect(state.homeFocus.restoreRequest, tv) {
@@ -52,7 +56,7 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
         }
     }
     Box(Modifier.fillMaxSize()) {
-        LazyColumn(state = list, modifier = Modifier.fillMaxSize().onPreviewKeyEvent {
+        LazyColumn(state = list, modifier = Modifier.fillMaxSize().onFocusChanged { controller.homeContentFocused = it.hasFocus }.onPreviewKeyEvent {
             if (it.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) controller.recordHomeDirectionalInput()
             false
         }, contentPadding = PaddingValues(start = measure(0, 16), end = measure(0, 16), top = measure(0, 8), bottom = measure(54, 164)),
@@ -61,7 +65,7 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
                 if (tv) {
                     if (hero != null) Box(Modifier.fillMaxWidth().height(664.dp)) {
                         HeroBackdrop(hero)
-                        Box(Modifier.padding(start = 192.dp, end = 96.dp, top = 54.dp)) { TelevisionHero(hero, firstShelf?.isQueueShelf == true, state, controller, initial, rail) }
+                        Box(Modifier.padding(start = 192.dp, end = 96.dp, top = 54.dp)) { TelevisionHero(hero, heroShelf?.isQueueShelf == true, heroShelf?.let(shelves::indexOf)?.coerceAtLeast(0) ?: 0, heroShelf?.id.orEmpty(), state, controller, initial, rail) }
                     }
                     else EmptyState(if (state.homeLoading) "Starting VIPTV…" else "Your library is ready", "Browse Discover to find something to watch.", "home", Modifier.height(540.dp))
                 } else {
@@ -98,10 +102,10 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
     }
 }
 
-@Composable private fun TelevisionHero(media: Media, queue: Boolean, state: AppState, controller: AppController, initial: FocusRequester, rail: FocusRequester) {
+@Composable private fun TelevisionHero(media: Media, queue: Boolean, shelfIndex: Int, shelfId: String, state: AppState, controller: AppController, initial: FocusRequester, rail: FocusRequester) {
     val hero = remember(media) { CoreModels.presentation(media) }
     val saved = state.favorites.any { it.id == media.id && it.type == media.type }
-    LaunchedEffect(media.id) { if (state.homeFocus.mediaKey == null || state.homeFocus.surface == HomeFocusSurface.Hero) { withFrameNanos {}; runCatching { initial.requestFocus() } } }
+    LaunchedEffect(media.id) { if (state.homeFocus.mediaKey == null || (state.homeFocus.surface == HomeFocusSurface.Hero && controller.homeContentFocused)) { withFrameNanos {}; runCatching { initial.requestFocus() } } }
     Box(Modifier.fillMaxWidth().height(610.dp)) {
         VText(if (queue) "CONTINUE WATCHING" else if (media.type == "live") "LIVE NOW" else "FEATURED", 20, Modifier.offset(y = 96.dp), C.textSecondary, bold = true)
         if (hero.titleLogo.isNullOrBlank()) VText(media.name, 56, Modifier.offset(y = 142.dp).width(800.dp), display = true, lines = 2)
@@ -113,10 +117,10 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
         }
         VText(mediaFacts(media), 22, Modifier.offset(y = 336.dp).width(950.dp), C.textSecondary, lines = 1)
         VText(media.description.orEmpty(), 26, Modifier.offset(y = 394.dp).width(760.dp), C.textBody, lines = 2)
-        Row(Modifier.offset(y = 496.dp).onFocusChanged { if (it.hasFocus) controller.recordHomeFocus(0, state.shelves.firstOrNull()?.id.orEmpty(), media, HomeFocusSurface.Hero) }.focusGroup(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+        Row(Modifier.offset(y = 496.dp).onFocusChanged { if (it.hasFocus) controller.recordHomeFocus(shelfIndex, shelfId, media, HomeFocusSurface.Hero) }.focusGroup(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             AppButton(hero.primaryActionLabel, { controller.activateHero(media, queue) }, Modifier.width(228.dp).focusRequester(initial).focusProperties { left = rail },
                 "play", tvAccent = hero.primaryAction == "resume", onHold = { controller.chooseSources(media, origin = SourceReturn.Home) },
-                onFocused = { controller.recordHomeFocus(0, state.shelves.firstOrNull()?.id.orEmpty(), media, HomeFocusSurface.Hero) })
+                onFocused = { controller.recordHomeFocus(shelfIndex, shelfId, media, HomeFocusSurface.Hero) })
             AppButton("Details", { controller.open(media) }, Modifier.width(228.dp))
             AppIconButton(if (saved) "check" else "plus", if (saved) "Remove from My List" else "Add to My List", { controller.toggleMyList(media) })
         }

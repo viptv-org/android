@@ -34,6 +34,21 @@ object HomeFocusPolicy {
     fun afterDirectionalInput(current: HomeFocusSnapshot): HomeFocusSnapshot = current.copy(inputEpoch = current.inputEpoch + 1)
     fun requestRestore(current: HomeFocusSnapshot): HomeFocusSnapshot = current.copy(restoreRequest = current.restoreRequest + 1)
     fun mayRestore(snapshot: HomeFocusSnapshot, observedInputEpoch: Long): Boolean = snapshot.inputEpoch == observedInputEpoch
+
+    fun reconcile(current: HomeFocusSnapshot, previous: List<HomeShelf>, next: List<HomeShelf>, restoreFocusedCard: Boolean = true): HomeFocusSnapshot {
+        val key = current.mediaKey ?: return current
+        val surviving = next.indexOfFirst { shelf -> shelf.id == current.shelfTitle && shelf.items.any { mediaKey(it) == key } }
+        if (surviving >= 0) return current.copy(shelfIndex = surviving)
+        val oldShelf = previous.indexOfFirst { it.id == current.shelfTitle }.takeIf { it >= 0 } ?: current.shelfIndex ?: 0
+        val oldCard = previous.getOrNull(oldShelf)?.items?.indexOfFirst { mediaKey(it) == key }?.takeIf { it >= 0 } ?: 0
+        val nearest = next.indices.filter { next[it].items.isNotEmpty() }.minWithOrNull(compareBy<Int> { kotlin.math.abs(it - oldShelf) }.thenBy { it })
+            ?: return current.copy(shelfIndex = null, shelfTitle = null, mediaKey = null,
+                restoreRequest = current.restoreRequest + if (restoreFocusedCard) 1 else 0)
+        val shelf = next[nearest]
+        val card = shelf.items[oldCard.coerceAtMost(shelf.items.lastIndex)]
+        return current.copy(shelfIndex = nearest, shelfTitle = shelf.id, mediaKey = mediaKey(card),
+            restoreRequest = current.restoreRequest + if (restoreFocusedCard) 1 else 0)
+    }
 }
 
 /** An older queue refresh must never overwrite a later Undo response. */
