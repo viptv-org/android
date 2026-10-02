@@ -145,6 +145,28 @@ inspection of the highlighted Subtitles control. This is actual Media3 direct
 track acceptance; server-managed track replacement and physical TV remain
 separate checks. Pointer setup is allowed; the acceptance sequence uses only
 remote/media keys.
+
+With the same four-minute native media loaded and no panel open, run
+`python3 qualification/check-player-audio.py` for alternate AAC selection.
+It verifies native en/es tracks, Back and selection return to Audio, and
+immediate reopening with es · Current. It resumes playback at completion;
+use the explicit Exit control afterward. This qualifies direct Media3 audio
+on the owned emulator, not server-managed replacement or physical audio.
+
+For source-discovery qualification, the HTTPS fixture control endpoint accepts
+`{"sourceDelay":30000,"sourceError":true}`. Delay is bounded to 0–30000 ms
+per newly created discovery job; healthy rows arrive immediately while done
+remains false. Source error adds a named Failed provider with no playable rows
+beside the 12 healthy rows. Check Still checking sources, the provider's safe
+error view, All providers recovery and native Back to the invoking source
+control. Reset sourceDelay to zero and sourceError to false after checking.
+
+`GuideProgrammeFocusReturnTest` uses the actual Guide composition/controller,
+one initial public focus setup and remote/native Back. Its synthetic EPG uses
+the current clock so the future cell stays in the two-hour window. This is a
+focused programme-details return regression; full Guide filter/Search remote
+acceptance and visual parity remain separate.
+
 # Reliability follow-up checks
 
 On the paired remote of dedicated emulator 5574, run
