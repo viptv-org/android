@@ -28,7 +28,7 @@ TV-web tests use one worker and do not overlap its production build.
 
 Incoming tasks join this queue without replacing work already authorized.
 Research stays with Luna workers so the main chat can receive new tasks.
-Tickets 01-08 are complete, with implementation and qualification recorded in
+Tickets 01-10 are complete, with implementation and qualification recorded in
 their individual files. Independent final Android reviews used Luna workers.
 
 Verify descriptions with long multiline text and long unbroken torrent names,

@@ -850,3 +850,28 @@ Home/Search/episode geometry and final-card focus were inspected at 1920x1080;
 Personal sign-in was preserved and no playback/history write was performed.
 Private captures and logs remain under qualification/artifacts. This evidence
 qualifies emulator UI, not physical-TV codecs, HDR, PiP or playback.
+
+## Episode artwork failure and web player presentation - 2026-10-02
+
+Android 9d99d15 repairs the actual EpisodeCard fallback path. Authenticated
+One Piece metadata retained 1410 videos; episode 1059's supplied thumbnail
+returned HTTP 404, while episode 2's thumbnail returned HTTP 200 JPEG. Image
+failure observations now reach shared Core policy, with a compact parent-art
+context for composed cards. Failed thumbnails use the known landscape; if all
+art fails, a readable title placeholder appears. Exact episode/source identity,
+progress and virtual composition remain intact. Two device rendering tests
+passed after the original fallback-request regression failed before the fix.
+The final Windows host/native flow passed 223 unit tests with no failures,
+errors or skips, three core ABIs, APK assembly and lint. The normal APK was
+installed preserving sign-in. Private inspected actual-account captures show
+1059's fallback and episode 2's original still with the same process alive.
+No personal playback was started during this diagnosis.
+
+Web Fit/Fill is recorded in local ticket 10 and TV-web TESTING.md at aed6ed5.
+The qualified website bundle is active on dev.embedez.com/tv/; public HTML and
+entry asset hashes match the candidate. Its 256 units, production build and
+two decoded-HLS Chromium desktop/phone scenarios passed. The toggle beside
+fullscreen applies contain/cover to video and canvas without a playback
+session replacement. Real MediaBunny decode and physical devices were not
+qualified. The DEV asset update preserved the backend binary/settings and
+protected account/profile/session/add-on/import/favorite/progress records.

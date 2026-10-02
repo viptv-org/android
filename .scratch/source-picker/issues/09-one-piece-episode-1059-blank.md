@@ -4,17 +4,17 @@
 fallback instead of an unexplained empty rectangle. Confirm source discovery
 and actual episode identity independently of lazy scrolling.
 
-**Status:** in-progress
-**Blocked by:** Implementation qualification.
+**Status:** done
+**Blocked by:** None.
 **Owner:** episode_1059_research (GPT-6 Luna, max), then Sol implementation.
 
 - [x] Reproduce on the owner's signed-in Windows Android TV emulator.
 - [x] Distinguish episode artwork from source discovery and navigation.
 - [x] Verify upstream and normalized thumbnail data for 1059 against early episodes.
 - [x] Lock down the demonstrated failing boundary with a regression check.
-- [ ] Fix the demonstrated cause using shared artwork policy.
-- [ ] Repeat native acceptance and the required Windows build/test flow.
-- [ ] Commit and push narrowly; preserve personal sign-in and viewing data.
+- [x] Fix the demonstrated cause using shared artwork policy.
+- [x] Repeat native acceptance and the required Windows build/test flow.
+- [x] Commit and push narrowly; preserve personal sign-in and viewing data.
 
 ## Diagnosis evidence
 
@@ -42,3 +42,20 @@ card skipped both parent-art enrichment and image-failure observations; the
 shared Rust projection already supports thumbnail-to-landscape fallback. Fix
 scope is the Android rendering adaptation, with a compact parent-art context
 and failure observations, retaining the existing shared policy and lazy row.
+
+Implementation `9d99d15` is pushed to Android main. Both native regressions
+passed: a 404 thumbnail loads the parent landscape (a green fixture pixel proves
+it rendered), and two failed images produce a visible title placeholder. Shared
+Core enrichment preserves exact episode/source identity and progress. The full
+Windows JDK 17 / SDK 36 flow passed 223 unit tests with zero failures/errors/skips,
+three Android core ABIs, normal/test APK assembly and lint. Independent Luna
+review found no confirmed implementation gaps.
+
+The normal APK was installed with data retained on the owner's API 36 Windows
+TV. Actual episode 1059 and adjacent cards now show the known series landscape;
+jumping back to 2 retains its real episode thumbnails. All 1410 episodes remain,
+the same app process stayed alive, and source activation still uses the original
+episode. Final inspected captures are `episode1059-fixed-fallback.png` and
+`episode1059-fixed-original-thumbnails.png` in the private acceptance directory.
+No personal playback was initiated. Upstream 404 images remain unavailable;
+the fix provides the existing shared fallback instead of manufacturing stills.
