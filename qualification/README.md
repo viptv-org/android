@@ -1,5 +1,45 @@
 # Native Android design qualification
 
+## Actual managed torrent audio
+
+The three `native-*`/`check-native-managed-audio.py` helpers operate the owned
+API36 television emulator5576 against the backend's real synthetic
+`check-torrent-browser-backend.sh` serve-only stack. Start the emulator with
+`-no-audio`; use `PLAYBACK_TEST_DUAL_AUDIO=true` for silent generated tracks.
+Use the explicit debug fixture CA and preserve a separate ordinary system-trust
+APK. This operator harness does not exercise login/pairing or physical input.
+
+Prepare the APK, ingress certificate and private seeded-session JSON before
+starting the bounded stack. Keep its qualification directory mode700 and all
+credential files private. Clear only the owned QA app's cached data between
+fixture instances. `seed-native-fixture-session.py --serial emulator-5576
+--config PRIVATE_JSON` provisions that synthetic account in app-private storage.
+Its JSON contains `origin` and the fixture's `session` object; never commit it.
+
+With the real stack ready, set `QUALIFICATION_DIR` and start
+`node qualification/native-gateway-proxy.mjs`. It binds loopback9445,
+forwards account/catalog/playback to the actual backend and media to the actual
+gateway bridge, and rewrites only the validated delivery origin for the emulator.
+It does not weaken production endpoint validation or synthesize responses.
+
+Start the backend's `observe-native-torrent-map.py PRIVATE_QDIR 2 --timeout 180`
+before native playback; fast FFmpeg jobs may finish before the delivery becomes
+ready. Ensure its Docker command has the host's required sudo wrapper. The
+observer keeps raw arguments private and writes numeric `native-audio-map.json`
+after correlating real served bytes with the observed output job. Then run
+`python3 qualification/check-native-managed-audio.py --directory PRIVATE_QDIR`.
+Only after its result and explicit Exit/release pass should the operator write
+the backend runner's `native-complete` marker and require successful quota,
+cache, peer and owned-process cleanup. Stop the native ingress and clear only
+this QA app's private synthetic session afterward.
+
+The assertion distinguishes input2/spa from delivered AAC/und: this gateway
+runtime intentionally neutralizes the non-English transcoded output tag.
+Identical silent samples cannot qualify audible language. Captures, raw argv,
+delivery URLs and tokens stay private; only validated selectors/counts and
+numeric lifecycle results are suitable for tickets. Exact accepted pins and
+observations are recorded in `TESTING.md`.
+
 ## Vizio remote fixture
 
 After starting the HTTPS fixture, run `node qualification/smartcast-fixture.mjs`.
