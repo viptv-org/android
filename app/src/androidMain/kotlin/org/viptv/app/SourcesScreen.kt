@@ -4,16 +4,29 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.*
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.Lifecycle
@@ -22,9 +35,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.PersistableBundle
+import android.animation.ValueAnimator
+import android.os.Build
+import android.provider.Settings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import org.viptv.app.theme.ViptvColor as C
 
 @Composable internal fun SourcePicker(media: Media, sources: List<Source>, controller: AppController) {
@@ -38,6 +55,13 @@ import org.viptv.app.theme.ViptvColor as C
     val first = remember(media.id, provider, quality) { FocusRequester() }
     var claimed by remember(media.id, provider, quality) { mutableStateOf(false) }
     val providerLabels = groups.values.associate { it.first to it.second }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var resumed by remember(lifecycle) { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, _ -> resumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
     Box(Modifier.fillMaxSize()) {
         if (tv) {
             HeroBackdrop(media)
@@ -62,11 +86,15 @@ import org.viptv.app.theme.ViptvColor as C
         else LazyColumn(Modifier.fillMaxWidth().then(if (tv) Modifier.weight(1f) else Modifier.heightIn(max = 440.dp)), verticalArrangement = Arrangement.spacedBy(measure(14, 12)), contentPadding = PaddingValues(4.dp)) {
             itemsIndexed(shown, key = { _, source -> source.id }) { index, source ->
                 var focused by remember(source.id) { mutableStateOf(false) }
+                val hoverSource = remember(source.id) { MutableInteractionSource() }
+                val hovered by hoverSource.collectIsHoveredAsState()
                 val opening = state.preparingSourceId == source.id
                 val foreground = if (tv && focused) C.onLight else C.textPrimary
                 Holdable({ controller.start(media, source) }, { controller.requestDialog(DialogKind.SourceDetails, "Source details", source = source) },
-                    Modifier.fillMaxWidth().height(measure(104, 86)).then(if (index == 0 && tv) Modifier.focusRequester(first) else Modifier)
-                        .onFocusChanged { focused = it.isFocused }.clip(RoundedCornerShape(measure(22, 18)))
+                    Modifier.fillMaxWidth().height(measure(180, 112)).then(if (index == 0 && tv) Modifier.focusRequester(first) else Modifier)
+                        .onFocusChanged { focused = it.isFocused }
+                        .hoverable(hoverSource)
+                        .clip(RoundedCornerShape(measure(22, 18)))
                         .background(if (tv && focused) C.textPrimary else C.surfaceN2)
                         .border(1.dp, if (index == 0 && !tv) LocalAccent.current else Color.Transparent, RoundedCornerShape(measure(22, 18)))) {
                     Row(Modifier.fillMaxSize().padding(horizontal = measure(26, 14)), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(measure(20, 12))) {
@@ -75,8 +103,10 @@ import org.viptv.app.theme.ViptvColor as C
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             if (index == 0) VText("BEST MATCH", if (tv) 18 else 10, color = if (tv && focused) C.textOnLightAccent else LocalAccent.current, bold = true)
-                            VText(SourceDisplayPolicy.title(source).replace('\n', ' '), if (tv) 26 else 15, color = foreground, bold = true, lines = 1)
-                            VText(if (opening) "Opening source…" else SourceDisplayPolicy.body(source).replace('\n', ' '), if (tv) 20 else 12, color = if (tv && focused) C.textOnLightSecondary else C.textSecondary, lines = 1)
+                            VText(SourceDisplayPolicy.title(source).replace('\n', ' '), if (tv) 26 else 15, color = foreground, bold = true, lines = 2)
+                            SourceDescriptionWindow(if (opening) "Opening source…" else SourceDisplayPolicy.body(source),
+                                if (tv) 20 else 12, if (tv && focused) C.textOnLightSecondary else C.textSecondary,
+                                active = (focused || hovered) && resumed && !picker && state.dialog == null)
                         }
                         if (opening) CircularProgressIndicator(Modifier.size(measure(28, 24)), color = foreground, strokeWidth = 3.dp)
                         else if (tv) VIcon("play", color = foreground)
@@ -92,6 +122,38 @@ import org.viptv.app.theme.ViptvColor as C
         }
     }
     if (picker) ChoiceDialog("Provider", listOf("All providers" to { provider = null; picker = false }) + providerLabels.map { (id, label) -> label to { provider = id; picker = false } }, { picker = false })
+}
+
+/** A stationary two-line viewport; only its measured, overflowing text travels. */
+@Composable internal fun SourceDescriptionWindow(text: String, size: Int, color: Color, active: Boolean, modifier: Modifier = Modifier) {
+    val density = LocalDensity.current
+    val context = LocalContext.current
+    val lineHeight = (size * 1.35f).sp
+    val viewport = with(density) { lineHeight.toDp() * 2 }
+    val linePixels = with(density) { lineHeight.toPx() }
+    val viewportPixels = with(density) { viewport.toPx() }
+    val durationScale = Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+    val motionEnabled = durationScale > 0f && (Build.VERSION.SDK_INT < 26 || ValueAnimator.areAnimatorsEnabled())
+    var textHeight by remember(text, size) { mutableIntStateOf(0) }
+    val offset = remember(text, size) { Animatable(0f) }
+    val overflow = (textHeight - viewportPixels).coerceAtLeast(0f)
+    LaunchedEffect(active, text, overflow, motionEnabled) {
+        offset.snapTo(0f)
+        if (active && motionEnabled && overflow > 1f) {
+            while (true) {
+                delay(1500)
+                offset.animateTo(overflow, tween(((overflow / linePixels) * 1500).toInt().coerceAtLeast(1500)))
+                delay(1500)
+                offset.snapTo(0f)
+            }
+        }
+    }
+    Box(modifier.fillMaxWidth().height(viewport).clipToBounds().semantics { contentDescription = text }.testTag("source-description-window")) {
+        Text(text, Modifier.fillMaxWidth().wrapContentHeight(unbounded = true).graphicsLayer { translationY = -offset.value }, color = color,
+            fontSize = size.sp, fontFamily = Onest, fontWeight = FontWeight.Normal,
+            lineHeight = lineHeight, softWrap = true, maxLines = Int.MAX_VALUE, overflow = TextOverflow.Clip,
+            onTextLayout = { textHeight = it.size.height })
+    }
 }
 
 @Composable internal fun ActionDialog(dialog: DialogState, controller: AppController) {
