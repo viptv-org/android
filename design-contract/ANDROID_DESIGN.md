@@ -339,6 +339,18 @@ in AND-035; implementations record adoption and measured evidence separately.
   rows stay selectable. Completion or cancellation clears the status. An empty
   final list retains the existing no-sources message. These presentation states
   never take focus or change Back, hold/Info, exact-source play or return focus.
+- SRC-PROVIDERS-001 (proposed, design revision of this commit): The phone and TV
+  Provider choice lists separately observed configured source producers by stable
+  installed identity even when a producer returned zero playable sources or a
+  safe failure. Use the shared producer event identity and configured name, not
+  the upstream release's branding; the source rows retain their existing shared
+  display projection. For a selected empty producer, show the outcome copy in
+  `viptv-design-system/components.md`. A `source_format_unsupported` event
+  explains that only HTTP(S) streams are supported here. Keep other producers'
+  playable rows active through pending and failed responses. Preserve filter,
+  row focus, exact-source selection, Retry and Back cancellation. Do not infer
+  eligible producers from every installed catalog add-on or invent a progress
+  percentage; before a producer event, retain the general discovery indicator.
 - Both hero + actions reflect current My List membership (+ / check), including
   immediately after a toggle and across refreshed shelves/profile changes.
 - Phone Home starts at its system top inset without an extra top spacer. Global
@@ -362,6 +374,13 @@ touch accessibility and reduced motion. Delay one provider until after another
 row arrives: the spinner changes from `Finding sources` to `Still checking sources`,
 the first row stays playable and focused, and the status clears only on finish or
 Back cancellation. Verify empty, filtered-empty, failure and return navigation.
+SRC-PROVIDERS-001 acceptance: a single discovery reports distinct Torrentio,
+TorrentsDB and Torrentio TB add-on identities, with two safe unsupported-format
+outcomes and HTTP(S) rows from the third. The Provider menu names all three
+configured add-ons separately, selecting either empty producer explains its
+outcome, and selecting the third retains usable rows. Repeat with delayed events,
+one recoverable failure, Retry, Back, profile replacement and an unrelated
+catalog-only add-on; no fake producer or automatic playback appears.
 Production promotion requires tested immutable artifacts and verification of the
 running backend/transcoder plus served TV asset hashes; Git push is not a deploy.
 

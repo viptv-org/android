@@ -23,6 +23,11 @@ These are the exact strings used on the screens. Text in `[brackets]` is a place
 | Live search, phone | No channels match your search. |
 | Live search, desktop / TV | No channels match your search. |
 | Sources, finding | Finding sources. Sources appear here as they arrive. |
+| Sources, provider pending | Still checking [provider] |
+| Sources, provider empty | No playable sources from [provider] |
+| Sources, provider unsupported | [provider] returned formats this app cannot play. Only HTTP(S) streams are supported here. |
+| Sources, in-progress label before rows | Finding sources |
+| Sources, in-progress label after rows | Still checking sources |
 | Sources, none | No sources available. Check your add-ons in Settings. |
 | Sources, filtered out | No matching sources. Choose another provider or quality. |
 | Live details, no guide | No guide information. You can still watch this channel. |

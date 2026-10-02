@@ -179,6 +179,16 @@ at `b7e36df` is the comparison for Home composition and queue content.
   remain selectable, and late arrivals never steal focus. Clear the indicator on
   finish or cancellation. Preserve Back, hold/Info, source identity and return
   focus behavior.
+- SRC-PROVIDERS-001 (proposed, design revision of this commit): React and
+  SolidTV source pickers list every separately observed account-owned producer
+  in the Provider choice, including zero-result and safe failed producers.
+  Stable installed identity and configured name distinguish add-ons that share
+  upstream branding. Selecting a producer with no playable row shows the
+  outcome copy in `viptv-design-system/components.md`; unsupported source
+  formats explain the HTTP(S)-only limit. Pending producers and global discovery
+  use the actual job state, without fake progress percentages. Partial playable
+  rows remain selectable, late events retain filter/focus, and Retry/Back keep
+  their existing cancellation and return behavior.
 
 Acceptance: inspect 1920×1080 and 1280×720 Home, detail, profiles, Discover,
 search, guide, preparation and live/VOD playback. Capture consecutive frames
@@ -195,6 +205,11 @@ reduced-motion display, full accessible text, and a spinner that persists during
 partial results but clears on completion or Back. Exercise empty, filtered-empty,
 error, source selection and return focus; physical TV behavior remains unverified
 until a device run.
+For SRC-PROVIDERS-001, use three distinct configured add-on IDs whose upstream
+branding overlaps: two report zero playable HTTP(S) sources with safe unsupported
+format outcomes while the third reports playable rows. Verify three named filter
+choices, truthful empty outcomes, usable third-party rows, delayed/failure/Retry
+states, focus stability and Back cancellation on React and SolidTV separately.
 
 # TV-041 — Bounded Home loading and player inactivity
 
