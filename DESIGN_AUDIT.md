@@ -1,3 +1,26 @@
+# TV Guide source audit — 2026-10-02
+
+Contract: design `85a20e918d44af28d20caa52997b1d307922cf29`, committed
+`TvLive`, `TvLiveDetails` and `TvLiveSearch` HTML boards. Implementation:
+Android `3f21e41` (`GuideScreen.kt`, `DesignUi.kt`, `AccountScreens.kt`). This is
+a fresh comparison with the immutable board export, rather than an assumption
+that the earlier device SSIM applied to the current Guide. All measurements
+below use the 1920×1080 TV coordinate frame. TV layout remains unchanged.
+
+| State | Pinned reference | Current Android | Disposition |
+| --- | --- | --- | --- |
+| TvLive top summary | x192/right96/y54, 300px high; LIVE chip plus channel; time/progress/remaining; next programme; 480×270 preview | Same outside gutters; stacked LIVE text/title/channel-time/description; no preview, progress, remaining or next-programme line | Presentation gap; requires a dedicated design-first implementation slice |
+| TvLive filters | y374; 56px controls with 6px gaps; stale baseline `All US channels` copy | Flow after summary; unclassified `All`, 14dp gaps; existing My channels/Recent/provider/Search controls | Geometry gap; retained existing remote paging controls. BACKEND_V2.md §111–114 supersedes US classification/count copy; restoring it would violate the pinned v2 contract |
+| TvLive grid | y460, 48px time header, 300px channel column, 100px rows; 72px logos; channel numbers | Flow-positioned header with Channels and Earlier/Now/Later; 266px channel blocks, 272px header label, 94px rows plus 10px spacing; 56px logos; no numbers | Presentation gap; outside gutters and proportional programme-time placement retained |
+| TvLive programme cells | Time and programme title, current/future fills, current progress line; now marker through grid | Title-only 22px text in 16px-radius cells; selected fill, no cell-time/progress or now marker | Presentation gap; current/future activation remains separately testable |
+| TvLive hints | Bottom-right OK Watch, Menu Details, Up/Down Channels, Left/Right Time | No visible Guide key-hint row | Discoverability gap; no TV layout change in this audit |
+| TvLiveDetails | 820px right panel, padding 64/96/120/64; Watch channel now and Close, OK/BACK hints | Same 820px panel width, uniform 64px padding; title/channel-time/description and Watch live; Back dismissal, no explicit Close or key hints | Copy/actions/padding gap |
+| TvLiveSearch | Full-screen Search Live TV dialog with canvas key grid | Native Android text field/IME and Done/Cancel through TextEntry | Native keyboard substitution is specified by AND-KEYBOARD-001; full search-result composition still needs separate comparison |
+
+These are measured source differences, not a pixel similarity score or a
+physical-device acceptance claim. The no-TV-layout-change standing constraint
+preserves the present composition; the gaps remain open under design#6.
+
 # Native design audit — 2026-09-26
 
 Contract: AND-037 at `8c3b0e5` and the pinned VIPTV reference screens/components.

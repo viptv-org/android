@@ -34,6 +34,7 @@ let failPlayback = false;
 let liveCount = 0;
 let categoryCount = 0;
 const calls = [];
+const playbackLeases = new Map();
 const token = { session_id: 'android-fixture-session', account_id: '7', profile_id: null, access_token: 'fixture-access', refresh_token: 'fixture-refresh', expires_in: 900 };
 const json = (response, value, status = 200) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(value)); };
 function rewrite(value) {
@@ -133,13 +134,21 @@ const server = https.createServer({
             value.programs = (value.programs ?? []).map(program => ({ ...program, start: program.start + shift, end: program.end + shift }));
           }
           if (favoritePage) value = { items: value, total: value.length, offset: 0, next_offset: null };
-          if (path === '/api/v2/playback' && value.delivery) {
-            const isLive = String(body.stream_id ?? '').startsWith('live_source_') || value.delivery.live;
-            value.delivery = { ...value.delivery, kind: 'direct', mode: 'direct', format: 'original', headers: {},
+          if (path === '/api/v2/playback' && request.method === 'POST') {
+            // The shared browser preview can still return legacy flat playback
+            // fields. Native qualification must use the current v2 lease envelope.
+            const delivery = value.delivery ?? value;
+            const isLive = String(body.stream_id ?? '').startsWith('live_source_') || delivery.live;
+            value = { id: value.id, status: 'ready', expires_at: Math.floor(Date.now() / 1000) + 60,
+              renew_after_seconds: 20, delivery: { ...delivery, kind: 'direct', mode: 'direct', format: nativeMedia ? 'original' : delivery.format, headers: {},
               live: isLive, duration: isLive ? 0 : nativeDuration, position: 0,
-              ...(nativeMedia ? { url: origin + '/fixtures/native-validation.mp4' } : {}) };
+              ...(nativeMedia ? { url: origin + '/fixtures/native-validation.mp4' } : {}) } };
             if (copyUrl) value.delivery.url = 'https://provider.test/stream/' + encodeURIComponent(body.stream_id) + '.mkv?token=synthetic%2Bvalue';
+            playbackLeases.set(value.id, value);
           }
+          const heartbeat = /^\/api\/v2\/playback\/([^/]+)\/heartbeat$/.exec(path);
+          if (heartbeat && playbackLeases.has(heartbeat[1]))
+            value = { ...playbackLeases.get(heartbeat[1]), expires_at: Math.floor(Date.now() / 1000) + 60 };
           output = JSON.stringify(value);
         }
         response.writeHead(result.status ?? 200, { ...result.headers, ...(result.contentType ? { 'content-type': result.contentType } : {}) });
