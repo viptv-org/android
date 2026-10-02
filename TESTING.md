@@ -1,3 +1,59 @@
+# Android TV Guide, source failures and alternate native audio — 2026-10-02
+
+Application baseline: Android main `297d469`, Core
+`c9e7bea8c0df4258e363bcd9141a38716904a6aa`, design
+`1742afa2b50d30638fa46f3abc8c1a76638a51e1`. API36 Android TV x86_64,
+owned emulator5576 at 1920×1080, JDK17 and two Gradle workers. No application
+or TV layout code changed in this qualification slice.
+
+`GuideProgrammeFocusReturnTest` passed on that Android TV emulator: one test
+in 1.9 seconds. It composes the actual Guide and controller with a synthetic
+schedule based on the current clock, at the application's 1920-coordinate
+density. One initial public semantics focus request establishes the future
+programme. Remote OK opens its Watch live details; native Android Back closes
+the dialog and returns focus to that exact programme. Public route,
+preparation and error state remain idle for playback. No focus request repairs
+the return. The isolated test preference namespace preserves the app's session.
+The initial test fixture allowed startup errors to race its seeded state;
+waiting for startup before initial setup removed that fixture race.
+
+The actual authenticated synthetic app also showed News filtering, native
+channel Search and a CNBC result. Those observations are separate from the
+repeatable future-programme regression; a complete automated filter/Search/
+future-details remote chain has not been qualified. The current collapsed
+Guide capture and source still show the previously recorded preview, progress,
+programme-time and now-marker gaps. Native keyboard substitution remains the
+Android exception. No new full-screen similarity or physical-TV claim is made.
+
+The local HTTPS source fixture now supports a bounded `sourceDelay` and a
+named `sourceError` producer through its private control endpoint. Native
+Choose source showed 12 healthy rows with Still checking sources. Selecting
+Failed provider showed the safe unsupported-format explanation while the
+total remained 12; returning to All providers retained playable rows. An
+empty-result Retry entered that partial discovery successfully. The final
+remote sequence established Choose source focus before activation, opened its
+partial picker, then used Android Back to restore that same invoking control
+without another playback admission. The fixture request journal recorded no
+playback admission during discovery and provider filtering. A stopped fixture
+caused intervening empty retry results; those were not accepted as application
+failures or successful qualification.
+
+`check-player-audio.py` passed against the actual four-minute H.264/dual-AAC
+MP4 from `make-track-media.sh`. The direct player uses Media3's real native
+en/es inventory. Back from Audio restored the invoking control; immediate OK
+reopened Audio without navigation. Selecting Spanish also returned to Audio,
+and immediate OK showed es · Current. Explicit remote Exit released the sole
+fixture playback lease. This proves native direct selection and return on this
+emulator, not audible hardware fidelity or server-managed output replacement.
+
+Core/design integrity, fixture syntax, the existing category fixture check,
+237 host tests (zero failures/errors/skips), normal debug APK assembly,
+instrumentation APK assembly and lint passed. The normal debug APK contains no
+fixture CA. The same pinned native Core binaries for three ABIs were reused;
+no new ABI build is claimed. Media, certificates, APKs, logs and captures stay
+ignored. Managed alternate-audio delivery, physical input/hardware and full
+Guide presentation remain separate acceptance work.
+
 # AND-042 real multi-track TV return and Guide audit — 2026-10-02
 
 App source: `3f21e4126c708bae87720391994217960249a2f0`; Core
