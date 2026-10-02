@@ -80,7 +80,9 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
         if (tv && restoreEpisodes && !pendingSavedEpisode && episodes.isNotEmpty()) {
             val index = selectedEpisode.coerceIn(episodes.indices)
             if (returningToEpisode) pageScroll.scrollToItem(1)
-            episodeScroll.scrollToItem(index); withFrameNanos {}; runCatching { episodeFocus[index].requestFocus() }
+            episodeScroll.scrollToItem(index); withFrameNanos {}
+            inputMode.requestInputMode(InputMode.Keyboard)
+            runCatching { episodeFocus[index].requestFocus() }
         }
     }
     LaunchedEffect(media.id, media.season, media.episode, season, episodes, entryId) {
@@ -92,6 +94,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
             episodeScroll.scrollToItem(index)
             withFrameNanos {}
             if (pendingSavedEpisode) {
+                inputMode.requestInputMode(InputMode.Keyboard)
                 runCatching { episodeFocus[index].requestFocus() }
                 pendingSavedEpisode = false
             }
