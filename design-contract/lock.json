@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/design",
-  "revision": "6da30a58c839e4e66465a76c8f80471139147f27",
+  "revision": "8b92d90842c9307df7e2daef5eeb0d9a61bbce51",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
@@ -17,6 +17,10 @@
     "design-contract/TV_POLISH.md": {
       "source": "TV_POLISH.md",
       "sha256": "ca2384cd1b1afd3ab77fd3372ecd476c7919cc36fe9a4ef4967d72e98dee8fab"
+    },
+    "design-contract/specs/behavior/home-addon-refresh.md": {
+      "source": "specs/behavior/home-addon-refresh.md",
+      "sha256": "9cb9385f19c05500625c84dfe1ac36ced45fcdd8e24a4d701c22d01a5671c458"
     },
     "design-contract/viptv-design-system/README.md": {
       "source": "viptv-design-system/README.md",
