@@ -37,7 +37,7 @@ class EpisodeWatchedBadgeTest {
 
     @Test fun partialEpisodeDoesNotClaimCompletion() = renderEpisode(tv = true, watched = false)
 
-    @Test fun unwatchedCorrectionRevealsPartialProgressOnTheSameCard() {
+    @Test fun changingCardFactsFromWatchedToPartialShowsProgress() {
         var episode by mutableStateOf(Media("show:1:1059", "episode", name = "Fixture Show", season = 1,
             episode = 1059, episodeTitle = "The Future", positionMillis = 30_000,
             durationMillis = 120_000, watched = true))

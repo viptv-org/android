@@ -252,10 +252,23 @@ internal fun correctedDetailsRoute(route: Route, episode: Media, watched: Boolea
 internal fun AppController.correctEpisode(media: Media, watched: Boolean) = scope.launch {
     guarded("Enter parent PIN") {
         val profile = requireProfile()
+        val detail = _state.value.route as? Route.Details
+        val seriesId = SourceReturnPolicy.parentSeries(media)?.id
         gateway.correctProgress(profile, media, if (watched) "watched" else "unwatched")
         if (_state.value.selectedProfile?.id == profile) {
-            _state.value = _state.value.copy(route = correctedDetailsRoute(_state.value.route, media, watched),
+            val current = _state.value
+            val stillOnDetail = detail != null && current.route === detail && detail.media.id == seriesId
+            val accepted = if (stillOnDetail) correctedDetailsRoute(checkNotNull(detail), media, watched) else current.route
+            _state.value = current.copy(route = accepted,
                 message = if (watched) "Marked watched." else "Marked unwatched.")
+            val records = if (stillOnDetail) try { gateway.seriesProgress(profile, checkNotNull(seriesId)) }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { null }
+            else null
+            val latest = _state.value
+            if (latest.selectedProfile?.id == profile && latest.route === accepted && records != null && accepted is Route.Details) {
+                _state.value = latest.copy(route = accepted.copy(media = mergeSeriesProgress(accepted.media, records)))
+            }
         }
     }
 }
