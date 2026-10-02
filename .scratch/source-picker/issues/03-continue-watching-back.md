@@ -5,7 +5,7 @@ that show's info page and episode selector, allowing another episode to be
 chosen. Back from the info page restores the original queue card.
 
 **Blocked by:** None (design is already committed).
-**Status:** in-progress
+**Status:** in-review
 **Triage:** ready-for-agent
 **Owner:** Android navigation worker and source_picker_tv (GPT-6 Sol, low).
 **Contract:** CW-SOURCE-BACK-001 at design ce7084ff80d0541257509748ea772ef0f95d8058.
@@ -19,4 +19,7 @@ chosen. Back from the info page restores the original queue card.
 
 ## Commits and evidence
 
-Pending implementation and qualification.
+Android implementation: `94ac6a5`; the parent-identity regression passed with
+the local unit suite. TV-web implementation: `a906e47`; the responsive browser
+flow passed queue episode sources -> parent details -> different episode sources
+-> details -> Home. Broader review and native route acceptance remain pending.

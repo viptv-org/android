@@ -5,7 +5,7 @@ discovery is pending, both before the first source and while more providers are
 still returning. Arrived sources remain selectable.
 
 **Blocked by:** None (design is already committed).
-**Status:** in-progress
+**Status:** in-review
 **Triage:** ready-for-agent
 **Owner:** source_picker_android and source_picker_tv (GPT-6 Sol, low).
 **Contract:** SRC-OVERFLOW-001 at design ce7084ff80d0541257509748ea772ef0f95d8058.
@@ -18,4 +18,7 @@ still returning. Arrived sources remain selectable.
 
 ## Commits and evidence
 
-Pending implementation and qualification.
+Android implementation: `5be0b0e`. The isolated API 36 TV emulator passed the
+Finding sources -> Still checking sources -> completed status/spinner test,
+including stable allocated height. TV-web implementation: `faf203c`; final
+browser/build evidence is being recorded.

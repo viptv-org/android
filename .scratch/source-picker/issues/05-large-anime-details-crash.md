@@ -3,12 +3,12 @@
 **What to build:** Opening a large series such as One Piece on Android TV keeps
 the app running and displays usable title information and episode selection.
 
-**Blocked by:** Native reproduction and a concrete crash cause.
+**Blocked by:** None; the original installed APK crash has been reproduced.
 **Status:** in-progress
-**Triage:** needs-triage
-**Owner:** provider_anime_research (GPT-6 Luna, max); implementation assigned after findings.
+**Triage:** ready-for-agent
+**Owner:** large_anime_fix (GPT-6 Sol, low), with provider_anime_research (GPT-6 Luna, max) for reproduction.
 
-- [ ] Reproduce opening the title and identify a safe, redacted crash signature.
+- [x] Reproduce opening the title and identify a safe, redacted crash signature.
 - [ ] Fix the demonstrated cause without dropping episodes or inventing source policy.
 - [ ] A large-series regression exercises the failing boundary and normal navigation.
 - [ ] Native TV acceptance confirms details remain usable and Back returns correctly.
@@ -16,4 +16,11 @@ the app running and displays usable title information and episode selection.
 
 ## Commits and evidence
 
-Research in progress. Android TV opening the title was reported to close the app.
+The old installed APK closed when Search opened Anime Kitsu's 1999 One Piece
+details on the signed-in Windows TV emulator. Android reported an app exception;
+the safe stack enters `CoreModels.initialEpisode` through native `normalize`,
+with `CoreException.InvalidInput`. The adapter sends the episode list twice and
+exceeds the core's 2 MiB input limit. The Rust selection policy needs only the
+original season/episode alongside one full episode list. A Sol worker is fixing
+that request shape and adding a large-series regression. Private logs remain
+ignored; no playback, sign-out or data clearing occurred.

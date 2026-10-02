@@ -5,7 +5,7 @@ two-line window. Focused overflowing text scrolls vertically from its beginning
 to its end, allowing the torrent details to be read without widening the panel.
 
 **Blocked by:** None (design is already committed).
-**Status:** in-progress
+**Status:** in-review
 **Triage:** ready-for-agent
 **Owner:** source_picker_android and source_picker_tv (GPT-6 Sol, low).
 **Contract:** SRC-OVERFLOW-001 at design ce7084ff80d0541257509748ea772ef0f95d8058.
@@ -18,4 +18,7 @@ to its end, allowing the torrent details to be read without widening the panel.
 
 ## Commits and evidence
 
-Pending implementation and qualification.
+Android implementation: `0fd492c`, with viewport anchoring/compile correction
+`3a1e7f7` and controlled native rendering check `5351223`. The isolated API 36
+TV emulator passed the measured-overflow, pixel-movement and blur-reset test.
+TV-web implementation: `61dc20c`; final browser/build evidence is being recorded.

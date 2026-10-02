@@ -9,7 +9,7 @@ not merge their choices or make their source rows indistinguishable.
 **Triage:** needs-triage
 **Owner:** provider_anime_research (GPT-6 Luna, max); implementation assigned after findings.
 
-- [ ] Read-only inspection confirms the affected account's installed add-ons.
+- [x] Read-only inspection confirms the affected account's installed add-ons.
 - [ ] Trace configured identity/name through discovery, shared core and both clients.
 - [ ] Group by stable installed add-on identity and show the configured provider name.
 - [ ] Filtering selects only that add-on's sources; exact Resume identity remains intact.
@@ -17,4 +17,10 @@ not merge their choices or make their source rows indistinguishable.
 
 ## Commits and evidence
 
-Research in progress. No configuration or personal viewing data changed.
+Read-only inspection confirms separate enabled Torrentio, TorrentsDB and
+Torrentio TB add-ons on the signed-in TV account. Their configured names and
+IDs are distinct. The current shared projection and generated DTO retain the
+add-on ID and source name, so an identity collision has not been established.
+One live title returned 38 sources from a single visible provider. Research is
+checking a common title and discovery results before changing grouping logic.
+No configuration or personal viewing data changed.
