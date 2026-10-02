@@ -17,10 +17,13 @@ import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import org.viptv.app.theme.ViptvColor as C
 import kotlinx.coroutines.flow.first
+import coil.compose.AsyncImage
 
 /** The displayed episode number is metadata, not a row position. Preserve backend row order. */
 internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
@@ -50,6 +53,10 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     var jumpCancelRequest by remember(media.id) { mutableIntStateOf(0) }
     var info by remember { mutableStateOf(false) }
     val episodes = remember(media, season) { media.episodes.filter { (it.season ?: 1) == season } }
+    // Keep the parent artwork facts small; the full series may contain thousands of episodes.
+    val episodeArtworkContext = remember(media.id, media.name, media.poster, media.backdrop, media.thumbnail) {
+        Media(media.id, media.type, name = media.name, poster = media.poster, backdrop = media.backdrop, thumbnail = media.thumbnail)
+    }
     val target = playEpisode?.withArtworkFrom(media) ?: media.takeUnless { it.type == "series" && it.episode == null }
     val retryDetail = !app.loading && app.message != null && media.episodes.isEmpty()
     val saved = app.favorites.any { it.id == media.id && it.type == media.type }
@@ -158,13 +165,13 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                             EpisodeCard(episode, Modifier.width(360.dp).focusRequester(episodeFocus[index]),
                                 onClick = { selectedEpisode = index; restoreEpisodes = true; controller.chooseSources(episode.withArtworkFrom(media)) },
                                 onHold = { controller.requestDialog(DialogKind.EpisodeManage, episode.episodeTitle ?: episode.name, episode) },
-                                onFocused = { selectedEpisode = index; focusedEpisodeIndex = index })
+                                onFocused = { selectedEpisode = index; focusedEpisodeIndex = index }, artworkContext = episodeArtworkContext)
                         }
                     }
                 } else itemsIndexed(episodes, key = { _, item -> item.id }) { _, episode ->
                     EpisodeCard(episode, Modifier.padding(horizontal = 20.dp, vertical = 10.dp).fillMaxWidth(),
                         onClick = { controller.chooseSources(episode.withArtworkFrom(media), episode.positionMillis > 0) },
-                        onHold = { controller.requestDialog(DialogKind.EpisodeManage, episode.episodeTitle ?: episode.name, episode) })
+                        onHold = { controller.requestDialog(DialogKind.EpisodeManage, episode.episodeTitle ?: episode.name, episode) }, artworkContext = episodeArtworkContext)
                 }
             }
         }
@@ -207,23 +214,30 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     }
 }
 
-@Composable private fun EpisodeCard(media: Media, modifier: Modifier, onClick: () -> Unit, onHold: () -> Unit, onFocused: (() -> Unit)? = null) {
+@Composable internal fun EpisodeCard(media: Media, modifier: Modifier, onClick: () -> Unit, onHold: () -> Unit, onFocused: (() -> Unit)? = null, artworkContext: Media? = null) {
     val tv = LocalTv.current
-    val card = remember(media) { CoreModels.card(media, true) }
+    val enriched = remember(media, artworkContext) { artworkContext?.let { media.withArtworkFrom(it) } ?: media }
+    var failed by remember(media.id, enriched.thumbnail, enriched.poster, enriched.backdrop) { mutableStateOf(emptySet<String>()) }
+    val card = remember(enriched, failed) { CoreModels.card(enriched, true, failed) }
+    val image = card.image
     var focused by remember { mutableStateOf(false) }
     val closeRail = LocalCloseRail.current
     Holdable(onClick, onHold, modifier.onFocusChanged { focused = it.isFocused; if (focused) { closeRail(); onFocused?.invoke() } }) {
         if (tv) Column {
-            Box(Modifier.size(360.dp, 200.dp).clip(RoundedCornerShape(16.dp)).background(C.surfaceN2).border(if (focused) 4.dp else 0.dp, if (focused) C.fillWhite else Color.Transparent, RoundedCornerShape(16.dp))) {
-                Artwork(card.image, media.episodeTitle, Modifier.fillMaxSize())
+            Box(Modifier.size(360.dp, 200.dp).testTag("episode-artwork").clip(RoundedCornerShape(16.dp)).background(C.surfaceN2).border(if (focused) 4.dp else 0.dp, if (focused) C.fillWhite else Color.Transparent, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+                if (image.isNullOrBlank()) VText(card.title, 24, Modifier.padding(12.dp), C.textSecondary, bold = true, lines = 2, align = TextAlign.Center)
+                else AsyncImage(image, card.title, Modifier.fillMaxSize(), contentScale = if (card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
+                    onError = { failed = failed + image })
                 if (media.positionMillis > 0) ProgressLine(card.progress?.toFloat() ?: 0f, Modifier.align(Alignment.BottomCenter).padding(14.dp))
             }
             VText("EPISODE " + media.episode, 18, Modifier.padding(top = 14.dp), C.textSecondary, bold = true)
             VText(media.episodeTitle ?: media.name, 24, Modifier.padding(top = 8.dp), bold = true, lines = 1)
             VText(media.description.orEmpty(), 20, Modifier.padding(top = 14.dp), C.textSecondary, lines = 2)
         } else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(124.dp, 76.dp).clip(RoundedCornerShape(12.dp)).background(C.surfaceN2)) {
-                Artwork(card.image, null, Modifier.fillMaxSize())
+            Box(Modifier.size(124.dp, 76.dp).testTag("episode-artwork").clip(RoundedCornerShape(12.dp)).background(C.surfaceN2), contentAlignment = Alignment.Center) {
+                if (image.isNullOrBlank()) VText(card.title, 13, Modifier.padding(8.dp), C.textSecondary, bold = true, lines = 2, align = TextAlign.Center)
+                else AsyncImage(image, card.title, Modifier.fillMaxSize(), contentScale = if (card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
+                    onError = { failed = failed + image })
                 if (media.positionMillis > 0) ProgressLine(card.progress?.toFloat() ?: 0f, Modifier.align(Alignment.BottomCenter).padding(8.dp))
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
