@@ -116,6 +116,16 @@ Search keeps separate progressive catalog shelves; Back dismisses native input
 before leaving its screen/dialog. Roku and TV-web retain their current inputs.
 The Android contract records focus, Results, secret input and return acceptance.
 
+## Native Android TV media-row edge (AND-TV-ROW-EDGE-001)
+
+The 2026-10-02 owner request extends horizontal Android TV media card rows,
+including Popular movies and Details episodes, through the right viewport edge.
+This explicitly supersedes the general 96 px right safe inset and TV-034's
+1824 px final-card bound **for native Android TV media rows only**. Headings,
+text and non-media content keep their safe inset. The
+[media-row contract](../specs/behavior/android-tv-media-rows.md) defines the
+geometry, focus restoration and acceptance cases.
+
 ## Android TV episode-number jump (AND-EPISODE-JUMP-001)
 
 The proposed compact `Episode #` chip beside the season badge opens a native

@@ -85,7 +85,7 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
                 }
             }
             itemsIndexed(shelves, key = { _, shelf -> shelf.id }) { row, shelf ->
-                Box(Modifier.padding(start = measure(192, 0), end = measure(96, 0))) { ShelfRow(shelf, row, state, controller) }
+                Box(Modifier.padding(start = measure(192, 0))) { ShelfRow(shelf, row, state, controller) }
             }
         }
     }
@@ -161,7 +161,7 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
         }
     }
     Column {
-        Row(Modifier.fillMaxWidth().padding(bottom = measure(18, 12)), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(end = measure(96, 0), bottom = measure(18, 12)), verticalAlignment = Alignment.CenterVertically) {
             VText(if (shelf.isQueueShelf) "Continue watching" else if (tv) shelf.title else PhonePresentationPolicy.shelfHeading(shelf), if (tv) 32 else 20, Modifier.weight(1f), display = true, lines = 1)
             if (!tv && shelf.isQueueShelf) Holdable({ controller.openContinueWatching() }, modifier = Modifier.height(44.dp).padding(start = 12.dp)) { VText("See all", 13, color = C.textSecondary) }
         }

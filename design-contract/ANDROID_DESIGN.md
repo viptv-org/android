@@ -246,6 +246,11 @@ normalization, artwork, source identity, progress and continuation rules.
   4px focus rings. Scale the complete TV reference uniformly to the viewport.
   Share rail coordinates between collapsed/expanded states. Focused items do
   not move or resize; rows scroll enough to reveal every selected item.
+  Horizontal media-card rows follow the proposed
+  [AND-TV-ROW-EDGE-001](specs/behavior/android-tv-media-rows.md) exception:
+  their viewport reaches the right edge while retaining small existing focus
+  padding instead of the general 96px right inset. Headers, text and non-media content retain
+  the safe inset. TV-034's 1824px final-card bound remains for shared TV-web.
 - Phones follow the phone references at native density: Onest body text,
   Bricolage display type, 16dp gutters, rounded hero, 54dp primary controls,
   44dp minimum touch targets, and a floating Home/Discover/Live/My List bar

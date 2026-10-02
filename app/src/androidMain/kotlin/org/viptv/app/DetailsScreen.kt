@@ -117,7 +117,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     }
     Box(Modifier.fillMaxSize()) {
         if (tv) HeroBackdrop(media)
-        LazyColumn(Modifier.fillMaxSize(), state = pageScroll, contentPadding = if (tv) PaddingValues(start = 192.dp, end = 96.dp, top = 96.dp, bottom = 54.dp) else PaddingValues(bottom = 200.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), state = pageScroll, contentPadding = if (tv) PaddingValues(start = 192.dp, top = 96.dp, bottom = 54.dp) else PaddingValues(bottom = 200.dp)) {
             item {
                 if (!tv) Box(Modifier.fillMaxWidth().height(352.dp)) {
                     Artwork(presentation.heroImage, null, Modifier.fillMaxSize())
@@ -144,7 +144,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
             }
             if (seasons.isNotEmpty()) {
                 item {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = if (tv) 0.dp else 20.dp, vertical = if (tv) 0.dp else 28.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(measure(24, 14))) {
+                    Row(Modifier.fillMaxWidth().padding(start = if (tv) 0.dp else 20.dp, end = if (tv) 96.dp else 20.dp, top = if (tv) 0.dp else 28.dp, bottom = if (tv) 0.dp else 28.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(measure(24, 14))) {
                         AppChip("Season $season", { seasonPicker = true }, selected = true)
                         if (tv && episodes.isNotEmpty()) AppChip("Episode #", { jumpOrigin = media.id to season; jumpEntry = true },
                             modifier = Modifier.focusRequester(jumpFocus).onFocusChanged { jumpFocused = it.isFocused }

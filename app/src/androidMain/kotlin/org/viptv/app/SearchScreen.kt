@@ -84,10 +84,10 @@ import org.viptv.app.theme.ViptvColor as C
             lastShownEntry = state.searchEntryEpoch
         }
     }
-    Column(Modifier.fillMaxSize().imePadding().padding(start = measure(192, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
-        ScreenHeader("Search", if (tv) null else controller::back)
+    Column(Modifier.fillMaxSize().imePadding().padding(start = measure(192, 16), end = measure(0, 16), top = measure(54, 12), bottom = measure(54, 0))) {
+        Box(Modifier.fillMaxWidth().padding(end = measure(96, 0))) { ScreenHeader("Search", if (tv) null else controller::back) }
         if (tv) Column(Modifier.fillMaxSize()) {
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            Row(Modifier.padding(end = 96.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 key(state.selectedProfile?.id) { TvSearchField(state.searchQuery, controller::search, openKeyboardOnFocus,
                     Modifier.width(960.dp).height(80.dp).focusRequester(first).focusProperties { left = rail; right = resultsButton }
                         .onPreviewKeyEvent { event ->
@@ -106,7 +106,7 @@ import org.viptv.app.theme.ViptvColor as C
                         }, onSubmit = ::enterResults) }
                 AppButton("Results", ::enterResults, Modifier.width(220.dp).focusRequester(resultsButton).focusProperties { left = first })
             }
-            VText(state.searchStatus, 22, Modifier.padding(top = 24.dp, bottom = 20.dp), C.textTertiary)
+            VText(state.searchStatus, 22, Modifier.padding(top = 24.dp, end = 96.dp, bottom = 20.dp), C.textTertiary)
             LazyColumn(state = resultRows, verticalArrangement = Arrangement.spacedBy(36.dp), contentPadding = PaddingValues(4.dp)) {
                 items(state.searchSections, key = { state.searchQuery + "\u0000" + it.id }) { section ->
                     SearchResultShelf(section, first, if (section.id == entrySection) entryRequest else 0, { entrySection = null }, controller)
@@ -174,8 +174,8 @@ import org.viptv.app.theme.ViptvColor as C
         }
     }
     Column {
-        VText(section.source, 28, lines = 2, display = true)
-        VText(listOfNotNull(section.type?.let { DiscoverPolicy.groupLabel(DiscoverPolicy.typeGroup(it)) }, "${section.items.size} results").joinToString(" · "), 20, Modifier.padding(top = 6.dp), C.textTertiary)
+        VText(section.source, 28, Modifier.padding(end = 96.dp), lines = 2, display = true)
+        VText(listOfNotNull(section.type?.let { DiscoverPolicy.groupLabel(DiscoverPolicy.typeGroup(it)) }, "${section.items.size} results").joinToString(" · "), 20, Modifier.padding(top = 6.dp, end = 96.dp), C.textTertiary)
         LazyRow(state = horizontal, modifier = Modifier.padding(top = 18.dp).focusGroup(), horizontalArrangement = Arrangement.spacedBy(36.dp), contentPadding = PaddingValues(4.dp)) {
             itemsIndexed(section.items, key = { _, item -> HomeFocusPolicy.mediaKey(item) }) { index, media ->
                 MediaCard(media, Modifier.then(if (index == 0) Modifier.focusRequester(first).focusProperties { left = keyboard } else Modifier),
