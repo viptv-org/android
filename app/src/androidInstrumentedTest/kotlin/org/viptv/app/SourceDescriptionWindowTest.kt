@@ -12,7 +12,6 @@ import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
@@ -35,7 +34,7 @@ class SourceDescriptionWindowTest {
         }
         val window = compose.onNodeWithTag("source-description-window")
         window.assertContentDescriptionEquals(description)
-        val height = window.getUnclippedBoundsInRoot().height
+        val height = window.fetchSemanticsNode().boundsInRoot.height
         val first = window.captureToImage().toPixelMap()
         fun fingerprint() = window.captureToImage().toPixelMap().let { pixels ->
             (0 until pixels.height).sumOf { y ->
@@ -46,7 +45,7 @@ class SourceDescriptionWindowTest {
         compose.runOnIdle { active.value = true }
         compose.mainClock.advanceTimeBy(4000)
         compose.waitForIdle()
-        assertEquals(height, window.getUnclippedBoundsInRoot().height)
+        assertEquals(height, window.fetchSemanticsNode().boundsInRoot.height)
         assertNotEquals(initialInk, fingerprint())
         compose.runOnIdle { active.value = false }
         compose.waitForIdle()

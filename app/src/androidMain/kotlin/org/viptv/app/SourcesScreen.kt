@@ -161,7 +161,7 @@ import org.viptv.app.theme.ViptvColor as C
         }
     }
     Box(modifier.fillMaxWidth().height(viewport).clipToBounds().semantics { contentDescription = text }.testTag("source-description-window")) {
-        Text(text, Modifier.fillMaxWidth().wrapContentHeight(unbounded = true).graphicsLayer { translationY = -offset.value }, color = color,
+        Text(text, Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).graphicsLayer { translationY = -offset.value }, color = color,
             fontSize = size.sp, fontFamily = Onest, fontWeight = FontWeight.Normal,
             lineHeight = lineHeight, softWrap = true, maxLines = Int.MAX_VALUE, overflow = TextOverflow.Clip,
             onTextLayout = { textHeight = it.size.height })
