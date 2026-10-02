@@ -12,9 +12,11 @@ import androidx.compose.ui.focus.*
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import org.viptv.app.theme.ViptvColor as C
 
 @Composable internal fun SearchScreen(state: AppState, controller: AppController) {
@@ -24,6 +26,7 @@ import org.viptv.app.theme.ViptvColor as C
     var filter by rememberSaveable { mutableStateOf("All") }
     var lastShownEntry by rememberSaveable(state.selectedProfile?.id) { mutableIntStateOf(0) }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val resultsButton = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
@@ -36,9 +39,10 @@ import org.viptv.app.theme.ViptvColor as C
         }
     }
     fun enterResults() {
-        keyboard?.hide()
         val sectionIndex = state.searchSections.indexOfFirst { it.items.isNotEmpty() }
-        if (sectionIndex < 0) { runCatching { first.requestFocus() }; return }
+        if (sectionIndex < 0) { keyboard?.hide(); runCatching { first.requestFocus() }; return }
+        focusManager.clearFocus(force = true)
+        keyboard?.hide()
         val section = state.searchSections[sectionIndex]
         scope.launch {
             resultRows.scrollToItem(sectionIndex)
@@ -93,12 +97,14 @@ import org.viptv.app.theme.ViptvColor as C
 @Composable private fun SearchResultShelf(section: SearchSection, keyboard: FocusRequester, entryRequest: Int, onEntered: () -> Unit, controller: AppController) {
     val horizontal = rememberLazyListState()
     val first = remember { FocusRequester() }
+    val density = LocalDensity.current
+    val ime = WindowInsets.ime
     LaunchedEffect(entryRequest) {
         if (entryRequest > 0) {
             horizontal.scrollToItem(0)
+            snapshotFlow { ime.getBottom(density) }.first { it == 0 }
             withFrameNanos {}
-            runCatching { first.requestFocus() }
-            onEntered()
+            runCatching { first.requestFocus() }.onSuccess { onEntered() }
         }
     }
     Column {
