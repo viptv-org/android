@@ -817,3 +817,36 @@ Anime Kitsu shelves alongside Cinemeta on Home. Captures remain private.
 
 This qualifies emulator Home rendering and the local build/test flow. Physical
 TV behavior, codecs, HDR and playback were not established by this check.
+
+## Android TV sources, navigation and media rows - 2026-10-02
+
+Source descriptions wrap inside a two-line viewport with focused vertical
+traversal. Initial and partial discovery retain a visible loading indicator.
+Installed add-on identities remain separate, including zero/error outcomes.
+Continue Watching episode-source Back opens the parent show's episode selector;
+a second Back returns to the original queue. Native Android IME replaces the
+custom TV keyboard. Episode # beside Season jumps to an actual current-season
+number and focuses its card without starting playback or changing history.
+
+Home (including Popular movies), Search and show episode rows extend to the
+right viewport edge while headers retain their safe inset. Compose LazyRows
+retain virtual composition. Design is pinned to df1a965; shared core remains
+1f8483e. Behavior changes and local evidence are tracked in tickets 01-08 under
+.scratch/source-picker/issues, with narrow commits and independent reviews.
+
+Windows JDK 17 / SDK 36 full flow passed: host core, 222 unit tests with zero
+failures/errors/skips, all three Android core ABIs, normal/test APK assembly,
+and lint (77 warnings, existing error baseline unchanged). Final scoped native
+acceptance passed all five source/input tests together: description overflow,
+progressive loading, masked PIN, cancel and repeated numeric errors/correction.
+The test fixture uses the application's TV reference density.
+
+On the signed-in API 36 Windows TV emulator, One Piece retained 1410 episodes.
+Jumping to 1410 focused the final card; Left focused 1409; jumping to 2 focused
+its card with the same app process alive. Invalid entry retained the editable
+field and accessible error; first Back hid IME and second restored the chip.
+Home/Search/episode geometry and final-card focus were inspected at 1920x1080;
+1280x720 geometry was also checked, then the owner resolution was restored.
+Personal sign-in was preserved and no playback/history write was performed.
+Private captures and logs remain under qualification/artifacts. This evidence
+qualifies emulator UI, not physical-TV codecs, HDR, PiP or playback.
