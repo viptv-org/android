@@ -1,3 +1,61 @@
+# Actual backend/gateway Android TV managed audio — 2026-10-02
+
+Android application baseline `e61f6ffc0775b8fb45544b2d852bdbd6bc5f3ca4`,
+Core `f66c87e13a2c93b6dad3234da9694c57f8530b0a`, unchanged design
+`1742afa2b50d30638fa46f3abc8c1a76638a51e1`. The actual app ran on the owned
+API36 Android TV x86_64 emulator5576, 1920×1080, with emulator audio disabled
+and a generated 120-second H.264/two-silent-AAC torrent. No application or
+layout code changed.
+
+`check-native-managed-audio.py` drove the actual ApplicationShell Home →
+Details → Choose source → Generated torrent addon through native hierarchy
+inspection/taps and ADB-injected remote keys. Account/catalog/discovery,
+encrypted addon/vault, approved source admission, playback leases and gateway
+media were actual backend APIs; responses were not mocked. The synthetic
+account session was provisioned privately in the owned app, so this does not
+qualify login/pairing UI. A fixture-only HTTPS ingress forwards the real APIs
+and media and rewrites only delivery URL origin for emulator routing; the
+production endpoint validator is unchanged. Request/response body lengths
+are recomputed after forwarding/rewriting.
+
+The final uninterrupted automated case passed. Initial delivered HLS was
+AAC/eng. Selecting Spanish created a new lease at 5.772 seconds and the real
+ready descriptor selected input2/spa. A bounded read-only observer captured
+the actual FFmpeg `-map 0:2` and correlated its output segment bytes with the
+served segment, matching exactly one observed output. The runtime deliberately
+tags this transcoded output AAC/und. Both input tracks are silent: this proves
+the selected input and output path, not audible Spanish or an output language
+tag of spa.
+
+Selection returned to Audio; immediate OK reopened Spanish Current without
+directional repair. Native Back and immediate OK retained that control and
+selection. Managed forward seek admitted position65.772 with input2 retained.
+Actual Media3 position advanced72 →81 seconds; the inspected private capture
+showed decoded video with burned-in82.920 seconds and a1:22 player timeline.
+Four lease DELETEs returned200, including explicit Exit. The gateway reclaimed
+all2 input/2 output/4 viewer slots; its deterministic peer delivered4,014,682
+bytes over19,924ms. The fixture test passed and checked cache/peer teardown;
+the runner exited0 and all owned backend/gateway ingress listeners stopped.
+
+Execution provenance: backend fixture source `d52a9c1422c94ea4e2d866cef3e135484473595e`,
+observer source `31b2dc8551bc682cb9b60a0984b9b979308c31e4`, immutable copied
+gateway driver `20e515faa03a254963db03c540a4596484ffab2f`, service image
+`sha256:3ed14fbbf179d9d4a326b6e798118ad62c209f01a7fdf3d0524233a52e367825`.
+The private launcher used an immutable driver path and a local sudo Docker
+wrapper; its Git blob was `8211fccc7efa273b9065b44c3a5281b15cacbf72`, not a
+claim of byte identity with a published backend runner. Earlier expired,
+fixture-handshake, operator-framing and helper-calibration attempts are excluded.
+
+Core/design integrity and helper syntax passed. The unchanged ordinary
+system-trust debug APK from the Core f66 build still contains all three Core
+ABIs and excludes fixture CA material. Only the isolated installed QA APK uses
+the explicit fixture certificate. The previously recorded fresh237 host tests,
+three-ABI build, normal/instrumentation assembly and lint remain that build's
+checks; no fresh broad suite is claimed for these operator helpers/docs.
+Physical hardware, audible fidelity, HDR/DRM, Guide pixel parity/rail/OS IME,
+store signing and production delivery remain unqualified. Private source URLs,
+credentials, proc arguments, segment bytes, logs and captures remain ignored.
+
 # Current Core Android TV Guide remote chain — 2026-10-02
 
 Baseline: Android main `7b0d00c`, Core
