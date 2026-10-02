@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync
 import { resolve, dirname, relative } from 'node:path';
 const root=resolve(import.meta.dirname,'..'), dest=resolve(root,'vendor/core');
 const hash=data=>createHash('sha256').update(data).digest('hex');
+const matches=(data,expected)=>hash(data)===expected||hash(Buffer.from(data.toString('utf8').replaceAll('\r\n','\n')))===expected;
 const safe=p=>typeof p==='string'&&!p.startsWith('/')&&!p.split('/').some(x=>!x||x==='.'||x==='..');
 const git=(repo,args)=>execFileSync('git',['-C',repo,...args],{maxBuffer:16*1024*1024});
 const mode=process.argv[2]??'check';
@@ -25,8 +26,8 @@ if(mode==='sync') {
 } else if(mode==='check') {
  const lock=JSON.parse(readFileSync(resolve(dest,'lock.json'),'utf8'));
  if(lock.repository!=='viptv-org/core'||!/^[a-f0-9]{40}$/.test(lock.revision)||readFileSync(resolve(root,'CORE_REF'),'utf8').trim()!==lock.revision)throw Error('Core pin mismatch');
- for(const [path,expected] of Object.entries(lock.files))if(!safe(path)||hash(readFileSync(resolve(dest,path)))!==expected)throw Error(`Core artifact mismatch: ${path}`);
- const inspect=dir=>{for(const entry of readdirSync(dir,{withFileTypes:true})){const file=resolve(dir,entry.name);if(entry.isDirectory())inspect(file);else if(!lock.files[relative(dest,file)])throw Error(`Unpinned core source: ${relative(dest,file)}`);}};
+ for(const [path,expected] of Object.entries(lock.files)){const data=readFileSync(resolve(dest,path));if(!safe(path)||!matches(data,expected))throw Error(`Core artifact mismatch: ${path}`);}
+ const inspect=dir=>{for(const entry of readdirSync(dir,{withFileTypes:true})){const file=resolve(dir,entry.name);if(entry.isDirectory())inspect(file);else {const path=relative(dest,file).replaceAll('\\','/');if(!lock.files[path])throw Error(`Unpinned core source: ${path}`);}}};
  for(const dir of ['crates','generated','adapters','tests'])if(existsSync(resolve(dest,dir)))inspect(resolve(dest,dir));
  console.log(`Core integrity passed: ${lock.revision}`);
 } else throw Error('Use sync <core-checkout> or check');

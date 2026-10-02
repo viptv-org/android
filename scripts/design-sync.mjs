@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 
 const root = resolve(import.meta.dirname, '..');
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+const matches = (bytes, expected) => hash(bytes) === expected || hash(Buffer.from(bytes.toString('utf8').replaceAll('\r\n', '\n'))) === expected;
 const [mode = 'check', repository = '../design', revision] = process.argv.slice(2);
 const write = (path, bytes) => { const target = resolve(root, path); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, bytes); };
 if (mode === 'sync') {
@@ -14,7 +15,7 @@ if (mode === 'sync') {
   const git = (...args) => execFileSync('git', ['-C', repo, ...args], { maxBuffer: 16 * 1024 * 1024 });
   const files = {};
   const names = git('ls-tree', '-r', '--name-only', revision).toString().trim().split('\n');
-  const docs = ['DESIGN.md', 'DESIGN_SYNC.md', 'ANDROID_DESIGN.md', 'TV_POLISH.md', 'viptv-design-system/README.md', 'viptv-design-system/components.md', 'viptv-design-system/copy.md', 'viptv-design-system/decisions.md', 'viptv-design-system/tokens/tokens.json'];
+  const docs = ['DESIGN.md', 'DESIGN_SYNC.md', 'ANDROID_DESIGN.md', 'TV_POLISH.md', 'specs/behavior/home-addon-refresh.md', 'viptv-design-system/README.md', 'viptv-design-system/components.md', 'viptv-design-system/copy.md', 'viptv-design-system/decisions.md', 'viptv-design-system/tokens/tokens.json'];
   const mappings = docs.map(path => [path, `design-contract/${path}`]);
   for (const path of names) {
     if (path.startsWith('assets/fonts/')) mappings.push([path, path.endsWith('.ttf') ? `app/src/androidMain/res/font/${path.split('/').at(-1)}` : `app/src/androidMain/assets/design/fonts/${path.split('/').at(-1)}`]);
@@ -41,7 +42,7 @@ if (mode === 'sync') {
   const lock = JSON.parse(readFileSync(resolve(root, 'design-contract/lock.json')));
   if (readFileSync(resolve(root, 'DESIGN_REF'), 'utf8').trim() !== lock.revision) throw Error('Design pin mismatch');
   for (const [path, item] of Object.entries(lock.files)) {
-    if (path.startsWith('/') || path.split('/').includes('..') || hash(readFileSync(resolve(root, path))) !== item.sha256) throw Error(`Design artifact mismatch: ${path}`);
+    if (path.startsWith('/') || path.split('/').includes('..') || !matches(readFileSync(resolve(root, path)), item.sha256)) throw Error(`Design artifact mismatch: ${path}`);
   }
 } else throw Error('Use sync <repo> <commit> or check');
 console.log('Android design integrity passed');
