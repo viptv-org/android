@@ -94,7 +94,7 @@ sealed interface Route {
     data object Pairing : Route
     data object Profiles : Route
     data class Browse(val destination: Destination) : Route
-    data class Details(val media: Media) : Route
+    data class Details(val media: Media, val entryId: Long = 0L) : Route
     data class Sources(val media: Media, val resume: Boolean = false, val origin: SourceReturn = SourceReturn.Details, val backRoute: Route? = null, val queueEpisodeReturn: Boolean = false) : Route
     data class Player(val media: Media, val source: Source, val returnDestination: PlaybackReturn = PlaybackReturn.Details, val directOrigin: Route? = null, val sourceRoute: Sources? = null) : Route
     data object Search : Route

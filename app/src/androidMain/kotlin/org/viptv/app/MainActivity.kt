@@ -113,9 +113,9 @@ class ViptvModel(application: Application) : AndroidViewModel(application) {
 
 }
 
-private fun Route.screenKey(): String = when (this) {
+internal fun Route.screenKey(): String = when (this) {
     is Route.Browse -> "browse:" + destination.name
-    is Route.Details -> "detail:" + media.id
+    is Route.Details -> "detail:${media.id}:$entryId"
     is Route.Player -> "player:" + media.id
     is Route.Sources -> "sources:" + media.id
     is Route.ProfileEditor -> "profile:" + profile?.id
