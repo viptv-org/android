@@ -28,8 +28,12 @@ enum class SourceReturn { Details, Home }
 object SourceReturnPolicy {
     /** A queue episode's title route addresses its parent, retaining the episode cursor. */
     fun parentSeries(media: Media): Media? {
-        val id = media.seriesId?.takeIf(String::isNotBlank) ?: return null
-        if (media.type != "episode") return null
+        if (media.season == null || media.episode == null) return null
+        val id = when (media.type) {
+            "episode" -> media.seriesId
+            "series" -> media.seriesId ?: media.id
+            else -> null
+        }?.takeIf(String::isNotBlank) ?: return null
         return Media(id, "series", media.name, poster = media.poster, description = media.description,
             season = media.season, episode = media.episode, backdrop = media.backdrop,
             thumbnail = media.thumbnail)

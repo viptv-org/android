@@ -20,4 +20,14 @@ class ContinueWatchingSourceReturnTest {
         assertNull(SourceReturnPolicy.parentSeries(Media("movie-1", "movie", "Movie")))
         assertNull(SourceReturnPolicy.parentSeries(Media("orphan-episode", "episode", "Episode")))
     }
+
+    @Test fun queueSeriesWithEpisodeCoordinatesReturnsToItsShow() {
+        val queueItem = Media("series-42", "series", "The Show", season = 2, episode = 9)
+
+        val parent = SourceReturnPolicy.parentSeries(queueItem)
+
+        assertEquals("series-42", parent?.id)
+        assertEquals(2, parent?.season)
+        assertEquals(9, parent?.episode)
+    }
 }

@@ -195,7 +195,7 @@ import org.viptv.app.theme.ViptvColor as C
                     if (QueuePolicy.canResume(media)) add("Resume" to { controller.resumeQueueItem(media) })
                     add("Choose source" to { controller.chooseQueueSource(media) })
                     add("Mark watched" to { controller.correctEpisode(media, true); controller.dismissDialog() })
-                    add("Watch from beginning" to { controller.dismissDialog(); controller.chooseSources(media.copy(positionMillis = 0), origin = SourceReturn.Home, queueEpisodeReturn = media.type == "episode") })
+                    add("Watch from beginning" to { controller.dismissDialog(); controller.chooseSources(media.copy(positionMillis = 0), origin = SourceReturn.Home, queueEpisodeReturn = SourceReturnPolicy.parentSeries(media) != null) })
                     add("Remove from Continue Watching" to { controller.removeFromQueue(media) })
                 }
                 add("Cancel" to dismiss)

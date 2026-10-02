@@ -9,9 +9,9 @@ import kotlinx.coroutines.launch
 internal fun AppController.activateCard(media: Media, queue: Boolean = false, origin: SourceReturn = sourceOrigin()) {
     when (CoreModels.card(media, queue).primaryAction) {
         "play" -> start(media, Source(media.id, "Live TV", media.name, channelId = media.id))
-        "resume" -> chooseSources(media, true, origin, queueEpisodeReturn = queue && media.type == "episode")
+        "resume" -> chooseSources(media, true, origin, queueEpisodeReturn = queue && SourceReturnPolicy.parentSeries(media) != null)
         "next" -> playQueuedNext(media)
-        "sources" -> chooseSources(media, origin = origin, queueEpisodeReturn = queue && media.type == "episode")
+        "sources" -> chooseSources(media, origin = origin, queueEpisodeReturn = queue && SourceReturnPolicy.parentSeries(media) != null)
         "episodes", "details" -> open(media)
         else -> fail(IllegalStateException("This card action is unavailable."))
     }
