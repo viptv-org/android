@@ -297,15 +297,17 @@ private var cachedAvatarCatalog: List<AvatarCategory>? = null
         val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         fun submit() { val submitted = value; keyboard?.hide(); if (secret) value = ""; onDone(submitted) }
         BackHandler { if (imeVisible) keyboard?.hide() else { value = ""; onCancel() } }
-        VText(instruction, if (tv) 24 else 15, color = C.textSecondary)
-        Spacer(Modifier.height(24.dp))
-        AppField(value, ::edit, if (secret) "Parent PIN" else title,
-            Modifier.focusRequester(first).then(if (tv) Modifier.widthIn(max = 960.dp) else Modifier),
-            secret = secret, onSubmit = ::submit)
-        Spacer(Modifier.height(measure(32, 24)))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            AppButton(if (secret) "Unlock" else "Done", ::submit, Modifier.weight(1f), primary = true)
-            AppButton("Cancel", { value = ""; keyboard?.hide(); onCancel() }, Modifier.weight(1f))
+        Column(Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+            VText(instruction, if (tv) 24 else 15, color = C.textSecondary)
+            Spacer(Modifier.height(24.dp))
+            AppField(value, ::edit, if (secret) "Parent PIN" else title,
+                Modifier.focusRequester(first).then(if (tv) Modifier.widthIn(max = 960.dp) else Modifier),
+                secret = secret, onSubmit = ::submit)
+            Spacer(Modifier.height(measure(32, 24)))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                AppButton(if (secret) "Unlock" else "Done", ::submit, Modifier.weight(1f), primary = true)
+                AppButton("Cancel", { value = ""; keyboard?.hide(); onCancel() }, Modifier.weight(1f))
+            }
         }
         LaunchedEffect(title) { withFrameNanos {}; runCatching { first.requestFocus() }; keyboard?.show() }
     }

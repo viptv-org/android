@@ -22,7 +22,10 @@ internal fun AppController.navigate(destination: Destination) = scope.launch {
     if (destination == Destination.Settings) { openSettings(); return@launch }
     if (destination == Destination.MyList) { openMyList(); return@launch }
     if (destination == Destination.Live) { openLive(); return@launch }
-    if (destination == Destination.Search) { _state.value = _state.value.copy(route = Route.Search, loading = false); return@launch }
+    if (destination == Destination.Search) {
+        _state.value = _state.value.copy(route = Route.Search, loading = false, searchEntryEpoch = _state.value.searchEntryEpoch + 1)
+        return@launch
+    }
     if (destination == Destination.Discover) { openDiscover(); return@launch }
     _state.value = _state.value.copy(route = Route.Browse(Destination.Home), loading = false, message = null)
     requestHomeFocusRestore()

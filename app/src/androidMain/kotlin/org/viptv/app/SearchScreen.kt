@@ -22,7 +22,7 @@ import org.viptv.app.theme.ViptvColor as C
     val first = LocalContentFocus.current
     val rail = LocalRailFocus.current
     var filter by rememberSaveable { mutableStateOf("All") }
-    var firstEntry by rememberSaveable { mutableStateOf(true) }
+    var lastShownEntry by rememberSaveable(state.selectedProfile?.id) { mutableIntStateOf(0) }
     val keyboard = LocalSoftwareKeyboardController.current
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val resultsButton = remember { FocusRequester() }
@@ -48,10 +48,13 @@ import org.viptv.app.theme.ViptvColor as C
     }
     BackHandler(tv && imeVisible) { keyboard?.hide() }
     DisposableEffect(Unit) { onDispose { keyboard?.hide() } }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(state.searchEntryEpoch) {
         withFrameNanos {}
         runCatching { first.requestFocus() }
-        if (firstEntry) { keyboard?.show(); firstEntry = false }
+        if (tv && state.searchEntryEpoch > lastShownEntry) {
+            keyboard?.show()
+            lastShownEntry = state.searchEntryEpoch
+        }
     }
     Column(Modifier.fillMaxSize().imePadding().padding(start = measure(192, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
         ScreenHeader("Search", if (tv) null else controller::back)

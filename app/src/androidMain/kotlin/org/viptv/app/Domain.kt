@@ -160,6 +160,8 @@ data class AppState(
     val queueContinuationPending: Boolean = false,
     /** Query-owned state survives focus moves between keyboard and source-labelled rows. */
     val searchQuery: String = "",
+    /** Increments only for explicit Search navigation, never for a details return. */
+    val searchEntryEpoch: Int = 0,
     val searchStatus: String = "Find your next favorite.",
     val searchSections: List<SearchSection> = emptyList(),
     val searchResults: List<Media> = emptyList(), // Compatibility projection for older surfaces.
