@@ -1,5 +1,29 @@
 # Native Android design qualification
 
+## Actual TV shell/OS keyboard and phone font/insets
+
+Prepare the explicit-CA QA APK and owned emulator before starting a fresh
+`start-fixture.sh --tv` listener on9444. From a worktree, set
+`ANDROID_FIXTURE_TV_WEB` to the intended sibling fixture checkout. Require
+verified HTTPS200 from `/__requests` before actions. Then run
+`python3 qualification/check-guide-shell-ime.py --directory qualification/artifacts/guide-shell-ime`.
+It restarts only the owned TV QA app and uses its synthetic profile gate,
+actual rail and Guide, then the API36 TV LatinIME D-pad letter grid and OS Done.
+It verifies future Details/native Back without focus repair or autoplay.
+The fixed keyboard sequence is specific to this named emulator/IME; another
+keyboard must be inspected and qualified separately.
+
+For phone inspection, use owned emulator5574 with the phone fixture on9443 at
+390×844dp (780×1688 pixels/320dpi). Record the original font setting, then use
+the Android documented font-scale setting to compare1.0 and1.3. Navigate the
+synthetic app to Home, Title or Search with native IME shown; invoke
+`capture-phone-font-insets.py --directory qualification/artifacts/phone-font-insets
+--state home|title|search-insets --font-scale 1.0|1.3` with one concrete state
+and value. This helper validates/captures the current route; it does not drive
+navigation or claim pixel parity. Inspect each private capture before recording
+it. Restore only the owned emulator's setting/viewport, clear its synthetic app
+state and stop the owned processes. Exact accepted observations are in TESTING.md.
+
 ## Actual managed torrent audio
 
 The three `native-*`/`check-native-managed-audio.py` helpers operate the owned

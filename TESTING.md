@@ -1,3 +1,55 @@
+# Actual shell/native TV keyboard and phone text insets — 2026-10-02
+
+Application baseline Android main `4d88d1b328c118ffc7d7a7f69ecce6b8d3db3750`,
+Core `f66c87e13a2c93b6dad3234da9694c57f8530b0a`, design
+`1742afa2b50d30638fa46f3abc8c1a76638a51e1`. No application/layout code changed.
+The isolated synthetic HTTPS fixture uses the same installed app and actual
+controller/HTTP boundary, not an actual backend account/source in this slice.
+
+`check-guide-shell-ime.py` passed on owned API36 Android TV x86_64 emulator5576,
+1920×1080. Starting at actual ApplicationShell Home, D-pad entered the rail,
+selected Live TV, applied News, and reached Search channels. The real OS
+LatinIME was visible; D-pad navigation selected each letter of cnbc and its
+Check/Done action. Captures privately inspected the empty keyboard, complete
+query with Check focused, and returned future programme. No Compose text/IME
+semantics, text injection, touch, Tab or test-only focus request entered this
+successful flow. After the CNBC-only result, ordinary D-pad reached future
+Halftime Report. OK opened Watch live details; native Android Back returned
+to the same focused programme bounds `[1535,503][1818,597]` with CNBC retained.
+The fixture journal showed zero playback-admission delta. This adds actual
+shell/rail/OS-keyboard evidence to PR19's distinct public-composition proof;
+it does not expose the private Compose node ID or qualify physical input.
+
+Phone: owned API36 Google APIs x86_64 emulator5574,390×844dp,780×1688 pixels
+at320dpi. Four final route captures passed `capture-phone-font-insets.py` and
+were inspected: matching Home at1.0 and1.3 font scale, Boruto Title at1.3, and
+Search with query naruto and real native IME shown at1.3. Home's enlarged text
+and action remain usable; the two-line Title, source/provider/count and Play
+fit. The focused Search field bounds `[32,228][748,364]`, filters and first
+result row remain above the keyboard. The helper verifies the private fixture
+origin, HTTPS health/trust, viewport, font setting, route and actual IME before
+capture. These are selected-route observations, not a pixel score, all route
+families, every device/font scale or continuous-typing acceptance.
+
+The ordinary three-ABI system-trust APK was assembled again without fixture CA;
+normal assembly/lint passed in4 seconds. JDK17 explicit-CA QA assembly passed
+in8 seconds; only the owned installed QA APK trusts that fixture. Helper syntax
+and Core/design integrity pass. The shared preview fixture's committed module
+blob was `694478c2eb0cdfde7d2d3bbb8bd012b81588a0f1`; its working bytes matched.
+The
+previous237 host tests/build/lint and managed-audio case were not repeated.
+The TV helper initially collided with an operator UI-tree dump; its bounded
+snapshot retry now follows the existing driver. Mixed-touch/incorrect-route
+calibration captures and a synthetic Resume-envelope failure are excluded.
+No native playback was qualified by these phone captures.
+
+Only the owned phone's font setting was restored to1.0 and viewport overrides
+reset; its synthetic app state was cleared. Both owned emulators and fixture
+listeners stopped. Private images/XML/credentials remain ignored. Guide
+presentation gaps still remain under the standing layout constraint. Physical
+remotes/decoders, audible fidelity, HDR/DRM, signing and production acceptance
+remain separate; broad design#6/android#3 stay open.
+
 # Actual backend/gateway Android TV managed audio — 2026-10-02
 
 Android application baseline `e61f6ffc0775b8fb45544b2d852bdbd6bc5f3ca4`,
