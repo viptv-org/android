@@ -26,11 +26,14 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
     when {
         media.type == "live" -> activateCard(media)
         action == MediaCardAction.PlayQueuedNext -> playQueuedNext(media)
-        action == MediaCardAction.ResumeExactSource -> chooseSources(media, true, SourceReturn.Home)
-        HomeHeroPrimaryPolicy.choosesManualSource(action, queue, media) -> chooseSources(media, origin = SourceReturn.Home)
+        action == MediaCardAction.ResumeExactSource -> chooseHeroSources(media, queue, resume = true)
+        HomeHeroPrimaryPolicy.choosesManualSource(action, queue, media) -> chooseHeroSources(media, queue)
         else -> open(media)
     }
 }
+
+internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resume: Boolean = false) =
+    chooseSources(media, resume, SourceReturn.Home, queueEpisodeReturn = queue && SourceReturnPolicy.parentSeries(media) != null)
 
 @Composable internal fun HomeScreen(state: AppState, controller: AppController) {
     val tv = LocalTv.current
@@ -119,7 +122,7 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
         VText(media.description.orEmpty(), 26, Modifier.offset(y = 394.dp).width(760.dp), C.textBody, lines = 2)
         Row(Modifier.offset(y = 496.dp).onFocusChanged { if (it.hasFocus) controller.recordHomeFocus(shelfIndex, shelfId, media, HomeFocusSurface.Hero) }.focusGroup(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             AppButton(hero.primaryActionLabel, { controller.activateHero(media, queue) }, Modifier.width(228.dp).focusRequester(initial).focusProperties { left = rail },
-                "play", tvAccent = hero.primaryAction == "resume", onHold = { controller.chooseSources(media, origin = SourceReturn.Home) },
+                "play", tvAccent = hero.primaryAction == "resume", onHold = { controller.chooseHeroSources(media, queue) },
                 onFocused = { controller.recordHomeFocus(shelfIndex, shelfId, media, HomeFocusSurface.Hero) })
             AppButton("Details", { controller.open(media) }, Modifier.width(228.dp))
             AppIconButton(if (saved) "check" else "plus", if (saved) "Remove from My List" else "Add to My List", { controller.toggleMyList(media) })

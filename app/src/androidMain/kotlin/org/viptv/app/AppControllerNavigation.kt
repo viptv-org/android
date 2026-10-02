@@ -132,6 +132,16 @@ internal fun AppController.exitPlayback() {
 
 internal fun AppController.exitPlayer(route: Route.Player, media: Media) {
     stopPlayback(media)
+    val sourceRoute = route.sourceRoute
+    val parent = media.takeIf {
+        route.directOrigin == null && route.returnDestination == PlaybackReturn.Details &&
+            sourceRoute?.origin == SourceReturn.Home && sourceRoute.queueEpisodeReturn
+    }?.let(SourceReturnPolicy::parentSeries)
+    if (parent != null) {
+        _state.value = _state.value.copy(dialog = null, message = null)
+        open(parent, returnRoute = sourceRoute?.backRoute ?: Route.Browse(Destination.Home), showWhileLoading = true)
+        return
+    }
     _state.value = _state.value.copy(
         route = PlaybackRecoveryPolicy.returnRoute(route, media),
         dialog = null,
