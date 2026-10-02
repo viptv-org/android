@@ -905,3 +905,16 @@ These checks qualify emulator UI and controller/HTTP fixtures. Actual initialize
 decoder playback, a real final-save HTTP transaction and physical-TV capability
 were not exercised. Missing/failed manual refresh retains the last known position
 and accepted watched fact until an authoritative row arrives.
+## Phone Title dimensions — 2026-10-02
+
+The Title board at pinned design `18b19af378b27655e3b6401f17b92321739dba83`
+defines a 300dp hero and 58dp action buttons. Details now uses that hero height
+and the generated `sizeButtonPhoneDetail` token for Play/Resume, retry, My List
+and More info. Shared control defaults and TV geometry are unchanged.
+
+On the isolated candidate based on Android `a9e4167`, Core and design integrity
+passed. JDK17 host preparation, 228 library/app unit tests (zero failures/errors),
+and debug APK assembly passed with two workers. Lint retained 78 warnings and
+three errors filtered by the existing baseline. All three native Core ABIs were
+built from pinned Core `1f8483e365867f99eb39928cd7f3a23920003515`.
+No emulator visual, native input or physical-device qualification is claimed.

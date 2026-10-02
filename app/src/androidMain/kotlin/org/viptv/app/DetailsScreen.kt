@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import org.viptv.app.theme.ViptvColor as C
+import org.viptv.app.theme.ViptvDimen
 import kotlinx.coroutines.flow.first
 import coil.compose.AsyncImage
 
@@ -126,7 +127,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
         if (tv) HeroBackdrop(media)
         LazyColumn(Modifier.fillMaxSize(), state = pageScroll, contentPadding = if (tv) PaddingValues(start = 192.dp, top = 96.dp, bottom = 54.dp) else PaddingValues(bottom = 200.dp)) {
             item {
-                if (!tv) Box(Modifier.fillMaxWidth().height(352.dp)) {
+                if (!tv) Box(Modifier.fillMaxWidth().height(300.dp)) {
                     Artwork(presentation.heroImage, null, Modifier.fillMaxSize())
                     Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Transparent, LocalGround.current))))
                     if (!presentation.titleLogo.isNullOrBlank()) Artwork(presentation.titleLogo, media.name, Modifier.align(Alignment.BottomStart).padding(20.dp).size(280.dp, 88.dp), ContentScale.Fit, Alignment.CenterStart)
@@ -188,12 +189,12 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                AppIconButton(if (saved) "check" else "plus", "My List", { controller.toggleMyList(media) })
-                if (target != null) AppButton(label, ::play, Modifier.weight(1f), "play", primary = true)
+                AppIconButton(if (saved) "check" else "plus", "My List", { controller.toggleMyList(media) }, Modifier.size(ViptvDimen.sizeButtonPhoneDetail))
+                if (target != null) AppButton(label, ::play, Modifier.weight(1f).height(ViptvDimen.sizeButtonPhoneDetail), "play", primary = true)
                 else if (retryDetail)
-                    AppButton("Try again", { controller.open(media, controller.detailReturnRoute, showWhileLoading = true) }, Modifier.weight(1f))
+                    AppButton("Try again", { controller.open(media, controller.detailReturnRoute, showWhileLoading = true) }, Modifier.weight(1f).height(ViptvDimen.sizeButtonPhoneDetail))
                 else VText(label, 14, Modifier.weight(1f).align(Alignment.CenterVertically), C.textSecondary)
-                AppIconButton("more", "More info", { info = true })
+                AppIconButton("more", "More info", { info = true }, Modifier.size(ViptvDimen.sizeButtonPhoneDetail))
             }
         }
         if (seasonPicker) ChoiceDialog("Season", seasons.map { value -> "Season $value" to { season = value; selectedEpisode = 0; restoreEpisodes = tv; seasonPicker = false } }, { seasonPicker = false })
