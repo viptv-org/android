@@ -797,3 +797,23 @@ failure and automatic recovery. The in-app restoration screen was inspected
 privately under delayed identity response. The immediate system screenshot was
 too early to qualify the OS splash itself. Real Vizio/TV firmware, frame-time
 performance and physical-device OS splash behavior remain unverified.
+
+## HOME-ADDON-001 — Automatic account add-on refresh, 2026-10-01
+
+Android implementation `fddc610` checks the private account catalog revision on
+authenticated Home entry and foreground return, then every 15 seconds while
+Home remains visible. A changed revision refreshes eligible shelves while
+retaining usable rows and focus; failed catalog rows retry on later checks.
+Controller, HTTP and focus regressions cover unchanged revisions, changes,
+load races, background/route/account replacement, and failure recovery.
+
+The Windows JDK 17 / Android SDK Platform 36 host and native flow passed:
+213 unit tests (166 app and 47 library), three Android core ABIs, and the
+normal debug APK assembly. `adb install -r` on the dedicated Windows Android TV
+emulator (port 5572) retained the personal sign-in. After the development
+backend revision became live on dev.embedez.com, the existing app was
+foregrounded. Private inspected captures show imported Continue Watching and
+Anime Kitsu shelves alongside Cinemeta on Home. Captures remain private.
+
+This qualifies emulator Home rendering and the local build/test flow. Physical
+TV behavior, codecs, HDR and playback were not established by this check.
