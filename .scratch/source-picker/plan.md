@@ -18,6 +18,8 @@ client records its exact adopted revision; shared Rust policy stays authoritativ
 | 06 | [Native Android TV keyboard](issues/06-native-android-tv-keyboard.md) | Native IME and focus research; canonical Android UX | Luna research, then Sol implementation |
 | 07 | [Jump to an episode number](issues/07-jump-to-episode.md) | Episode-number/focus research; canonical UX | Luna research, then Sol implementation |
 | 08 | [Media rows reach the right edge](issues/08-media-rows-right-edge.md) | Layout research; canonical UX; coordinate 06/07 files | Luna research, then Sol implementation |
+| 09 | [Blank One Piece episode 1059](issues/09-one-piece-episode-1059-blank.md) | Exact metadata/artwork reproduction | Luna research, then Sol implementation |
+| 10 | [Web video-player Fit/Fill](issues/10-web-player-fit-fill.md) | Canonical player behavior and surface checks | Sol implementation, Luna review |
 
 Workers use GPT-6 Sol with low reasoning for implementation. Independent
 validation and review use GPT-6 Luna with max reasoning, per Mimir's AGENTS.md.
