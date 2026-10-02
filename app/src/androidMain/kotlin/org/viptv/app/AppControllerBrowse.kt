@@ -143,9 +143,9 @@ internal fun AppController.chooseSources(media: Media, resume: Boolean = false, 
             publishProducers()
         }
         try {
-            val discovered = gateway.sources(media, onUpdate = { arriving ->
+            val discovered = discoverSourcesFor(media, onSources = { arriving ->
                 if (ownsResults()) { _state.value = _state.value.copy(sources = arriving); publishProducers() }
-            }, onProducerUpdate = { outcomes -> observed = outcomes; publishProducers() })
+            }, onProducers = { outcomes -> observed = outcomes; publishProducers() })
             if (!ownsResults()) return@launch
             _state.value = _state.value.copy(sources = discovered, sourceLoading = false,
                 loading = _state.value.preparingSourceId != null)

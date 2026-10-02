@@ -45,8 +45,9 @@ class AppController(context: Context, private val origin: String) {
     internal val _state = MutableStateFlow(AppState(loading = true))
     val state: StateFlow<AppState> = _state.asStateFlow()
     private val foregroundValidation = ForegroundValidation(scope, gateway::foregroundIdentity)
+    internal val backendFactory = AndroidMedia3BackendFactory(context)
     private val playerDelegate = lazy {
-        AndroidMedia3BackendFactory(context).createAndroidPlayer().also { instance ->
+        backendFactory.createAndroidPlayer().also { instance ->
             scope.launch { instance.events.collect(::onPlayerEvent) }
         }
     }
@@ -62,6 +63,16 @@ class AppController(context: Context, private val origin: String) {
     private var loginJob: Job? = null
     internal var playbackStartJob: Job? = null
     internal var sourceDiscovery: Job? = null
+    internal var probedCapabilities: PlaybackClientCapabilities? = null
+    internal var capabilityProbe: Job? = null
+    internal fun rankCapabilities(): PlaybackClientCapabilities? =
+        if (playerDelegate.isInitialized()) PlaybackClientCapabilities.from(player.capabilities.value) else probedCapabilities
+    internal val sourcePreview = TitleSourcePreview(scope, gateway::sources, { preview ->
+        _state.value = _state.value.copy(sourceSummary = preview?.let {
+            SourceSummary(it.key, SourceRankPolicy.order(it.sources, rankCapabilities(), _state.value.preferences.audioLanguage).firstOrNull(),
+                it.sources.size, it.done, it.error != null)
+        })
+    })
     internal var queueContinuationJob: Job? = null
     /** Last queue/Home refresh wins over any earlier response racing Undo. */
     internal var homeRefreshGeneration = 0L
@@ -122,7 +133,10 @@ class AppController(context: Context, private val origin: String) {
 
     init {
         scope.launch { foregroundValidation.result.collect(::acceptForegroundResult) }
-        scope.launch { state.collect { updateHomeRevisionWatcher() } }
+        scope.launch { state.collect {
+            updateHomeRevisionWatcher()
+            sourcePreview.key?.let { key -> if (!SourcePreviewPolicy.keep(key, it.selectedProfile?.id, it.route)) sourcePreview.cancel() }
+        } }
         coreSession.begin()
     }
     private fun acceptForegroundResult(result: ForegroundValidationResult?) {
@@ -221,6 +235,7 @@ class AppController(context: Context, private val origin: String) {
         }
     }
     private fun cancelAuthenticatedWork() {
+        sourcePreview.cancel()
         homeRevisionJob?.cancel(); homeRevisionJob = null
         homeWatcherKey = null
         renderedCatalogRevision = null; revisionOwner = null
@@ -461,6 +476,7 @@ class AppController(context: Context, private val origin: String) {
 
     fun signOut() = scope.launch { cancelForegroundValidation(); guarded("Enter parent PIN to sign out") { homeRevisionJob?.cancel(); homeRevisionJob = null; renderedCatalogRevision = null; revisionOwner = null; quietSessionAdoption = false; authenticationGeneration++; stopPlayback((_state.value.route as? Route.Player)?.media); pendingCoreAction = coreSession::signOut; coreSession.signOut() } }
     fun close() {
+        sourcePreview.cancel(); capabilityProbe?.cancel()
         homeRevisionJob?.cancel(); homeRevisionJob = null
         foregroundValidation.close(); authenticationGeneration++; sessionRefreshJob?.cancel(); pendingProfileRefreshWait?.cancel()
         cancelGuideWork()

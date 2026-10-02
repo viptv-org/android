@@ -59,6 +59,12 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
         Media(media.id, media.type, name = media.name, poster = media.poster, backdrop = media.backdrop, thumbnail = media.thumbnail)
     }
     val target = playEpisode?.withArtworkFrom(media) ?: media.takeUnless { it.type == "series" && it.episode == null }
+    val previewKey = target?.let { SourcePreviewPolicy.key(app.selectedProfile?.id, it) }
+    val sourceSummary = app.sourceSummary?.takeIf { it.key == previewKey }
+    DisposableEffect(previewKey) {
+        if (target != null) controller.previewSources(target)
+        onDispose { if (target != null) controller.releaseSourcePreview(target) }
+    }
     val retryDetail = !app.loading && app.message != null && media.episodes.isEmpty()
     val saved = app.favorites.any { it.id == media.id && it.type == media.type }
     val initial = LocalContentFocus.current
@@ -142,7 +148,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                 if (tv) Row(Modifier.padding(top = 32.dp, bottom = if (episodes.isEmpty()) 40.dp else 108.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     if (target != null) AppButton(label, ::play, Modifier.widthIn(min = 280.dp).focusRequester(initial).focusProperties { left = rail }, "play",
                         onHold = { controller.chooseSources(target) }, tvAccent = targetPresentation?.primaryAction == "resume")
-                    if (target != null) AppButton("Choose source", { controller.chooseSources(target) })
+                    if (target != null) TitleSourceControl(sourceSummary) { controller.chooseSources(target) }
                     else if (retryDetail)
                         AppButton("Try again", { controller.open(media, controller.detailReturnRoute, showWhileLoading = true) }, Modifier.focusRequester(initial))
                     else VText(label, 22, Modifier.align(Alignment.CenterVertically), C.textSecondary)
@@ -181,13 +187,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
             AppIconButton("back", "Back", controller::back, Modifier.align(Alignment.TopStart).statusBarsPadding().padding(12.dp).size(44.dp))
         }
         if (!tv) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, LocalGround.current, LocalGround.current))).navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (target != null) Holdable({ controller.chooseSources(target) }, modifier = Modifier.fillMaxWidth().height(58.dp).clip(RoundedCornerShape(18.dp)).background(C.surfaceN1).border(1.dp, C.lineOutline, RoundedCornerShape(18.dp))) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    VIcon("list", modifier = Modifier.size(22.dp))
-                    Column(Modifier.weight(1f).padding(start = 12.dp)) { VText("Playback source", 12, color = C.textTertiary); VText("Choose source", 14, bold = true) }
-                    VIcon("down")
-                }
-            }
+            if (target != null) TitleSourceControl(sourceSummary) { controller.chooseSources(target) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppIconButton(if (saved) "check" else "plus", "My List", { controller.toggleMyList(media) }, Modifier.size(ViptvDimen.sizeButtonPhoneDetail))
                 if (target != null) AppButton(label, ::play, Modifier.weight(1f).height(ViptvDimen.sizeButtonPhoneDetail), "play", primary = true)
@@ -231,6 +231,11 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                 else AsyncImage(image, card.title, Modifier.fillMaxSize(), contentScale = if (card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
                     onError = { failed = failed + image })
                 if (!media.watched && media.positionMillis > 0) ProgressLine(card.progress?.toFloat() ?: 0f, Modifier.align(Alignment.BottomCenter).padding(14.dp).testTag("episode-progress"))
+                if (!media.watched && media.positionMillis > 0) Box(Modifier.align(Alignment.TopStart).padding(14.dp)
+                    .height(30.dp).clip(RoundedCornerShape(15.dp)).background(Color.Black.copy(alpha = .65f))
+                    .padding(horizontal = 12.dp).testTag("episode-watching-badge"), contentAlignment = Alignment.Center) {
+                    VText("WATCHING", 16, bold = true)
+                }
             }
             Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 VText("EPISODE " + media.episode, 18, color = C.textSecondary, bold = true)

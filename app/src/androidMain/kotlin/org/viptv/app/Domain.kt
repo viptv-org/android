@@ -58,6 +58,9 @@ data class Source(
     val providerLabel: String = "",
 )
 
+/** Safe Title display facts; source selection remains an explicit picker action. */
+data class SourceSummary(val key: String, val best: Source?, val count: Int, val done: Boolean, val failed: Boolean = false)
+
 /** Safe, Rust-normalized discovery event facts for a configured producer. */
 data class SourceProducerOutcome(
     val sourceId: String,
@@ -152,6 +155,7 @@ data class AppState(
     val homeFocus: HomeFocusSnapshot = HomeFocusSnapshot(),
     val catalog: List<Media> = emptyList(),
     val sources: List<Source> = emptyList(),
+    val sourceSummary: SourceSummary? = null,
     val sourceProducers: List<SourceProducerOutcome> = emptyList(),
     val favorites: List<Media> = emptyList(),
     val queue: List<Media> = emptyList(),

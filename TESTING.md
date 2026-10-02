@@ -918,3 +918,32 @@ and debug APK assembly passed with two workers. Lint retained 78 warnings and
 three errors filtered by the existing baseline. All three native Core ABIs were
 built from pinned Core `1f8483e365867f99eb39928cd7f3a23920003515`.
 No emulator visual, native input or physical-device qualification is claimed.
+## AND-043 Title discovery and watching marker — 2026-10-02
+
+Adopts proposed design `85a20e918d44af28d20caa52997b1d307922cf29`, grounded
+in the committed Title/TvTitle boards. Title now discovers its Core-selected
+Play/Resume target once after a 400ms settle, with a three-minute limit. Its
+manual source picker adopts pending/completed rows and producer outcomes.
+Profile/target/route replacement invalidates callbacks; empty/failed previews
+can retry through the picker. Source summary order uses Core sourceMatch with
+measured limits and audio preference. Discovery does not select or play a source.
+TV partial-progress episodes show WATCHING; completed episodes retain Watched.
+
+JDK17 checks at Core `1f8483e365867f99eb39928cd7f3a23920003515`: Core/design
+integrity, 237 library/app unit tests, debug APK assembly and lint passed with two
+workers. Lint retains the existing 78 warnings and three baseline-filtered errors.
+The nine added host tests cover settle/recomposition, cancellation, partial and
+completed adoption, producer failures, late callbacks, bounded timeout, retry,
+profile/route eligibility and shared-Core ranking.
+
+Nine class-filtered Compose instrumentation tests passed on the fresh owned API36
+Google APIs x86_64 phone AVD `viptv-and043-qa-20261002` (`emulator-5586`). They
+verify displayed quality/provider/count, explicit manual-picker actions,
+empty/failure copy, and watched/WATCHING/progress state. TV component variants
+use LocalTv in this phone emulator; this is not Android TV remote acceptance or
+matched full-screen visual parity. The normal debug APK has no fixture CA;
+the tests used synthetic component data, with no account/backend connection.
+The exact owned emulator was stopped and its AVD deleted after the run.
+
+Full Title-to-picker emulator flows, TV Guide re-audit, TV track-panel focus
+return with longer media, and physical Android acceptance remain unverified.
