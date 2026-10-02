@@ -17,6 +17,45 @@ internal fun AppController.activateCard(media: Media, queue: Boolean = false, or
     }
 }
 
+/** Core supplies watched facts; keep one exact episode join for open and playback return. */
+internal fun mergeSeriesProgress(details: Media, progress: List<Media>): Media = details.copy(
+    episodes = details.episodes.map { episode ->
+        val record = progress.firstOrNull { it.id == episode.id }
+            ?: progress.firstOrNull { it.seriesId == details.id && it.season == episode.season && it.episode == episode.episode }
+        if (record == null) episode else episode.copy(
+            positionMillis = record.positionMillis, durationMillis = record.durationMillis ?: episode.durationMillis,
+            watched = record.watched, updatedAtMillis = record.updatedAtMillis,
+            sourceAddonId = record.sourceAddonId, sourceFingerprint = record.sourceFingerprint,
+        )
+    },
+)
+
+/** One final save, then one authoritative read; callers guard the active route before applying. */
+internal suspend fun refreshEpisodeReturn(
+    route: Route, episode: Media, save: suspend () -> Unit, readProgress: suspend () -> List<Media>,
+): Route {
+    val details = when (route) {
+        is Route.Details -> route
+        is Route.Sources -> route.backRoute as? Route.Details
+        else -> null
+    } ?: return route
+    if (details.media.id != SourceReturnPolicy.parentSeries(episode)?.id) return route
+    save()
+    val updated = details.copy(media = mergeSeriesProgress(details.media, readProgress()))
+    return if (route is Route.Sources) route.copy(backRoute = updated) else updated
+}
+
+/** A quick Back may expose the same retained Details while the final progress read is pending. */
+internal fun applyRefreshedEpisodeReturn(
+    original: Route, refreshed: Route, current: Route, profileStillSelected: Boolean, detailGenerationUnchanged: Boolean,
+): Route {
+    if (!profileStillSelected) return current
+    if (current === original && detailGenerationUnchanged) return refreshed
+    val originalDetails = (original as? Route.Sources)?.backRoute as? Route.Details
+    val refreshedDetails = (refreshed as? Route.Sources)?.backRoute as? Route.Details
+    return if (current === originalDetails && refreshedDetails != null) refreshedDetails else current
+}
+
 internal fun AppController.open(media: Media, returnRoute: Route? = null, showWhileLoading: Boolean = false) {
     if (media.type == "live") { activateCard(media); return }
     detailJob?.cancel()
@@ -37,15 +76,7 @@ internal fun AppController.open(media: Media, returnRoute: Route? = null, showWh
             val progress = try { gateway.seriesProgress(requireProfile(), details.id) }
                 catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
                 catch (_: Exception) { emptyList() }
-            details.copy(episodes = details.episodes.map { episode ->
-                val record = progress.firstOrNull { it.id == episode.id }
-                    ?: progress.firstOrNull { it.seriesId == details.id && it.season == episode.season && it.episode == episode.episode }
-                if (record == null) episode else episode.copy(
-                    positionMillis = record.positionMillis, durationMillis = record.durationMillis ?: episode.durationMillis,
-                    watched = record.watched, updatedAtMillis = record.updatedAtMillis,
-                    sourceAddonId = record.sourceAddonId, sourceFingerprint = record.sourceFingerprint,
-                )
-            })
+            mergeSeriesProgress(details, progress)
         }
     }.onSuccess { metadata ->
         if (generation != detailGeneration || _state.value.selectedProfile?.id != profile) return@onSuccess
@@ -208,7 +239,26 @@ internal fun AppController.toggleMyList(media: Media) = scope.launch {
     }
 }
 
-internal fun AppController.correctEpisode(media: Media, watched: Boolean) = scope.launch { guarded("Enter parent PIN") { gateway.correctProgress(requireProfile(), media, if (watched) "watched" else "unwatched"); _state.value = _state.value.copy(message = if (watched) "Marked watched." else "Marked unwatched.") } }
+/** Apply a successful correction only to the exact episode currently open in this profile. */
+internal fun correctedDetailsRoute(route: Route, episode: Media, watched: Boolean): Route =
+    if (route is Route.Details && route.media.id == SourceReturnPolicy.parentSeries(episode)?.id)
+        route.copy(media = route.media.copy(episodes = route.media.episodes.map { item ->
+            if (item.id == episode.id && item.season == episode.season && item.episode == episode.episode)
+                item.copy(watched = watched)
+            else item
+        }))
+    else route
+
+internal fun AppController.correctEpisode(media: Media, watched: Boolean) = scope.launch {
+    guarded("Enter parent PIN") {
+        val profile = requireProfile()
+        gateway.correctProgress(profile, media, if (watched) "watched" else "unwatched")
+        if (_state.value.selectedProfile?.id == profile) {
+            _state.value = _state.value.copy(route = correctedDetailsRoute(_state.value.route, media, watched),
+                message = if (watched) "Marked watched." else "Marked unwatched.")
+        }
+    }
+}
 internal fun AppController.setPreference(preferences: PlaybackPreferences) = scope.launch { guarded("Enter parent PIN") { gateway.savePreferences(requireProfile(), preferences); _state.value = _state.value.copy(preferences = preferences, message = "Applies to your next playback. Manual track choices take priority.") } }
 internal fun AppController.toggleAddon(addon: Addon) = scope.launch { guarded("Enter parent PIN") { gateway.setAddonEnabled(addon, !addon.enabled); openSettings() } }
 internal fun AppController.removeAddon(addon: Addon) = scope.launch { guarded("Enter parent PIN") { gateway.removeAddon(addon); openSettings() } }

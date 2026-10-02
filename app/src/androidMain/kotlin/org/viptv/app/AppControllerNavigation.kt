@@ -2,6 +2,8 @@ package org.viptv.app
 
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 
 internal fun AppController.navigate(destination: Destination) = scope.launch {
     cancelForegroundValidation()
@@ -131,7 +133,8 @@ internal fun AppController.exitPlayback() {
 }
 
 internal fun AppController.exitPlayer(route: Route.Player, media: Media) {
-    stopPlayback(media)
+    val profileId = _state.value.selectedProfile?.id
+    val finalSave = stopPlayback(media)
     val sourceRoute = route.sourceRoute
     val parent = media.takeIf {
         route.directOrigin == null && route.returnDestination == PlaybackReturn.Details &&
@@ -140,13 +143,44 @@ internal fun AppController.exitPlayer(route: Route.Player, media: Media) {
     if (parent != null) {
         _state.value = _state.value.copy(dialog = null, message = null)
         open(parent, returnRoute = sourceRoute?.backRoute ?: Route.Browse(Destination.Home), showWhileLoading = true)
+        refreshEpisodeDetailsAfterExit(media, profileId, finalSave, _state.value.route, detailJob)
         return
     }
+    val returned = PlaybackRecoveryPolicy.returnRoute(route, media)
     _state.value = _state.value.copy(
-        route = PlaybackRecoveryPolicy.returnRoute(route, media),
+        route = returned,
         dialog = null,
         message = null,
     )
+    refreshEpisodeDetailsAfterExit(media, profileId, finalSave, returned)
+}
+
+/** Read the selected profile's completion after the final save and any parent Details load. */
+private fun AppController.refreshEpisodeDetailsAfterExit(
+    episode: Media, profileId: String?, finalSave: Job?, returned: Route, detailLoad: Job? = null,
+) {
+    val seriesId = SourceReturnPolicy.parentSeries(episode)?.id ?: return
+    val profile = profileId ?: return
+    val generation = detailGeneration
+    scope.launch {
+        finalSave?.join()
+        detailLoad?.join()
+        if (_state.value.selectedProfile?.id != profile) return@launch
+        if (detailLoad != null && detailGeneration != generation) return@launch
+        val baseline = if (detailLoad != null) _state.value.route as? Route.Details ?: return@launch else returned
+        val refreshed = try {
+            refreshEpisodeReturn(baseline, episode, save = {}, readProgress = { gateway.seriesProgress(profile, seriesId) })
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            return@launch
+        }
+        val state = _state.value
+        val updated = applyRefreshedEpisodeReturn(baseline, refreshed, state.route,
+            profileStillSelected = state.selectedProfile?.id == profile,
+            detailGenerationUnchanged = detailGeneration == generation)
+        if (updated !== state.route) _state.value = state.copy(route = updated)
+    }
 }
 
 internal fun AppController.requestDialog(kind: DialogKind, title: String, media: Media? = null, source: Source? = null) { _state.value = _state.value.copy(dialog = DialogState(kind, title, media, source)) }

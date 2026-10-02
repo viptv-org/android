@@ -562,14 +562,14 @@ class AppController(context: Context, private val origin: String) {
             profileId?.let { id -> runCatching { gateway.updateProgress(id, media, positionMillis) } }
         }
     }
-    internal fun stopPlayback(media: Media? = null) {
+    internal fun stopPlayback(media: Media? = null): Job? {
         cancelUpNext()
         invalidatePlaybackPreparation()
-        if (!playerDelegate.isInitialized()) return
+        if (!playerDelegate.isInitialized()) return null
         val position = absolutePositionMillis()
         val profileId = _state.value.selectedProfile?.id
         progressJob?.cancel()
-        media?.let { item -> scope.launch { persistProgress(profileId, item, position) } }
+        val finalSave = media?.let { item -> scope.launch { persistProgress(profileId, item, position) } }
         player.stop()
         player.detachSurface()
         playbackTitleOffsetMillis = 0L
@@ -578,6 +578,7 @@ class AppController(context: Context, private val origin: String) {
         managedPauseAnchorMillis = null
         playerMenuOpen = false
         retirePlaybackSession()
+        return finalSave
     }
     internal suspend fun guarded(pinTitle: String, action: suspend () -> Unit) {
         try { action() } catch (error: GatewayError) {

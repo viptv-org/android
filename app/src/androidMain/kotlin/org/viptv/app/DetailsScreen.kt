@@ -214,6 +214,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable internal fun EpisodeCard(media: Media, modifier: Modifier, onClick: () -> Unit, onHold: () -> Unit, onFocused: (() -> Unit)? = null, artworkContext: Media? = null) {
     val tv = LocalTv.current
     val enriched = remember(media, artworkContext) { artworkContext?.let { media.withArtworkFrom(it) } ?: media }
@@ -228,9 +229,12 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                 if (image.isNullOrBlank()) VText(card.title, 24, Modifier.padding(12.dp), C.textSecondary, bold = true, lines = 2, align = TextAlign.Center)
                 else AsyncImage(image, card.title, Modifier.fillMaxSize(), contentScale = if (card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
                     onError = { failed = failed + image })
-                if (media.positionMillis > 0) ProgressLine(card.progress?.toFloat() ?: 0f, Modifier.align(Alignment.BottomCenter).padding(14.dp))
+                if (!media.watched && media.positionMillis > 0) ProgressLine(card.progress?.toFloat() ?: 0f, Modifier.align(Alignment.BottomCenter).padding(14.dp).testTag("episode-progress"))
             }
-            VText("EPISODE " + media.episode, 18, Modifier.padding(top = 14.dp), C.textSecondary, bold = true)
+            Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                VText("EPISODE " + media.episode, 18, color = C.textSecondary, bold = true)
+                if (media.watched) EpisodeWatchedBadge()
+            }
             VText(media.episodeTitle ?: media.name, 24, Modifier.padding(top = 8.dp), bold = true, lines = 1)
             VText(media.description.orEmpty(), 20, Modifier.padding(top = 14.dp), C.textSecondary, lines = 2)
         } else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -238,14 +242,27 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                 if (image.isNullOrBlank()) VText(card.title, 13, Modifier.padding(8.dp), C.textSecondary, bold = true, lines = 2, align = TextAlign.Center)
                 else AsyncImage(image, card.title, Modifier.fillMaxSize(), contentScale = if (card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
                     onError = { failed = failed + image })
-                if (media.positionMillis > 0) ProgressLine(card.progress?.toFloat() ?: 0f, Modifier.align(Alignment.BottomCenter).padding(8.dp))
+                if (!media.watched && media.positionMillis > 0) ProgressLine(card.progress?.toFloat() ?: 0f, Modifier.align(Alignment.BottomCenter).padding(8.dp).testTag("episode-progress"))
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                VText("Episode " + media.episode, 12, color = C.textTertiary)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    VText("Episode " + media.episode, 12, color = C.textTertiary, lines = 2)
+                    if (media.watched) EpisodeWatchedBadge()
+                }
                 VText(media.episodeTitle ?: media.name, 15, bold = true, lines = 2)
                 VText(media.description.orEmpty(), 13, color = C.textSecondary, lines = 2)
             }
             Holdable(onHold, modifier = Modifier.size(44.dp)) { VIcon("more", "Episode options") }
         }
+    }
+}
+
+@Composable private fun EpisodeWatchedBadge() {
+    val tv = LocalTv.current
+    Row(Modifier.testTag("episode-watched-badge").height(if (tv) 32.dp else 24.dp)
+        .clip(RoundedCornerShape(50)).background(C.surfaceN3).padding(horizontal = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        VIcon("check", modifier = Modifier.size(if (tv) 20.dp else 14.dp), color = LocalAccent.current)
+        VText("Watched", if (tv) 18 else 11, color = C.textPrimary, bold = true, lines = 1)
     }
 }

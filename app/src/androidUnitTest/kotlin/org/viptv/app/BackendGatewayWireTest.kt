@@ -433,13 +433,16 @@ class BackendGatewayWireTest {
     fun `series progress retains resume identity and recency from profile endpoint`() = runBlocking {
         FixtureServer(1) { request ->
             assertEquals("/api/profiles/profile-1/progress/series?series_id=show-1", request.target)
-            FixtureResponse("""[{"id":"show-1:1:2","type":"series","series_id":"show-1","season":1,"episode":2,"position":120,"duration":1800,"updated_at":1700000000,"source_addon_id":"addon-1","source_fingerprint":"fp-1"}]""")
+            FixtureResponse("""[{"id":"show-1:1:2","type":"series","series_id":"show-1","season":1,"episode":2,"position":120,"duration":1800,"watched":true,"updated_at":1700000000,"source_addon_id":"addon-1","source_fingerprint":"fp-1"},{"id":"show-1:1:3","type":"series","series_id":"show-1","season":1,"episode":3,"position":1790,"duration":1800,"watched":false}]""")
         }.use { server ->
-            val progress = VipTvHttpGateway(server.origin).seriesProgress("profile-1", "show-1").single()
+            val records = VipTvHttpGateway(server.origin).seriesProgress("profile-1", "show-1")
+            val progress = records.first()
             assertEquals(120_000L, progress.positionMillis)
+            assertTrue(progress.watched)
             assertEquals(1_700_000_000_000L, progress.updatedAtMillis)
             assertEquals("fp-1", progress.sourceFingerprint)
             assertEquals(2, progress.episode)
+            assertFalse(records.last().watched)
             server.assertHealthy()
         }
     }
