@@ -23,7 +23,7 @@ client records its exact adopted revision; shared Rust policy stays authoritativ
 | 11 | [Restore selected episode after source Back](issues/11-episode-source-back-selection.md) | Actual route and focus reproduction | native regression, investigation |
 | 12 | [Hero Resume Back opens episode list](issues/12-hero-resume-back.md) | Hero versus queue entry-point regression | investigation, implementation |
 | 13 | [Completed episode indicators](issues/13-completed-episode-indicators.md) | Existing per-profile watched facts and card contract | investigation, implementation |
-| 14 | [Restore episode after parent metadata loads](issues/14-loaded-episode-return-selection.md) | Reproduced hero return and actual Details readiness | Sol regression/implementation, Luna independent review |
+| 14 | [Restore episode after parent metadata loads](issues/14-loaded-episode-return-selection.md) | Reproduced hero return and actual Details readiness | regression/implementation, independent review |
 
 All workers use GPT-6.1 Sol (`gpt-6.1-sol`) with high reasoning (`high`) for
 implementation, validation and review, including retained workers.
@@ -31,7 +31,7 @@ Shared files in one checkout have a single writer. Gradle runs sequentially;
 TV-web tests use one worker and do not overlap its production build.
 
 Incoming tasks join this queue without replacing work already authorized.
-Research stays with Luna workers so the main chat can receive new tasks.
+Research stays with subagents so the main chat can receive new tasks.
 Tickets 01-10 are complete, with implementation and qualification recorded in
 their individual files. Independent final Android reviews used Luna workers.
 Tickets 12-14 are complete and qualified. Ticket 14 corrects the loaded episode

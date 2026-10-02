@@ -22,11 +22,11 @@ scrolling through a large series such as One Piece.
 ## Commits and evidence
 
 Owner requested 2026-10-01 while native keyboard acceptance was in progress.
-Luna research is delegated so the main chat can receive further tasks. Current
+Research is delegated to subagents so the main chat can receive further tasks. Current
 season is the initial interpretation; research must check real numbering before
 implementation. Keep this separate from source/provider and keyboard commits.
 
-Luna research completed: match actual current-season numbers (missing season as 1); allow 0 only if present, choose first metadata entry for duplicates. Count is not a maximum. Invalid stays open and cancel preserves position. Separate Sol workers own the Android TV design rule and UI adaptation.
+Luna research completed: match actual current-season numbers (missing season as 1); allow 0 only if present, choose first metadata entry for duplicates. Count is not a maximum. Invalid stays open and cancel preserves position. Separate implementation subagents own the Android TV design rule and UI adaptation.
 
 Implementation `ec61aaa` adopts AND-EPISODE-JUMP-001 at design `6e74a9a`.
 Focus/validation refinement `96cdbae` handles touch input mode, parent window
