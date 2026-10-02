@@ -294,21 +294,26 @@ private var cachedAvatarCatalog: List<AvatarCategory>? = null
     val tv = LocalTv.current
     var value by remember(title) { mutableStateOf(initial.take(maxLength)) }
     var error by remember(title) { mutableStateOf<String?>(null) }
+    var failedSubmissions by remember(title) { mutableIntStateOf(0) }
     val first = remember { FocusRequester() }
     fun edit(text: String) { value = (if (secret || numeric) text.filter(Char::isDigit) else text).take(if (secret) 8 else maxLength); error = null }
     AppOverlay(title, { value = ""; onCancel() }, full = tv) {
         val keyboard = LocalSoftwareKeyboardController.current
         val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-        fun submit() { val submitted = value; error = validate?.invoke(submitted); if (error != null) return; keyboard?.hide(); if (secret) value = ""; onDone(submitted) }
+        fun submit() { val submitted = value; error = validate?.invoke(submitted); if (error != null) { failedSubmissions++; return }; keyboard?.hide(); if (secret) value = ""; onDone(submitted) }
         BackHandler { if (imeVisible) keyboard?.hide() else { value = ""; onCancel() } }
         Column(Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState())) {
             VText(instruction, if (tv) 24 else 15, color = C.textSecondary)
-            if (error != null) VText(error.orEmpty(), if (tv) 22 else 14,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = C.textSecondary)
             Spacer(Modifier.height(24.dp))
             AppField(value, ::edit, if (secret) "Parent PIN" else fieldLabel,
                 Modifier.focusRequester(first).then(if (tv) Modifier.widthIn(max = 960.dp) else Modifier),
-                secret = secret, keyboardType = if (numeric) KeyboardType.Number else if (secret) KeyboardType.NumberPassword else KeyboardType.Text, onSubmit = ::submit)
+                secret = secret, keyboardType = if (numeric) KeyboardType.Number else if (secret) KeyboardType.NumberPassword else KeyboardType.Text,
+                onSubmit = ::submit, isError = error != null)
+            if (error != null) Row(Modifier.padding(top = 8.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                VIcon("alert", null, Modifier.size(if (tv) 24.dp else 18.dp), C.statusDangerTv)
+                VText(error.orEmpty(), if (tv) 22 else 14, color = C.statusDangerTv)
+            }
             Spacer(Modifier.height(measure(32, 24)))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 AppButton(doneLabel, ::submit, Modifier.weight(1f), primary = true)
@@ -316,7 +321,7 @@ private var cachedAvatarCatalog: List<AvatarCategory>? = null
             }
         }
         LaunchedEffect(title) { withFrameNanos {}; runCatching { first.requestFocus() }; keyboard?.show() }
-        LaunchedEffect(error) { if (error != null) { withFrameNanos {}; runCatching { first.requestFocus() } } }
+        LaunchedEffect(failedSubmissions) { if (failedSubmissions > 0) { withFrameNanos {}; runCatching { first.requestFocus() } } }
     }
 }
 

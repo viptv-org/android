@@ -12,11 +12,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import org.viptv.app.theme.ViptvColor as C
+import kotlinx.coroutines.flow.first
 
 /** The displayed episode number is metadata, not a row position. Preserve backend row order. */
 internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
@@ -37,6 +41,10 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     var jumpEntry by remember { mutableStateOf(false) }
     var jumpOrigin by remember { mutableStateOf<Pair<String, Int>?>(null) }
     val jumpFocus = remember { FocusRequester() }
+    val windowInfo = LocalWindowInfo.current
+    val inputMode = LocalInputModeManager.current
+    var jumpFocused by remember { mutableStateOf(false) }
+    var focusedEpisodeIndex by remember { mutableIntStateOf(-1) }
     var jumpRequest by remember(media.id) { mutableIntStateOf(0) }
     var jumpIndex by remember(media.id) { mutableIntStateOf(-1) }
     var jumpCancelRequest by remember(media.id) { mutableIntStateOf(0) }
@@ -67,16 +75,38 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
         }
     }
     LaunchedEffect(media.id, season, jumpRequest) {
-        if (tv && jumpIndex in episodes.indices && jumpRequest > 0) {
+        if (tv && jumpOrigin == (media.id to season) && jumpIndex in episodes.indices && jumpRequest > 0) {
+            val index = jumpIndex
+            focusedEpisodeIndex = -1
             pageScroll.scrollToItem(1)
-            episodeScroll.scrollToItem(jumpIndex)
-            withFrameNanos {}
-            runCatching { episodeFocus[jumpIndex].requestFocus() }
-            jumpIndex = -1
+            episodeScroll.scrollToItem(index)
+            snapshotFlow { windowInfo.isWindowFocused }.first { it }
+            var attempts = 0
+            while (focusedEpisodeIndex != index && !jumpEntry && jumpOrigin == (media.id to season) && attempts++ < 60) {
+                snapshotFlow { windowInfo.isWindowFocused }.first { it }
+                withFrameNanos {}
+                if (windowInfo.isWindowFocused) {
+                    inputMode.requestInputMode(InputMode.Keyboard)
+                    runCatching { episodeFocus[index].requestFocus() }
+                }
+            }
+            if (focusedEpisodeIndex == index) jumpIndex = -1
         }
     }
     LaunchedEffect(jumpCancelRequest) {
-        if (tv && jumpCancelRequest > 0) { withFrameNanos {}; runCatching { jumpFocus.requestFocus() } }
+        if (tv && jumpCancelRequest > 0) {
+            jumpFocused = false
+            snapshotFlow { windowInfo.isWindowFocused }.first { it }
+            var attempts = 0
+            while (!jumpFocused && !jumpEntry && jumpOrigin == (media.id to season) && attempts++ < 60) {
+                snapshotFlow { windowInfo.isWindowFocused }.first { it }
+                withFrameNanos {}
+                if (windowInfo.isWindowFocused) {
+                    inputMode.requestInputMode(InputMode.Keyboard)
+                    runCatching { jumpFocus.requestFocus() }
+                }
+            }
+        }
     }
     LaunchedEffect(media.id, season) {
         if (jumpEntry && jumpOrigin != (media.id to season)) jumpEntry = false
@@ -117,7 +147,8 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                     Row(Modifier.fillMaxWidth().padding(horizontal = if (tv) 0.dp else 20.dp, vertical = if (tv) 0.dp else 28.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(measure(24, 14))) {
                         AppChip("Season $season", { seasonPicker = true }, selected = true)
                         if (tv && episodes.isNotEmpty()) AppChip("Episode #", { jumpOrigin = media.id to season; jumpEntry = true },
-                            modifier = Modifier.focusRequester(jumpFocus).semantics { contentDescription = "Jump to episode number" })
+                            modifier = Modifier.focusRequester(jumpFocus).onFocusChanged { jumpFocused = it.isFocused }
+                                .semantics { contentDescription = "Jump to episode number" })
                         VText(episodes.size.toString() + " episodes", if (tv) 22 else 13, color = C.textTertiary)
                     }
                 }
@@ -127,7 +158,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                             EpisodeCard(episode, Modifier.width(360.dp).focusRequester(episodeFocus[index]),
                                 onClick = { selectedEpisode = index; restoreEpisodes = true; controller.chooseSources(episode.withArtworkFrom(media)) },
                                 onHold = { controller.requestDialog(DialogKind.EpisodeManage, episode.episodeTitle ?: episode.name, episode) },
-                                onFocused = { selectedEpisode = index })
+                                onFocused = { selectedEpisode = index; focusedEpisodeIndex = index })
                         }
                     }
                 } else itemsIndexed(episodes, key = { _, item -> item.id }) { _, episode ->
@@ -163,12 +194,14 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
             fieldLabel = "Episode number", doneLabel = "Go",
             validate = { entered ->
                 val number = entered.toIntOrNull()
-                if (number == null || episodeIndexForNumber(episodes, number) < 0) "Episode not found in this season." else null
+                if (jumpOrigin != (media.id to season) || number == null || episodeIndexForNumber(episodes, number) < 0) "Episode not found in this season." else null
             }, onDone = { entered ->
-                jumpIndex = episodeIndexForNumber(episodes, entered.toInt())
-                selectedEpisode = jumpIndex
-                jumpEntry = false
-                jumpRequest++
+                if (jumpOrigin == (media.id to season)) {
+                    jumpIndex = episodeIndexForNumber(episodes, entered.toInt())
+                    selectedEpisode = jumpIndex
+                    jumpEntry = false
+                    jumpRequest++
+                } else jumpEntry = false
             }, onCancel = { jumpEntry = false; jumpCancelRequest++ })
         if (info) FullInfo(media.name, listOf(mediaFacts(media), media.description.orEmpty(), media.credits.orEmpty()).filter { it.isNotBlank() }.joinToString("\n\n"), { info = false })
     }
