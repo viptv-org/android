@@ -1,5 +1,26 @@
 # Decisions
 
+## Android completed episode indicators (AND-EPISODE-WATCHED-001)
+
+Proposed from the 2026-10-02 owner request. Android TV and phone episode cards
+show `Watched` beside their episode-number caption using the current profile's
+saved completion fact. Core and backend own completion semantics; the renderer
+does not infer completion from a progress percentage or another episode.
+Press, hold and repeated remote input retain existing card actions; the badge
+is informational and does not change source selection, Back or restored focus.
+No artwork readiness gate or animation is introduced. Loading/error progress
+does not fabricate completion; details remain browsable. Reopening details and
+switching profiles must project fresh profile progress. A completed fact hides
+the partial progress bar; resetting that fact removes the badge.
+
+Acceptance: render completed, partial, unwatched and missing-progress episodes
+together on TV and phone; verify only completed cards display and announce
+`Watched`. Replace a watched item with an incomplete item and switch profiles;
+no old badge remains. Verify a 1,410-episode lazy row near its end and ordinary
+source Back keep identity, selected episode and focus. Native emulator evidence
+and physical TV compatibility are recorded separately. Other platforms retain
+their pinned episode presentation until they explicitly adopt this addition.
+
 ## Settled with the product owner
 
 1. **Up Next:** a card with a countdown ("Starts in [8]") plus Play now / Cancel. It does not take over the whole screen.

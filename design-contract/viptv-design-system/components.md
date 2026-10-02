@@ -55,6 +55,7 @@ Platform keys: **P** = phone, **D** = desktop app and web, **T** = TV.
 - **Quality badge:** "1080p", "4K", "SD". 4 px radius (D) or 8 px (T), with a 0.16 white fill.
 - **LIVE:** red `#FF5A4E` is used only here. It appears as a glass badge over art (a 6 px dot + "LIVE"), as a row label, and on TV as a solid red block.
 - **UP NEXT** and **WATCHING:** uppercase eyebrow badges on episodes.
+- **Android completed episode (proposed, AND-EPISODE-WATCHED-001):** a noninteractive check + `Watched` pill beside the episode-number caption on TV and phone. Use surface-3 ground and text-primary, accent check, pill radius, height 32 px on TV or 24 dp on phone, 8 px/dp horizontal padding and 4 px/dp icon gap. TV text is 18 px with a 20 px icon; phone text is 11 sp with a 14 dp icon. Render only the current profile's authoritative `watched=true`; no local completion percentage threshold. Completed cards omit the partial-progress bar; incomplete cards retain it. Preserve artwork, title, card geometry and remote focus behavior. Include `Watched` in the card's accessible content without another focus stop. Missing or failed progress has no completed badge; a false fact removes it. Lazy-card reuse and profile switching cannot retain another episode/profile's badge.
 - **Best match:** an accent eyebrow on the first source row.
 - **Progress:** P/D 4 px (3 px on small tiles), T 6 px. The track is white at 0.22 and the fill is accent.
 - **Live dot:** 8 px, or 12 px on TV.
@@ -168,6 +169,7 @@ Platform keys: **P** = phone, **D** = desktop app and web, **T** = TV.
 - **Timeline:** accent played fill, a lighter buffered segment, and a white knob. The time labels are `[12:48]` / `[52:10]`. Hovering (D) or seeking (T) shows a preview bubble above the bar.
 - **Up Next:** a card at the bottom-right (D/T) or above the controls (P) with a still, "NEXT EPISODE", the title, "Starts in [8]", a progress bar, and Play now / Cancel.
 - **Playback info:** key / value rows in monospace (decoder, transport, container, delivery, codecs, resolution).
+- **Responsive picture mode:** the 44 px Fit/Fill button is immediately before Fullscreen on phone and desktop. Fit (the default) contains the full picture; Fill covers the viewport with centered crop. Its state and transitions are in [WEB-PLAYER-FIT-001](../specs/behavior/responsive-player-fit-fill.md). Existing static player renders predate this control.
 - **Errors:** "This source could not be played" with Details (it expands to show HTTP status, request, error code and engine), then Retry / Choose another source / Back. "Playback could not be restored" appears on resume.
 - **Live:** no timeline or next. It shows the channel name, "Live TV" and the live dot, and audio / exit only on TV.
 
