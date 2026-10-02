@@ -72,8 +72,8 @@ Platform keys: **P** = phone, **D** = desktop app and web, **T** = TV.
 - **Password:** masked, with a show / hide eye button.
 - **PIN:** 4–8 boxes (the drawn example has 6). Filled boxes show a dot, the active box shows the accent caret, and errors turn the boxes' borders danger. Error copy: "Incorrect PIN. Try again." / "Enter a 4–8 digit parent PIN".
 - **URL field:** monospace value. Errors: "Enter an HTTPS manifest URL." / "That does not look like an addon URL." / "This addon is already installed."
-- **Search:** P is a pill field docked above the nav, with a fade behind it. D has a title-bar search (460 × 30, radius 9, "Search movies and series", a clear button once there is text, no shortcut hint) and a page search on web. T has a field with a caret plus the on-screen keyboard.
-- **TV text entry** is always full screen: the field on the left, the keyboard on the right (a–z, 0–9, `: / . - _ @`, Aa, Space, Delete, Done, Cancel). Digits use the **PIN keypad** (1–9, ⌫, 0, Done, Cancel).
+- **Search:** P is a pill field docked above the nav, with a fade behind it. D has a title-bar search (460 × 30, radius 9, "Search movies and series", a clear button once there is text, no shortcut hint) and a page search on web. T has a field with a caret plus the on-screen keyboard; native Android TV uses its device IME under AND-KEYBOARD-001.
+- **TV text entry:** Android TV uses a native editable field and device IME with Done/Cancel (AND-KEYBOARD-001); the app renders no character or PIN key grid. Other TV platforms use the full-screen design: the field on the left, the keyboard on the right (a–z, 0–9, `: / . - _ @`, Aa, Space, Delete, Done, Cancel). Digits use the **PIN keypad** (1–9, ⌫, 0, Done, Cancel).
 - **Toggle:** 52 × 32 (T 72 × 42). On = accent track. Off = surface-3 (T 0.2 white). Disabled = 0.4 opacity.
 
 ---

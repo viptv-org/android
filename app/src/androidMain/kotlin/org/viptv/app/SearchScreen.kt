@@ -1,5 +1,7 @@
 package org.viptv.app
 
+import android.view.KeyEvent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -7,6 +9,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.*
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.viptv.app.theme.ViptvColor as C
@@ -16,7 +22,10 @@ import org.viptv.app.theme.ViptvColor as C
     val first = LocalContentFocus.current
     val rail = LocalRailFocus.current
     var filter by rememberSaveable { mutableStateOf("All") }
-    var keyboardTarget by remember { mutableStateOf(first) }
+    var firstEntry by rememberSaveable { mutableStateOf(true) }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val resultsButton = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     val resultRows = key(state.searchQuery) { rememberLazyListState() }
     var entrySection by remember(state.searchQuery) { mutableStateOf<String?>(null) }
@@ -27,29 +36,41 @@ import org.viptv.app.theme.ViptvColor as C
         }
     }
     fun enterResults() {
-        val section = state.searchSections.firstOrNull { it.items.isNotEmpty() } ?: return
+        keyboard?.hide()
+        val sectionIndex = state.searchSections.indexOfFirst { it.items.isNotEmpty() }
+        if (sectionIndex < 0) { runCatching { first.requestFocus() }; return }
+        val section = state.searchSections[sectionIndex]
         scope.launch {
-            resultRows.scrollToItem(0)
+            resultRows.scrollToItem(sectionIndex)
             entrySection = section.id
             entryRequest++
         }
     }
-    LaunchedEffect(Unit) { withFrameNanos {}; runCatching { first.requestFocus() } }
+    BackHandler(tv && imeVisible) { keyboard?.hide() }
+    DisposableEffect(Unit) { onDispose { keyboard?.hide() } }
+    LaunchedEffect(Unit) {
+        withFrameNanos {}
+        runCatching { first.requestFocus() }
+        if (firstEntry) { keyboard?.show(); firstEntry = false }
+    }
     Column(Modifier.fillMaxSize().imePadding().padding(start = measure(192, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
         ScreenHeader("Search", if (tv) null else controller::back)
-        if (tv) Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(96.dp)) {
-            Column(Modifier.width(560.dp)) {
-                VText(state.searchQuery.ifBlank { "Search movies and series" }, 32, Modifier.fillMaxWidth().background(C.surfaceN1, androidx.compose.foundation.shape.RoundedCornerShape(20.dp)).padding(22.dp), if (state.searchQuery.isBlank()) C.textTertiary else C.textPrimary, lines = 1)
-                Spacer(Modifier.height(28.dp))
-                RemoteKeyboard(state.searchQuery, controller::search, first, onResults = ::enterResults, leftBoundary = rail, onKeyFocused = { keyboardTarget = it })
-                VText("▶▶ Jump to results", 20, Modifier.padding(top = 16.dp), C.textTertiary)
-            }
-            Column(Modifier.weight(1f)) {
-                VText(state.searchStatus, 22, Modifier.padding(bottom = 20.dp), C.textTertiary)
-                LazyColumn(state = resultRows, verticalArrangement = Arrangement.spacedBy(36.dp), contentPadding = PaddingValues(4.dp)) {
-                    items(state.searchSections, key = { state.searchQuery + "\u0000" + it.id }) { section ->
-                        SearchResultShelf(section, keyboardTarget, if (section.id == entrySection) entryRequest else 0, { entrySection = null }, controller)
-                    }
+        if (tv) Column(Modifier.fillMaxSize()) {
+            AppField(state.searchQuery, controller::search, "Search movies and series",
+                Modifier.width(960.dp).height(80.dp).focusRequester(first).focusProperties { left = rail; right = resultsButton }
+                    .onPreviewKeyEvent { event ->
+                        val key = event.nativeKeyEvent
+                        if (key.action == KeyEvent.ACTION_DOWN && key.repeatCount == 0 &&
+                            key.keyCode in listOf(KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)) {
+                            enterResults(); true
+                        } else false
+                    }, onSubmit = ::enterResults, imeAction = ImeAction.Search)
+            Spacer(Modifier.height(24.dp))
+            AppButton("Results", ::enterResults, Modifier.width(960.dp).focusRequester(resultsButton).focusProperties { left = first })
+            VText(state.searchStatus, 22, Modifier.padding(top = 24.dp, bottom = 20.dp), C.textTertiary)
+            LazyColumn(state = resultRows, verticalArrangement = Arrangement.spacedBy(36.dp), contentPadding = PaddingValues(4.dp)) {
+                items(state.searchSections, key = { state.searchQuery + "\u0000" + it.id }) { section ->
+                    SearchResultShelf(section, first, if (section.id == entrySection) entryRequest else 0, { entrySection = null }, controller)
                 }
             }
         } else {

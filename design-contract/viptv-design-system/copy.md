@@ -8,6 +8,7 @@ These are the exact strings used on the screens. Text in `[brackets]` is a place
 - **Continue Watching** is the in-progress list: the second segment of My List, and the Home shelf ("Continue watching" as a shelf heading).
 - **Watch on TV** is the pairing / remote feature (the desktop app). The rail item is "On TV".
 - Search placeholder: **"Search movies and series"** (desktop and web show no keyboard-shortcut hint).
+- Android TV native input: **"Results"**, **"Done"**, **"Unlock"**, **"Cancel"**. The device owns IME action labels; the app shows no custom keyboard or jump-to-results hint.
 
 ## Empty states
 

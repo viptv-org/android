@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.view.KeyEvent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -20,6 +21,7 @@ import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.KeyboardType
@@ -290,75 +292,22 @@ private var cachedAvatarCatalog: List<AvatarCategory>? = null
     var value by remember(title) { mutableStateOf(initial.take(maxLength)) }
     val first = remember { FocusRequester() }
     fun edit(text: String) { value = (if (secret) text.filter(Char::isDigit) else text).take(if (secret) 8 else maxLength) }
-    AppOverlay(title, onCancel, full = tv) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    fun submit() { val submitted = value; keyboard?.hide(); if (secret) value = ""; onDone(submitted) }
+    AppOverlay(title, { value = ""; keyboard?.hide(); onCancel() }, full = tv) {
+        val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+        BackHandler { if (imeVisible) keyboard?.hide() else { value = ""; onCancel() } }
         VText(instruction, if (tv) 24 else 15, color = C.textSecondary)
         Spacer(Modifier.height(24.dp))
-        if (!tv) AppField(value, ::edit, if (secret) "Parent PIN" else title, Modifier.focusRequester(first), secret)
-        else {
-            VText(if (secret) "•".repeat(value.length) else value.ifBlank { " " }, 34, Modifier.fillMaxWidth().background(C.surfaceN2, RoundedCornerShape(20.dp)).padding(24.dp), lines = 2)
-            Spacer(Modifier.height(28.dp))
-            RemoteKeyboard(value, ::edit, first, secret, symbols = !secret, compact = true)
-        }
+        AppField(value, ::edit, if (secret) "Parent PIN" else title,
+            Modifier.focusRequester(first).then(if (tv) Modifier.widthIn(max = 960.dp) else Modifier),
+            secret = secret, onSubmit = ::submit)
         Spacer(Modifier.height(measure(32, 24)))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            AppButton(if (secret) "Unlock" else "Done", { val submitted = value; if (secret) value = ""; onDone(submitted) }, Modifier.weight(1f), primary = true)
-            AppButton("Cancel", { value = ""; onCancel() }, Modifier.weight(1f))
+            AppButton(if (secret) "Unlock" else "Done", ::submit, Modifier.weight(1f), primary = true)
+            AppButton("Cancel", { value = ""; keyboard?.hide(); onCancel() }, Modifier.weight(1f))
         }
-        LaunchedEffect(title) { withFrameNanos {}; runCatching { first.requestFocus() } }
-    }
-}
-
-@Composable internal fun RemoteKeyboard(value: String, onChange: (String) -> Unit, first: FocusRequester, secret: Boolean = false, onResults: (() -> Unit)? = null, symbols: Boolean = false, compact: Boolean = false, leftBoundary: FocusRequester? = null, onKeyFocused: (FocusRequester) -> Unit = {}) {
-    var text by remember { mutableStateOf(value) }
-    SideEffect { text = value }
-    fun change(next: String) { text = next; onChange(next) }
-    val keys = if (secret) "1234567890" else "abcdefghijklmnopqrstuvwxyz1234567890"
-    val columns = if (secret) 3 else 6
-    val targets = remember(keys, first) { keys.mapIndexed { index, _ -> if (index == 0) first else FocusRequester() } }
-    var uppercase by remember { mutableStateOf(false) }
-    Column(Modifier.onPreviewKeyEvent { event ->
-        val key = event.nativeKeyEvent
-        if (key.action != KeyEvent.ACTION_DOWN) false
-        else when {
-            onResults != null && key.keyCode in listOf(KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD) -> { onResults(); true }
-            key.keyCode == KeyEvent.KEYCODE_DEL -> { change(text.dropLast(1)); true }
-            key.unicodeChar >= 32 && key.unicodeChar != 127 && (!secret || key.unicodeChar.toChar().isDigit()) -> { change(text + key.unicodeChar.toChar()); true }
-            else -> false
-        }
-    }, verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp)) {
-        keys.chunked(columns).forEachIndexed { row, letters ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                letters.forEachIndexed { column, letter ->
-                    val index = row * columns + column
-                    val label = if (uppercase) letter.uppercase() else letter.toString()
-                    AppButton(label, { change(text + label) }, Modifier.size(if (secret) 110.dp else 84.dp, if (compact) 48.dp else 64.dp)
-                        .focusRequester(targets[index])
-                        .onFocusChanged { if (it.isFocused) onKeyFocused(targets[index]) }
-                        .focusProperties {
-                            left = if (column > 0) targets[index - 1] else leftBoundary ?: FocusRequester.Default
-                            right = if (column < letters.lastIndex) targets[index + 1] else FocusRequester.Default
-                            up = if (row > 0) targets[index - columns] else FocusRequester.Cancel
-                            down = if (index + columns < keys.length) targets[index + columns] else FocusRequester.Default
-                        }
-                        .onPreviewKeyEvent { event ->
-                            if (onResults != null && column == letters.lastIndex && event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                                if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) onResults()
-                                true
-                            } else false
-                        }, pill = false)
-                }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (!secret) AppButton("Space", { change(text + " ") }, Modifier.width(180.dp).height(if (compact) 52.dp else 72.dp), pill = false)
-            AppButton("Delete", { change(text.dropLast(1)) }, Modifier.width(180.dp).height(if (compact) 52.dp else 72.dp), pill = false)
-            AppButton("Clear", { change("") }, Modifier.width(180.dp).height(if (compact) 52.dp else 72.dp), pill = false)
-        }
-        if (onResults != null) AppButton("Results", onResults, Modifier.fillMaxWidth().height(52.dp), icon = "search", pill = false)
-        if (symbols) Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ":/.?=&_-".forEach { symbol -> AppButton(symbol.toString(), { change(text + symbol) }, Modifier.size(64.dp, 48.dp), pill = false) }
-            AppButton("Shift", { uppercase = !uppercase }, Modifier.width(140.dp).height(48.dp), selected = uppercase, pill = false)
-        }
+        LaunchedEffect(title) { withFrameNanos {}; runCatching { first.requestFocus() }; keyboard?.show() }
     }
 }
 
