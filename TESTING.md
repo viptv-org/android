@@ -1,3 +1,56 @@
+# AND-042 real multi-track TV return and Guide audit — 2026-10-02
+
+App source: `3f21e4126c708bae87720391994217960249a2f0`; Core
+`1f8483e365867f99eb39928cd7f3a23920003515`; design
+`85a20e918d44af28d20caa52997b1d307922cf29`. API36 Android TV x86_64,
+Android16, dedicated emulator5576, 1920×1080, local HTTPS fixture. JDK17,
+Gradle max-workers2, normal app code and Media3; no test player/controller.
+The three native Core ABI binaries were reused from the prior qualified build
+at the identical Core pin. The fixture-trusting debug APK assembled successfully.
+
+The old adapter rewrote only `value.delivery`, while the current shared TV-web
+preview returns a legacy flat playback response. Thus ANDROID_FIXTURE_MEDIA
+had no effect and the app could still receive the short HLS clip. The adapter
+now wraps flat/nested playback into the current ready v2 lease, sets the actual
+native duration/media and renews the same delivery envelope at heartbeat. A
+flat fixture POST and its heartbeat returned a 240-second direct original
+delivery; the native player independently displayed `4:00` and decoded video
+past three minutes. This corrects qualification tooling, not application UX.
+
+`make-track-media.sh` supplies an ignored 240-second H.264 test pattern, two AAC
+audio tracks and two actual mov_text subtitle tracks (English/Spanish). The
+remote acceptance uses actual native track inventory, not server-synthetic rows:
+
+- INFO → Right → OK opened Subtitles with Off/en/es and Off · Current.
+- Back returned to the highlighted Subtitles control. Immediate OK, without
+  re-navigation, reopened Subtitles rather than toggling playback.
+- Selecting English closed the panel and kept Subtitles highlighted. Immediate
+  OK reopened it with `en · Current`. A real English subtitle cue rendered over
+  continuing decoded video. The native sequence also paused/resumed media.
+- `python3 qualification/check-player-tracks.py` passed the repeatable Back,
+  selection and Current checks. Its saved native cue screenshot was inspected;
+  subtitle cues are hidden from accessibility, so XML is not a cue-render claim.
+
+Source/app UI is unchanged. This qualifies direct native subtitle-track return
+on this emulator/fixture only. Managed output replacement, selecting alternate
+audio, long track-list scrolling, physical TV input, sideloaded external
+subtitles and image subtitle formats remain unqualified by this pass.
+
+The populated native Guide was captured and inspected. `DESIGN_AUDIT.md`
+records the fresh TvLive/TvLiveDetails/TvLiveSearch source comparison at the
+exact pin: missing preview/progress/next, channel/logo/row geometry, cell times/
+progress, now marker, and details action/hint gaps. The native keyboard is an
+explicit Android exception. Details and Search gaps are source comparisons,
+not a new complete remote-flow acceptance. TV layout remains unchanged and
+design#6 remains open; no new pixel-similarity or physical-device claim is made.
+
+Validation: debug APK assembly, Core/design integrity, Node fixture syntax,
+shell generator syntax, Python checker compilation, existing bounded category
+fixture check and the actual native remote check passed. No application code or
+wire contract changed; no new Rust/Android unit-test count is claimed. Private
+media, certificate/key, logs, APK and captures stay ignored. No production data,
+deployment, migration or physical device was used.
+
 # AND-042 phone presentation and track menus (design#6) — 2026-09-30
 
 Adopts design `6da30a58c839e4e66465a76c8f80471139147f27` (AND-042). Phone Home

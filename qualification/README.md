@@ -116,6 +116,35 @@ No media bytes are packaged in the app. `POST /__control` with
 `{"delaySearchMovies":9000}` delays only movie search catalogs; reset it to zero
 after checking late-arrival focus. The fixture's continuation advances its
 reference episode IDs so countdown expiry and Play now can be checked separately.
+
+### Native multi-track TV return check
+
+Generate a four-minute local MP4 with two actual AAC audio tracks and English/
+Spanish `mov_text` subtitles (FFmpeg is required):
+
+```sh
+bash qualification/make-track-media.sh
+ANDROID_FIXTURE_MEDIA="$PWD/qualification/fixtures/track-focus.mp4" \
+  ANDROID_FIXTURE_DURATION=240 bash qualification/start-fixture.sh --tv
+```
+
+For an isolated worktree, set `ANDROID_FIXTURE_TV_WEB` to the sibling shared
+TV-web checkout. The adapter accepts its legacy flat playback preview response
+and current nested delivery response, supplies a v2 lease and renews the same
+delivery during native heartbeat requests. Verify the actual player shows
+`4:00`; a short HLS clip cannot establish this acceptance.
+
+On the dedicated TV emulator 5576, install the fixture-trusting debug APK,
+enter the local preview origin and start playback through the app. Close any
+open panel, then run `python3 qualification/check-player-tracks.py`. It pauses
+the loaded native media, resets subtitles to Off through the remote, verifies
+Back and selection return by immediately reopening Subtitles without moving
+focus, checks the actual `en · Current` row and resumes to a rendered English
+cue. Private screenshots/XML are written under ignored artifacts for visual
+inspection of the highlighted Subtitles control. This is actual Media3 direct
+track acceptance; server-managed track replacement and physical TV remain
+separate checks. Pointer setup is allowed; the acceptance sequence uses only
+remote/media keys.
 # Reliability follow-up checks
 
 On the paired remote of dedicated emulator 5574, run
