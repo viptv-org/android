@@ -3,9 +3,10 @@
 Owner instructions, 2026-10-01: keep tickets in local Markdown, use Mimir model
 routing, make narrow commits, verify locally on Windows and push the changes.
 
-Canonical design: `ce7084ff80d0541257509748ea772ef0f95d8058`, including
-`SRC-OVERFLOW-001` and `CW-SOURCE-BACK-001`. Android and TV-web adopt this exact
-revision before implementation. Shared Rust policy remains authoritative.
+Canonical source design: `d088071106e4d5479aea761469152e037f011a3c`, including
+`SRC-OVERFLOW-001`, `CW-SOURCE-BACK-001` and `SRC-PROVIDERS-001`. Android's
+native keyboard uses the later `AND-KEYBOARD-001` platform exception. Each
+client records its exact adopted revision; shared Rust policy stays authoritative.
 
 | Order | Ticket | Dependencies | Execution |
 | --- | --- | --- | --- |

@@ -5,7 +5,7 @@ that show's info page and episode selector, allowing another episode to be
 chosen. Back from the info page restores the original queue card.
 
 **Blocked by:** None (design is already committed).
-**Status:** in-review
+**Status:** in-progress
 **Triage:** ready-for-agent
 **Owner:** Android navigation worker and source_picker_tv (GPT-6 Sol, low).
 **Contract:** CW-SOURCE-BACK-001 at design ce7084ff80d0541257509748ea772ef0f95d8058.
@@ -23,3 +23,8 @@ Android implementation: `94ac6a5`; the parent-identity regression passed with
 the local unit suite. TV-web implementation: `a906e47`; the responsive browser
 flow passed queue episode sources -> parent details -> different episode sources
 -> details -> Home. Broader review and native route acceptance remain pending.
+
+Native acceptance found a remaining failure: a Continue Watching series-shaped
+S2E9 item returned to Home instead of the episode selector. The episode-only
+entry marker missed series items carrying season/episode coordinates. The Sol
+worker is adding that exact regression and fixing the route/parent projection.
