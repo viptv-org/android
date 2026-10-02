@@ -42,3 +42,6 @@ activation preserved the running backend binary and its other settings;
 SQLite backup/quick-check and protected account/profile/session/add-on/import/
 favorites/progress records passed before/after checks. No production change or
 automatic deployment workflow was added. Private screenshots/logs stay ignored.
+
+Independent Luna review found no confirmed code issues. It also confirmed the
+canvas evidence limitation is explicitly recorded in TV-web TESTING.md.

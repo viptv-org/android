@@ -23,7 +23,7 @@ Jumping to 1059 focused the correctly titled episode, but its image and nearby
 images remained blank after settling. Jumping to 2 rendered episode thumbnails
 normally. The same virtual LazyRow handles both ranges. Activating 1059 opened
 a populated chooser with 19 sources, including torrents explicitly naming 1059.
-No source was started and no playback/history write was performed.
+This evidence establishes source discovery and artwork, not playback success.
 
 Private native captures are under
 `qualification/artifacts/native-final-acceptance-20261001/episode1059-*`.
@@ -57,5 +57,5 @@ jumping back to 2 retains its real episode thumbnails. All 1410 episodes remain,
 the same app process stayed alive, and source activation still uses the original
 episode. Final inspected captures are `episode1059-fixed-fallback.png` and
 `episode1059-fixed-original-thumbnails.png` in the private acceptance directory.
-No personal playback was initiated. Upstream 404 images remain unavailable;
+Actual provider playback is outside this artwork qualification. Upstream 404 images remain unavailable;
 the fix provides the existing shared fallback instead of manufacturing stills.

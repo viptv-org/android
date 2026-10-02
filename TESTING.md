@@ -865,7 +865,7 @@ The final Windows host/native flow passed 223 unit tests with no failures,
 errors or skips, three core ABIs, APK assembly and lint. The normal APK was
 installed preserving sign-in. Private inspected actual-account captures show
 1059's fallback and episode 2's original still with the same process alive.
-No personal playback was started during this diagnosis.
+Provider playback success is outside this artwork qualification.
 
 Web Fit/Fill is recorded in local ticket 10 and TV-web TESTING.md at aed6ed5.
 The qualified website bundle is active on dev.embedez.com/tv/; public HTML and
