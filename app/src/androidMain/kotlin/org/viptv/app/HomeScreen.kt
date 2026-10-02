@@ -109,6 +109,13 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
     val hero = remember(media) { CoreModels.presentation(media) }
     val saved = state.favorites.any { it.id == media.id && it.type == media.type }
     LaunchedEffect(media.id) { if (state.homeFocus.mediaKey == null || (state.homeFocus.surface == HomeFocusSurface.Hero && controller.homeContentFocused)) { withFrameNanos {}; runCatching { initial.requestFocus() } } }
+    LaunchedEffect(media.id, state.homeFocus.restoreRequest) {
+        if (state.homeFocus.restoreRequest > 0 && state.homeFocus.surface == HomeFocusSurface.Hero &&
+            state.homeFocus.mediaKey == HomeFocusPolicy.mediaKey(media)) {
+            withFrameNanos {}
+            runCatching { initial.requestFocus() }
+        }
+    }
     Box(Modifier.fillMaxWidth().height(610.dp)) {
         VText(if (queue) "CONTINUE WATCHING" else if (media.type == "live") "LIVE NOW" else "FEATURED", 20, Modifier.offset(y = 96.dp), C.textSecondary, bold = true)
         if (hero.titleLogo.isNullOrBlank()) VText(media.name, 56, Modifier.offset(y = 142.dp).width(800.dp), display = true, lines = 2)

@@ -5,12 +5,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -23,6 +29,7 @@ import org.junit.runner.RunWith
 
 /** The Home TV hero invokes activateHero for the active Continue Watching episode. */
 @RunWith(AndroidJUnit4::class)
+@OptIn(ExperimentalTestApi::class)
 class HomeHeroEpisodeReturnTest {
     @get:Rule val compose = createComposeRule()
 
@@ -33,7 +40,9 @@ class HomeHeroEpisodeReturnTest {
         try {
             compose.setContent {
                 val state by controller.state.collectAsState()
-                CompositionLocalProvider(LocalTv provides true, LocalDensity provides Density(1f, 1f)) {
+                val contentFocus = remember { FocusRequester() }
+                CompositionLocalProvider(LocalTv provides true, LocalDensity provides Density(1f, 1f),
+                    LocalContentFocus provides contentFocus) {
                     ViptvTheme(false, Color.White) { Box(Modifier.fillMaxSize()) {
                         if (state.route is Route.Browse) HomeScreen(state, controller)
                         else if (state.route is Route.Details) VText("Parent details")
@@ -44,7 +53,7 @@ class HomeHeroEpisodeReturnTest {
                 controller._state.value = AppState(route = Route.Browse(Destination.Home), sessionRestoring = false,
                     shelves = listOf(HomeShelf("Continue Watching", listOf(episode), isQueueShelf = true)))
             }
-            compose.onNodeWithText("Resume").performClick()
+            compose.onNodeWithText("Resume").assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
             compose.waitUntil(5_000) { controller.state.value.route is Route.Sources }
             val sourceRoute = controller.state.value.route as Route.Sources
             assertTrue(sourceRoute.queueEpisodeReturn)
@@ -53,6 +62,7 @@ class HomeHeroEpisodeReturnTest {
             assertEquals("show", (controller.state.value.route as Route.Details).media.id)
             compose.runOnIdle { controller.back() }
             assertEquals(Route.Browse(Destination.Home), controller.state.value.route)
+            compose.onNodeWithText("Resume").assertIsFocused()
         } finally {
             controller.scope.cancel()
         }
@@ -96,10 +106,15 @@ class HomeHeroEpisodeReturnTest {
     }
 
     @Test fun resumeHeroPlayerExitLoadsParentEpisodeAndThenReturnsHome() {
+        assertResumeHeroPlayerExit(Media("show:1:1059", "episode", name = "Fixture Show", seriesId = "show",
+            season = 1, episode = 1059, positionMillis = 60_000))
+        assertResumeHeroPlayerExit(Media("show", "series", name = "Fixture Show",
+            season = 1, episode = 1059, positionMillis = 60_000))
+    }
+
+    private fun assertResumeHeroPlayerExit(episode: Media) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val controller = AppController(instrumentation.targetContext, "https://example.invalid")
-        val episode = Media("show:1:1059", "episode", name = "Fixture Show", seriesId = "show",
-            season = 1, episode = 1059, positionMillis = 60_000)
         val home = Route.Browse(Destination.Home)
         val picker = Route.Sources(episode, resume = true, origin = SourceReturn.Home,
             backRoute = home, queueEpisodeReturn = true)
