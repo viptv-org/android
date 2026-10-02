@@ -54,7 +54,8 @@ internal object CoreModels {
     fun presentation(media: Media): MediaPresentation = CoreJson.decode(normalize("presentation", media.normalizedJson(), ""))
     fun initialEpisode(media: Media): Media? {
         val input = JSONObject().put("episodes", org.json.JSONArray().also { array -> media.episodes.forEach { array.put(JSONObject(it.normalizedJson())) } })
-            .put("original", JSONObject(media.normalizedJson())).put("now", System.currentTimeMillis())
+            .put("original", JSONObject().putOpt("season", media.season).putOpt("episode", media.episode))
+            .put("now", System.currentTimeMillis())
         val result = normalize("initialEpisode", input.toString(), "")
         return if (result == "null") null else CoreJson.decode<MediaItem>(result).view()
     }
