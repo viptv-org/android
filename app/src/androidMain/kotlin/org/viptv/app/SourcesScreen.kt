@@ -79,9 +79,10 @@ import org.viptv.app.theme.ViptvColor as C
             items(sources.mapNotNull { it.quality }.distinct()) { value -> AppChip(value, { quality = value }, quality == value) }
             item { AppChip(provider?.let { providerLabels[it] } ?: "All providers", { picker = true }, provider != null) }
         }
+        SourceDiscoveryStatus(state.sourceLoading, sources.isNotEmpty())
         if (shown.isEmpty()) EmptyState(
-            if (state.sourceLoading) "Finding sources" else if (sources.isEmpty()) "No sources available" else "No matching sources",
-            if (state.sourceLoading) "Sources appear here as they arrive." else "Choose another provider or check your addons in Settings.", "list",
+            if (state.sourceLoading) "Sources appear here as they arrive." else if (sources.isEmpty()) "No sources available" else "No matching sources",
+            if (state.sourceLoading) "" else "Choose another provider or check your addons in Settings.", "list",
             retry = if (state.sourceLoading) null else { { val route = state.route as? Route.Sources; controller.chooseSources(media, route?.resume == true, route?.origin ?: SourceReturn.Details) } })
         else LazyColumn(Modifier.fillMaxWidth().then(if (tv) Modifier.weight(1f) else Modifier.heightIn(max = 440.dp)), verticalArrangement = Arrangement.spacedBy(measure(14, 12)), contentPadding = PaddingValues(4.dp)) {
             itemsIndexed(shown, key = { _, source -> source.id }) { index, source ->
@@ -116,12 +117,23 @@ import org.viptv.app.theme.ViptvColor as C
             }
         }
         if (state.preparingSourceId != null) VText("Opening your selected source. Back cancels.", if (tv) 20 else 13, Modifier.padding(top = 12.dp), C.textSecondary)
-        if (state.sourceLoading && shown.isNotEmpty()) VText("Still checking sources…", if (tv) 20 else 13, Modifier.padding(top = 12.dp), C.textTertiary)
         LaunchedEffect(shown.isNotEmpty(), picker) {
             if (tv && shown.isNotEmpty() && !claimed && !picker) { withFrameNanos {}; runCatching { first.requestFocus() }; claimed = true }
         }
     }
     if (picker) ChoiceDialog("Provider", listOf("All providers" to { provider = null; picker = false }) + providerLabels.map { (id, label) -> label to { provider = id; picker = false } }, { picker = false })
+}
+
+/** Reserved above the list so progressive arrivals do not move its controls. */
+@Composable internal fun SourceDiscoveryStatus(loading: Boolean, hasSources: Boolean) {
+    val tv = LocalTv.current
+    Box(Modifier.fillMaxWidth().height(measure(40, 32)).semantics { liveRegion = LiveRegionMode.Polite }.testTag("source-discovery-status"),
+        contentAlignment = Alignment.CenterStart) {
+        if (loading) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(measure(12, 8))) {
+            CircularProgressIndicator(Modifier.size(measure(22, 18)).testTag("source-discovery-spinner"), color = LocalAccent.current, strokeWidth = 2.dp)
+            VText(if (hasSources) "Still checking sources" else "Finding sources", if (tv) 20 else 13, color = C.textSecondary)
+        }
+    }
 }
 
 /** A stationary two-line viewport; only its measured, overflowing text travels. */
