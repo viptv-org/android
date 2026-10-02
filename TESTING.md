@@ -8,19 +8,22 @@ in 5.144 seconds (one test). The test asserts native television mode and uses
 the paired synthetic session, actual AppController/GuideScreen, local HTTPS
 fixture responses and the application's 1920-coordinate density.
 
-One initial public focus setup selects All. Ordinary remote keys move to News
-and apply that filter; remote OK opens Search, native text input/IME Done submits
-CNBC, and the real controller replaces the channel page and loads its schedule.
-Ordinary remote navigation then reaches future Halftime Report. OK opens its
+One initial public focus setup selects All. Compose key input moves to News
+and applies that filter; Compose remote OK opens Search. The editable field
+and IME action are driven through Compose semantics to submit CNBC, and the
+real controller replaces the channel page and loads its schedule. Compose
+remote key navigation then reaches future Halftime Report. OK opens its
 Watch live details; native Android Back restores the same programme semantics
-ID, bounds and focus on CNBC. No focus request repairs Search or Back. The
+ID, bounds and focus on CNBC. Back uses an actual instrumentation Android key
+event. No focus request repairs Search or Back. The
 HTTPS fixture journal proves no playback admission before or after the flow.
 
 This completes the formerly unqualified filter/Search/result/future-details/
 Back functional chain through the pre-agreed public composition/remote seam.
 It uses the actual controller and HTTP boundary with synthetic backend data;
 it is not actual backend/gateway delivery, full ApplicationShell/rail navigation,
-pixel parity or physical remote/decoder acceptance. Current Guide presentation
+pixel parity, OS keyboard UI interaction or physical remote/decoder acceptance.
+Current Guide presentation
 gaps remain unchanged. The earlier partial-chain caveats below describe the
 older checkpoint and are superseded only for this scoped functional chain.
 

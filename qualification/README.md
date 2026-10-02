@@ -174,7 +174,9 @@ APK and run only `org.viptv.app.GuideRemoteFixtureTest` with instrumentation
 argument `-e viptvGuideFixture true`. The class skips by default, asserts actual
 television mode, and never connects outside the isolated fixture origin. It
 uses one initial focus setup; News/Search/CNBC/future-details/native-Back are
-then real controller/HTTP and ordinary remote/native-input actions. It checks
+then real controller/HTTP with Compose remote key input. Editable text and IME
+submission use Compose semantics; Back is an actual Android instrumentation key
+event. The OS keyboard UI is not clicked or qualified. The test checks
 the exact restored programme node/bounds and zero playback admissions. This
 qualifies that public composition/remote chain, not the app rail, actual gateway
 delivery, pixel parity or physical input. Normal APKs must omit fixture trust.
