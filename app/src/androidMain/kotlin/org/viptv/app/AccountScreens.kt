@@ -292,10 +292,10 @@ private var cachedAvatarCatalog: List<AvatarCategory>? = null
     var value by remember(title) { mutableStateOf(initial.take(maxLength)) }
     val first = remember { FocusRequester() }
     fun edit(text: String) { value = (if (secret) text.filter(Char::isDigit) else text).take(if (secret) 8 else maxLength) }
-    val keyboard = LocalSoftwareKeyboardController.current
-    fun submit() { val submitted = value; keyboard?.hide(); if (secret) value = ""; onDone(submitted) }
-    AppOverlay(title, { value = ""; keyboard?.hide(); onCancel() }, full = tv) {
+    AppOverlay(title, { value = ""; onCancel() }, full = tv) {
+        val keyboard = LocalSoftwareKeyboardController.current
         val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+        fun submit() { val submitted = value; keyboard?.hide(); if (secret) value = ""; onDone(submitted) }
         BackHandler { if (imeVisible) keyboard?.hide() else { value = ""; onCancel() } }
         VText(instruction, if (tv) 24 else 15, color = C.textSecondary)
         Spacer(Modifier.height(24.dp))

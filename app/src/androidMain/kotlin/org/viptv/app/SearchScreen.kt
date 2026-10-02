@@ -56,17 +56,21 @@ import org.viptv.app.theme.ViptvColor as C
     Column(Modifier.fillMaxSize().imePadding().padding(start = measure(192, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
         ScreenHeader("Search", if (tv) null else controller::back)
         if (tv) Column(Modifier.fillMaxSize()) {
-            AppField(state.searchQuery, controller::search, "Search movies and series",
-                Modifier.width(960.dp).height(80.dp).focusRequester(first).focusProperties { left = rail; right = resultsButton }
-                    .onPreviewKeyEvent { event ->
-                        val key = event.nativeKeyEvent
-                        if (key.action == KeyEvent.ACTION_DOWN && key.repeatCount == 0 &&
-                            key.keyCode in listOf(KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)) {
-                            enterResults(); true
-                        } else false
-                    }, onSubmit = ::enterResults, imeAction = ImeAction.Search)
-            Spacer(Modifier.height(24.dp))
-            AppButton("Results", ::enterResults, Modifier.width(960.dp).focusRequester(resultsButton).focusProperties { left = first })
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                AppField(state.searchQuery, controller::search, "Search movies and series",
+                    Modifier.width(960.dp).height(80.dp).focusRequester(first).focusProperties { left = rail; right = resultsButton }
+                        .onPreviewKeyEvent { event ->
+                            val key = event.nativeKeyEvent
+                            if (!imeVisible && key.keyCode in listOf(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER)) {
+                                if (key.action == KeyEvent.ACTION_DOWN && key.repeatCount == 0) keyboard?.show()
+                                true
+                            } else if (key.action == KeyEvent.ACTION_DOWN && key.repeatCount == 0 &&
+                                key.keyCode in listOf(KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)) {
+                                enterResults(); true
+                            } else false
+                        }, onSubmit = ::enterResults, imeAction = ImeAction.Search, showKeyboardOnFocus = false)
+                AppButton("Results", ::enterResults, Modifier.width(220.dp).focusRequester(resultsButton).focusProperties { left = first })
+            }
             VText(state.searchStatus, 22, Modifier.padding(top = 24.dp, bottom = 20.dp), C.textTertiary)
             LazyColumn(state = resultRows, verticalArrangement = Arrangement.spacedBy(36.dp), contentPadding = PaddingValues(4.dp)) {
                 items(state.searchSections, key = { state.searchQuery + "\u0000" + it.id }) { section ->
