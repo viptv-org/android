@@ -1,5 +1,56 @@
 # AND-035 — Native Android phone and TV design adoption
 
+## AND-043 — Title source summary and episode watching marker (2026-10-02)
+
+Status: proposed for Android phone and TV, tracked by design issue 6. Source
+revision is the immutable design commit introducing this section. Visual sources
+are the committed Title and TvTitle boards in `viptv-design-system/reference/`.
+This replaces their placeholder source information with account-backed facts;
+TV control sizes, placement and navigation remain unchanged.
+
+Opening a movie or a populated series Title starts one background discovery for
+the same exact Play/Resume target chosen by shared Core. A series without an
+available episode and a live channel do not discover Title sources. Wait 400ms
+after entry, cancel on target/profile replacement or leaving the Title and its
+own source picker/player, and bound discovery to three minutes. Recomposition
+must not restart discovery. Opening the matching source picker adopts the
+running or completed discovery, including producer failures, without starting a
+second job. Leaving the Title family discards the preview; a new visit may
+discover afresh. Background discovery never starts playback or changes Resume's
+exact-source requirement.
+
+The summary ranks only returned sources using Core's `sourceMatch` policy with
+measured device limits and preferred audio; equal ranks keep discovery order.
+Unknown device limits remain unknown. The phone source row keeps its 58dp height:
+quality badge (or `Auto`), provider label, and `N sources` (singular `1 source`).
+The TV's existing 72px source control shows the same quality/provider summary.
+Activating either opens the manual picker. They retain accessible names identifying
+Choose source. Before a source arrives, show a layout-matching skeleton inside
+that control with the accessible name Choose source. Partial results update the
+summary without moving focus. Finished empty discovery reads `No sources found`;
+failure or timeout with no rows reads `Sources unavailable`. These states remain
+actionable and open a fresh picker attempt. A failure after partial rows retains
+those rows. Safe display facts only are exposed; no stream URLs, headers or tokens.
+
+For a TV episode with positive saved progress and no watched completion, show
+`WATCHING` at the artwork's top-left (14px insets, 30px height, 15px radius,
+12px horizontal padding, 16px bold uppercase text on 65% black). Keep the existing
+progress line. An unstarted or completed episode has no WATCHING marker; completed
+episodes keep their specified Watched badge. The marker has no separate focus or
+action. Phone episode layout and all card actions remain unchanged.
+
+Acceptance AND-043-01: movie and series Title display real quality/provider/count
+after delayed partial and completed discovery; repeated recomposition starts no
+extra job. AND-043-02: Back or profile/target replacement cancels discovery, and
+late rows cannot appear on another Title. AND-043-03: opening the matching manual
+picker reuses pending/completed rows and producer outcomes; returning preserves
+the summary, original focus, exact-source Resume and manual source selection.
+AND-043-04: empty, failed and timed-out previews recover through the picker, and
+live/episode-less titles issue no discovery. AND-043-05: positive-progress TV
+episode shows WATCHING, completed and unstarted episodes do not, and phone cards
+keep their layout. Functional, emulator visual and physical evidence remain
+separate; specifying these states does not claim implementation or parity.
+
 ## CW-SOURCE-BACK-001 — Continue Watching episode source return (2026-10-01)
 
 Status: proposed for Android phone and TV; source revision is the design commit

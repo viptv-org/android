@@ -253,10 +253,10 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
 }
 
 /** Layout-matching loading placeholder (AND-042); never a "Loading…" label. */
-@Composable internal fun SkeletonBlock(modifier: Modifier, radius: Dp = measure(16, 16)) {
+@Composable internal fun SkeletonBlock(modifier: Modifier, radius: Dp = measure(16, 16), color: Color = C.surfaceN1) {
     val pulse = rememberInfiniteTransition(label = "skeleton")
     val alpha by pulse.animateFloat(.55f, 1f, infiniteRepeatable(androidx.compose.animation.core.tween(900), androidx.compose.animation.core.RepeatMode.Reverse), label = "skeleton-alpha")
-    Box(modifier.alpha(alpha).clip(RoundedCornerShape(radius)).background(C.surfaceN1))
+    Box(modifier.alpha(alpha).clip(RoundedCornerShape(radius)).background(color))
 }
 
 @Composable internal fun PosterSkeletonGrid(columns: Int, rows: Int = 3, modifier: Modifier = Modifier) {

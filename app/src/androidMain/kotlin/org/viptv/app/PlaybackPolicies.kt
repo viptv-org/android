@@ -163,3 +163,29 @@ object PlaybackRecoveryPolicy {
         PlaybackReturn.Sources -> Route.Sources(media)
     }
 }
+
+/**
+ * Orders discovered sources for display with the shared Rust `sourceMatch`
+ * rank, comparing each source with the others offered (AND-043). Ties keep
+ * discovery order. This only orders what is shown; it never starts playback.
+ */
+object SourceRankPolicy {
+    fun order(sources: List<Source>, capabilities: PlaybackClientCapabilities?, audioLanguage: String): List<Source> {
+        if (sources.size < 2) return sources
+        val caps = JSONObject().putOpt("maxHeight", capabilities?.maxHeight?.takeIf { it > 0 }).put("hevcSdr", capabilities?.hevcSdr == true)
+        val prefs = JSONObject().put("audioLanguage", audioLanguage)
+        val labels = sources.map(::label)
+        val candidates = org.json.JSONArray().also { array -> labels.forEach { array.put(it) } }
+        val ranks = labels.map { label ->
+            (CorePolicy.value("sourceMatch", JSONObject().put("source", label).put("capabilities", caps).put("preferences", prefs).put("candidates", candidates)) as? JSONObject)
+                ?.optDouble("rank", Double.MAX_VALUE) ?: Double.MAX_VALUE
+        }
+        return sources.indices.sortedWith(compareBy<Int> { ranks[it] }.thenBy { it }).map(sources::get)
+    }
+    /** Only safe display facts are ranked; source identifiers and URLs are never sent. */
+    private fun label(source: Source): JSONObject = JSONObject()
+        .put("name", source.name)
+        .putOpt("title", source.quality)
+        .putOpt("audio", source.audio)
+        .put("raw", JSONObject().put("description", source.description))
+}

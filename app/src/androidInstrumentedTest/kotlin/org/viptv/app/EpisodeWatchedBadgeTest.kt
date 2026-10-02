@@ -84,6 +84,7 @@ class EpisodeWatchedBadgeTest {
         }
         compose.onNodeWithText("The Future").assertExists()
         if (watched) {
+            compose.onAllNodesWithTag("episode-watching-badge", useUnmergedTree = true).assertCountEquals(0)
             compose.onNodeWithTag("episode-watched-badge", useUnmergedTree = true).assertExists()
             compose.onNodeWithText("Watched").assertExists()
             compose.onAllNodesWithTag("episode-progress", useUnmergedTree = true).assertCountEquals(0)
@@ -95,6 +96,8 @@ class EpisodeWatchedBadgeTest {
         } else {
             compose.onAllNodesWithTag("episode-watched-badge", useUnmergedTree = true).assertCountEquals(0)
             compose.onNodeWithTag("episode-progress", useUnmergedTree = true).assertExists()
+            if (tv) compose.onNodeWithTag("episode-watching-badge", useUnmergedTree = true).assertExists()
+            else compose.onAllNodesWithTag("episode-watching-badge", useUnmergedTree = true).assertCountEquals(0)
         }
     }
 }

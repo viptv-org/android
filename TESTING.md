@@ -905,6 +905,77 @@ These checks qualify emulator UI and controller/HTTP fixtures. Actual initialize
 decoder playback, a real final-save HTTP transaction and physical-TV capability
 were not exercised. Missing/failed manual refresh retains the last known position
 and accepted watched fact until an authoritative row arrives.
+## Phone Title dimensions — 2026-10-02
+
+The Title board at pinned design `18b19af378b27655e3b6401f17b92321739dba83`
+defines a 300dp hero and 58dp action buttons. Details now uses that hero height
+and the generated `sizeButtonPhoneDetail` token for Play/Resume, retry, My List
+and More info. Shared control defaults and TV geometry are unchanged.
+
+On the isolated candidate based on Android `a9e4167`, Core and design integrity
+passed. JDK17 host preparation, 228 library/app unit tests (zero failures/errors),
+and debug APK assembly passed with two workers. Lint retained 78 warnings and
+three errors filtered by the existing baseline. All three native Core ABIs were
+built from pinned Core `1f8483e365867f99eb39928cd7f3a23920003515`.
+No emulator visual, native input or physical-device qualification is claimed.
+## AND-043 Title discovery and watching marker — 2026-10-02
+
+Adopts proposed design `85a20e918d44af28d20caa52997b1d307922cf29`, grounded
+in the committed Title/TvTitle boards. Title now discovers its Core-selected
+Play/Resume target once after a 400ms settle, with a three-minute limit. Its
+manual source picker adopts pending/completed rows and producer outcomes.
+Profile/target/route replacement invalidates callbacks; empty/failed previews
+can retry through the picker. Source summary order uses Core sourceMatch with
+measured limits and audio preference. Discovery does not select or play a source.
+TV partial-progress episodes show WATCHING; completed episodes retain Watched.
+
+JDK17 checks at Core `1f8483e365867f99eb39928cd7f3a23920003515`: Core/design
+integrity, 237 library/app unit tests, debug APK assembly and lint passed with two
+workers. Lint retains the existing 78 warnings and three baseline-filtered errors.
+The nine added host tests cover settle/recomposition, cancellation, partial and
+completed adoption, producer failures, late callbacks, bounded timeout, retry,
+profile/route eligibility and shared-Core ranking.
+
+Nine class-filtered Compose instrumentation tests passed on the fresh owned API36
+Google APIs x86_64 phone AVD `viptv-and043-qa-20261002` (`emulator-5586`). They
+verify displayed quality/provider/count, explicit manual-picker actions,
+empty/failure copy, and watched/WATCHING/progress state. TV component variants
+use LocalTv in this phone emulator; this is not Android TV remote acceptance or
+matched full-screen visual parity. The normal debug APK has no fixture CA;
+the tests used synthetic component data, with no account/backend connection.
+The exact owned emulator was stopped and its AVD deleted after the run.
+
+Authenticated Title-to-picker emulator flows, TV Guide re-audit, TV track-panel focus
+return with longer media, and physical Android acceptance remain unverified.
+
+## AND-043 manual-picker focus return — 2026-10-02
+
+Review exposed a Title-family focus gap: the TV source summary opened its manual
+picker, but Back recreated Details and focused Play/Resume. Details now saves a
+one-shot logical source-control return target and attaches a fresh focus
+requester on re-entry. Consuming that return leaves subsequent primary/episode
+restoration paths intact. TV geometry, design `85a20e9`, discovery and exact-source
+Resume policy are unchanged.
+
+The new `TitleSourceFocusReturnTest` uses actual DetailsScreen, SourcePicker and
+controller navigation in a saveable route composition. It requests keyboard
+focus, activates the source control with DPAD_CENTER, injects Android Back, and
+asserts source focus. The assertion failed before the fix and passed after it.
+The same flow then enters through Play and verifies Back restores Play, rather
+than retaining the earlier source-return target. No account/backend/media is
+required by this synthetic movie fixture.
+
+All ten class-filtered Compose tests (the new return test plus source-summary and
+episode-badge suites) passed on fresh owned API36 Google APIs x86_64 phone AVD
+`viptv-focus-qa-20261002`, serial `emulator-5588`, at an owned 1600×900/160dpi test
+viewport with LocalTv. This proves component route/focus behavior, not Android TV
+remote hardware or full-screen parity. JDK17 host preparation, all 237 unit tests,
+design integrity, debug assembly and the three pinned Core Android ABIs pass with
+two workers. Lint retains 78 existing warnings and three baseline-filtered errors,
+with no new errors. The owned emulator and its AVD were removed after checking.
+Broad authenticated Title/picker flows, TV Guide, real long-media track-panel
+return and physical acceptance remain open.
+
 
 ## Loaded hero episode restoration - 2026-10-02
 
@@ -935,3 +1006,31 @@ loaded 1,410-episode list; the next Back returned Home. Acceptance used native
 hierarchy assertions without additional screenshots or source activation.
 The Continue Watching card also restored episode 1059 visibly and with focus.
 No personal playback/history write occurred. Physical TV is unqualified.
+
+## AND-043 reconciliation with loaded episode return — 2026-10-02
+
+Merged Android main `1ea4b0e` into the Title candidate, preserving the explicit
+Details entry identity, delayed saved-episode restoration and keyboard-mode
+request for pointer-triggered TV episode returns. The source-control return uses
+that same entry identity and clears pending episode restoration before opening
+its picker, so an episode restoration cannot compete for focus on Back. Its
+route regression now uses the application's actual saveable screen key.
+
+JDK17 host preparation, all 237 library/app unit tests (zero failures/errors/skips),
+Core/design integrity, all three pinned Core Android ABIs, debug and instrumentation
+APK assembly, and lint passed with two workers. Lint reports zero errors and
+78 existing warnings, with three errors filtered by the existing baseline.
+
+All 20 class-filtered Compose tests passed together in 21.794 seconds on the fresh
+owned API36 Google APIs x86_64 AVD `viptv-merge-qa-20261002`, serial `emulator-5590`,
+at 1600×900/160dpi with LocalTv. Classes: `TitleSourceFocusReturnTest`,
+`TitleSourceControlTest`, `EpisodeWatchedBadgeTest`, `DetailsEpisodeReturnTest`
+and `HomeHeroEpisodeReturnTest`. The combined suite covers actual Details/source
+navigation and source focus, delayed 1,410-episode metadata, saved season/episode,
+retained manual jumps and fresh visits, Continue Watching/hero Back and pointer
+activation. Fixtures use synthetic data and no authenticated account or media.
+The owned emulator was stopped and its AVD removed after qualification.
+
+This proves the combined component/controller behavior on the named emulator;
+authenticated Title flows, TV Guide re-audit, long-media track-panel return and
+physical Android TV acceptance remain open.
