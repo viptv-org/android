@@ -73,7 +73,11 @@ import org.viptv.app.theme.ViptvColor as C
     LaunchedEffect(state.searchEntryEpoch) {
         withFrameNanos {}
         val requested = tv && state.searchEntryEpoch > lastShownEntry
-        if (requested) { openKeyboardOnFocus = true; focusManager.clearFocus(force = true) }
+        if (requested) {
+            openKeyboardOnFocus = true
+            focusManager.clearFocus(force = true)
+            withFrameNanos {}
+        }
         runCatching { first.requestFocus() }
         if (requested) {
             keyboard?.show()
