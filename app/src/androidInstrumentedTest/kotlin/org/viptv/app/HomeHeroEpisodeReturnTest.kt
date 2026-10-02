@@ -13,6 +13,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
@@ -64,6 +65,43 @@ class HomeHeroEpisodeReturnTest {
             assertEquals(Route.Browse(Destination.Home), controller.state.value.route)
             compose.onNodeWithText("Resume").assertIsFocused()
         } finally {
+            controller.scope.cancel()
+        }
+    }
+
+    @Test fun directionalInputCancelsPendingHeroFocusRestore() {
+        val controller = AppController(InstrumentationRegistry.getInstrumentation().targetContext, "https://example.invalid")
+        val episode = Media("show:1:1059", "episode", name = "Fixture Show", seriesId = "show",
+            season = 1, episode = 1059, positionMillis = 60_000, durationMillis = 120_000)
+        try {
+            compose.setContent {
+                val state by controller.state.collectAsState()
+                val contentFocus = remember { FocusRequester() }
+                CompositionLocalProvider(LocalTv provides true, LocalDensity provides Density(1f, 1f),
+                    LocalContentFocus provides contentFocus) {
+                    ViptvTheme(false, Color.White) { Box(Modifier.fillMaxSize()) {
+                        if (state.route is Route.Browse) HomeScreen(state, controller)
+                        else if (state.route is Route.Details) VText("Parent details")
+                    } }
+                }
+            }
+            compose.runOnIdle {
+                controller._state.value = AppState(route = Route.Browse(Destination.Home), sessionRestoring = false,
+                    shelves = listOf(HomeShelf("Continue Watching", listOf(episode), isQueueShelf = true)))
+            }
+            compose.onNodeWithText("Resume").assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
+            compose.waitUntil(5_000) { controller.state.value.route is Route.Sources }
+            compose.runOnIdle { controller.back() }
+            compose.waitUntil(5_000) { controller.state.value.route is Route.Details }
+            compose.mainClock.autoAdvance = false
+            compose.runOnIdle { controller.back() }
+            compose.mainClock.advanceTimeByFrame()
+            compose.runOnIdle { controller.recordHomeDirectionalInput() }
+            compose.mainClock.advanceTimeByFrame()
+            compose.mainClock.advanceTimeByFrame()
+            compose.onNodeWithText("Resume").assertIsNotFocused()
+        } finally {
+            compose.mainClock.autoAdvance = true
             controller.scope.cancel()
         }
     }

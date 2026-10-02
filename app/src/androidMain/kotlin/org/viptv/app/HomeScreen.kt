@@ -110,10 +110,15 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
     val saved = state.favorites.any { it.id == media.id && it.type == media.type }
     LaunchedEffect(media.id) { if (state.homeFocus.mediaKey == null || (state.homeFocus.surface == HomeFocusSurface.Hero && controller.homeContentFocused)) { withFrameNanos {}; runCatching { initial.requestFocus() } } }
     LaunchedEffect(media.id, state.homeFocus.restoreRequest) {
-        if (state.homeFocus.restoreRequest > 0 && state.homeFocus.surface == HomeFocusSurface.Hero &&
-            state.homeFocus.mediaKey == HomeFocusPolicy.mediaKey(media)) {
+        val requested = state.homeFocus
+        if (requested.restoreRequest > 0 && requested.surface == HomeFocusSurface.Hero &&
+            requested.mediaKey == HomeFocusPolicy.mediaKey(media)) {
             withFrameNanos {}
-            runCatching { initial.requestFocus() }
+            val current = controller.state.value.homeFocus
+            if (current.restoreRequest == requested.restoreRequest && current.surface == requested.surface &&
+                current.mediaKey == requested.mediaKey && HomeFocusPolicy.mayRestore(current, requested.inputEpoch)) {
+                runCatching { initial.requestFocus() }
+            }
         }
     }
     Box(Modifier.fillMaxWidth().height(610.dp)) {
