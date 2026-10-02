@@ -65,7 +65,7 @@ internal fun AppController.open(media: Media, returnRoute: Route? = null, showWh
     if (showWhileLoading) {
         detailReturnRoute = backRoute
         detailReturnDestination = (backRoute as? Route.Browse)?.destination
-        _state.value = _state.value.copy(route = Route.Details(media), message = null)
+        _state.value = _state.value.copy(route = Route.Details(media, generation), message = null)
     }
     detailJob = scope.launch {
     val origin = (backRoute as? Route.Browse)?.destination
@@ -102,7 +102,7 @@ internal fun AppController.open(media: Media, returnRoute: Route? = null, showWh
         )
         detailReturnDestination = origin
         detailReturnRoute = backRoute
-        _state.value = _state.value.copy(route = Route.Details(detail), loading = false,
+        _state.value = _state.value.copy(route = Route.Details(detail, generation), loading = false,
             shelves = _state.value.shelves.map { shelf -> shelf.copy(items = shelf.items.map { item ->
                 if ((item.seriesId ?: item.id) == (detail.seriesId ?: detail.id)) item.withArtworkFrom(detail) else item
             }) },

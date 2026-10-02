@@ -23,6 +23,7 @@ client records its exact adopted revision; shared Rust policy stays authoritativ
 | 11 | [Restore selected episode after source Back](issues/11-episode-source-back-selection.md) | Actual route and focus reproduction | Sol device regression, Luna research |
 | 12 | [Hero Resume Back opens episode list](issues/12-hero-resume-back.md) | Hero versus queue entry-point regression | Luna research, Sol implementation |
 | 13 | [Completed episode indicators](issues/13-completed-episode-indicators.md) | Existing per-profile watched facts and card contract | Luna research, Sol implementation |
+| 14 | [Restore episode after parent metadata loads](issues/14-loaded-episode-return-selection.md) | Reproduced hero return and actual Details readiness | Sol regression/implementation, Luna independent review |
 
 Workers use GPT-6 Sol with low reasoning for implementation. Independent
 validation and review use GPT-6 Luna with max reasoning, per Mimir's AGENTS.md.
@@ -33,7 +34,10 @@ Incoming tasks join this queue without replacing work already authorized.
 Research stays with Luna workers so the main chat can receive new tasks.
 Tickets 01-10 are complete, with implementation and qualification recorded in
 their individual files. Independent final Android reviews used Luna workers.
-Tickets 12-13 are complete and qualified. Ticket 11 verifies the expected direct
+Tickets 12-14 are complete and qualified. Ticket 14 corrects the loaded episode
+selection gap missed by ticket 12's earlier route/Home-focus coverage, using the
+shared Details screen and real-screen regression checks.
+Ticket 11 verifies the expected direct
 source-Back behavior with a fresh 1,410-episode route; the reported reset itself
 remains unreproduced, and no speculative direct-path fix was made.
 

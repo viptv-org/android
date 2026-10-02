@@ -33,6 +33,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
 @Composable internal fun DetailsScreen(media: Media, controller: AppController) {
     val tv = LocalTv.current
     val app by controller.state.collectAsState()
+    val entryId = (app.route as? Route.Details)?.entryId ?: 0L
     val presentation = remember(media) { CoreModels.presentation(media) }
     val playEpisode = remember(media) { CoreModels.initialEpisode(media) }
     val focusEpisode = remember(media, playEpisode) {
@@ -40,7 +41,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
             ?: playEpisode
     }
     val seasons = remember(media.episodes) { media.episodes.map { it.season ?: 1 }.distinct().sorted() }
-    var season by rememberSaveable(media.id, media.season, media.episode) { mutableIntStateOf(focusEpisode?.season ?: seasons.firstOrNull() ?: 1) }
+    var season by rememberSaveable(media.id, media.season, media.episode, entryId) { mutableIntStateOf(media.season ?: focusEpisode?.season ?: seasons.firstOrNull() ?: 1) }
     var seasonPicker by remember { mutableStateOf(false) }
     var jumpEntry by remember { mutableStateOf(false) }
     var jumpOrigin by remember { mutableStateOf<Pair<String, Int>?>(null) }
@@ -69,9 +70,9 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     val saved = app.favorites.any { it.id == media.id && it.type == media.type }
     val initial = LocalContentFocus.current
     val rail = LocalRailFocus.current
-    val sourceFocus = remember(previewKey) { FocusRequester() }
+    val sourceFocus = remember(previewKey, entryId) { FocusRequester() }
     // Save a logical return target, never a FocusRequester from a disposed route.
-    var returnToSource by rememberSaveable(media.id, previewKey) { mutableStateOf(false) }
+    var returnToSource by rememberSaveable(media.id, previewKey, entryId) { mutableStateOf(false) }
     val targetPresentation = remember(target) { target?.let(CoreModels::presentation) }
     val label = targetPresentation?.primaryActionLabel ?: "No episodes available"
     val episodeFocus = remember(episodes) { episodes.map { FocusRequester() } }
@@ -79,24 +80,43 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     val pageScroll = rememberLazyListState()
     val scrolledHeader by remember { derivedStateOf { pageScroll.firstVisibleItemIndex > 0 || pageScroll.firstVisibleItemScrollOffset > 300 } }
     val returningToEpisode = media.type == "series" && media.season != null && media.episode != null
-    var selectedEpisode by rememberSaveable(media.id, season, media.episode) {
+    var selectedEpisode by rememberSaveable(media.id, season, media.episode, entryId) {
         mutableIntStateOf(episodes.indexOfFirst { it.episode == media.episode }.coerceAtLeast(0))
     }
-    var restoreEpisodes by rememberSaveable(media.id, media.season, media.episode) { mutableStateOf(returningToEpisode) }
-    LaunchedEffect(media.id) {
+    var restoreEpisodes by rememberSaveable(media.id, media.season, media.episode, entryId) { mutableStateOf(returningToEpisode) }
+    var pendingSavedEpisode by rememberSaveable(media.id, media.season, media.episode, entryId) { mutableStateOf(returningToEpisode) }
+    LaunchedEffect(media.id, entryId) {
         if (tv) {
             withFrameNanos {}
             if (returnToSource && target != null) {
+                inputMode.requestInputMode(InputMode.Keyboard)
                 runCatching { sourceFocus.requestFocus() }
                 returnToSource = false
             } else if (!restoreEpisodes) runCatching { initial.requestFocus() }
         }
     }
-    LaunchedEffect(media.id, media.episode, restoreEpisodes, season) {
-        if (tv && restoreEpisodes && episodes.isNotEmpty()) {
+    LaunchedEffect(media.id, media.episode, restoreEpisodes, season, entryId) {
+        if (tv && restoreEpisodes && !pendingSavedEpisode && episodes.isNotEmpty()) {
             val index = selectedEpisode.coerceIn(episodes.indices)
             if (returningToEpisode) pageScroll.scrollToItem(1)
-            episodeScroll.scrollToItem(index); withFrameNanos {}; runCatching { episodeFocus[index].requestFocus() }
+            episodeScroll.scrollToItem(index); withFrameNanos {}
+            inputMode.requestInputMode(InputMode.Keyboard)
+            runCatching { episodeFocus[index].requestFocus() }
+        }
+    }
+    LaunchedEffect(media.id, media.season, media.episode, season, episodes, entryId) {
+        if (tv && pendingSavedEpisode && episodes.isNotEmpty()) {
+            val index = episodeIndexForNumber(episodes, media.episode ?: -1).takeIf { it >= 0 }
+                ?: selectedEpisode.coerceIn(episodes.indices)
+            selectedEpisode = index
+            pageScroll.scrollToItem(1)
+            episodeScroll.scrollToItem(index)
+            withFrameNanos {}
+            if (pendingSavedEpisode) {
+                inputMode.requestInputMode(InputMode.Keyboard)
+                runCatching { episodeFocus[index].requestFocus() }
+                pendingSavedEpisode = false
+            }
         }
     }
     LaunchedEffect(media.id, season, jumpRequest) {
@@ -161,6 +181,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                         onHold = { controller.chooseSources(target) }, tvAccent = targetPresentation?.primaryAction == "resume")
                     if (target != null) TitleSourceControl(sourceSummary, Modifier.focusRequester(sourceFocus)) {
                         returnToSource = true
+                        pendingSavedEpisode = false
                         restoreEpisodes = false
                         controller.chooseSources(target)
                     }
@@ -185,7 +206,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                     LazyRow(state = episodeScroll, modifier = Modifier.fillMaxWidth().padding(top = 24.dp).focusGroup(), horizontalArrangement = Arrangement.spacedBy(36.dp), contentPadding = PaddingValues(4.dp)) {
                         itemsIndexed(episodes, key = { _, item -> item.id }) { index, episode ->
                             EpisodeCard(episode, Modifier.width(360.dp).focusRequester(episodeFocus[index]),
-                                onClick = { selectedEpisode = index; restoreEpisodes = true; controller.chooseSources(episode.withArtworkFrom(media)) },
+                                onClick = { pendingSavedEpisode = false; selectedEpisode = index; restoreEpisodes = true; controller.chooseSources(episode.withArtworkFrom(media)) },
                                 onHold = { controller.requestDialog(DialogKind.EpisodeManage, episode.episodeTitle ?: episode.name, episode) },
                                 onFocused = { selectedEpisode = index; focusedEpisodeIndex = index }, artworkContext = episodeArtworkContext)
                         }
@@ -212,7 +233,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                 AppIconButton("more", "More info", { info = true }, Modifier.size(ViptvDimen.sizeButtonPhoneDetail))
             }
         }
-        if (seasonPicker) ChoiceDialog("Season", seasons.map { value -> "Season $value" to { season = value; selectedEpisode = 0; restoreEpisodes = tv; seasonPicker = false } }, { seasonPicker = false })
+        if (seasonPicker) ChoiceDialog("Season", seasons.map { value -> "Season $value" to { pendingSavedEpisode = false; season = value; selectedEpisode = 0; restoreEpisodes = tv; seasonPicker = false } }, { seasonPicker = false })
         if (jumpEntry) TextEntry("Jump to episode", "Enter an available episode number in Season $season.", numeric = true,
             fieldLabel = "Episode number", doneLabel = "Go",
             validate = { entered ->
@@ -221,6 +242,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
             }, onDone = { entered ->
                 if (jumpOrigin == (media.id to season)) {
                     jumpIndex = episodeIndexForNumber(episodes, entered.toInt())
+                    pendingSavedEpisode = false
                     selectedEpisode = jumpIndex
                     jumpEntry = false
                     jumpRequest++

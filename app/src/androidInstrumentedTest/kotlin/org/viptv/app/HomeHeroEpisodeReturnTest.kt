@@ -6,6 +6,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
@@ -16,6 +17,8 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.Density
@@ -34,7 +37,11 @@ import org.junit.runner.RunWith
 class HomeHeroEpisodeReturnTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun visibleContinueWatchingHeroResumeReturnsToParentDetails() {
+    @Test fun visibleContinueWatchingHeroResumeReturnsToParentDetails() = assertVisibleHeroReturn(touch = false)
+
+    @Test fun touchResumeRestoresFocusWhenParentEpisodesArrive() = assertVisibleHeroReturn(touch = true)
+
+    private fun assertVisibleHeroReturn(touch: Boolean) {
         val controller = AppController(InstrumentationRegistry.getInstrumentation().targetContext, "https://example.invalid")
         val episode = Media("show:1:1059", "episode", name = "Fixture Show", seriesId = "show",
             season = 1, episode = 1059, positionMillis = 60_000, durationMillis = 120_000)
@@ -42,11 +49,16 @@ class HomeHeroEpisodeReturnTest {
             compose.setContent {
                 val state by controller.state.collectAsState()
                 val contentFocus = remember { FocusRequester() }
+                val holder = rememberSaveableStateHolder()
                 CompositionLocalProvider(LocalTv provides true, LocalDensity provides Density(1f, 1f),
                     LocalContentFocus provides contentFocus) {
                     ViptvTheme(false, Color.White) { Box(Modifier.fillMaxSize()) {
-                        if (state.route is Route.Browse) HomeScreen(state, controller)
-                        else if (state.route is Route.Details) VText("Parent details")
+                        when (val route = state.route) {
+                            is Route.Browse -> holder.SaveableStateProvider(route.screenKey()) { HomeScreen(state, controller) }
+                            is Route.Details -> holder.SaveableStateProvider(route.screenKey()) { DetailsScreen(route.media, controller) }
+                            is Route.Sources -> VText("Source picker")
+                            else -> Unit
+                        }
                     } }
                 }
             }
@@ -54,16 +66,25 @@ class HomeHeroEpisodeReturnTest {
                 controller._state.value = AppState(route = Route.Browse(Destination.Home), sessionRestoring = false,
                     shelves = listOf(HomeShelf("Continue Watching", listOf(episode), isQueueShelf = true)))
             }
-            compose.onNodeWithText("Resume").assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
+            val resume = compose.onNodeWithText("Resume")
+            if (touch) resume.performTouchInput { click() } else resume.assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
             compose.waitUntil(5_000) { controller.state.value.route is Route.Sources }
             val sourceRoute = controller.state.value.route as Route.Sources
             assertTrue(sourceRoute.queueEpisodeReturn)
             compose.runOnIdle { controller.back() }
             compose.waitUntil(5_000) { controller.state.value.route is Route.Details }
             assertEquals("show", (controller.state.value.route as Route.Details).media.id)
+            val sparseRoute = controller.state.value.route as Route.Details
+            val sparse = sparseRoute.media
+            val loaded = sparse.copy(episodes = (1..1410).map { number ->
+                Media("show:1:$number", "episode", name = "Fixture Show", seriesId = "show", season = 1,
+                    episode = number, episodeTitle = if (number == 1059) "The Future" else "Episode $number")
+            })
+            compose.runOnIdle { controller._state.value = controller.state.value.copy(route = sparseRoute.copy(media = loaded), loading = false) }
+            compose.onNodeWithText("The Future").assertIsFocused()
             compose.runOnIdle { controller.back() }
             assertEquals(Route.Browse(Destination.Home), controller.state.value.route)
-            compose.onNodeWithText("Resume").assertIsFocused()
+            if (!touch) compose.onNodeWithText("Resume").assertIsFocused()
         } finally {
             controller.scope.cancel()
         }

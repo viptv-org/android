@@ -44,7 +44,7 @@ class TitleSourceFocusReturnTest {
             compose.setContent {
                 val state by controller.state.collectAsState()
                 val route = state.route
-                val key = if (route is Route.Details) "details" else "sources"
+                val key = route.screenKey()
                 val inputMode = LocalInputModeManager.current
                 SideEffect { inputMode.requestInputMode(InputMode.Keyboard) }
                 val saved = rememberSaveableStateHolder()
