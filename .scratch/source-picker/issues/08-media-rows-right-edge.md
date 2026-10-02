@@ -8,7 +8,7 @@ and remote focus behavior.
 **Blocked by:** None.
 **Status:** done
 **Triage:** ready-for-agent
-**Owner:** media_row_edge_research (GPT-6 Luna, max), then Sol implementation.
+**Owner:** media_row_edge_research (GPT-6.1 Sol, high), then implementation.
 
 - [x] Identify all horizontal media-row surfaces and the parent right inset.
 - [x] Commit the canonical Android TV rule and adopt its immutable revision.

@@ -5,7 +5,7 @@ opening Choose a source and pressing Back keeps that episode visible and focused
 The row cursor must remain separate from the shared Play/Resume target.
 
 **Status:** regression covered; reported direct-path reset remains unreproduced
-**Owner:** Sol implementation and native regression, Luna research.
+**Owner:** implementation and native regression, investigation.
 
 - [x] Check a fresh info route displaying episode 1 before selecting episode 1059.
 - [x] Retain regression coverage using the actual Details route state holder.

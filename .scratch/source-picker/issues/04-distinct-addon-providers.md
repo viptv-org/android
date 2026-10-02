@@ -7,7 +7,7 @@ not merge their choices or make their source rows indistinguishable.
 **Blocked by:** None; research established hidden zero/error producer outcomes.
 **Status:** done
 **Triage:** ready-for-agent
-**Owner:** source_picker_design and source_picker_tv (GPT-6 Sol, low), after Luna research.
+**Owner:** source_picker_design and source_picker_tv (GPT-6.1 Sol, high), after GPT-6.1 Sol high research.
 **Contract:** SRC-PROVIDERS-001 at design d088071106e4d5479aea761469152e037f011a3c.
 
 - [x] Read-only inspection confirms the affected account's installed add-ons.

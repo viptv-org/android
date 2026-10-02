@@ -6,7 +6,7 @@ the app running and displays usable title information and episode selection.
 **Blocked by:** None; the original installed APK crash has been reproduced.
 **Status:** done
 **Triage:** ready-for-agent
-**Owner:** large_anime_fix (GPT-6 Sol, low), with provider_anime_research (GPT-6 Luna, max) for reproduction.
+**Owner:** large_anime_fix (GPT-6.1 Sol, high), with provider_anime_research (GPT-6.1 Sol, high) for reproduction.
 
 - [x] Reproduce opening the title and identify a safe, redacted crash signature.
 - [x] Fix the demonstrated cause without dropping episodes or inventing source policy.

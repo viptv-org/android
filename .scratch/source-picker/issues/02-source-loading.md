@@ -7,7 +7,7 @@ still returning. Arrived sources remain selectable.
 **Blocked by:** None (design is already committed).
 **Status:** done
 **Triage:** ready-for-agent
-**Owner:** source_picker_android and source_picker_tv (GPT-6 Sol, low).
+**Owner:** source_picker_android and source_picker_tv (GPT-6.1 Sol, high).
 **Contract:** SRC-OVERFLOW-001 at design ce7084ff80d0541257509748ea772ef0f95d8058.
 
 - [x] Initial pending discovery shows a spinner and Finding sources status.
