@@ -69,6 +69,9 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     val saved = app.favorites.any { it.id == media.id && it.type == media.type }
     val initial = LocalContentFocus.current
     val rail = LocalRailFocus.current
+    val sourceFocus = remember(previewKey) { FocusRequester() }
+    // Save a logical return target, never a FocusRequester from a disposed route.
+    var returnToSource by rememberSaveable(media.id, previewKey) { mutableStateOf(false) }
     val targetPresentation = remember(target) { target?.let(CoreModels::presentation) }
     val label = targetPresentation?.primaryActionLabel ?: "No episodes available"
     val episodeFocus = remember(episodes) { episodes.map { FocusRequester() } }
@@ -80,7 +83,15 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
         mutableIntStateOf(episodes.indexOfFirst { it.episode == media.episode }.coerceAtLeast(0))
     }
     var restoreEpisodes by rememberSaveable(media.id, media.season, media.episode) { mutableStateOf(returningToEpisode) }
-    LaunchedEffect(media.id) { if (tv) { withFrameNanos {}; if (!restoreEpisodes) runCatching { initial.requestFocus() } } }
+    LaunchedEffect(media.id) {
+        if (tv) {
+            withFrameNanos {}
+            if (returnToSource && target != null) {
+                runCatching { sourceFocus.requestFocus() }
+                returnToSource = false
+            } else if (!restoreEpisodes) runCatching { initial.requestFocus() }
+        }
+    }
     LaunchedEffect(media.id, media.episode, restoreEpisodes, season) {
         if (tv && restoreEpisodes && episodes.isNotEmpty()) {
             val index = selectedEpisode.coerceIn(episodes.indices)
@@ -148,7 +159,11 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                 if (tv) Row(Modifier.padding(top = 32.dp, bottom = if (episodes.isEmpty()) 40.dp else 108.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     if (target != null) AppButton(label, ::play, Modifier.widthIn(min = 280.dp).focusRequester(initial).focusProperties { left = rail }, "play",
                         onHold = { controller.chooseSources(target) }, tvAccent = targetPresentation?.primaryAction == "resume")
-                    if (target != null) TitleSourceControl(sourceSummary) { controller.chooseSources(target) }
+                    if (target != null) TitleSourceControl(sourceSummary, Modifier.focusRequester(sourceFocus)) {
+                        returnToSource = true
+                        restoreEpisodes = false
+                        controller.chooseSources(target)
+                    }
                     else if (retryDetail)
                         AppButton("Try again", { controller.open(media, controller.detailReturnRoute, showWhileLoading = true) }, Modifier.focusRequester(initial))
                     else VText(label, 22, Modifier.align(Alignment.CenterVertically), C.textSecondary)

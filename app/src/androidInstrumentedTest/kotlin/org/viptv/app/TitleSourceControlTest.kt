@@ -59,7 +59,7 @@ class TitleSourceControlTest {
         compose.setContent {
             CompositionLocalProvider(LocalTv provides tv) {
                 ViptvTheme(false, Color.White) {
-                    Box(Modifier.width(350.dp)) { TitleSourceControl(summary, onClick) }
+                    Box(Modifier.width(350.dp)) { TitleSourceControl(summary, onClick = onClick) }
                 }
             }
         }

@@ -945,5 +945,33 @@ matched full-screen visual parity. The normal debug APK has no fixture CA;
 the tests used synthetic component data, with no account/backend connection.
 The exact owned emulator was stopped and its AVD deleted after the run.
 
-Full Title-to-picker emulator flows, TV Guide re-audit, TV track-panel focus
+Authenticated Title-to-picker emulator flows, TV Guide re-audit, TV track-panel focus
 return with longer media, and physical Android acceptance remain unverified.
+
+## AND-043 manual-picker focus return — 2026-10-02
+
+Review exposed a Title-family focus gap: the TV source summary opened its manual
+picker, but Back recreated Details and focused Play/Resume. Details now saves a
+one-shot logical source-control return target and attaches a fresh focus
+requester on re-entry. Consuming that return leaves subsequent primary/episode
+restoration paths intact. TV geometry, design `85a20e9`, discovery and exact-source
+Resume policy are unchanged.
+
+The new `TitleSourceFocusReturnTest` uses actual DetailsScreen, SourcePicker and
+controller navigation in a saveable route composition. It requests keyboard
+focus, activates the source control with DPAD_CENTER, injects Android Back, and
+asserts source focus. The assertion failed before the fix and passed after it.
+The same flow then enters through Play and verifies Back restores Play, rather
+than retaining the earlier source-return target. No account/backend/media is
+required by this synthetic movie fixture.
+
+All ten class-filtered Compose tests (the new return test plus source-summary and
+episode-badge suites) passed on fresh owned API36 Google APIs x86_64 phone AVD
+`viptv-focus-qa-20261002`, serial `emulator-5588`, at an owned 1600×900/160dpi test
+viewport with LocalTv. This proves component route/focus behavior, not Android TV
+remote hardware or full-screen parity. JDK17 host preparation, all 237 unit tests,
+design integrity, debug assembly and the three pinned Core Android ABIs pass with
+two workers. Lint retains 78 existing warnings and three baseline-filtered errors,
+with no new errors. The owned emulator and its AVD were removed after checking.
+Broad authenticated Title/picker flows, TV Guide, real long-media track-panel
+return and physical acceptance remain open.

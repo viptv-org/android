@@ -15,14 +15,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import org.viptv.app.theme.ViptvColor as C
 
-@Composable internal fun TitleSourceControl(summary: SourceSummary?, onClick: () -> Unit) {
+@Composable internal fun TitleSourceControl(summary: SourceSummary?, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val tv = LocalTv.current
     val closeRail = LocalCloseRail.current
     var focused by remember { mutableStateOf(false) }
     val foreground = if (tv && focused) C.onLight else C.textPrimary
     val secondary = if (tv && focused) C.textOnLightSecondary else C.textSecondary
     val shape = RoundedCornerShape(if (tv) 36.dp else 20.dp)
-    Holdable(onClick, modifier = Modifier.then(if (tv) Modifier else Modifier.fillMaxWidth())
+    Holdable(onClick, modifier = modifier.then(if (tv) Modifier else Modifier.fillMaxWidth())
         .height(measure(72, 58)).onFocusChanged { focused = it.isFocused; if (focused) closeRail() }
         .clip(shape).background(if (tv && focused) C.textPrimary else if (tv) C.surfaceN3 else C.surfaceN1)
         .then(if (tv) Modifier else Modifier.border(1.dp, C.lineOutline, shape))
