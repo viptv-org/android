@@ -115,3 +115,12 @@ with native Android editable fields and the installed device input method.
 Search keeps separate progressive catalog shelves; Back dismisses native input
 before leaving its screen/dialog. Roku and TV-web retain their current inputs.
 The Android contract records focus, Results, secret input and return acceptance.
+
+## Android TV episode-number jump (AND-EPISODE-JUMP-001)
+
+The proposed compact `Episode #` chip beside the season badge opens a native
+numeric-input dialog. Exact current-season episode metadata controls the jump;
+success only scrolls and focuses the card. Invalid input remains editable in
+the dialog, and Back first hides the IME. [The behavior contract](../specs/behavior/episode-number-jump.md)
+defines the full state and acceptance scenarios. This does not change the
+shared Core hero Play/Resume rule or require Roku/TV-web adoption.

@@ -74,6 +74,7 @@ Platform keys: **P** = phone, **D** = desktop app and web, **T** = TV.
 - **URL field:** monospace value. Errors: "Enter an HTTPS manifest URL." / "That does not look like an addon URL." / "This addon is already installed."
 - **Search:** P is a pill field docked above the nav, with a fade behind it. D has a title-bar search (460 × 30, radius 9, "Search movies and series", a clear button once there is text, no shortcut hint) and a page search on web. T has a field with a caret plus the on-screen keyboard; native Android TV uses its device IME under AND-KEYBOARD-001.
 - **TV text entry:** Android TV uses a native editable field and device IME with Done/Cancel (AND-KEYBOARD-001); the app renders no character or PIN key grid. Other TV platforms use the full-screen design: the field on the left, the keyboard on the right (a–z, 0–9, `: / . - _ @`, Aa, Space, Delete, Done, Cancel). Digits use the **PIN keypad** (1–9, ⌫, 0, Done, Cancel).
+- **Android TV episode jump (proposed, AND-EPISODE-JUMP-001):** a compact `Episode #` chip sits directly right of the season badge above the lazy episode row. It opens a native numeric-input dialog; a successful exact current-season match scrolls to and focuses the card. See [episode-number-jump.md](../specs/behavior/episode-number-jump.md) for input, error and Back rules. Roku and TV-web keep their existing episode controls.
 - **Toggle:** 52 × 32 (T 72 × 42). On = accent track. Off = surface-3 (T 0.2 white). Disabled = 0.4 opacity.
 
 ---

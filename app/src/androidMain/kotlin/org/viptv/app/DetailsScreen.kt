@@ -12,9 +12,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import org.viptv.app.theme.ViptvColor as C
+
+/** The displayed episode number is metadata, not a row position. Preserve backend row order. */
+internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
+    episodes.indexOfFirst { it.episode == number }
 
 @Composable internal fun DetailsScreen(media: Media, controller: AppController) {
     val tv = LocalTv.current
@@ -28,6 +34,12 @@ import org.viptv.app.theme.ViptvColor as C
     val seasons = remember(media.episodes) { media.episodes.map { it.season ?: 1 }.distinct().sorted() }
     var season by rememberSaveable(media.id, media.season, media.episode) { mutableIntStateOf(focusEpisode?.season ?: seasons.firstOrNull() ?: 1) }
     var seasonPicker by remember { mutableStateOf(false) }
+    var jumpEntry by remember { mutableStateOf(false) }
+    var jumpOrigin by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    val jumpFocus = remember { FocusRequester() }
+    var jumpRequest by remember(media.id) { mutableIntStateOf(0) }
+    var jumpIndex by remember(media.id) { mutableIntStateOf(-1) }
+    var jumpCancelRequest by remember(media.id) { mutableIntStateOf(0) }
     var info by remember { mutableStateOf(false) }
     val episodes = remember(media, season) { media.episodes.filter { (it.season ?: 1) == season } }
     val target = playEpisode?.withArtworkFrom(media) ?: media.takeUnless { it.type == "series" && it.episode == null }
@@ -53,6 +65,21 @@ import org.viptv.app.theme.ViptvColor as C
             if (returningToEpisode) pageScroll.scrollToItem(1)
             episodeScroll.scrollToItem(index); withFrameNanos {}; runCatching { episodeFocus[index].requestFocus() }
         }
+    }
+    LaunchedEffect(media.id, season, jumpRequest) {
+        if (tv && jumpIndex in episodes.indices && jumpRequest > 0) {
+            pageScroll.scrollToItem(1)
+            episodeScroll.scrollToItem(jumpIndex)
+            withFrameNanos {}
+            runCatching { episodeFocus[jumpIndex].requestFocus() }
+            jumpIndex = -1
+        }
+    }
+    LaunchedEffect(jumpCancelRequest) {
+        if (tv && jumpCancelRequest > 0) { withFrameNanos {}; runCatching { jumpFocus.requestFocus() } }
+    }
+    LaunchedEffect(media.id, season) {
+        if (jumpEntry && jumpOrigin != (media.id to season)) jumpEntry = false
     }
     fun play() {
         if (target != null) controller.chooseSources(target, target.positionMillis > 0)
@@ -89,6 +116,8 @@ import org.viptv.app.theme.ViptvColor as C
                 item {
                     Row(Modifier.fillMaxWidth().padding(horizontal = if (tv) 0.dp else 20.dp, vertical = if (tv) 0.dp else 28.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(measure(24, 14))) {
                         AppChip("Season $season", { seasonPicker = true }, selected = true)
+                        if (tv && episodes.isNotEmpty()) AppChip("Episode #", { jumpOrigin = media.id to season; jumpEntry = true },
+                            modifier = Modifier.focusRequester(jumpFocus).semantics { contentDescription = "Jump to episode number" })
                         VText(episodes.size.toString() + " episodes", if (tv) 22 else 13, color = C.textTertiary)
                     }
                 }
@@ -130,6 +159,17 @@ import org.viptv.app.theme.ViptvColor as C
             }
         }
         if (seasonPicker) ChoiceDialog("Season", seasons.map { value -> "Season $value" to { season = value; selectedEpisode = 0; restoreEpisodes = tv; seasonPicker = false } }, { seasonPicker = false })
+        if (jumpEntry) TextEntry("Jump to episode", "Enter an available episode number in Season $season.", numeric = true,
+            fieldLabel = "Episode number", doneLabel = "Go",
+            validate = { entered ->
+                val number = entered.toIntOrNull()
+                if (number == null || episodeIndexForNumber(episodes, number) < 0) "Episode not found in this season." else null
+            }, onDone = { entered ->
+                jumpIndex = episodeIndexForNumber(episodes, entered.toInt())
+                selectedEpisode = jumpIndex
+                jumpEntry = false
+                jumpRequest++
+            }, onCancel = { jumpEntry = false; jumpCancelRequest++ })
         if (info) FullInfo(media.name, listOf(mediaFacts(media), media.description.orEmpty(), media.credits.orEmpty()).filter { it.isNotBlank() }.joinToString("\n\n"), { info = false })
     }
 }

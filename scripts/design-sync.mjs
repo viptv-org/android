@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -8,14 +8,18 @@ const root = resolve(import.meta.dirname, '..');
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const matches = (bytes, expected) => hash(bytes) === expected || hash(Buffer.from(bytes.toString('utf8').replaceAll('\r\n', '\n'))) === expected;
 const [mode = 'check', repository = '../design', revision] = process.argv.slice(2);
-const write = (path, bytes) => { const target = resolve(root, path); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, bytes); };
+const write = (path, bytes) => {
+  const target = resolve(root, path);
+  if (existsSync(target) && matches(readFileSync(target), hash(bytes))) return;
+  mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, bytes);
+};
 if (mode === 'sync') {
   if (!/^[a-f0-9]{40}$/.test(revision ?? '')) throw Error('Pass an immutable design commit');
   const repo = resolve(root, repository);
   const git = (...args) => execFileSync('git', ['-C', repo, ...args], { maxBuffer: 16 * 1024 * 1024 });
   const files = {};
   const names = git('ls-tree', '-r', '--name-only', revision).toString().trim().split('\n');
-  const docs = ['DESIGN.md', 'DESIGN_SYNC.md', 'ANDROID_DESIGN.md', 'TV_POLISH.md', 'specs/behavior/home-addon-refresh.md', 'viptv-design-system/README.md', 'viptv-design-system/components.md', 'viptv-design-system/copy.md', 'viptv-design-system/decisions.md', 'viptv-design-system/tokens/tokens.json'];
+  const docs = ['DESIGN.md', 'DESIGN_SYNC.md', 'ANDROID_DESIGN.md', 'TV_POLISH.md', 'specs/behavior/home-addon-refresh.md', 'specs/behavior/episode-number-jump.md', 'viptv-design-system/README.md', 'viptv-design-system/components.md', 'viptv-design-system/copy.md', 'viptv-design-system/decisions.md', 'viptv-design-system/tokens/tokens.json'];
   const mappings = docs.map(path => [path, `design-contract/${path}`]);
   for (const path of names) {
     if (path.startsWith('assets/fonts/')) mappings.push([path, path.endsWith('.ttf') ? `app/src/androidMain/res/font/${path.split('/').at(-1)}` : `app/src/androidMain/assets/design/fonts/${path.split('/').at(-1)}`]);

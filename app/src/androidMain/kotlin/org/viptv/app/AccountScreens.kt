@@ -28,6 +28,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import org.json.JSONObject
@@ -287,29 +290,33 @@ private var cachedAvatarCatalog: List<AvatarCategory>? = null
     }
 }
 
-@Composable internal fun TextEntry(title: String, instruction: String, initial: String = "", secret: Boolean = false, maxLength: Int = 256, onDone: (String) -> Unit, onCancel: () -> Unit) {
+@Composable internal fun TextEntry(title: String, instruction: String, initial: String = "", secret: Boolean = false, maxLength: Int = 256, numeric: Boolean = false, fieldLabel: String = title, doneLabel: String = if (secret) "Unlock" else "Done", validate: ((String) -> String?)? = null, onDone: (String) -> Unit, onCancel: () -> Unit) {
     val tv = LocalTv.current
     var value by remember(title) { mutableStateOf(initial.take(maxLength)) }
+    var error by remember(title) { mutableStateOf<String?>(null) }
     val first = remember { FocusRequester() }
-    fun edit(text: String) { value = (if (secret) text.filter(Char::isDigit) else text).take(if (secret) 8 else maxLength) }
+    fun edit(text: String) { value = (if (secret || numeric) text.filter(Char::isDigit) else text).take(if (secret) 8 else maxLength); error = null }
     AppOverlay(title, { value = ""; onCancel() }, full = tv) {
         val keyboard = LocalSoftwareKeyboardController.current
         val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-        fun submit() { val submitted = value; keyboard?.hide(); if (secret) value = ""; onDone(submitted) }
+        fun submit() { val submitted = value; error = validate?.invoke(submitted); if (error != null) return; keyboard?.hide(); if (secret) value = ""; onDone(submitted) }
         BackHandler { if (imeVisible) keyboard?.hide() else { value = ""; onCancel() } }
         Column(Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState())) {
             VText(instruction, if (tv) 24 else 15, color = C.textSecondary)
+            if (error != null) VText(error.orEmpty(), if (tv) 22 else 14,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = C.textSecondary)
             Spacer(Modifier.height(24.dp))
-            AppField(value, ::edit, if (secret) "Parent PIN" else title,
+            AppField(value, ::edit, if (secret) "Parent PIN" else fieldLabel,
                 Modifier.focusRequester(first).then(if (tv) Modifier.widthIn(max = 960.dp) else Modifier),
-                secret = secret, onSubmit = ::submit)
+                secret = secret, keyboardType = if (numeric) KeyboardType.Number else if (secret) KeyboardType.NumberPassword else KeyboardType.Text, onSubmit = ::submit)
             Spacer(Modifier.height(measure(32, 24)))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                AppButton(if (secret) "Unlock" else "Done", ::submit, Modifier.weight(1f), primary = true)
+                AppButton(doneLabel, ::submit, Modifier.weight(1f), primary = true)
                 AppButton("Cancel", { value = ""; keyboard?.hide(); onCancel() }, Modifier.weight(1f))
             }
         }
         LaunchedEffect(title) { withFrameNanos {}; runCatching { first.requestFocus() }; keyboard?.show() }
+        LaunchedEffect(error) { if (error != null) { withFrameNanos {}; runCatching { first.requestFocus() } } }
     }
 }
 

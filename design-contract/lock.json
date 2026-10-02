@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/design",
-  "revision": "8ce8971ebcece32af59c39ecd56ea9fc8c880936",
+  "revision": "6e74a9a9ffbbbc82bc143ca1f53867c17b064186",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
@@ -22,21 +22,25 @@
       "source": "specs/behavior/home-addon-refresh.md",
       "sha256": "9cb9385f19c05500625c84dfe1ac36ced45fcdd8e24a4d701c22d01a5671c458"
     },
+    "design-contract/specs/behavior/episode-number-jump.md": {
+      "source": "specs/behavior/episode-number-jump.md",
+      "sha256": "6672603653862286c813711572f7a27c1214c630cdfafd5c3251ececeeb5a1e6"
+    },
     "design-contract/viptv-design-system/README.md": {
       "source": "viptv-design-system/README.md",
       "sha256": "f6a9e5e0da4312a8d71d0e2b2a3338088bf9a5b5a9891a783c0a859257acd7e2"
     },
     "design-contract/viptv-design-system/components.md": {
       "source": "viptv-design-system/components.md",
-      "sha256": "0029d9e21b44798dd5925f0e82653fb4bc3ea63fa3fed42cc6113746f467109c"
+      "sha256": "c1e6530fd3948667f6d31425de52caedb2b3967ec40209f5b3a93746305054ad"
     },
     "design-contract/viptv-design-system/copy.md": {
       "source": "viptv-design-system/copy.md",
-      "sha256": "6505fe45653c16f4a41f0c58e64bc0feb1f7b257a512b8d2778d0314ec4e7205"
+      "sha256": "e0982b719104a9c21c741b10742bc39384dcd72476097ffc0049a5342bc6c535"
     },
     "design-contract/viptv-design-system/decisions.md": {
       "source": "viptv-design-system/decisions.md",
-      "sha256": "5e5a0e41117681a6357b2e039cf25a6e0e8bc807dab66e3a31399d27d7805da5"
+      "sha256": "ebbb10a46d954e244fa5c1a7f3c6375380fb8aac9e452fab9deb26882b6b3540"
     },
     "design-contract/viptv-design-system/tokens/tokens.json": {
       "source": "viptv-design-system/tokens/tokens.json",
