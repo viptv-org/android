@@ -4,7 +4,7 @@
 the app running and displays usable title information and episode selection.
 
 **Blocked by:** None; the original installed APK crash has been reproduced.
-**Status:** in-review
+**Status:** done
 **Triage:** ready-for-agent
 **Owner:** large_anime_fix (GPT-6 Sol, low), with provider_anime_research (GPT-6 Luna, max) for reproduction.
 
@@ -29,3 +29,5 @@ Native API 36 TV acceptance opened the actual 1,410-episode One Piece details,
 chose episode 2's sources without playback, and returned to details with the
 same app process running. Private captures/logs stay ignored; no playback,
 sign-out, data clearing or viewing-history change occurred.
+
+Final qualification (2026-10-02): later Windows unit suite passed 221 tests with zero failures/errors/skips, followed by three-ABI build and normal APK assembly. Final Standards review found no documented-rule violations (retained Sol). Ticket 07 adds a separate jump control; this crash fix preserves every episode.

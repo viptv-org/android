@@ -5,7 +5,7 @@ discovery is pending, both before the first source and while more providers are
 still returning. Arrived sources remain selectable.
 
 **Blocked by:** None (design is already committed).
-**Status:** in-review
+**Status:** done
 **Triage:** ready-for-agent
 **Owner:** source_picker_android and source_picker_tv (GPT-6 Sol, low).
 **Contract:** SRC-OVERFLOW-001 at design ce7084ff80d0541257509748ea772ef0f95d8058.
@@ -25,3 +25,5 @@ through `0545d52` with the production build, 251 unit tests, React partial-statu
 browser checks and SolidTV source previews. Real-account sources settled before
 the native screenshot, so that run does not prove its initial loading frame;
 the isolated Compose test provides that scoped evidence. Final review pending.
+
+Final qualification (2026-10-02): isolated Android rendering verifies initial, partial and complete discovery. TV-web final 256-test suite, production build and progressive React/SolidTV browser checks passed. Final Standards review found no documented-rule violations and TV-web Spec review found no confirmed gaps (retained Sol workers). Qualified TV-web 04239f8 assets are pushed and active on DEV.

@@ -5,7 +5,7 @@ two-line window. Focused overflowing text scrolls vertically from its beginning
 to its end, allowing the torrent details to be read without widening the panel.
 
 **Blocked by:** None (design is already committed).
-**Status:** in-review
+**Status:** done
 **Triage:** ready-for-agent
 **Owner:** source_picker_android and source_picker_tv (GPT-6 Sol, low).
 **Contract:** SRC-OVERFLOW-001 at design ce7084ff80d0541257509748ea772ef0f95d8058.
@@ -27,3 +27,5 @@ long-token/reduced-motion cases and SolidTV Sources/Details/Library previews
 passed. Private browser captures were inspected. Native personal-account
 acceptance displayed two-line source rows and full Source Details safely.
 Physical TV remains unverified; final two-axis review is pending.
+
+Final qualification (2026-10-02): TV-web fa6b903 includes each distinct source description in the shared body projection. All 256 TV-web tests, production build and React/SolidTV browser previews passed. Android measured-overflow, movement and blur-reset render checks passed again on isolated API 36. Final Standards review found no documented-rule violations; final TV-web Spec review found no confirmed gaps. Reviews used retained Sol workers because fresh review launches were unavailable. TV-web 04239f8 is pushed and its qualified assets are active on DEV.
