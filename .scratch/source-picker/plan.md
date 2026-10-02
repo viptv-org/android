@@ -16,6 +16,7 @@ client records its exact adopted revision; shared Rust policy stays authoritativ
 | 04 | [Distinct installed add-on providers](issues/04-distinct-addon-providers.md) | Concrete research findings | Luna research, then Sol implementation |
 | 05 | [Large anime details crash](issues/05-large-anime-details-crash.md) | Native reproduction and cause | Luna research, then Sol implementation |
 | 06 | [Native Android TV keyboard](issues/06-native-android-tv-keyboard.md) | Native IME and focus research; canonical Android UX | Luna research, then Sol implementation |
+| 07 | [Jump to an episode number](issues/07-jump-to-episode.md) | Episode-number/focus research; canonical UX | Luna research, then Sol implementation |
 
 Workers use GPT-6 Sol with low reasoning for implementation. Independent
 validation and review use GPT-6 Luna with max reasoning, per Mimir's AGENTS.md.
