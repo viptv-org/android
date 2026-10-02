@@ -905,3 +905,33 @@ These checks qualify emulator UI and controller/HTTP fixtures. Actual initialize
 decoder playback, a real final-save HTTP transaction and physical-TV capability
 were not exercised. Missing/failed manual refresh retains the last known position
 and accepted watched fact until an authoritative row arrives.
+
+## Loaded hero episode restoration - 2026-10-02
+
+Implementation a321cda corrects the common Details screen's restoration after
+parent metadata loads. Hero/queue source Back and hero player exit already
+carry a saved season/episode through shared parent-series routing; their sparse
+loading Details page initialized selection against an empty list and did not
+retry when episodes arrived. This left episode 1 visible despite cursor 1059.
+Episode-card returns retain their existing populated Details state.
+Fresh Details entry identity prevents a later Resume from reusing the preceding
+visit's manual selection, even when fast metadata skips a rendered loading page.
+Follow-up 2f0791b requests keyboard input mode before episode focus. The owner
+emulator first showed the correct row without focus after a mouse/touch launch;
+the final native hierarchy check qualifies the correction on both entry points.
+
+The actual rendered delayed-metadata regression failed before the fix. Previous
+hero route/Home-focus tests used placeholder Details text and missed the rendered
+episode list. Updated coverage exercises actual Details and its restored focus,
+including later manual selection. The final host/native gate passed 228 unit
+tests with no failures/errors/skips, three Android ABIs, APK assembly, lint and
+18 targeted native tests, with independent Luna review. Pins unchanged.
+The final batch excludes existing badge capture tests. A preliminary broader
+batch produced two private QA fixture captures; neither was inspected/displayed.
+
+After installation preserving sign-in, a genuine signed-in One Piece hero
+Resume -> source Back on emulator-5572 revealed/focused episode 1059 in the
+loaded 1,410-episode list; the next Back returned Home. Acceptance used native
+hierarchy assertions without additional screenshots or source activation.
+The Continue Watching card also restored episode 1059 visibly and with focus.
+No personal playback/history write occurred. Physical TV is unqualified.

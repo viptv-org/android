@@ -4,7 +4,7 @@
 return from Choose a source to the parent show's info and resumed episode.
 The next Back returns to Home and restores the originating hero focus.
 
-**Status:** complete; Windows and native qualification passed
+**Status:** complete; loaded episode selection corrected and qualified in ticket 14
 **Owner:** Luna research, Sol implementation.
 **Related contract:** CW-SOURCE-BACK-001; this entry point was missed by ticket 03.
 
@@ -58,3 +58,9 @@ hero source -> parent info -> Home remote flow, restored Resume focus, delayed
 restore cancellation, both saved-cursor shapes and the 1,410-episode route.
 Luna independently reviewed the final routing and focus guards. Source/player
 controller fixtures do not claim real-provider playback or physical TV behavior.
+
+Correction to the earlier acceptance scope: the hero fixture used placeholder
+Details text, so it did not prove the saved episode was actually revealed.
+Ticket 14 reproduced that gap on the latest APK and fixed common Details
+restoration after metadata arrival in `2f0791b`. The updated real-screen
+test and owner native hierarchy check now verify episode 1059 is visible/focused.
