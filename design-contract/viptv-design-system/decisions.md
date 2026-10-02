@@ -13,6 +13,10 @@ does not fabricate completion; details remain browsable. Reopening details and
 switching profiles must project fresh profile progress. A completed fact hides
 the partial progress bar; resetting that fact removes the badge.
 
+On narrow phones, the badge wraps immediately below the episode-number caption
+when both cannot fit at full width. Keep the full label, existing artwork and
+44 dp options target; use layout constraints rather than a fixed phone breakpoint.
+
 Acceptance: render completed, partial, unwatched and missing-progress episodes
 together on TV and phone; verify only completed cards display and announce
 `Watched`. Replace a watched item with an incomplete item and switch profiles;
