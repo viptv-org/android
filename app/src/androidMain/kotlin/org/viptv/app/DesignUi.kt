@@ -303,12 +303,12 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
     }
 }
 
-@Composable internal fun AppField(value: String, onChange: (String) -> Unit, label: String, modifier: Modifier = Modifier, secret: Boolean = false, singleLine: Boolean = true, keyboardType: KeyboardType = if (secret) KeyboardType.NumberPassword else KeyboardType.Text, onSubmit: (() -> Unit)? = null, imeAction: ImeAction = if (onSubmit == null) ImeAction.Default else ImeAction.Done, showKeyboardOnFocus: Boolean? = null) {
+@Composable internal fun AppField(value: String, onChange: (String) -> Unit, label: String, modifier: Modifier = Modifier, secret: Boolean = false, singleLine: Boolean = true, keyboardType: KeyboardType = if (secret) KeyboardType.NumberPassword else KeyboardType.Text, onSubmit: (() -> Unit)? = null) {
     OutlinedTextField(value, onChange, modifier.fillMaxWidth(), label = { VText(label, if (LocalTv.current) 22 else 14) },
         singleLine = singleLine, textStyle = TextStyle(fontFamily = Onest, fontSize = (if (LocalTv.current) 28 else 16).sp, color = C.textPrimary),
         visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction, showKeyboardOnFocus = showKeyboardOnFocus),
-        keyboardActions = KeyboardActions(onDone = { onSubmit?.invoke() }, onSearch = { onSubmit?.invoke() }),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = if (onSubmit == null) ImeAction.Default else ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onSubmit?.invoke() }),
         shape = RoundedCornerShape(measure(20, 16)))
 }
 
