@@ -83,7 +83,7 @@ import org.viptv.app.theme.ViptvColor as C
         if (shown.isEmpty()) EmptyState(
             if (state.sourceLoading) "Sources appear here as they arrive." else if (sources.isEmpty()) "No sources available" else "No matching sources",
             if (state.sourceLoading) "" else "Choose another provider or check your addons in Settings.", "list",
-            retry = if (state.sourceLoading) null else { { val route = state.route as? Route.Sources; controller.chooseSources(media, route?.resume == true, route?.origin ?: SourceReturn.Details) } })
+            retry = if (state.sourceLoading) null else { { val route = state.route as? Route.Sources; controller.chooseSources(media, route?.resume == true, route?.origin ?: SourceReturn.Details, queueEpisodeReturn = route?.queueEpisodeReturn == true) } })
         else LazyColumn(Modifier.fillMaxWidth().then(if (tv) Modifier.weight(1f) else Modifier.heightIn(max = 440.dp)), verticalArrangement = Arrangement.spacedBy(measure(14, 12)), contentPadding = PaddingValues(4.dp)) {
             itemsIndexed(shown, key = { _, source -> source.id }) { index, source ->
                 var focused by remember(source.id) { mutableStateOf(false) }
@@ -184,7 +184,7 @@ import org.viptv.app.theme.ViptvColor as C
                     if (QueuePolicy.canResume(media)) add("Resume" to { controller.resumeQueueItem(media) })
                     add("Choose source" to { controller.chooseQueueSource(media) })
                     add("Mark watched" to { controller.correctEpisode(media, true); controller.dismissDialog() })
-                    add("Watch from beginning" to { controller.dismissDialog(); controller.chooseSources(media.copy(positionMillis = 0), origin = SourceReturn.Home) })
+                    add("Watch from beginning" to { controller.dismissDialog(); controller.chooseSources(media.copy(positionMillis = 0), origin = SourceReturn.Home, queueEpisodeReturn = media.type == "episode") })
                     add("Remove from Continue Watching" to { controller.removeFromQueue(media) })
                 }
                 add("Cancel" to dismiss)

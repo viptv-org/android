@@ -236,9 +236,10 @@ internal fun AppController.chooseAnotherSourceForRecovery() {
         is Route.Player -> {
             stopPlayback(media)
             _state.value = _state.value.copy(dialog = null, message = null)
-            chooseSources(media, resume = false)
+            chooseSources(media, resume = false, origin = route.sourceRoute?.origin ?: SourceReturn.Details,
+                queueEpisodeReturn = route.sourceRoute?.queueEpisodeReturn == true)
         }
-        is Route.Sources -> { _state.value = _state.value.copy(dialog = null, message = null); chooseSources(media, origin = route.origin) }
+        is Route.Sources -> { _state.value = _state.value.copy(dialog = null, message = null); chooseSources(media, origin = route.origin, queueEpisodeReturn = route.queueEpisodeReturn) }
         else -> Unit
     }
 }

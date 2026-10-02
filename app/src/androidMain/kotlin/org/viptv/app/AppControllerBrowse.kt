@@ -9,20 +9,25 @@ import kotlinx.coroutines.launch
 internal fun AppController.activateCard(media: Media, queue: Boolean = false, origin: SourceReturn = sourceOrigin()) {
     when (CoreModels.card(media, queue).primaryAction) {
         "play" -> start(media, Source(media.id, "Live TV", media.name, channelId = media.id))
-        "resume" -> chooseSources(media, true, origin)
+        "resume" -> chooseSources(media, true, origin, queueEpisodeReturn = queue && media.type == "episode")
         "next" -> playQueuedNext(media)
-        "sources" -> chooseSources(media, origin = origin)
+        "sources" -> chooseSources(media, origin = origin, queueEpisodeReturn = queue && media.type == "episode")
         "episodes", "details" -> open(media)
         else -> fail(IllegalStateException("This card action is unavailable."))
     }
 }
 
-internal fun AppController.open(media: Media) {
+internal fun AppController.open(media: Media, returnRoute: Route? = null, showWhileLoading: Boolean = false) {
     if (media.type == "live") { activateCard(media); return }
     detailJob?.cancel()
     val generation = ++detailGeneration
-    val backRoute = _state.value.route
+    val backRoute = returnRoute ?: _state.value.route
     val profile = _state.value.selectedProfile?.id
+    if (showWhileLoading) {
+        detailReturnRoute = backRoute
+        detailReturnDestination = (backRoute as? Route.Browse)?.destination
+        _state.value = _state.value.copy(route = Route.Details(media), message = null)
+    }
     detailJob = scope.launch {
     val origin = (backRoute as? Route.Browse)?.destination
     update(loading = true)
@@ -74,11 +79,15 @@ internal fun AppController.open(media: Media) {
     }.onFailure { if (it !is CancellationException && generation == detailGeneration) fail(it) }
     }
 }
-internal fun AppController.chooseSources(media: Media, resume: Boolean = false, origin: SourceReturn = sourceOrigin()) {
+internal fun AppController.chooseSources(media: Media, resume: Boolean = false, origin: SourceReturn = sourceOrigin(), queueEpisodeReturn: Boolean = false) {
     val previous = _state.value.route
     if (previous is Route.Guide) cancelGuideWork()
-    val returnRoute = (previous as? Route.Sources)?.backRoute ?: previous.takeUnless { it is Route.Player }
-    val route = Route.Sources(media, resume, origin, returnRoute)
+    val returnRoute = when (previous) {
+        is Route.Sources -> previous.backRoute
+        is Route.Player -> previous.sourceRoute?.backRoute
+        else -> previous
+    }
+    val route = Route.Sources(media, resume, origin, returnRoute, queueEpisodeReturn)
     val profile = _state.value.selectedProfile?.id
     val beforeStart = playbackGeneration
     fun ownsResults(): Boolean {

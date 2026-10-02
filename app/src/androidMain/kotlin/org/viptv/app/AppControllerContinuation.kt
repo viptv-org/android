@@ -121,12 +121,12 @@ internal fun AppController.requestQueueManage(media: Media) {
 internal fun AppController.resumeQueueItem(media: Media) {
     val target = QueuePolicy.manageTarget(media)
     dismissDialog()
-    chooseSources(target, resume = true, origin = SourceReturn.Home)
+    chooseSources(target, resume = true, origin = SourceReturn.Home, queueEpisodeReturn = target.type == "episode")
 }
 internal fun AppController.chooseQueueSource(media: Media) {
     val target = QueuePolicy.manageTarget(media)
     dismissDialog()
-    chooseSources(target, resume = false, origin = SourceReturn.Home)
+    chooseSources(target, resume = false, origin = SourceReturn.Home, queueEpisodeReturn = target.type == "episode")
 }
 /**
  * Queue Next is server-controlled continuation, never a guessed source.

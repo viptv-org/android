@@ -82,8 +82,15 @@ internal fun AppController.handleBack(): Boolean {
             invalidatePlaybackPreparation()
             sourceDiscovery?.cancel()
             queueContinuationJob?.cancel()
-            _state.value = _state.value.copy(route = route.backRoute ?: SourceReturnPolicy.cancelRoute(route.origin, route.media), loading = false, sourceLoading = false, message = null)
-            if (route.origin == SourceReturn.Home) requestHomeFocusRestore()
+            val returnRoute = route.backRoute ?: SourceReturnPolicy.cancelRoute(route.origin, route.media)
+            val series = route.media.takeIf { route.queueEpisodeReturn }?.let(SourceReturnPolicy::parentSeries)
+            if (series != null) {
+                _state.value = _state.value.copy(loading = false, sourceLoading = false, message = null)
+                open(series, returnRoute = returnRoute, showWhileLoading = true)
+            } else {
+                _state.value = _state.value.copy(route = returnRoute, loading = false, sourceLoading = false, message = null)
+                if (route.origin == SourceReturn.Home) requestHomeFocusRestore()
+            }
         }
         is Route.Profiles -> if (_state.value.managingProfiles) _state.value = _state.value.copy(managingProfiles = false) else if (_state.value.selectedProfile != null) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), dialog = null, pinPrompt = null) else return false
         is Route.Details -> {

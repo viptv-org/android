@@ -20,13 +20,17 @@ import org.viptv.app.theme.ViptvColor as C
     val tv = LocalTv.current
     val app by controller.state.collectAsState()
     val presentation = remember(media) { CoreModels.presentation(media) }
-    val initialEpisode = remember(media) { CoreModels.initialEpisode(media) }
+    val initialEpisode = remember(media) {
+        media.episodes.firstOrNull { it.season == media.season && it.episode == media.episode }
+            ?: CoreModels.initialEpisode(media)
+    }
     val seasons = remember(media.episodes) { media.episodes.map { it.season ?: 1 }.distinct().sorted() }
-    var season by rememberSaveable(media.id) { mutableIntStateOf(initialEpisode?.season ?: seasons.firstOrNull() ?: 1) }
+    var season by rememberSaveable(media.id, media.season, media.episode) { mutableIntStateOf(initialEpisode?.season ?: seasons.firstOrNull() ?: 1) }
     var seasonPicker by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf(false) }
     val episodes = remember(media, season) { media.episodes.filter { (it.season ?: 1) == season } }
     val target = initialEpisode?.withArtworkFrom(media) ?: media.takeUnless { it.type == "series" && it.episode == null }
+    val retryDetail = !app.loading && app.message != null && media.episodes.isEmpty()
     val saved = app.favorites.any { it.id == media.id && it.type == media.type }
     val initial = LocalContentFocus.current
     val rail = LocalRailFocus.current
@@ -36,12 +40,16 @@ import org.viptv.app.theme.ViptvColor as C
     val episodeScroll = rememberLazyListState()
     val pageScroll = rememberLazyListState()
     val scrolledHeader by remember { derivedStateOf { pageScroll.firstVisibleItemIndex > 0 || pageScroll.firstVisibleItemScrollOffset > 300 } }
-    var selectedEpisode by rememberSaveable(media.id, season) { mutableIntStateOf(0) }
-    var restoreEpisodes by rememberSaveable(media.id) { mutableStateOf(false) }
+    val returningToEpisode = media.type == "series" && media.season != null && media.episode != null
+    var selectedEpisode by rememberSaveable(media.id, season, media.episode) {
+        mutableIntStateOf(episodes.indexOfFirst { it.episode == media.episode }.coerceAtLeast(0))
+    }
+    var restoreEpisodes by rememberSaveable(media.id, media.season, media.episode) { mutableStateOf(returningToEpisode) }
     LaunchedEffect(media.id) { if (tv) { withFrameNanos {}; if (!restoreEpisodes) runCatching { initial.requestFocus() } } }
-    LaunchedEffect(restoreEpisodes, season) {
+    LaunchedEffect(media.id, media.episode, restoreEpisodes, season) {
         if (tv && restoreEpisodes && episodes.isNotEmpty()) {
             val index = selectedEpisode.coerceIn(episodes.indices)
+            if (returningToEpisode) pageScroll.scrollToItem(1)
             episodeScroll.scrollToItem(index); withFrameNanos {}; runCatching { episodeFocus[index].requestFocus() }
         }
     }
@@ -69,8 +77,10 @@ import org.viptv.app.theme.ViptvColor as C
                     if (target != null) AppButton(label, ::play, Modifier.widthIn(min = 280.dp).focusRequester(initial).focusProperties { left = rail }, "play",
                         onHold = { controller.chooseSources(target) }, tvAccent = targetPresentation?.primaryAction == "resume")
                     if (target != null) AppButton("Choose source", { controller.chooseSources(target) })
+                    else if (retryDetail)
+                        AppButton("Try again", { controller.open(media, controller.detailReturnRoute, showWhileLoading = true) }, Modifier.focusRequester(initial))
                     else VText(label, 22, Modifier.align(Alignment.CenterVertically), C.textSecondary)
-                    AppButton("My List", { controller.toggleMyList(media) }, Modifier.then(if (target == null) Modifier.focusRequester(initial) else Modifier), icon = if (saved) "check" else "plus")
+                    AppButton("My List", { controller.toggleMyList(media) }, Modifier.then(if (target == null && !retryDetail) Modifier.focusRequester(initial) else Modifier), icon = if (saved) "check" else "plus")
                     AppButton("More info", { info = true }, icon = "info")
                 }
             }
@@ -112,6 +122,8 @@ import org.viptv.app.theme.ViptvColor as C
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppIconButton(if (saved) "check" else "plus", "My List", { controller.toggleMyList(media) })
                 if (target != null) AppButton(label, ::play, Modifier.weight(1f), "play", primary = true)
+                else if (retryDetail)
+                    AppButton("Try again", { controller.open(media, controller.detailReturnRoute, showWhileLoading = true) }, Modifier.weight(1f))
                 else VText(label, 14, Modifier.weight(1f).align(Alignment.CenterVertically), C.textSecondary)
                 AppIconButton("more", "More info", { info = true })
             }

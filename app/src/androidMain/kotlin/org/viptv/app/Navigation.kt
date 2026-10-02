@@ -26,6 +26,15 @@ object HomeHeroPrimaryPolicy {
  */
 enum class SourceReturn { Details, Home }
 object SourceReturnPolicy {
+    /** A queue episode's title route addresses its parent, retaining the episode cursor. */
+    fun parentSeries(media: Media): Media? {
+        val id = media.seriesId?.takeIf(String::isNotBlank) ?: return null
+        if (media.type != "episode") return null
+        return Media(id, "series", media.name, poster = media.poster, description = media.description,
+            season = media.season, episode = media.episode, backdrop = media.backdrop,
+            thumbnail = media.thumbnail)
+    }
+
     fun cancelRoute(origin: SourceReturn, media: Media): Route = when (origin) {
         SourceReturn.Details -> Route.Details(media)
         SourceReturn.Home -> Route.Browse(Destination.Home)
@@ -82,7 +91,7 @@ sealed interface Route {
     data object Profiles : Route
     data class Browse(val destination: Destination) : Route
     data class Details(val media: Media) : Route
-    data class Sources(val media: Media, val resume: Boolean = false, val origin: SourceReturn = SourceReturn.Details, val backRoute: Route? = null) : Route
+    data class Sources(val media: Media, val resume: Boolean = false, val origin: SourceReturn = SourceReturn.Details, val backRoute: Route? = null, val queueEpisodeReturn: Boolean = false) : Route
     data class Player(val media: Media, val source: Source, val returnDestination: PlaybackReturn = PlaybackReturn.Details, val directOrigin: Route? = null, val sourceRoute: Sources? = null) : Route
     data object Search : Route
     data object Settings : Route
