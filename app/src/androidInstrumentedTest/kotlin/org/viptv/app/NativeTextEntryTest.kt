@@ -6,12 +6,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -62,5 +64,33 @@ class NativeTextEntryTest {
 
         compose.runOnIdle { assertEquals(1, cancelled); assertEquals(emptyList<String>(), submitted) }
         compose.onNode(hasSetTextAction()).assertDoesNotExist()
+    }
+
+    @Test fun numericEntryKeepsRepeatedErrorsEditableAndSubmitsCorrectionOnce() {
+        val visible = mutableStateOf(true)
+        val submitted = mutableListOf<String>()
+        compose.setContent {
+            CompositionLocalProvider(LocalTv provides true) {
+                ViptvTheme(false, Color.White) {
+                    if (visible.value) TextEntry("Jump to episode", "Enter an episode number", numeric = true,
+                        fieldLabel = "Episode number", doneLabel = "Go",
+                        validate = { if (it == "10") null else "Episode not found in this season." },
+                        onDone = { submitted += it; visible.value = false }, onCancel = { visible.value = false })
+                }
+            }
+        }
+
+        val field = compose.onNode(hasSetTextAction())
+        field.performTextInput("9x9")
+        repeat(2) {
+            compose.onNodeWithText("Go").performClick()
+            compose.onNodeWithText("Episode not found in this season.").assertExists()
+            field.assertIsFocused()
+            compose.runOnIdle { assertEquals(emptyList<String>(), submitted) }
+        }
+        field.performTextReplacement("10")
+        compose.onNodeWithText("Go").performClick()
+        compose.runOnIdle { assertEquals(listOf("10"), submitted) }
+        field.assertDoesNotExist()
     }
 }
