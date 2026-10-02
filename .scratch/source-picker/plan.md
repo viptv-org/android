@@ -20,6 +20,9 @@ client records its exact adopted revision; shared Rust policy stays authoritativ
 | 08 | [Media rows reach the right edge](issues/08-media-rows-right-edge.md) | Layout research; canonical UX; coordinate 06/07 files | Luna research, then Sol implementation |
 | 09 | [Blank One Piece episode 1059](issues/09-one-piece-episode-1059-blank.md) | Exact metadata/artwork reproduction | Luna research, then Sol implementation |
 | 10 | [Web video-player Fit/Fill](issues/10-web-player-fit-fill.md) | Canonical player behavior and surface checks | Sol implementation, Luna review |
+| 11 | [Restore selected episode after source Back](issues/11-episode-source-back-selection.md) | Actual route and focus reproduction | Sol device regression, Luna research |
+| 12 | [Hero Resume Back opens episode list](issues/12-hero-resume-back.md) | Hero versus queue entry-point regression | Luna research, Sol implementation |
+| 13 | [Completed episode indicators](issues/13-completed-episode-indicators.md) | Existing per-profile watched facts and card contract | Luna research, Sol implementation |
 
 Workers use GPT-6 Sol with low reasoning for implementation. Independent
 validation and review use GPT-6 Luna with max reasoning, per Mimir's AGENTS.md.
@@ -30,6 +33,7 @@ Incoming tasks join this queue without replacing work already authorized.
 Research stays with Luna workers so the main chat can receive new tasks.
 Tickets 01-10 are complete, with implementation and qualification recorded in
 their individual files. Independent final Android reviews used Luna workers.
+Tickets 11-13 track incoming Android episode navigation and watched-state work.
 
 Verify descriptions with long multiline text and long unbroken torrent names,
 initial and partial loading, focus/blur, reduced motion and route cancellation.
