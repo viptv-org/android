@@ -1,10 +1,10 @@
 {
   "repository": "viptv-org/core",
-  "revision": "1f8483e365867f99eb39928cd7f3a23920003515",
+  "revision": "c9e7bea8c0df4258e363bcd9141a38716904a6aa",
   "files": {
     "Cargo.lock": "e3169bdc694bea70e1d0c5c65c4796fb8f233520ba59d7ddb396af30020b008e",
     "Cargo.toml": "aaadafb7d7043ae4788352e5784c05398c9020647acea903cc0940a158a77845",
-    "DESIGN_REF": "e8dcc9ded502fb2e736d099cd7e580f4ebdc1316f895d9c5d8110062e405a286",
+    "DESIGN_REF": "44f847ad939d04ebd34f1db3feecfbd6a3cbf0cd66b0e47d2d14929b6641a63c",
     "adapters/android/src/androidTest/kotlin/tv/viptv/core/HttpTransportTest.kt": "5b3d4b1af872a66ea8a077929d90e7f5f05c3fce965b2abe8c7b9fa034c7cf6d",
     "adapters/android/src/androidTest/kotlin/tv/viptv/core/SmartCastTransportTest.kt": "899be20d9e3e7e73ad60b7f95fd9da5acfa0766c23fdb69269bcd25e853e22f4",
     "adapters/android/src/main/kotlin/tv/viptv/core/HttpTransport.kt": "4f86d0720504554c02d4a7ce35d682c0c87e32084404c180d322709af2567c0a",
@@ -23,7 +23,7 @@
     "crates/viptv-core/src/app/types.rs": "e614f5d2a0137de53b201143802046ba4d92917fcb20578ded8efff24bcce8d0",
     "crates/viptv-core/src/app/update.rs": "d68819ed507dac2109b8249b9969a81e5c53424ddcdea6f37157a135553a64e9",
     "crates/viptv-core/src/bin/uniffi-bindgen.rs": "f7a2dd11fb370e9595bdfa6c32fc41a9b67a60bbab06ec711cb7a03eb873ffa6",
-    "crates/viptv-core/src/domain/api_error.rs": "d2c407960a2712d536cc066fed0ebd5d58e733e2e6507ef1ca454961956765ea",
+    "crates/viptv-core/src/domain/api_error.rs": "73c22f83521a7f54763d65e877ccdbee8dc96cba7946e1803b52b6e646d731dc",
     "crates/viptv-core/src/domain/identity.rs": "ebd3abf320fc1c998281268ea52da1296dd6e3506f16992bce723e9bfa0dcc3a",
     "crates/viptv-core/src/domain/live_v2.rs": "7acf89daf59c80deba0f96ca00a44bd490adbc79daefb6a48b3b94e23a829e30",
     "crates/viptv-core/src/domain/media.rs": "1ea1c83b6e3210886049a2f47d6da24e76ef8ff21aa8d77028160f4b714250bc",
