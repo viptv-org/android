@@ -4,8 +4,28 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 
 class DistinctSourceProducerWireTest {
+    @Test fun allFailedDiscoveryStillReportsSelectableProducerOutcomes() = runBlocking {
+        FixtureServer(2) { request -> when (request.target) {
+            "/api/v2/streams" -> FixtureResponse("""{"id":"job-empty"}""")
+            "/api/v2/streams/job-empty?after=0" -> FixtureResponse("""{"events":[
+                {"seq":1,"source":"addon:3","streams":[],"error_code":"source_format_unsupported","error":"Only HTTP(S) streams are supported here."},
+                {"seq":2,"source":"addon:4","streams":[],"error_code":"source_format_unsupported","error":"Only HTTP(S) streams are supported here."}
+            ],"done":true}""")
+            else -> error("Unexpected request ${request.target}")
+        } }.use { server ->
+            var last = emptyList<SourceProducerOutcome>()
+            assertFailsWith<GatewayError> {
+                VipTvHttpGateway(server.origin).sources(Media("title-1", "movie", "Title"), onProducerUpdate = { last = it })
+            }
+            assertEquals(listOf("addon:3", "addon:4"), last.map { it.sourceId })
+            assertEquals(listOf("source_format_unsupported", "source_format_unsupported"), last.map { it.errorCode })
+            server.assertHealthy()
+        }
+    }
+
     @Test fun configuredNamesStaySeparateEvenWhenOnlyOneAddonHasRows() {
         val observed = listOf("addon:3", "addon:4", "addon:8").map { SourceProducerOutcome(it) }
         val installed = listOf(

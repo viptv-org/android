@@ -65,7 +65,8 @@ data class SourceProducerOutcome(
     val errorCode: String? = null,
     val errorMessage: String? = null,
 ) {
-    val providerKey: String get() = "addon:$sourceId"
+    /** The same generated display projection supplies keys for rows and empty producers. */
+    val providerKey: String get() = SourceDisplayPolicy.providerKey(Source("", "", addonId = sourceId))
 }
 
 /** Join observed producer IDs to account-configured labels; never create a choice from settings alone. */
