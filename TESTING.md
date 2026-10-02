@@ -1,3 +1,24 @@
+# Core malformed-response HTTP status adoption — 2026-10-02
+
+Adopted immutable Core `f66c87e13a2c93b6dad3234da9694c57f8530b0a`
+through the normal core-sync importer after Core PR6. Malformed successful
+identity/token responses retain their actual HTTP status instead of looking
+like a transport failure. The Kotlin interface is unchanged; Android-specific
+policy and the existing design `1742afa` remain unchanged.
+
+JDK17/SDK36 with Cargo jobs2 and Gradle workers2: rebuilt the host library,
+freshly executed all 237 host tests (zero failures/errors/skips), rebuilt
+arm64-v8a/armeabi-v7a/x86_64 native Core libraries, and assembled the normal
+debug and instrumentation APKs. Core/design integrity and lint passed.
+The normal APK has all three expected ELF architectures and no fixture CA.
+The initial cached Gradle test result was followed by an explicit fresh run
+against the rebuilt library; it was not treated as new runtime evidence.
+
+This is pin/build/host-runtime evidence. The earlier Android TV Guide, source
+picker and dual-AAC checks below were performed at Core `c9e7bea`; they are
+not represented as fresh managed gateway or physical-device acceptance at
+this pin. The original checkout and TV layout remain unchanged.
+
 # Android TV Guide, source failures and alternate native audio — 2026-10-02
 
 Application baseline: Android main `297d469`, Core
