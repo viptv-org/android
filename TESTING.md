@@ -1,3 +1,36 @@
+# Current Core Android TV Guide remote chain — 2026-10-02
+
+Baseline: Android main `7b0d00c`, Core
+`f66c87e13a2c93b6dad3234da9694c57f8530b0a`, unchanged design
+`1742afa2b50d30638fa46f3abc8c1a76638a51e1`. The opt-in
+`GuideRemoteFixtureTest` passed on the owned API36 Android TV x86_64 emulator
+in 5.144 seconds (one test). The test asserts native television mode and uses
+the paired synthetic session, actual AppController/GuideScreen, local HTTPS
+fixture responses and the application's 1920-coordinate density.
+
+One initial public focus setup selects All. Ordinary remote keys move to News
+and apply that filter; remote OK opens Search, native text input/IME Done submits
+CNBC, and the real controller replaces the channel page and loads its schedule.
+Ordinary remote navigation then reaches future Halftime Report. OK opens its
+Watch live details; native Android Back restores the same programme semantics
+ID, bounds and focus on CNBC. No focus request repairs Search or Back. The
+HTTPS fixture journal proves no playback admission before or after the flow.
+
+This completes the formerly unqualified filter/Search/result/future-details/
+Back functional chain through the pre-agreed public composition/remote seam.
+It uses the actual controller and HTTP boundary with synthetic backend data;
+it is not actual backend/gateway delivery, full ApplicationShell/rail navigation,
+pixel parity or physical remote/decoder acceptance. Current Guide presentation
+gaps remain unchanged. The earlier partial-chain caveats below describe the
+older checkpoint and are superseded only for this scoped functional chain.
+
+Core/design integrity, targeted native test, instrumentation/normal APK assembly
+and lint pass. The ordinary debug APK excludes fixture CA material; only the
+isolated installed QA APK trusted that fixture certificate. The unchanged
+Core f66 host/three-ABI rebuild and fresh 237-test host gate are recorded below.
+No application/layout code, production data, deployment or physical device was
+changed. Private credentials, media, logs and captures remain ignored.
+
 # Core malformed-response HTTP status adoption — 2026-10-02
 
 Adopted immutable Core `f66c87e13a2c93b6dad3234da9694c57f8530b0a`
