@@ -20,16 +20,17 @@ import org.viptv.app.theme.ViptvColor as C
     val tv = LocalTv.current
     val app by controller.state.collectAsState()
     val presentation = remember(media) { CoreModels.presentation(media) }
-    val initialEpisode = remember(media) {
+    val playEpisode = remember(media) { CoreModels.initialEpisode(media) }
+    val focusEpisode = remember(media, playEpisode) {
         media.episodes.firstOrNull { it.season == media.season && it.episode == media.episode }
-            ?: CoreModels.initialEpisode(media)
+            ?: playEpisode
     }
     val seasons = remember(media.episodes) { media.episodes.map { it.season ?: 1 }.distinct().sorted() }
-    var season by rememberSaveable(media.id, media.season, media.episode) { mutableIntStateOf(initialEpisode?.season ?: seasons.firstOrNull() ?: 1) }
+    var season by rememberSaveable(media.id, media.season, media.episode) { mutableIntStateOf(focusEpisode?.season ?: seasons.firstOrNull() ?: 1) }
     var seasonPicker by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf(false) }
     val episodes = remember(media, season) { media.episodes.filter { (it.season ?: 1) == season } }
-    val target = initialEpisode?.withArtworkFrom(media) ?: media.takeUnless { it.type == "series" && it.episode == null }
+    val target = playEpisode?.withArtworkFrom(media) ?: media.takeUnless { it.type == "series" && it.episode == null }
     val retryDetail = !app.loading && app.message != null && media.episodes.isEmpty()
     val saved = app.favorites.any { it.id == media.id && it.type == media.type }
     val initial = LocalContentFocus.current

@@ -8,6 +8,19 @@ import org.json.JSONObject
 
 /** Exercises the native input boundary reached when opening a long series. */
 class LargeSeriesPresentationTest {
+    @Test fun explicitDetailsCursorDoesNotReplaceCoreResumeEpisode() {
+        val videos = JSONArray()
+            .put(JSONObject().put("id", "series:1:1").put("season", 1).put("episode", 1)
+                .put("updated_at", "2025-01-01T00:00:00Z").put("position", 30))
+            .put(JSONObject().put("id", "series:2:4").put("season", 2).put("episode", 4)
+                .put("updated_at", "2026-01-01T00:00:00Z").put("position", 90))
+        val series = CoreModels.media(JSONObject().put("id", "series").put("type", "series")
+            .put("name", "Series").put("season", 1).put("episode", 1).put("videos", videos))
+
+        assertEquals("series:1:1", series.episodes.first { it.season == series.season && it.episode == series.episode }.id)
+        assertEquals("series:2:4", CoreModels.initialEpisode(series)?.id)
+    }
+
     @Test fun openingLongSeriesRetainsEveryEpisodeAndRequestedStartingPoint() {
         val videos = JSONArray()
         repeat(1_050) { index ->
