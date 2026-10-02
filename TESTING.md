@@ -875,3 +875,33 @@ fullscreen applies contain/cover to video and canvas without a playback
 session replacement. Real MediaBunny decode and physical devices were not
 qualified. The DEV asset update preserved the backend binary/settings and
 protected account/profile/session/add-on/import/favorite/progress records.
+
+## Hero episode return and watched indicators - 2026-10-02
+
+Android d9b5701 restores the parent episode list after Home hero Resume source
+cancellation or player exit. 6d85bda restores the originating hero focus;
+7a7f47c rejects a delayed restore after newer directional input. f9f3332 displays
+profile-scoped checkmark/Watched badges on episode cards, retains incomplete
+progress and refreshes authoritative series progress after playback return.
+41cf7b9 refreshes manual correction progress and preserves accepted
+watched facts when a follow-up read fails or omits the corrected episode.
+Design is pinned to 18b19af; shared Core remains 1f8483e.
+
+The final Windows JDK 17 / SDK 36 gate passed host Core, 228 unit tests with
+zero failures/errors/skips, three Android ABIs, normal/test APK assembly and
+lint. All 19 targeted API 36 TV emulator tests passed together: six hero/large
+list navigation cases, five badge/layout cases, three playback-return controller
+cases and five manual-correction controller HTTP cases. Independent Luna review
+covered routing, delayed focus and progress ownership. Private inspected TV
+and 320 dp phone captures retain complete episode numbers and watched labels.
+
+The signed-in personal emulator opened Anime Kitsu One Piece freshly at episode
+1, jumped to 1059, opened the 19-source picker and returned with 1059 focused.
+No source was activated and no viewing progress was written. The reported
+direct-path reset remains unreproduced. Local tickets 11-13 record the evidence.
+The qualified normal APK was installed preserving the personal sign-in.
+
+These checks qualify emulator UI and controller/HTTP fixtures. Actual initialized
+decoder playback, a real final-save HTTP transaction and physical-TV capability
+were not exercised. Missing/failed manual refresh retains the last known position
+and accepted watched fact until an authoritative row arrives.

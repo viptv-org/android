@@ -33,7 +33,9 @@ Incoming tasks join this queue without replacing work already authorized.
 Research stays with Luna workers so the main chat can receive new tasks.
 Tickets 01-10 are complete, with implementation and qualification recorded in
 their individual files. Independent final Android reviews used Luna workers.
-Tickets 11-13 track incoming Android episode navigation and watched-state work.
+Tickets 12-13 are complete and qualified. Ticket 11 verifies the expected direct
+source-Back behavior with a fresh 1,410-episode route; the reported reset itself
+remains unreproduced, and no speculative direct-path fix was made.
 
 Verify descriptions with long multiline text and long unbroken torrent names,
 initial and partial loading, focus/blur, reduced motion and route cancellation.
