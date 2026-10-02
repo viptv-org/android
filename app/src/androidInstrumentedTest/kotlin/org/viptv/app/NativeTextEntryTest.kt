@@ -3,6 +3,8 @@ package org.viptv.app
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -29,7 +31,7 @@ class NativeTextEntryTest {
         val visible = mutableStateOf(true)
         val submitted = mutableListOf<String>()
         compose.setContent {
-            CompositionLocalProvider(LocalTv provides true) {
+            CompositionLocalProvider(LocalTv provides true, LocalDensity provides Density(1f, 1f)) {
                 ViptvTheme(false, Color.White) {
                     if (visible.value) TextEntry("Enter parent PIN", "Enter a 4–8 digit parent PIN", secret = true,
                         onDone = { submitted += it; visible.value = false }, onCancel = { visible.value = false })
@@ -51,7 +53,7 @@ class NativeTextEntryTest {
         val submitted = mutableListOf<String>()
         var cancelled = 0
         compose.setContent {
-            CompositionLocalProvider(LocalTv provides true) {
+            CompositionLocalProvider(LocalTv provides true, LocalDensity provides Density(1f, 1f)) {
                 ViptvTheme(false, Color.White) {
                     if (visible.value) TextEntry("Enter parent PIN", "Enter a 4–8 digit parent PIN", secret = true,
                         onDone = { submitted += it; visible.value = false }, onCancel = { cancelled++; visible.value = false })
@@ -70,7 +72,7 @@ class NativeTextEntryTest {
         val visible = mutableStateOf(true)
         val submitted = mutableListOf<String>()
         compose.setContent {
-            CompositionLocalProvider(LocalTv provides true) {
+            CompositionLocalProvider(LocalTv provides true, LocalDensity provides Density(1f, 1f)) {
                 ViptvTheme(false, Color.White) {
                     if (visible.value) TextEntry("Jump to episode", "Enter an episode number", numeric = true,
                         fieldLabel = "Episode number", doneLabel = "Go",
@@ -83,10 +85,11 @@ class NativeTextEntryTest {
         val field = compose.onNode(hasSetTextAction())
         field.performTextInput("9x9")
         repeat(2) {
+            field.assertExists()
             compose.onNodeWithText("Go").performClick()
+            compose.runOnIdle { assertEquals(emptyList<String>(), submitted) }
             compose.onNodeWithText("Episode not found in this season.").assertExists()
             field.assertIsFocused()
-            compose.runOnIdle { assertEquals(emptyList<String>(), submitted) }
         }
         field.performTextReplacement("10")
         compose.onNodeWithText("Go").performClick()
