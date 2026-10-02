@@ -28,6 +28,6 @@ Keep the existing five triage labels. See docs/agents/triage-labels.md.
 ### Domain docs and workers
 
 Use the single-context layout and pinned contracts. See docs/agents/domain.md.
-Follow Mimir's global AGENTS.md: GPT-6 Sol with low reasoning for implementation;
-GPT-6 Luna with max reasoning for testing, investigation and review. Keep each
+Use the workspace subagent policy: GPT-6.1 Sol (`gpt-6.1-sol`) with high
+reasoning (`high`) for implementation, testing, investigation and review. Keep each
 ticket's implementation and checks in narrow commits, preserving owner edits.

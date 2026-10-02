@@ -6,7 +6,7 @@ shared Details restoration seam, preserving later manual selection and jumps.
 
 **Blocked by:** none; follows ticket 12's incomplete rendered-list coverage.
 **Status:** done; Windows gate and native loaded-return acceptance passed
-**Owner:** Sol implementation and device regression; Luna independent research/review.
+**Owner:** implementation and device regression; Luna independent research/review.
 **Contract:** CW-SOURCE-BACK-001 at the current DESIGN_REF.
 
 - [x] Verify the running owner emulator has the latest qualified APK.

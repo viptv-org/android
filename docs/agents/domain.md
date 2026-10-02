@@ -9,6 +9,6 @@ For this work, Continue Watching means the profile's in-progress viewing queue;
 the info page is title details and its episode selector; Choose a source means
 the existing source picker. Add-ons and their configuration belong to accounts.
 
-Mimir's global AGENTS.md determines worker routing: implementation and fixes
-use `gpt-6-sol` with low reasoning; testing, investigation and independent review
-use `gpt-6-luna` with max reasoning. Retained workers keep their existing model.
+All subagents use `gpt-6.1-sol` with high reasoning (`high`) for implementation,
+testing, investigation and independent review. Set both values explicitly;
+restart retained workers using other settings before assigning further work.

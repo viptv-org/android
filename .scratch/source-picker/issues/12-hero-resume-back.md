@@ -5,7 +5,7 @@ return from Choose a source to the parent show's info and resumed episode.
 The next Back returns to Home and restores the originating hero focus.
 
 **Status:** complete; loaded episode selection corrected and qualified in ticket 14
-**Owner:** Luna research, Sol implementation.
+**Owner:** investigation, implementation.
 **Related contract:** CW-SOURCE-BACK-001; this entry point was missed by ticket 03.
 
 - [x] Reproduce the hero Resume entry separately from the queue card.

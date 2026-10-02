@@ -7,7 +7,7 @@ scrolling through a large series such as One Piece.
 **Blocked by:** None.
 **Status:** done
 **Triage:** ready-for-agent
-**Owner:** episode_jump_research (GPT-6 Luna, max), then Sol implementation.
+**Owner:** episode_jump_research (GPT-6.1 Sol, high), then implementation.
 
 - [x] Trace actual episode numbering and season/focus behavior, including large anime.
 - [x] Commit a canonical design rule and adopt its immutable revision.
