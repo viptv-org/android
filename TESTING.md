@@ -1,3 +1,126 @@
+# Android TV Home rail focus restoration — 2026-10-03
+
+Reproduced the owner's Right-from-navigation failure with the real Home and
+rail composables: refresh disposed the remembered control, so Right collapsed
+the rail while Play remained unfocused. The original and minimized text-only
+regressions both failed before correction. FocusMemory now tries the saved
+control, clears an invalid requester, and falls back to the current page entry
+control. Profile Right, navigation Right and shell Back share this handoff;
+the rail stays available if loading content offers no valid focus target.
+Route-keyed focus lifetime is preserved. No delay or layout workaround added.
+
+Five dedicated TV emulator checks passed (final rebuilt harness: 44.36s):
+hero return, refreshed hero return,
+shelf return, Profile Right after refresh, and loading Home then retry.
+The season/watched and Home hero return regressions also passed
+**OK (11 tests)** in 54.979s. All checks use text/focus assertions only; no
+screenshots, images, recordings or pixel assertions were captured or used.
+Private evidence is under `qualification/artifacts/rail-focus-20261003/`.
+
+JDK 17 / SDK 36 host-core preparation, **228 unit tests** with zero
+failures/errors/skips, all three Android ABIs, normal/test APK assembly and
+app lint passed. Lint reports 77 warnings under the existing three-error
+baseline; no baseline changes or suppressions were added. The same production
+fix on isolated latest main `44196c4` passed **237 unit tests**, also clean.
+The test harness owns one FocusMemory per fixture, avoiding lint's incorrect
+Unit inference for the cross-source-set constructor inside remember.
+
+The normal debug APK was installed with `adb install -r` and relaunched on the
+dedicated local TV emulator, preserving app data/sign-in and backend settings.
+SHA256: `31EDA02C2E5023008061F4AC40BAF94D8C708D9F4707AF39BEDC6276DDC43D57`.
+Other destination pages and physical remote behavior are not device-qualified
+by this Home-focused run. No commit or push was requested.
+
+# Android TV episode season cards and watched hold — 2026-10-02
+
+Owner-requested working change on Android main `1ea4b0e`, with the same
+change unit-checked on isolated latest main `44196c4`. Previous season and
+Next season cards bookend the episode row for available adjacent seasons.
+OK opens the previous season at its last episode or the next at its first;
+focus alone does not change seasons. The episode lazy-list offset is accounted
+for in saved-cursor restoration and Episode #. Episode hold opens the existing
+700ms menu, offering Mark watched or Mark unwatched according to its saved fact.
+Accepted correction updates Watched and retains the selected season/episode.
+
+JDK 17 / SDK 36 local flow passed host-core preparation, both unit tasks
+(47 library + 181 app = **228 tests**, zero failures/errors/skips), all three
+Android native ABIs, normal APK + Android-test APK assembly, and app lint.
+Latest-main isolated unit checks also passed: **237 tests**, zero failures,
+errors or skips.
+
+On the dedicated Windows API 36 Android TV emulator, the text-only
+`EpisodeSeasonNavigationTest`, `DetailsEpisodeReturnTest`, and
+`EpisodeCorrectionProgressTest` returned **OK (14 tests)** in 48.197s.
+Scenarios cover sparse seasons including 0, unavailable end directions, exact
+destination focus, Episode # with a preceding card, delayed metadata, Sources
+Back, actual Android hold/release delivery, watched/unwatched badge updates,
+Cancel, rejected saves, and stale profile/route progress responses. The initial
+test APK had a cross-window key-injection bookkeeping failure; the final rebuilt
+harness uses native Android hold/release events.
+
+The normal debug APK was installed with `adb install -r` and relaunched,
+without clearing app data or changing its backend. SHA256:
+`B1E485A516F1A03B28F02A83C28FBB9833FEE779CCC22F01648D0DDB38A176FC`.
+Private text evidence is under
+`qualification/artifacts/episode-season-20261002/`; no screenshots, images,
+recordings or pixel assertions were captured/used in this run.
+
+The canonical owning design working draft is
+`../design/specs/behavior/android-tv-episode-season-cards.md`. Pins remain
+unchanged pending an authorized commit/adoption; no publication or other-client
+parity is claimed. Windows-normalized design validation passed docs, links,
+tokens and the recorded asset inventories; the original validator retains its
+Windows path/CRLF limitation. Physical remote and visual appearance remain
+unverified.
+
+# Windows-local v2 upgrade and playback UI fixes — 2026-10-01
+
+Android main `c8f8ffa`, design `6da30a5`, core `1f8483e`: existing Windows
+work was preserved during upstream integration. The TV track label now yields
+space to Current/unavailable markers. Positioned subtitle cues use the measured
+text bounds and retain their horizontal viewport anchor even with automatic
+vertical placement; safe edges and visible controls constrain their placement.
+
+The position-only cue regression failed before the fix in
+`qualification/artifacts/v2-subtitle-before.log`. The final JDK 17 / SDK 36
+local flow built host core, ran both Android unit-test tasks, built all three
+Android core ABIs and assembled the normal APK. Final XML reports contain
+**206 tests, zero failures/errors/skips**; the final combined Gradle run passed.
+The normal APK was installed with `adb install -r` on this PC's dedicated TV
+emulator and launched successfully, without clearing app data or changing its
+backend. Evidence is private under `qualification/artifacts/v2-windows-*`.
+
+The simultaneous automatic-cue regression also failed before correction in
+`qualification/artifacts/v2-subtitle-stack-before.log`. Automatic cues now share
+one vertical stack while retaining each horizontal anchor. The stack is measured
+and clipped above visible controls, including oversized text.
+
+Two real Compose pixel tests passed on the Windows TV emulator: simultaneous
+left/right/default cues occupy distinct rows at their horizontal anchors, and a
+tall cue cannot paint underneath the reserved controls area. Invocation used the
+explicit TV serial and `org.viptv.app.SubtitleOverlayPlacementTest`; result:
+`OK (2 tests)` in `qualification/artifacts/v2-subtitle-render-emulator.log`.
+This render-only test uses no account, network, source or media fixture.
+
+Not claimed: real provider playback, Media3-to-overlay end-to-end subtitles,
+physical TV remote input, codec/HDR or PiP. Record post-cutover signed-in
+discovery and playback independently below.
+
+Post-cutover dev checks: backend `1b218e84` plus retained numeric-pairing work
+is running on loopback3000 through the unchanged tunnel. Public dashboard,
+activation, TV-web, health/auth-status routes returned200; four frontend asset
+hashes match the reviewed candidate. Numeric pairing and PNG QR passed.
+Backup-first addon migration encrypted both entries, assigned the unowned entry
+to the personal account and retained the other owner. Integrity and preservation
+checks passed for15 protected tables (two accounts, two profiles, four sessions).
+
+On the Windows TV, the existing personal profile remains selected; populated
+Cinemeta Home, title details and account-scoped Addons render. Choose source
+renders the expected zero-source state with a catalog-only addon, not a playback
+success. No personal stream provider or Stremio import/apply was configured.
+The separate gateway candidate is qualified but public conversion is deferred.
+Private captures are `qualification/artifacts/v2-tv-*.png`.
+
 # AND-042 phone presentation and track menus (design#6) — 2026-09-30
 
 Adopts design `6da30a58c839e4e66465a76c8f80471139147f27` (AND-042). Phone Home
@@ -797,6 +920,23 @@ failure and automatic recovery. The in-app restoration screen was inspected
 privately under delayed identity response. The immediate system screenshot was
 too early to qualify the OS splash itself. Real Vizio/TV firmware, frame-time
 performance and physical-device OS splash behavior remain unverified.
+
+## Development backend connection, 2026-09-29
+
+The owner-requested running API 36 Android TV emulator was connected through
+the app's Server setting to the existing public HTTPS development tunnel.
+The Rust backend and account dashboard built successfully. Public health and
+the device pairing page returned HTTP 200; unauthenticated profiles returned
+HTTP 401. A separate development database, owner account and profile were
+created. TV pairing and profile selection succeeded through the normal API.
+Adding the default Cinemeta catalog to that account populated Discover with
+titles and artwork, confirmed in the native UI and a private screenshot.
+
+The backend runs as an enabled user service with restart on failure. Private
+credentials and captures remain under ignored qualification/artifacts. No
+Android implementation or APK changed; Gradle checks were not rerun. Stream
+providers, playback and physical-device behavior were not qualified here.
+
 
 ## HOME-ADDON-001 — Automatic account add-on refresh, 2026-10-01
 

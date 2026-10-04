@@ -84,6 +84,9 @@ The same core revision must be adopted by TV-web for shared behavior changes. In
 
 ## Validation and builds
 
+[DEVELOPMENT.md](DEVELOPMENT.md) documents Windows-first development, private VPS
+SSH configuration, local native builds, and the local Android TV emulator.
+
 Use JDK 17, SDK Platform 36, Node 22+, Rust, cargo-ndk and an Android NDK. The local acceptance build used NDK 28.2.13676358. With the Android SDK/NDK environment configured:
 
 ```sh

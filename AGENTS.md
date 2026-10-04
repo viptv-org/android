@@ -5,6 +5,11 @@ build workflows remain, triggered by main pushes and manual dispatch. No PR
 gates, automatic releases, image publishing or deployment. Retain local checks.
 This supersedes older automation/release-gate instructions below.
 
+This Windows checkout is Windows-first: build/test and run Android TV on this PC.
+Read DEVELOPMENT.md and load scripts/windows-dev.ps1; the git-ignored local .env
+records this PC's tools and the owner's exact VPS SSH target. The VPS hosts the
+dev backend; do not start a remote TV emulator unless explicitly requested.
+
 Read `DESIGN_REF` and `SPEC.md` before changing playback behavior. The pinned design commit defines shared UX; this library owns Media3 adaptation and reports facts rather than deciding product policy.
 
 Keep every public type free of Media3 implementation types. State is level-triggered and session-scoped; one-off completions, errors, and track events are event flows. Reject callbacks from replaced sessions. Preserve the distinction between on-demand, seekable live, and non-seekable live. Never serialize source URLs, headers, cookies, licenses, or local paths into logs, exceptions, analytics, or `toString()`.
