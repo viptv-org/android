@@ -123,6 +123,9 @@ internal fun Route.screenKey(): String = when (this) {
     else -> javaClass.simpleName
 }
 
+internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean): Boolean = requested && !keyboardVisible
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable private fun ApplicationShell(state: AppState, controller: AppController, model: ViptvModel) {
     val tv = LocalTv.current
     val route = state.route
@@ -132,10 +135,16 @@ internal fun Route.screenKey(): String = when (this) {
     val initial = remember(key) { FocusRequester() }
     val focusMemory = remember(key) { FocusMemory() }
     var railOpen by remember { mutableStateOf(false) }
+    val keyboardVisible = WindowInsets.isImeVisible
+    val railExpanded = televisionRailExpanded(railOpen, keyboardVisible)
+    LaunchedEffect(tv, keyboardVisible) {
+        // Forget expansion so dismissing native input does not reopen navigation.
+        if (tv && keyboardVisible) railOpen = false
+    }
     val browse = route is Route.Browse || route is Route.Guide || route == Route.Search || route == Route.Settings || route == Route.Addons || route is Route.Details
     val tab = route is Route.Browse || route is Route.Guide
     BackHandler(controller.consumesBack(state)) { controller.handleBack() }
-    BackHandler(tv && railOpen) { railOpen = false; runCatching { (focusMemory.target ?: initial).requestFocus() } }
+    BackHandler(tv && railExpanded) { railOpen = false; runCatching { (focusMemory.target ?: initial).requestFocus() } }
     CompositionLocalProvider(LocalRailFocus provides rail, LocalContentFocus provides initial, LocalFocusMemory provides focusMemory, LocalCloseRail provides { railOpen = false }) {
         Box(Modifier.fillMaxSize()) {
             val insets = if (tv || route is Route.Player || route is Route.Details) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
@@ -161,7 +170,7 @@ internal fun Route.screenKey(): String = when (this) {
                 }
             }
             if (!tv && tab) PhoneNavigation(route, controller, Modifier.align(Alignment.BottomCenter))
-            if (tv && browse) TelevisionRail(state, controller, railOpen, { railOpen = it }, rail, initial, focusMemory)
+            if (tv && browse) TelevisionRail(state, controller, railExpanded, { railOpen = televisionRailExpanded(it, keyboardVisible) }, rail, initial, focusMemory)
             if (state.loading && route !is Route.Player && route != Route.Pairing) {
                 CircularProgressIndicator(Modifier.align(Alignment.TopEnd).then(if (tv) Modifier else Modifier.statusBarsPadding()).padding(measure(40, 16)).size(measure(32, 22)), color = LocalAccent.current, strokeWidth = measure(4, 2))
             }
