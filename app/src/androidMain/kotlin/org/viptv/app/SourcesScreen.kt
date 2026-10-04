@@ -211,8 +211,9 @@ import org.viptv.app.theme.ViptvColor as C
             }
             DialogKind.EpisodeManage -> {
                 dialog.media?.let { media ->
-                    add("Mark watched" to { controller.correctEpisode(media, true); controller.dismissDialog() })
-                    add("Mark unwatched" to { controller.correctEpisode(media, false); controller.dismissDialog() })
+                    add((if (media.watched) "Mark unwatched" else "Mark watched") to {
+                        controller.correctEpisode(media, !media.watched); controller.dismissDialog()
+                    })
                     add("Watch from beginning" to { controller.dismissDialog(); controller.chooseSources(media.copy(positionMillis = 0)) })
                 }; add("Cancel" to dismiss)
             }

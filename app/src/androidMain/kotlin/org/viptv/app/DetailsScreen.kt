@@ -42,6 +42,10 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     val seasons = remember(media.episodes) { media.episodes.map { it.season ?: 1 }.distinct().sorted() }
     var season by rememberSaveable(media.id, media.season, media.episode, entryId) { mutableIntStateOf(media.season ?: focusEpisode?.season ?: seasons.firstOrNull() ?: 1) }
     var seasonPicker by remember { mutableStateOf(false) }
+    val seasonIndex = seasons.indexOf(season)
+    val previousSeason = seasons.getOrNull(seasonIndex - 1)
+    val nextSeason = seasons.getOrNull(seasonIndex + 1).takeIf { seasonIndex >= 0 }
+    val episodeRowOffset = if (tv && previousSeason != null) 1 else 0
     var jumpEntry by remember { mutableStateOf(false) }
     var jumpOrigin by remember { mutableStateOf<Pair<String, Int>?>(null) }
     val jumpFocus = remember { FocusRequester() }
@@ -75,12 +79,15 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     }
     var restoreEpisodes by rememberSaveable(media.id, media.season, media.episode, entryId) { mutableStateOf(returningToEpisode) }
     var pendingSavedEpisode by rememberSaveable(media.id, media.season, media.episode, entryId) { mutableStateOf(returningToEpisode) }
+    var seasonEntryIndex by rememberSaveable(media.id, media.season, media.episode, entryId) { mutableIntStateOf(-1) }
     LaunchedEffect(media.id, entryId) { if (tv) { withFrameNanos {}; if (!restoreEpisodes) runCatching { initial.requestFocus() } } }
-    LaunchedEffect(media.id, media.episode, restoreEpisodes, season, entryId) {
-        if (tv && restoreEpisodes && !pendingSavedEpisode && episodes.isNotEmpty()) {
-            val index = selectedEpisode.coerceIn(episodes.indices)
+    LaunchedEffect(media.id, media.episode, restoreEpisodes, season, episodes, app.dialog, seasonPicker, entryId) {
+        if (tv && restoreEpisodes && !pendingSavedEpisode && app.dialog == null && !seasonPicker && episodes.isNotEmpty()) {
+            val index = seasonEntryIndex.takeIf { it in episodes.indices } ?: selectedEpisode.coerceIn(episodes.indices)
+            selectedEpisode = index
+            seasonEntryIndex = -1
             if (returningToEpisode) pageScroll.scrollToItem(1)
-            episodeScroll.scrollToItem(index); withFrameNanos {}
+            episodeScroll.scrollToItem(index + episodeRowOffset); withFrameNanos {}
             inputMode.requestInputMode(InputMode.Keyboard)
             runCatching { episodeFocus[index].requestFocus() }
         }
@@ -91,7 +98,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                 ?: selectedEpisode.coerceIn(episodes.indices)
             selectedEpisode = index
             pageScroll.scrollToItem(1)
-            episodeScroll.scrollToItem(index)
+            episodeScroll.scrollToItem(index + episodeRowOffset)
             withFrameNanos {}
             if (pendingSavedEpisode) {
                 inputMode.requestInputMode(InputMode.Keyboard)
@@ -105,7 +112,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
             val index = jumpIndex
             focusedEpisodeIndex = -1
             pageScroll.scrollToItem(1)
-            episodeScroll.scrollToItem(index)
+            episodeScroll.scrollToItem(index + episodeRowOffset)
             snapshotFlow { windowInfo.isWindowFocused }.first { it }
             var attempts = 0
             while (focusedEpisodeIndex != index && !jumpEntry && jumpOrigin == (media.id to season) && attempts++ < 60) {
@@ -136,6 +143,14 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     }
     LaunchedEffect(media.id, season) {
         if (jumpEntry && jumpOrigin != (media.id to season)) jumpEntry = false
+    }
+    fun changeSeason(value: Int, atEnd: Boolean = false) {
+        pendingSavedEpisode = false
+        seasonEntryIndex = if (atEnd) media.episodes.count { (it.season ?: 1) == value } - 1 else 0
+        focusedEpisodeIndex = -1
+        season = value
+        restoreEpisodes = tv
+        seasonPicker = false
     }
     fun play() {
         if (target != null) controller.chooseSources(target, target.positionMillis > 0)
@@ -180,11 +195,22 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                 }
                 if (tv) item {
                     LazyRow(state = episodeScroll, modifier = Modifier.fillMaxWidth().padding(top = 24.dp).focusGroup(), horizontalArrangement = Arrangement.spacedBy(36.dp), contentPadding = PaddingValues(4.dp)) {
+                        if (previousSeason != null) item(key = "previous-season") {
+                            EpisodeSeasonCard(previousSeason, previous = true) { changeSeason(previousSeason, atEnd = true) }
+                        }
                         itemsIndexed(episodes, key = { _, item -> item.id }) { index, episode ->
                             EpisodeCard(episode, Modifier.width(360.dp).focusRequester(episodeFocus[index]),
                                 onClick = { pendingSavedEpisode = false; selectedEpisode = index; restoreEpisodes = true; controller.chooseSources(episode.withArtworkFrom(media)) },
-                                onHold = { controller.requestDialog(DialogKind.EpisodeManage, episode.episodeTitle ?: episode.name, episode) },
+                                onHold = {
+                                    pendingSavedEpisode = false
+                                    selectedEpisode = index
+                                    restoreEpisodes = true
+                                    controller.requestDialog(DialogKind.EpisodeManage, episode.episodeTitle ?: episode.name, episode)
+                                },
                                 onFocused = { selectedEpisode = index; focusedEpisodeIndex = index }, artworkContext = episodeArtworkContext)
+                        }
+                        if (nextSeason != null) item(key = "next-season") {
+                            EpisodeSeasonCard(nextSeason, previous = false) { changeSeason(nextSeason) }
                         }
                     }
                 } else itemsIndexed(episodes, key = { _, item -> item.id }) { _, episode ->
@@ -215,7 +241,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                 AppIconButton("more", "More info", { info = true })
             }
         }
-        if (seasonPicker) ChoiceDialog("Season", seasons.map { value -> "Season $value" to { pendingSavedEpisode = false; season = value; selectedEpisode = 0; restoreEpisodes = tv; seasonPicker = false } }, { seasonPicker = false })
+        if (seasonPicker) ChoiceDialog("Season", seasons.map { value -> "Season $value" to { changeSeason(value) } }, { seasonPicker = false })
         if (jumpEntry) TextEntry("Jump to episode", "Enter an available episode number in Season $season.", numeric = true,
             fieldLabel = "Episode number", doneLabel = "Go",
             validate = { entered ->
@@ -231,6 +257,22 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                 } else jumpEntry = false
             }, onCancel = { jumpEntry = false; jumpCancelRequest++ })
         if (info) FullInfo(media.name, listOf(mediaFacts(media), media.description.orEmpty(), media.credits.orEmpty()).filter { it.isNotBlank() }.joinToString("\n\n"), { info = false })
+    }
+}
+
+@Composable private fun EpisodeSeasonCard(season: Int, previous: Boolean, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val label = if (previous) "Previous season" else "Next season"
+    Holdable(onClick, modifier = Modifier.width(360.dp).onFocusChanged { focused = it.isFocused }
+        .semantics { contentDescription = "$label, Season $season" }) {
+        Column {
+            Box(Modifier.size(360.dp, 200.dp).clip(RoundedCornerShape(16.dp)).background(C.surfaceN2)
+                .border(if (focused) 4.dp else 0.dp, if (focused) C.fillWhite else Color.Transparent, RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center) {
+                VText(label, 26, Modifier.padding(16.dp), bold = true, align = TextAlign.Center)
+            }
+            VText("Season $season", 24, Modifier.padding(top = 14.dp), bold = true)
+        }
     }
 }
 
