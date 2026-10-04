@@ -49,7 +49,16 @@ internal val LocalTv = staticCompositionLocalOf { false }
 internal val LocalRailFocus = staticCompositionLocalOf { FocusRequester.Default }
 internal val LocalContentFocus = staticCompositionLocalOf { FocusRequester.Default }
 internal val LocalCloseRail = staticCompositionLocalOf<() -> Unit> { {} }
-internal class FocusMemory { var target: FocusRequester? = null }
+internal class FocusMemory {
+    var target: FocusRequester? = null
+
+    /** Refreshes can dispose the last focused control while the rail still owns focus. */
+    fun restore(initial: FocusRequester): Boolean {
+        if (target?.let { runCatching { it.requestFocus() }.getOrDefault(false) } == true) return true
+        target = null
+        return runCatching { initial.requestFocus() }.getOrDefault(false)
+    }
+}
 internal val LocalFocusMemory = staticCompositionLocalOf { FocusMemory() }
 internal val LocalAccent = staticCompositionLocalOf { C.accentDefault }
 internal val LocalGround = staticCompositionLocalOf { C.bg }

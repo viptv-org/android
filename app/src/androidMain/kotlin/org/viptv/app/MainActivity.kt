@@ -148,7 +148,7 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
     val browse = route is Route.Browse || route is Route.Guide || route == Route.Search || route == Route.Settings || route == Route.Addons || route is Route.Details
     val tab = route is Route.Browse || route is Route.Guide
     BackHandler(controller.consumesBack(state)) { controller.handleBack() }
-    BackHandler(tv && railExpanded) { railOpen = false; runCatching { (focusMemory.target ?: initial).requestFocus() } }
+    BackHandler(tv && railExpanded) { if (focusMemory.restore(initial)) railOpen = false }
     CompositionLocalProvider(LocalRailFocus provides rail, LocalContentFocus provides initial, LocalFocusMemory provides focusMemory, LocalCloseRail provides { railOpen = false }) {
         Box(Modifier.fillMaxSize()) {
             val insets = if (tv || route is Route.Player || route is Route.Details) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
@@ -215,10 +215,16 @@ private fun destination(route: Route) = when (route) {
     else -> Destination.Home
 }
 
-@Composable private fun TelevisionRail(state: AppState, controller: AppController, expanded: Boolean, onExpanded: (Boolean) -> Unit, rail: FocusRequester, initial: FocusRequester, memory: FocusMemory) {
+@Composable internal fun TelevisionRail(state: AppState, controller: AppController, expanded: Boolean, onExpanded: (Boolean) -> Unit, rail: FocusRequester, initial: FocusRequester, memory: FocusMemory) {
     val current = destination(state.route)
     val profileTarget = remember { FocusRequester() }
     val targets = remember { navItems.associate { it.first to FocusRequester() } }
+    val restoreContentOnRight = Modifier.onPreviewKeyEvent { event ->
+        if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN && memory.restore(initial)) onExpanded(false)
+            true
+        } else false
+    }
     Box(Modifier.fillMaxSize()) {
         if (expanded) {
             Box(Modifier.fillMaxSize().background(C.scrimTvMenu))
@@ -226,8 +232,9 @@ private fun destination(route: Route) = when (route) {
         }
         var profileFocused by remember { mutableStateOf(false) }
         Holdable({ onExpanded(false); controller.navigate(Destination.Profile) }, modifier = Modifier.offset(40.dp, 48.dp)
-            .focusRequester(profileTarget).focusProperties { up = FocusRequester.Cancel; down = targets.getValue(Destination.Search); left = FocusRequester.Cancel; right = memory.target ?: initial }
+            .focusRequester(profileTarget).focusProperties { up = FocusRequester.Cancel; down = targets.getValue(Destination.Search); left = FocusRequester.Cancel }
             .size(if (expanded) 376.dp else 64.dp, 68.dp).onFocusChanged { profileFocused = it.isFocused; if (it.isFocused) onExpanded(true) }
+            .then(restoreContentOnRight)
             .clip(CircleShape).background(if (profileFocused) C.textPrimary else Color.Transparent), rememberFocus = false) {
             Row(Modifier.fillMaxSize().padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 ProfileAvatar(state.selectedProfile, Modifier.size(56.dp).clip(CircleShape))
@@ -248,12 +255,7 @@ private fun destination(route: Route) = when (route) {
                 .size(if (expanded) 376.dp else 64.dp, 64.dp)
                 .then(if (current == item) Modifier.focusRequester(rail) else Modifier)
                 .onFocusChanged { focused = it.isFocused; if (it.isFocused) onExpanded(true) }
-                .onPreviewKeyEvent { event ->
-                    if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                        if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) { onExpanded(false); runCatching { (memory.target ?: initial).requestFocus() } }
-                        true
-                    } else false
-                }.clip(CircleShape).background(if (focused) C.textPrimary else if (!expanded && current == item) C.surfaceN3 else Color.Transparent), rememberFocus = false) {
+                .then(restoreContentOnRight).clip(CircleShape).background(if (focused) C.textPrimary else if (!expanded && current == item) C.surfaceN3 else Color.Transparent), rememberFocus = false) {
                 Row(Modifier.fillMaxSize().padding(start = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                     VIcon(icon, item.label, Modifier.size(24.dp), if (focused) C.onLight else if (current == item) C.textPrimary else C.textSecondary)
                     if (expanded) VText(item.label, 26, Modifier.padding(start = 40.dp), if (focused) C.onLight else C.textPrimary, bold = focused || current == item)
