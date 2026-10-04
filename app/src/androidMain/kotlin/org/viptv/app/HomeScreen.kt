@@ -21,7 +21,11 @@ import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import org.viptv.app.theme.ViptvColor as C
 
 internal fun AppController.activateHero(media: Media, queue: Boolean) {
@@ -110,8 +114,19 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
     val presentation = remember(media) { CoreModels.presentation(media) }
     val ground = LocalGround.current
     Box(Modifier.fillMaxWidth().height(950.dp)) {
-        Artwork(presentation.heroImage, null, Modifier.fillMaxSize().blur(72.dp).alpha(.6f))
-        Artwork(presentation.heroImage, null, Modifier.align(Alignment.TopEnd).width(1120.dp).height(720.dp))
+        if (!presentation.heroImage.isNullOrBlank()) {
+            val context = LocalContext.current
+            val density = LocalDensity.current
+            val width = with(density) { 1120.dp.roundToPx() }
+            val height = with(density) { 720.dp.roundToPx() }
+            val request = remember(presentation.heroImage, context, width, height) {
+                ImageRequest.Builder(context).data(presentation.heroImage).size(width, height).crossfade(false).build()
+            }
+            // The sharp layer defines decode size; the ambient layer reuses it under the blur.
+            val painter = rememberAsyncImagePainter(request, contentScale = ContentScale.Crop)
+            Image(painter, null, Modifier.fillMaxSize().blur(72.dp).alpha(.6f), contentScale = ContentScale.Crop)
+            Image(painter, null, Modifier.align(Alignment.TopEnd).width(1120.dp).height(720.dp), contentScale = ContentScale.Crop)
+        }
         Box(Modifier.matchParentSize().background(Brush.horizontalGradient(listOf(ground, ground.copy(alpha = .92f), Color.Transparent))))
         Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Transparent, ground), startY = 440f)))
     }
