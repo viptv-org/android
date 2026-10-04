@@ -20,6 +20,8 @@ data class HomeFocusSnapshot(
     val restoreRequest: Long = 0L,
     /** A directional event invalidates a queued focus restoration immediately. */
     val inputEpoch: Long = 0L,
+    /** Last selection in the top shelf; lower shelf focus does not replace the hero. */
+    val heroMediaKey: String? = null,
 )
 
 object HomeFocusPolicy {
@@ -30,7 +32,8 @@ object HomeFocusPolicy {
         shelfTitle: String,
         media: Media,
         surface: HomeFocusSurface = HomeFocusSurface.Card,
-    ): HomeFocusSnapshot = current.copy(shelfIndex = shelfIndex, shelfTitle = shelfTitle, mediaKey = mediaKey(media), surface = surface)
+    ): HomeFocusSnapshot = current.copy(shelfIndex = shelfIndex, shelfTitle = shelfTitle, mediaKey = mediaKey(media), surface = surface,
+        heroMediaKey = if (shelfIndex == 0) mediaKey(media) else current.heroMediaKey)
     fun afterDirectionalInput(current: HomeFocusSnapshot): HomeFocusSnapshot = current.copy(inputEpoch = current.inputEpoch + 1)
     fun requestRestore(current: HomeFocusSnapshot): HomeFocusSnapshot = current.copy(restoreRequest = current.restoreRequest + 1)
     fun mayRestore(snapshot: HomeFocusSnapshot, observedInputEpoch: Long): Boolean = snapshot.inputEpoch == observedInputEpoch

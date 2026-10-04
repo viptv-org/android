@@ -2,7 +2,10 @@
 package org.viptv.app
 
 import android.view.KeyEvent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.pager.*
@@ -35,22 +38,31 @@ internal fun AppController.activateHero(media: Media, queue: Boolean) {
 internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resume: Boolean = false) =
     chooseSources(media, resume, SourceReturn.Home, queueEpisodeReturn = queue && SourceReturnPolicy.parentSeries(media) != null)
 
-@Composable internal fun HomeScreen(state: AppState, controller: AppController) {
+@Composable internal fun HomeScreen(state: AppState, controller: AppController, list: LazyListState = rememberLazyListState()) {
     val tv = LocalTv.current
-    val list = rememberLazyListState()
     val shelves = state.shelves.filter { it.items.isNotEmpty() }
     val queue = shelves.firstOrNull { it.isQueueShelf }
     val firstShelf = shelves.firstOrNull()
     val featured = if (tv) firstShelf?.items.orEmpty().take(1) else shelves.firstOrNull { !it.isQueueShelf && it.items.firstOrNull()?.type != "live" }?.items.orEmpty().take(5).ifEmpty { queue?.items.orEmpty().take(1) }
-    val retainedHeroShelf = shelves.firstOrNull { shelf -> shelf.id == state.homeFocus.shelfTitle &&
-        shelf.items.any { HomeFocusPolicy.mediaKey(it) == state.homeFocus.mediaKey } }
-    val heroShelf = if (tv) retainedHeroShelf ?: firstShelf else firstShelf
-    val hero = if (tv) retainedHeroShelf?.items?.firstOrNull { HomeFocusPolicy.mediaKey(it) == state.homeFocus.mediaKey }
+    val heroShelf = firstShelf
+    val heroKey = state.homeFocus.heroMediaKey ?: state.homeFocus.mediaKey.takeIf { state.homeFocus.shelfTitle == firstShelf?.id }
+    val hero = if (tv) firstShelf?.items?.firstOrNull { HomeFocusPolicy.mediaKey(it) == heroKey }
         ?: featured.firstOrNull() else featured.firstOrNull()
     val initial = LocalContentFocus.current
     val rail = LocalRailFocus.current
-    LaunchedEffect(state.homeFocus.surface, state.homeFocus.mediaKey, tv) {
-        if (tv && (state.homeFocus.surface == HomeFocusSurface.Hero || state.homeFocus.shelfIndex == 0)) list.scrollToItem(0)
+    val showHero = tv && (state.homeFocus.surface == HomeFocusSurface.Hero || state.homeFocus.shelfIndex == 0)
+    LaunchedEffect(showHero, state.homeFocus.shelfIndex) {
+        // Enter the top region smoothly; moving between its cards must not restart the scroll.
+        val motion = tween<Float>(280, easing = FastOutSlowInEasing)
+        if (showHero) {
+            if (list.firstVisibleItemIndex == 0) list.animateScrollBy(-list.firstVisibleItemScrollOffset.toFloat(), motion)
+            else list.animateScrollToItem(0)
+        } else if (tv && state.homeFocus.surface == HomeFocusSurface.Card && state.homeFocus.shelfIndex == 1) {
+            // Ease the first downward boundary too, revealing only the clipped row/caption.
+            val target = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == state.homeFocus.shelfTitle }
+            val remaining = target?.let { it.offset + it.size - list.layoutInfo.viewportEndOffset } ?: 0
+            if (remaining > 0) list.animateScrollBy(remaining.toFloat(), motion)
+        }
     }
     LaunchedEffect(state.homeFocus.restoreRequest, tv) {
         if (tv && state.homeFocus.mediaKey != null && state.homeFocus.surface == HomeFocusSurface.Card) {

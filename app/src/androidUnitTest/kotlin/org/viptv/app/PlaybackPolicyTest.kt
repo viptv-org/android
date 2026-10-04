@@ -150,6 +150,18 @@ class MediaCardPolicyTest {
 }
 
 class HomeQueuePolicyTest {
+    @Test fun `lower shelf focus and route restoration retain the last top shelf hero`() {
+        val queued = Media("queued", "movie")
+        val other = Media("other", "movie")
+        val selected = HomeFocusPolicy.record(HomeFocusSnapshot(), 0, "Continue Watching", queued)
+        val lower = HomeFocusPolicy.record(selected, 1, "Library", other)
+        val restored = HomeFocusPolicy.requestRestore(HomeFocusPolicy.afterDirectionalInput(lower))
+        assertEquals(HomeFocusPolicy.mediaKey(other), restored.mediaKey)
+        assertEquals(HomeFocusPolicy.mediaKey(queued), restored.heroMediaKey)
+        val next = Media("next", "movie")
+        assertEquals(HomeFocusPolicy.mediaKey(next), HomeFocusPolicy.record(restored, 0, "Continue Watching", next).heroMediaKey)
+    }
+
     @Test fun `catalog replacement retains surviving focus and chooses nearest card when removed`() {
         val a = Media("a", "movie")
         val b = Media("b", "movie")
