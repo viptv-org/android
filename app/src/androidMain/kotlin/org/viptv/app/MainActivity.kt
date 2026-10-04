@@ -25,6 +25,7 @@ import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.*
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -123,7 +124,8 @@ internal fun Route.screenKey(): String = when (this) {
     else -> javaClass.simpleName
 }
 
-internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean): Boolean = requested && !keyboardVisible
+internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean, modalVisible: Boolean = false, windowFocused: Boolean = true): Boolean =
+    requested && !keyboardVisible && !modalVisible && windowFocused
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable private fun ApplicationShell(state: AppState, controller: AppController, model: ViptvModel) {
@@ -136,10 +138,12 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
     val focusMemory = remember(key) { FocusMemory() }
     var railOpen by remember { mutableStateOf(false) }
     val keyboardVisible = WindowInsets.isImeVisible
-    val railExpanded = televisionRailExpanded(railOpen, keyboardVisible)
-    LaunchedEffect(tv, keyboardVisible) {
-        // Forget expansion so dismissing native input does not reopen navigation.
-        if (tv && keyboardVisible) railOpen = false
+    val modalVisible = state.dialog != null || state.pinPrompt != null
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    val railExpanded = televisionRailExpanded(railOpen, keyboardVisible, modalVisible, windowFocused)
+    LaunchedEffect(tv, keyboardVisible, modalVisible, windowFocused) {
+        // Input/window handoffs must not preserve expansion for focus restoration.
+        if (tv && (keyboardVisible || modalVisible || !windowFocused)) railOpen = false
     }
     val browse = route is Route.Browse || route is Route.Guide || route == Route.Search || route == Route.Settings || route == Route.Addons || route is Route.Details
     val tab = route is Route.Browse || route is Route.Guide
@@ -170,7 +174,7 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
                 }
             }
             if (!tv && tab) PhoneNavigation(route, controller, Modifier.align(Alignment.BottomCenter))
-            if (tv && browse) TelevisionRail(state, controller, railExpanded, { railOpen = televisionRailExpanded(it, keyboardVisible) }, rail, initial, focusMemory)
+            if (tv && browse) TelevisionRail(state, controller, railExpanded, { railOpen = televisionRailExpanded(it, keyboardVisible, modalVisible, windowFocused) }, rail, initial, focusMemory)
             if (state.loading && route !is Route.Player && route != Route.Pairing) {
                 CircularProgressIndicator(Modifier.align(Alignment.TopEnd).then(if (tv) Modifier else Modifier.statusBarsPadding()).padding(measure(40, 16)).size(measure(32, 22)), color = LocalAccent.current, strokeWidth = measure(4, 2))
             }
