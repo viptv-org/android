@@ -7,7 +7,7 @@ chosen. Back from the info page restores the original queue card.
 **Blocked by:** None (design is already committed).
 **Status:** done
 **Triage:** ready-for-agent
-**Owner:** Android navigation worker and source_picker_tv (GPT-6 Sol, low).
+**Owner:** Android navigation worker and source_picker_tv (GPT-6.1 Sol, high).
 **Contract:** CW-SOURCE-BACK-001 at design ce7084ff80d0541257509748ea772ef0f95d8058.
 
 - [x] Episode picker Back opens the parent series with the relevant season/episode.

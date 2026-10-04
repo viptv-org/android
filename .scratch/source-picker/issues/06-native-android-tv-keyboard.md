@@ -7,7 +7,7 @@ The owner's 2026-10-01 request supersedes the older custom TV keyboard design.
 **Blocked by:** None; research and canonical Android UX are complete.
 **Status:** done
 **Triage:** ready-for-agent
-**Owner:** native_keyboard_android (GPT-6 Sol, low), after Luna research.
+**Owner:** native_keyboard_android (GPT-6.1 Sol, high), after GPT-6.1 Sol high research.
 **Contract:** AND-KEYBOARD-001 at design 8ce8971ebcece32af59c39ecd56ea9fc8c880936.
 
 - [x] Identify every custom Android TV keyboard surface and current native IME.

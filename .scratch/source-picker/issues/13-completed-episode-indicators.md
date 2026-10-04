@@ -5,7 +5,7 @@ watched-completion indicator when the selected profile has completed it.
 Use existing shared watched facts; retain partial progress as partial progress.
 
 **Status:** complete; Windows and native qualification passed
-**Owner:** Luna data and design research, Sol implementation.
+**Owner:** data and design research, implementation.
 **Contract:** AND-EPISODE-WATCHED-001 at design
 `4ac008108374b41f034fa025550f4d2bfbbbca97`, imported by Android `0e305b4`.
 

@@ -61,7 +61,7 @@ import org.viptv.app.theme.ViptvColor as C
     val emptyMessage = when {
         provider == null -> if (state.sourceLoading) "Sources appear here as they arrive." else if (sources.isEmpty()) "No sources available" else "No matching sources"
         selectedHasSources -> "No matching sources"
-        selectedProducer?.errorCode == "source_format_unsupported" -> "${selectedProducer.label} returned formats this app cannot play. Only HTTP(S) streams are supported here."
+        selectedProducer?.errorCode == "source_format_unsupported" -> "${selectedProducer.label} returned formats this app cannot play. Choose another source."
         selectedProducer?.errorMessage != null -> selectedProducer.errorMessage
         state.sourceLoading -> "Still checking ${providerLabels[provider] ?: "provider"}"
         else -> "No playable sources from ${providerLabels[provider] ?: "provider"}"

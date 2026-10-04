@@ -121,6 +121,282 @@ success. No personal stream provider or Stremio import/apply was configured.
 The separate gateway candidate is qualified but public conversion is deferred.
 Private captures are `qualification/artifacts/v2-tv-*.png`.
 
+# Actual shell/native TV keyboard and phone text insets — 2026-10-02
+
+Application baseline Android main `4d88d1b328c118ffc7d7a7f69ecce6b8d3db3750`,
+Core `f66c87e13a2c93b6dad3234da9694c57f8530b0a`, design
+`1742afa2b50d30638fa46f3abc8c1a76638a51e1`. No application/layout code changed.
+The isolated synthetic HTTPS fixture uses the same installed app and actual
+controller/HTTP boundary, not an actual backend account/source in this slice.
+
+`check-guide-shell-ime.py` passed on owned API36 Android TV x86_64 emulator5576,
+1920×1080. Starting at actual ApplicationShell Home, D-pad entered the rail,
+selected Live TV, applied News, and reached Search channels. The real OS
+LatinIME was visible; D-pad navigation selected each letter of cnbc and its
+Check/Done action. Captures privately inspected the empty keyboard, complete
+query with Check focused, and returned future programme. No Compose text/IME
+semantics, text injection, touch, Tab or test-only focus request entered this
+successful flow. After the CNBC-only result, ordinary D-pad reached future
+Halftime Report. OK opened Watch live details; native Android Back returned
+to the same focused programme bounds `[1535,503][1818,597]` with CNBC retained.
+The fixture journal showed zero playback-admission delta. This adds actual
+shell/rail/OS-keyboard evidence to PR19's distinct public-composition proof;
+it does not expose the private Compose node ID or qualify physical input.
+
+Phone: owned API36 Google APIs x86_64 emulator5574,390×844dp,780×1688 pixels
+at320dpi. Four final route captures passed `capture-phone-font-insets.py` and
+were inspected: matching Home at1.0 and1.3 font scale, Boruto Title at1.3, and
+Search with query naruto and real native IME shown at1.3. Home's enlarged text
+and action remain usable; the two-line Title, source/provider/count and Play
+fit. The focused Search field bounds `[32,228][748,364]`, filters and first
+result row remain above the keyboard. The helper verifies the private fixture
+origin, HTTPS health/trust, viewport, font setting, route and actual IME before
+capture. These are selected-route observations, not a pixel score, all route
+families, every device/font scale or continuous-typing acceptance.
+
+The ordinary three-ABI system-trust APK was assembled again without fixture CA;
+normal assembly/lint passed in4 seconds. JDK17 explicit-CA QA assembly passed
+in8 seconds; only the owned installed QA APK trusts that fixture. Helper syntax
+and Core/design integrity pass. The shared preview fixture's committed module
+blob was `694478c2eb0cdfde7d2d3bbb8bd012b81588a0f1`; its working bytes matched.
+The
+previous237 host tests/build/lint and managed-audio case were not repeated.
+The TV helper initially collided with an operator UI-tree dump; its bounded
+snapshot retry now follows the existing driver. Mixed-touch/incorrect-route
+calibration captures and a synthetic Resume-envelope failure are excluded.
+No native playback was qualified by these phone captures.
+
+Only the owned phone's font setting was restored to1.0 and viewport overrides
+reset; its synthetic app state was cleared. Both owned emulators and fixture
+listeners stopped. Private images/XML/credentials remain ignored. Guide
+presentation gaps still remain under the standing layout constraint. Physical
+remotes/decoders, audible fidelity, HDR/DRM, signing and production acceptance
+remain separate; broad design#6/android#3 stay open.
+
+# Actual backend/gateway Android TV managed audio — 2026-10-02
+
+Android application baseline `e61f6ffc0775b8fb45544b2d852bdbd6bc5f3ca4`,
+Core `f66c87e13a2c93b6dad3234da9694c57f8530b0a`, unchanged design
+`1742afa2b50d30638fa46f3abc8c1a76638a51e1`. The actual app ran on the owned
+API36 Android TV x86_64 emulator5576, 1920×1080, with emulator audio disabled
+and a generated 120-second H.264/two-silent-AAC torrent. No application or
+layout code changed.
+
+`check-native-managed-audio.py` drove the actual ApplicationShell Home →
+Details → Choose source → Generated torrent addon through native hierarchy
+inspection/taps and ADB-injected remote keys. Account/catalog/discovery,
+encrypted addon/vault, approved source admission, playback leases and gateway
+media were actual backend APIs; responses were not mocked. The synthetic
+account session was provisioned privately in the owned app, so this does not
+qualify login/pairing UI. A fixture-only HTTPS ingress forwards the real APIs
+and media and rewrites only delivery URL origin for emulator routing; the
+production endpoint validator is unchanged. Request/response body lengths
+are recomputed after forwarding/rewriting.
+
+The final uninterrupted automated case passed. Initial delivered HLS was
+AAC/eng. Selecting Spanish created a new lease at 5.772 seconds and the real
+ready descriptor selected input2/spa. A bounded read-only observer captured
+the actual FFmpeg `-map 0:2` and correlated its output segment bytes with the
+served segment, matching exactly one observed output. The runtime deliberately
+tags this transcoded output AAC/und. Both input tracks are silent: this proves
+the selected input and output path, not audible Spanish or an output language
+tag of spa.
+
+Selection returned to Audio; immediate OK reopened Spanish Current without
+directional repair. Native Back and immediate OK retained that control and
+selection. Managed forward seek admitted position65.772 with input2 retained.
+Actual Media3 position advanced72 →81 seconds; the inspected private capture
+showed decoded video with burned-in82.920 seconds and a1:22 player timeline.
+Four lease DELETEs returned200, including explicit Exit. The gateway reclaimed
+all2 input/2 output/4 viewer slots; its deterministic peer delivered4,014,682
+bytes over19,924ms. The fixture test passed and checked cache/peer teardown;
+the runner exited0 and all owned backend/gateway ingress listeners stopped.
+
+Execution provenance: backend fixture source `d52a9c1422c94ea4e2d866cef3e135484473595e`,
+observer source `31b2dc8551bc682cb9b60a0984b9b979308c31e4`, immutable copied
+gateway driver `20e515faa03a254963db03c540a4596484ffab2f`, service image
+`sha256:3ed14fbbf179d9d4a326b6e798118ad62c209f01a7fdf3d0524233a52e367825`.
+The private launcher used an immutable driver path and a local sudo Docker
+wrapper; its Git blob was `8211fccc7efa273b9065b44c3a5281b15cacbf72`, not a
+claim of byte identity with a published backend runner. Earlier expired,
+fixture-handshake, operator-framing and helper-calibration attempts are excluded.
+
+Core/design integrity and helper syntax passed. The unchanged ordinary
+system-trust debug APK from the Core f66 build still contains all three Core
+ABIs and excludes fixture CA material. Only the isolated installed QA APK uses
+the explicit fixture certificate. The previously recorded fresh237 host tests,
+three-ABI build, normal/instrumentation assembly and lint remain that build's
+checks; no fresh broad suite is claimed for these operator helpers/docs.
+Physical hardware, audible fidelity, HDR/DRM, Guide pixel parity/rail/OS IME,
+store signing and production delivery remain unqualified. Private source URLs,
+credentials, proc arguments, segment bytes, logs and captures remain ignored.
+
+# Current Core Android TV Guide remote chain — 2026-10-02
+
+Baseline: Android main `7b0d00c`, Core
+`f66c87e13a2c93b6dad3234da9694c57f8530b0a`, unchanged design
+`1742afa2b50d30638fa46f3abc8c1a76638a51e1`. The opt-in
+`GuideRemoteFixtureTest` passed on the owned API36 Android TV x86_64 emulator
+in 5.144 seconds (one test). The test asserts native television mode and uses
+the paired synthetic session, actual AppController/GuideScreen, local HTTPS
+fixture responses and the application's 1920-coordinate density.
+
+One initial public focus setup selects All. Compose key input moves to News
+and applies that filter; Compose remote OK opens Search. The editable field
+and IME action are driven through Compose semantics to submit CNBC, and the
+real controller replaces the channel page and loads its schedule. Compose
+remote key navigation then reaches future Halftime Report. OK opens its
+Watch live details; native Android Back restores the same programme semantics
+ID, bounds and focus on CNBC. Back uses an actual instrumentation Android key
+event. No focus request repairs Search or Back. The
+HTTPS fixture journal proves no playback admission before or after the flow.
+
+This completes the formerly unqualified filter/Search/result/future-details/
+Back functional chain through the pre-agreed public composition/remote seam.
+It uses the actual controller and HTTP boundary with synthetic backend data;
+it is not actual backend/gateway delivery, full ApplicationShell/rail navigation,
+pixel parity, OS keyboard UI interaction or physical remote/decoder acceptance.
+Current Guide presentation
+gaps remain unchanged. The earlier partial-chain caveats below describe the
+older checkpoint and are superseded only for this scoped functional chain.
+
+Core/design integrity, targeted native test, instrumentation/normal APK assembly
+and lint pass. The ordinary debug APK excludes fixture CA material; only the
+isolated installed QA APK trusted that fixture certificate. The unchanged
+Core f66 host/three-ABI rebuild and fresh 237-test host gate are recorded below.
+No application/layout code, production data, deployment or physical device was
+changed. Private credentials, media, logs and captures remain ignored.
+
+# Core malformed-response HTTP status adoption — 2026-10-02
+
+Adopted immutable Core `f66c87e13a2c93b6dad3234da9694c57f8530b0a`
+through the normal core-sync importer after Core PR6. Malformed successful
+identity/token responses retain their actual HTTP status instead of looking
+like a transport failure. The Kotlin interface is unchanged; Android-specific
+policy and the existing design `1742afa` remain unchanged.
+
+JDK17/SDK36 with Cargo jobs2 and Gradle workers2: rebuilt the host library,
+freshly executed all 237 host tests (zero failures/errors/skips), rebuilt
+arm64-v8a/armeabi-v7a/x86_64 native Core libraries, and assembled the normal
+debug and instrumentation APKs. Core/design integrity and lint passed.
+The normal APK has all three expected ELF architectures and no fixture CA.
+The initial cached Gradle test result was followed by an explicit fresh run
+against the rebuilt library; it was not treated as new runtime evidence.
+
+This is pin/build/host-runtime evidence. The earlier Android TV Guide, source
+picker and dual-AAC checks below were performed at Core `c9e7bea`; they are
+not represented as fresh managed gateway or physical-device acceptance at
+this pin. The original checkout and TV layout remain unchanged.
+
+# Android TV Guide, source failures and alternate native audio — 2026-10-02
+
+Application baseline: Android main `297d469`, Core
+`c9e7bea8c0df4258e363bcd9141a38716904a6aa`, design
+`1742afa2b50d30638fa46f3abc8c1a76638a51e1`. API36 Android TV x86_64,
+owned emulator5576 at 1920×1080, JDK17 and two Gradle workers. No application
+or TV layout code changed in this qualification slice.
+
+`GuideProgrammeFocusReturnTest` passed on that Android TV emulator: one test
+in 1.9 seconds. It composes the actual Guide and controller with a synthetic
+schedule based on the current clock, at the application's 1920-coordinate
+density. One initial public semantics focus request establishes the future
+programme. Remote OK opens its Watch live details; native Android Back closes
+the dialog and returns focus to that exact programme. Public route,
+preparation and error state remain idle for playback. No focus request repairs
+the return. The isolated test preference namespace preserves the app's session.
+The initial test fixture allowed startup errors to race its seeded state;
+waiting for startup before initial setup removed that fixture race.
+
+The actual authenticated synthetic app also showed News filtering, native
+channel Search and a CNBC result. Those observations are separate from the
+repeatable future-programme regression; a complete automated filter/Search/
+future-details remote chain has not been qualified. The current collapsed
+Guide capture and source still show the previously recorded preview, progress,
+programme-time and now-marker gaps. Native keyboard substitution remains the
+Android exception. No new full-screen similarity or physical-TV claim is made.
+
+The local HTTPS source fixture now supports a bounded `sourceDelay` and a
+named `sourceError` producer through its private control endpoint. Native
+Choose source showed 12 healthy rows with Still checking sources. Selecting
+Failed provider showed the safe unsupported-format explanation while the
+total remained 12; returning to All providers retained playable rows. An
+empty-result Retry entered that partial discovery successfully. The final
+remote sequence established Choose source focus before activation, opened its
+partial picker, then used Android Back to restore that same invoking control
+without another playback admission. The fixture request journal recorded no
+playback admission during discovery and provider filtering. A stopped fixture
+caused intervening empty retry results; those were not accepted as application
+failures or successful qualification.
+
+`check-player-audio.py` passed against the actual four-minute H.264/dual-AAC
+MP4 from `make-track-media.sh`. The direct player uses Media3's real native
+en/es inventory. Back from Audio restored the invoking control; immediate OK
+reopened Audio without navigation. Selecting Spanish also returned to Audio,
+and immediate OK showed es · Current. Explicit remote Exit released the sole
+fixture playback lease. This proves native direct selection and return on this
+emulator, not audible hardware fidelity or server-managed output replacement.
+
+Core/design integrity, fixture syntax, the existing category fixture check,
+237 host tests (zero failures/errors/skips), normal debug APK assembly,
+instrumentation APK assembly and lint passed. The normal debug APK contains no
+fixture CA. The same pinned native Core binaries for three ABIs were reused;
+no new ABI build is claimed. Media, certificates, APKs, logs and captures stay
+ignored. Managed alternate-audio delivery, physical input/hardware and full
+Guide presentation remain separate acceptance work.
+
+# AND-042 real multi-track TV return and Guide audit — 2026-10-02
+
+App source: `3f21e4126c708bae87720391994217960249a2f0`; Core
+`1f8483e365867f99eb39928cd7f3a23920003515`; design
+`85a20e918d44af28d20caa52997b1d307922cf29`. API36 Android TV x86_64,
+Android16, dedicated emulator5576, 1920×1080, local HTTPS fixture. JDK17,
+Gradle max-workers2, normal app code and Media3; no test player/controller.
+The three native Core ABI binaries were reused from the prior qualified build
+at the identical Core pin. The fixture-trusting debug APK assembled successfully.
+
+The old adapter rewrote only `value.delivery`, while the current shared TV-web
+preview returns a legacy flat playback response. Thus ANDROID_FIXTURE_MEDIA
+had no effect and the app could still receive the short HLS clip. The adapter
+now wraps flat/nested playback into the current ready v2 lease, sets the actual
+native duration/media and renews the same delivery envelope at heartbeat. A
+flat fixture POST and its heartbeat returned a 240-second direct original
+delivery; the native player independently displayed `4:00` and decoded video
+past three minutes. This corrects qualification tooling, not application UX.
+
+`make-track-media.sh` supplies an ignored 240-second H.264 test pattern, two AAC
+audio tracks and two actual mov_text subtitle tracks (English/Spanish). The
+remote acceptance uses actual native track inventory, not server-synthetic rows:
+
+- INFO → Right → OK opened Subtitles with Off/en/es and Off · Current.
+- Back returned to the highlighted Subtitles control. Immediate OK, without
+  re-navigation, reopened Subtitles rather than toggling playback.
+- Selecting English closed the panel and kept Subtitles highlighted. Immediate
+  OK reopened it with `en · Current`. A real English subtitle cue rendered over
+  continuing decoded video. The native sequence also paused/resumed media.
+- `python3 qualification/check-player-tracks.py` passed the repeatable Back,
+  selection and Current checks. Its saved native cue screenshot was inspected;
+  subtitle cues are hidden from accessibility, so XML is not a cue-render claim.
+
+Source/app UI is unchanged. This qualifies direct native subtitle-track return
+on this emulator/fixture only. Managed output replacement, selecting alternate
+audio, long track-list scrolling, physical TV input, sideloaded external
+subtitles and image subtitle formats remain unqualified by this pass.
+
+The populated native Guide was captured and inspected. `DESIGN_AUDIT.md`
+records the fresh TvLive/TvLiveDetails/TvLiveSearch source comparison at the
+exact pin: missing preview/progress/next, channel/logo/row geometry, cell times/
+progress, now marker, and details action/hint gaps. The native keyboard is an
+explicit Android exception. Details and Search gaps are source comparisons,
+not a new complete remote-flow acceptance. TV layout remains unchanged and
+design#6 remains open; no new pixel-similarity or physical-device claim is made.
+
+Validation: debug APK assembly, Core/design integrity, Node fixture syntax,
+shell generator syntax, Python checker compilation, existing bounded category
+fixture check and the actual native remote check passed. No application code or
+wire contract changed; no new Rust/Android unit-test count is claimed. Private
+media, certificate/key, logs, APK and captures stay ignored. No production data,
+deployment, migration or physical device was used.
+
 # AND-042 phone presentation and track menus (design#6) — 2026-09-30
 
 Adopts design `6da30a58c839e4e66465a76c8f80471139147f27` (AND-042). Phone Home
@@ -1045,6 +1321,77 @@ These checks qualify emulator UI and controller/HTTP fixtures. Actual initialize
 decoder playback, a real final-save HTTP transaction and physical-TV capability
 were not exercised. Missing/failed manual refresh retains the last known position
 and accepted watched fact until an authoritative row arrives.
+## Phone Title dimensions — 2026-10-02
+
+The Title board at pinned design `18b19af378b27655e3b6401f17b92321739dba83`
+defines a 300dp hero and 58dp action buttons. Details now uses that hero height
+and the generated `sizeButtonPhoneDetail` token for Play/Resume, retry, My List
+and More info. Shared control defaults and TV geometry are unchanged.
+
+On the isolated candidate based on Android `a9e4167`, Core and design integrity
+passed. JDK17 host preparation, 228 library/app unit tests (zero failures/errors),
+and debug APK assembly passed with two workers. Lint retained 78 warnings and
+three errors filtered by the existing baseline. All three native Core ABIs were
+built from pinned Core `1f8483e365867f99eb39928cd7f3a23920003515`.
+No emulator visual, native input or physical-device qualification is claimed.
+## AND-043 Title discovery and watching marker — 2026-10-02
+
+Adopts proposed design `85a20e918d44af28d20caa52997b1d307922cf29`, grounded
+in the committed Title/TvTitle boards. Title now discovers its Core-selected
+Play/Resume target once after a 400ms settle, with a three-minute limit. Its
+manual source picker adopts pending/completed rows and producer outcomes.
+Profile/target/route replacement invalidates callbacks; empty/failed previews
+can retry through the picker. Source summary order uses Core sourceMatch with
+measured limits and audio preference. Discovery does not select or play a source.
+TV partial-progress episodes show WATCHING; completed episodes retain Watched.
+
+JDK17 checks at Core `1f8483e365867f99eb39928cd7f3a23920003515`: Core/design
+integrity, 237 library/app unit tests, debug APK assembly and lint passed with two
+workers. Lint retains the existing 78 warnings and three baseline-filtered errors.
+The nine added host tests cover settle/recomposition, cancellation, partial and
+completed adoption, producer failures, late callbacks, bounded timeout, retry,
+profile/route eligibility and shared-Core ranking.
+
+Nine class-filtered Compose instrumentation tests passed on the fresh owned API36
+Google APIs x86_64 phone AVD `viptv-and043-qa-20261002` (`emulator-5586`). They
+verify displayed quality/provider/count, explicit manual-picker actions,
+empty/failure copy, and watched/WATCHING/progress state. TV component variants
+use LocalTv in this phone emulator; this is not Android TV remote acceptance or
+matched full-screen visual parity. The normal debug APK has no fixture CA;
+the tests used synthetic component data, with no account/backend connection.
+The exact owned emulator was stopped and its AVD deleted after the run.
+
+Authenticated Title-to-picker emulator flows, TV Guide re-audit, TV track-panel focus
+return with longer media, and physical Android acceptance remain unverified.
+
+## AND-043 manual-picker focus return — 2026-10-02
+
+Review exposed a Title-family focus gap: the TV source summary opened its manual
+picker, but Back recreated Details and focused Play/Resume. Details now saves a
+one-shot logical source-control return target and attaches a fresh focus
+requester on re-entry. Consuming that return leaves subsequent primary/episode
+restoration paths intact. TV geometry, design `85a20e9`, discovery and exact-source
+Resume policy are unchanged.
+
+The new `TitleSourceFocusReturnTest` uses actual DetailsScreen, SourcePicker and
+controller navigation in a saveable route composition. It requests keyboard
+focus, activates the source control with DPAD_CENTER, injects Android Back, and
+asserts source focus. The assertion failed before the fix and passed after it.
+The same flow then enters through Play and verifies Back restores Play, rather
+than retaining the earlier source-return target. No account/backend/media is
+required by this synthetic movie fixture.
+
+All ten class-filtered Compose tests (the new return test plus source-summary and
+episode-badge suites) passed on fresh owned API36 Google APIs x86_64 phone AVD
+`viptv-focus-qa-20261002`, serial `emulator-5588`, at an owned 1600×900/160dpi test
+viewport with LocalTv. This proves component route/focus behavior, not Android TV
+remote hardware or full-screen parity. JDK17 host preparation, all 237 unit tests,
+design integrity, debug assembly and the three pinned Core Android ABIs pass with
+two workers. Lint retains 78 existing warnings and three baseline-filtered errors,
+with no new errors. The owned emulator and its AVD were removed after checking.
+Broad authenticated Title/picker flows, TV Guide, real long-media track-panel
+return and physical acceptance remain open.
+
 
 ## Loaded hero episode restoration - 2026-10-02
 
@@ -1075,3 +1422,31 @@ loaded 1,410-episode list; the next Back returned Home. Acceptance used native
 hierarchy assertions without additional screenshots or source activation.
 The Continue Watching card also restored episode 1059 visibly and with focus.
 No personal playback/history write occurred. Physical TV is unqualified.
+
+## AND-043 reconciliation with loaded episode return — 2026-10-02
+
+Merged Android main `1ea4b0e` into the Title candidate, preserving the explicit
+Details entry identity, delayed saved-episode restoration and keyboard-mode
+request for pointer-triggered TV episode returns. The source-control return uses
+that same entry identity and clears pending episode restoration before opening
+its picker, so an episode restoration cannot compete for focus on Back. Its
+route regression now uses the application's actual saveable screen key.
+
+JDK17 host preparation, all 237 library/app unit tests (zero failures/errors/skips),
+Core/design integrity, all three pinned Core Android ABIs, debug and instrumentation
+APK assembly, and lint passed with two workers. Lint reports zero errors and
+78 existing warnings, with three errors filtered by the existing baseline.
+
+All 20 class-filtered Compose tests passed together in 21.794 seconds on the fresh
+owned API36 Google APIs x86_64 AVD `viptv-merge-qa-20261002`, serial `emulator-5590`,
+at 1600×900/160dpi with LocalTv. Classes: `TitleSourceFocusReturnTest`,
+`TitleSourceControlTest`, `EpisodeWatchedBadgeTest`, `DetailsEpisodeReturnTest`
+and `HomeHeroEpisodeReturnTest`. The combined suite covers actual Details/source
+navigation and source focus, delayed 1,410-episode metadata, saved season/episode,
+retained manual jumps and fresh visits, Continue Watching/hero Back and pointer
+activation. Fixtures use synthetic data and no authenticated account or media.
+The owned emulator was stopped and its AVD removed after qualification.
+
+This proves the combined component/controller behavior on the named emulator;
+authenticated Title flows, TV Guide re-audit, long-media track-panel return and
+physical Android TV acceptance remain open.

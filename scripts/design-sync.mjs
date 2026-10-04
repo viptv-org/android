@@ -19,7 +19,7 @@ if (mode === 'sync') {
   const git = (...args) => execFileSync('git', ['-C', repo, ...args], { maxBuffer: 16 * 1024 * 1024 });
   const files = {};
   const names = git('ls-tree', '-r', '--name-only', revision).toString().trim().split('\n');
-  const docs = ['DESIGN.md', 'DESIGN_SYNC.md', 'ANDROID_DESIGN.md', 'TV_POLISH.md', 'specs/behavior/home-addon-refresh.md', 'specs/behavior/episode-number-jump.md', 'specs/behavior/android-tv-media-rows.md', 'viptv-design-system/README.md', 'viptv-design-system/components.md', 'viptv-design-system/copy.md', 'viptv-design-system/decisions.md', 'viptv-design-system/tokens/tokens.json'];
+  const docs = ['DESIGN.md', 'DESIGN_SYNC.md', 'ANDROID_DESIGN.md', 'TV_POLISH.md', 'specs/behavior/home-addon-refresh.md', 'specs/behavior/episode-number-jump.md', 'specs/behavior/android-tv-media-rows.md', 'specs/behavior/torrent-gateway-sources.md', 'viptv-design-system/README.md', 'viptv-design-system/components.md', 'viptv-design-system/copy.md', 'viptv-design-system/decisions.md', 'viptv-design-system/tokens/tokens.json'];
   const mappings = docs.map(path => [path, `design-contract/${path}`]);
   for (const path of names) {
     if (path.startsWith('assets/fonts/')) mappings.push([path, path.endsWith('.ttf') ? `app/src/androidMain/res/font/${path.split('/').at(-1)}` : `app/src/androidMain/assets/design/fonts/${path.split('/').at(-1)}`]);

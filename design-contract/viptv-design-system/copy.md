@@ -30,7 +30,8 @@ Responsive player picture mode (WEB-PLAYER-FIT-001): visible toggle **"Fit"** / 
 | Sources, finding | Finding sources. Sources appear here as they arrive. |
 | Sources, provider pending | Still checking [provider] |
 | Sources, provider empty | No playable sources from [provider] |
-| Sources, provider unsupported | [provider] returned formats this app cannot play. Only HTTP(S) streams are supported here. |
+| Sources, provider unsupported (proposed, SRC-TORRENT-GATEWAY-001) | [provider] returned formats this app cannot play. Choose another source. |
+| Sources, unsupported API format (proposed, SRC-TORRENT-GATEWAY-001) | This source format is not supported. Choose another source. |
 | Sources, in-progress label before rows | Finding sources |
 | Sources, in-progress label after rows | Still checking sources |
 | Sources, none | No sources available. Check your add-ons in Settings. |

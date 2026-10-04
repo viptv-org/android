@@ -7,7 +7,7 @@ to its end, allowing the torrent details to be read without widening the panel.
 **Blocked by:** None (design is already committed).
 **Status:** done
 **Triage:** ready-for-agent
-**Owner:** source_picker_android and source_picker_tv (GPT-6 Sol, low).
+**Owner:** source_picker_android and source_picker_tv (GPT-6.1 Sol, high).
 **Contract:** SRC-OVERFLOW-001 at design ce7084ff80d0541257509748ea772ef0f95d8058.
 
 - [x] Android phone/TV and React/SolidTV rows wrap all descriptions, including long tokens.

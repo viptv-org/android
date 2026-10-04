@@ -33,7 +33,11 @@ let delayPlayback = 0;
 let failPlayback = false;
 let liveCount = 0;
 let categoryCount = 0;
+let sourceDelay = 0;
+let sourceError = false;
+const sourceStarts = new Map();
 const calls = [];
+const playbackLeases = new Map();
 const token = { session_id: 'android-fixture-session', account_id: '7', profile_id: null, access_token: 'fixture-access', refresh_token: 'fixture-refresh', expires_in: 900 };
 const json = (response, value, status = 200) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(value)); };
 function rewrite(value) {
@@ -72,6 +76,8 @@ const server = https.createServer({
     if (path === '/__control') {
       if ('liveCount' in body) liveCount = Math.max(0, Math.min(1000, Number(body.liveCount) || 0));
       if ('categoryCount' in body) categoryCount = boundedCategoryCount(body.categoryCount);
+      if ('sourceDelay' in body) sourceDelay = Math.max(0, Math.min(30000, Number(body.sourceDelay) || 0));
+      if ('sourceError' in body) sourceError = !!body.sourceError;
       if ('copyUrl' in body) copyUrl = !!body.copyUrl;
       if ('delayPlayback' in body) delayPlayback = Math.max(0, Math.min(10000, Number(body.delayPlayback) || 0));
       if ('failPlayback' in body) failPlayback = !!body.failPlayback;
@@ -128,18 +134,35 @@ const server = https.createServer({
         let output = result.body ?? '';
         if (typeof output === 'string' && (result.contentType?.includes('json') || result.headers?.['content-type']?.includes('json'))) {
           let value = rewrite(JSON.parse(output));
+          if (path === '/api/addons' && sourceError && Array.isArray(value))
+            value = [...value, { id: 5, name: 'Failed provider', enabled: true, version: '1.0.0', description: 'Synthetic source failure.' }];
+          if (path === '/api/v2/streams' && request.method === 'POST') sourceStarts.set(value.id, Date.now());
+          const sourcePoll = /^\/api\/v2\/streams\/([^/]+)$/.exec(path);
+          if (sourcePoll) {
+            value.done = Date.now() - (sourceStarts.get(sourcePoll[1]) ?? 0) >= sourceDelay;
+            if (sourceError && Number(url.searchParams.get('after') ?? 0) < 2)
+              value.events = [...(value.events ?? []), { seq: 2, source: 'addon:5', streams: [], error_code: 'source_format_unsupported' }];
+          }
           if (path.startsWith('/api/v2/iptv/guide/')) {
             const shift = Math.floor(Date.now() / 1000) - Date.parse('2026-09-23T10:55:00-04:00') / 1000;
             value.programs = (value.programs ?? []).map(program => ({ ...program, start: program.start + shift, end: program.end + shift }));
           }
           if (favoritePage) value = { items: value, total: value.length, offset: 0, next_offset: null };
-          if (path === '/api/v2/playback' && value.delivery) {
-            const isLive = String(body.stream_id ?? '').startsWith('live_source_') || value.delivery.live;
-            value.delivery = { ...value.delivery, kind: 'direct', mode: 'direct', format: 'original', headers: {},
+          if (path === '/api/v2/playback' && request.method === 'POST') {
+            // The shared browser preview can still return legacy flat playback
+            // fields. Native qualification must use the current v2 lease envelope.
+            const delivery = value.delivery ?? value;
+            const isLive = String(body.stream_id ?? '').startsWith('live_source_') || delivery.live;
+            value = { id: value.id, status: 'ready', expires_at: Math.floor(Date.now() / 1000) + 60,
+              renew_after_seconds: 20, delivery: { ...delivery, kind: 'direct', mode: 'direct', format: nativeMedia ? 'original' : delivery.format, headers: {},
               live: isLive, duration: isLive ? 0 : nativeDuration, position: 0,
-              ...(nativeMedia ? { url: origin + '/fixtures/native-validation.mp4' } : {}) };
+              ...(nativeMedia ? { url: origin + '/fixtures/native-validation.mp4' } : {}) } };
             if (copyUrl) value.delivery.url = 'https://provider.test/stream/' + encodeURIComponent(body.stream_id) + '.mkv?token=synthetic%2Bvalue';
+            playbackLeases.set(value.id, value);
           }
+          const heartbeat = /^\/api\/v2\/playback\/([^/]+)\/heartbeat$/.exec(path);
+          if (heartbeat && playbackLeases.has(heartbeat[1]))
+            value = { ...playbackLeases.get(heartbeat[1]), expires_at: Math.floor(Date.now() / 1000) + 60 };
           output = JSON.stringify(value);
         }
         response.writeHead(result.status ?? 200, { ...result.headers, ...(result.contentType ? { 'content-type': result.contentType } : {}) });

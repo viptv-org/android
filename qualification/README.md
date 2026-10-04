@@ -1,5 +1,69 @@
 # Native Android design qualification
 
+## Actual TV shell/OS keyboard and phone font/insets
+
+Prepare the explicit-CA QA APK and owned emulator before starting a fresh
+`start-fixture.sh --tv` listener on9444. From a worktree, set
+`ANDROID_FIXTURE_TV_WEB` to the intended sibling fixture checkout. Require
+verified HTTPS200 from `/__requests` before actions. Then run
+`python3 qualification/check-guide-shell-ime.py --directory qualification/artifacts/guide-shell-ime`.
+It restarts only the owned TV QA app and uses its synthetic profile gate,
+actual rail and Guide, then the API36 TV LatinIME D-pad letter grid and OS Done.
+It verifies future Details/native Back without focus repair or autoplay.
+The fixed keyboard sequence is specific to this named emulator/IME; another
+keyboard must be inspected and qualified separately.
+
+For phone inspection, use owned emulator5574 with the phone fixture on9443 at
+390×844dp (780×1688 pixels/320dpi). Record the original font setting, then use
+the Android documented font-scale setting to compare1.0 and1.3. Navigate the
+synthetic app to Home, Title or Search with native IME shown; invoke
+`capture-phone-font-insets.py --directory qualification/artifacts/phone-font-insets
+--state home|title|search-insets --font-scale 1.0|1.3` with one concrete state
+and value. This helper validates/captures the current route; it does not drive
+navigation or claim pixel parity. Inspect each private capture before recording
+it. Restore only the owned emulator's setting/viewport, clear its synthetic app
+state and stop the owned processes. Exact accepted observations are in TESTING.md.
+
+## Actual managed torrent audio
+
+The three `native-*`/`check-native-managed-audio.py` helpers operate the owned
+API36 television emulator5576 against the backend's real synthetic
+`check-torrent-browser-backend.sh` serve-only stack. Start the emulator with
+`-no-audio`; use `PLAYBACK_TEST_DUAL_AUDIO=true` for silent generated tracks.
+Use the explicit debug fixture CA and preserve a separate ordinary system-trust
+APK. This operator harness does not exercise login/pairing or physical input.
+
+Prepare the APK, ingress certificate and private seeded-session JSON before
+starting the bounded stack. Keep its qualification directory mode700 and all
+credential files private. Clear only the owned QA app's cached data between
+fixture instances. `seed-native-fixture-session.py --serial emulator-5576
+--config PRIVATE_JSON` provisions that synthetic account in app-private storage.
+Its JSON contains `origin` and the fixture's `session` object; never commit it.
+
+With the real stack ready, set `QUALIFICATION_DIR` and start
+`node qualification/native-gateway-proxy.mjs`. It binds loopback9445,
+forwards account/catalog/playback to the actual backend and media to the actual
+gateway bridge, and rewrites only the validated delivery origin for the emulator.
+It does not weaken production endpoint validation or synthesize responses.
+
+Start the backend's `observe-native-torrent-map.py PRIVATE_QDIR 2 --timeout 180`
+before native playback; fast FFmpeg jobs may finish before the delivery becomes
+ready. Ensure its Docker command has the host's required sudo wrapper. The
+observer keeps raw arguments private and writes numeric `native-audio-map.json`
+after correlating real served bytes with the observed output job. Then run
+`python3 qualification/check-native-managed-audio.py --directory PRIVATE_QDIR`.
+Only after its result and explicit Exit/release pass should the operator write
+the backend runner's `native-complete` marker and require successful quota,
+cache, peer and owned-process cleanup. Stop the native ingress and clear only
+this QA app's private synthetic session afterward.
+
+The assertion distinguishes input2/spa from delivered AAC/und: this gateway
+runtime intentionally neutralizes the non-English transcoded output tag.
+Identical silent samples cannot qualify audible language. Captures, raw argv,
+delivery URLs and tokens stay private; only validated selectors/counts and
+numeric lifecycle results are suitable for tickets. Exact accepted pins and
+observations are recorded in `TESTING.md`.
+
 ## Vizio remote fixture
 
 After starting the HTTPS fixture, run `node qualification/smartcast-fixture.mjs`.
@@ -116,6 +180,71 @@ No media bytes are packaged in the app. `POST /__control` with
 `{"delaySearchMovies":9000}` delays only movie search catalogs; reset it to zero
 after checking late-arrival focus. The fixture's continuation advances its
 reference episode IDs so countdown expiry and Play now can be checked separately.
+
+### Native multi-track TV return check
+
+Generate a four-minute local MP4 with two actual AAC audio tracks and English/
+Spanish `mov_text` subtitles (FFmpeg is required):
+
+```sh
+bash qualification/make-track-media.sh
+ANDROID_FIXTURE_MEDIA="$PWD/qualification/fixtures/track-focus.mp4" \
+  ANDROID_FIXTURE_DURATION=240 bash qualification/start-fixture.sh --tv
+```
+
+For an isolated worktree, set `ANDROID_FIXTURE_TV_WEB` to the sibling shared
+TV-web checkout. The adapter accepts its legacy flat playback preview response
+and current nested delivery response, supplies a v2 lease and renews the same
+delivery during native heartbeat requests. Verify the actual player shows
+`4:00`; a short HLS clip cannot establish this acceptance.
+
+On the dedicated TV emulator 5576, install the fixture-trusting debug APK,
+enter the local preview origin and start playback through the app. Close any
+open panel, then run `python3 qualification/check-player-tracks.py`. It pauses
+the loaded native media, resets subtitles to Off through the remote, verifies
+Back and selection return by immediately reopening Subtitles without moving
+focus, checks the actual `en · Current` row and resumes to a rendered English
+cue. Private screenshots/XML are written under ignored artifacts for visual
+inspection of the highlighted Subtitles control. This is actual Media3 direct
+track acceptance; server-managed track replacement and physical TV remain
+separate checks. Pointer setup is allowed; the acceptance sequence uses only
+remote/media keys.
+
+With the same four-minute native media loaded and no panel open, run
+`python3 qualification/check-player-audio.py` for alternate AAC selection.
+It verifies native en/es tracks, Back and selection return to Audio, and
+immediate reopening with es · Current. It resumes playback at completion;
+use the explicit Exit control afterward. This qualifies direct Media3 audio
+on the owned emulator, not server-managed replacement or physical audio.
+
+For source-discovery qualification, the HTTPS fixture control endpoint accepts
+`{"sourceDelay":30000,"sourceError":true}`. Delay is bounded to 0–30000 ms
+per newly created discovery job; healthy rows arrive immediately while done
+remains false. Source error adds a named Failed provider with no playable rows
+beside the 12 healthy rows. Check Still checking sources, the provider's safe
+error view, All providers recovery and native Back to the invoking source
+control. Reset sourceDelay to zero and sourceError to false after checking.
+
+`GuideProgrammeFocusReturnTest` uses the actual Guide composition/controller,
+one initial public focus setup and remote/native Back. Its synthetic EPG uses
+the current clock so the future cell stays in the two-hour window. This is a
+focused programme-details return regression; the broader opt-in chain below
+extends functional acceptance, while visual parity remains separate.
+
+For the full Guide functional chain, start the local TV HTTPS fixture on port
+9444, install its explicitly fixture-trusting debug APK on the owned emulator
+5576, and retain/select a synthetic paired profile. Build/install the app test
+APK and run only `org.viptv.app.GuideRemoteFixtureTest` with instrumentation
+argument `-e viptvGuideFixture true`. The class skips by default, asserts actual
+television mode, and never connects outside the isolated fixture origin. It
+uses one initial focus setup; News/Search/CNBC/future-details/native-Back are
+then real controller/HTTP with Compose remote key input. Editable text and IME
+submission use Compose semantics; Back is an actual Android instrumentation key
+event. The OS keyboard UI is not clicked or qualified. The test checks
+the exact restored programme node/bounds and zero playback admissions. This
+qualifies that public composition/remote chain, not the app rail, actual gateway
+delivery, pixel parity or physical input. Normal APKs must omit fixture trust.
+
 # Reliability follow-up checks
 
 On the paired remote of dedicated emulator 5574, run

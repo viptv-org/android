@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/design",
-  "revision": "18b19af378b27655e3b6401f17b92321739dba83",
+  "revision": "1742afa2b50d30638fa46f3abc8c1a76638a51e1",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
@@ -12,7 +12,7 @@
     },
     "design-contract/ANDROID_DESIGN.md": {
       "source": "ANDROID_DESIGN.md",
-      "sha256": "e2d22df08e370d2d721ef202ff30f2eb3f7896b3149bc17c4d50aad5509504c3"
+      "sha256": "6d6d49eada5cdf5e0e7ff241a7ef30186985f301a967daafd008fafbc7983018"
     },
     "design-contract/TV_POLISH.md": {
       "source": "TV_POLISH.md",
@@ -30,17 +30,21 @@
       "source": "specs/behavior/android-tv-media-rows.md",
       "sha256": "4facdf42eefe2c44e19783dc33603af7d91db282fc2bca31e9fa831bbf61ed42"
     },
+    "design-contract/specs/behavior/torrent-gateway-sources.md": {
+      "source": "specs/behavior/torrent-gateway-sources.md",
+      "sha256": "34dc7db8a453b626b41873dd0d49e922fbc546d81651ba945bcc74e499ef49c2"
+    },
     "design-contract/viptv-design-system/README.md": {
       "source": "viptv-design-system/README.md",
       "sha256": "f6a9e5e0da4312a8d71d0e2b2a3338088bf9a5b5a9891a783c0a859257acd7e2"
     },
     "design-contract/viptv-design-system/components.md": {
       "source": "viptv-design-system/components.md",
-      "sha256": "831c73c7dff5994dc21b33a4d6d5fe9bf92df466d3285d6de7e81653df3088b9"
+      "sha256": "9a282aa9d9c6d44a01cc04b1cb7349397bfa3e04175ad308d1aa153144c2c3af"
     },
     "design-contract/viptv-design-system/copy.md": {
       "source": "viptv-design-system/copy.md",
-      "sha256": "a7638aac85acaf4cd2ae44cff078eb8d51e26b0339b08b30b0e4768214cb1666"
+      "sha256": "e812ef8b48ed62214e6b97d8535392e24b53891d1ca15b596be0420f6991ff47"
     },
     "design-contract/viptv-design-system/decisions.md": {
       "source": "viptv-design-system/decisions.md",

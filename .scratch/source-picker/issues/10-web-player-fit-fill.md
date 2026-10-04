@@ -6,7 +6,7 @@ with cropping while preserving the picture's aspect ratio.
 
 **Status:** done
 **Blocked by:** None.
-**Owner:** web_player_fit_fill (GPT-6 Sol, low), independent Luna review.
+**Owner:** web_player_fit_fill (GPT-6.1 Sol, high), independent GPT-6.1 Sol high review.
 
 - [x] Commit canonical visual/input behavior and adopt its immutable design pin.
 - [x] Add a visible, accessible control beside fullscreen on phone and desktop.

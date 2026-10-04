@@ -6,7 +6,7 @@ and actual episode identity independently of lazy scrolling.
 
 **Status:** done
 **Blocked by:** None.
-**Owner:** episode_1059_research (GPT-6 Luna, max), then Sol implementation.
+**Owner:** episode_1059_research (GPT-6.1 Sol, high), then implementation.
 
 - [x] Reproduce on the owner's signed-in Windows Android TV emulator.
 - [x] Distinguish episode artwork from source discovery and navigation.
