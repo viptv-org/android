@@ -14,6 +14,25 @@ Only watched or explicitly followed titles participate, not all newly released s
 - Keep awaited-release, available-new-episode, backlog, and ended/watched states distinct.
 - No automatic playback, duplicate series cards, source-policy changes, or forced focus/scroll movement when a queue refresh changes ordering.
 
+## Narrow scope: `N behind` counting rules
+
+This is a planning clarification only, not an implementation or adoption of new runtime policy. The existing wait for the Stremio task remains in force.
+
+`N` is the number of distinct, confirmed-released episodes not watched by the selected profile. Count actual episode identities across seasons, not a subtraction of episode numbers or a count of queue cards. Earlier unwatched gaps still count.
+
+- A partly watched episode counts once only if it is not already watched.
+- Explicit/manual watched marks and verified imported completion exclude an episode even when its actual playback position is partial or its watch date is unknown.
+- Rewatching an already-watched episode must not increase the behind count. Keep active resume separate from completion.
+- Use the existing shared watched projection/policy; do not add an Android-specific completion threshold.
+- Future releases do not count. Missing release evidence, incomplete episode metadata, or truncated history must not produce a falsely exact count or zero.
+- Ongoing status and release-driven card ordering are independent of this count. Updating `N` does not itself promote the card or imply the series is ongoing.
+
+Example: E1–E12 are released, E1–E8 watched, E9 halfway through: **4 behind** (E9–E12). Mark E9 watched: **3 behind**. Announce future E13: still **3 behind**. Release E13: **4 behind**. Rewatch E3: still **4 behind**.
+
+Open scope choice: excluding Specials (season 0) from the main count is recommended to match current normal next-episode selection, but has not been separately confirmed. Do not silently settle it during implementation.
+
+Read-only inspection found release and watched/resume/import facts in canonical core and profile history in the backend; no behind-count DTO field exists yet. The inspected series-history endpoint caps results at 2,000, so exact counting needs complete-history handling. Revalidate these moving sources when work resumes.
+
 ## Ownership and sequencing
 
 1. First preserve prior bug fixes in focused commits and integrate current main without discarding owner edits.
