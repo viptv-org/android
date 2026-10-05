@@ -300,6 +300,9 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     val enriched = remember(media, artworkContext) { artworkContext?.let { media.withArtworkFrom(it) } ?: media }
     var failed by remember(media.id, enriched.thumbnail, enriched.poster, enriched.backdrop) { mutableStateOf(emptySet<String>()) }
     val card = remember(enriched, failed) { CoreModels.card(enriched, true, failed) }
+    val watching = media.positionMillis > 0 && (media.resumeActive == true || !media.watched)
+    val progress = if (media.resumeActive == true && media.durationMillis != null && media.durationMillis > 0)
+        (media.positionMillis.toFloat() / media.durationMillis).coerceIn(0f, 1f) else card.progress?.toFloat() ?: 0f
     val image = card.image
     var focused by remember { mutableStateOf(false) }
     val closeRail = LocalCloseRail.current
@@ -309,8 +312,8 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                 if (image.isNullOrBlank()) VText(card.title, 24, Modifier.padding(12.dp), C.textSecondary, bold = true, lines = 2, align = TextAlign.Center)
                 else AsyncImage(image, card.title, Modifier.fillMaxSize(), contentScale = if (card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
                     onError = { failed = failed + image })
-                if (!media.watched && media.positionMillis > 0) ProgressLine(card.progress?.toFloat() ?: 0f, Modifier.align(Alignment.BottomCenter).padding(14.dp).testTag("episode-progress"))
-                if (!media.watched && media.positionMillis > 0) Box(Modifier.align(Alignment.TopStart).padding(14.dp)
+                if (watching) ProgressLine(progress, Modifier.align(Alignment.BottomCenter).padding(14.dp).testTag("episode-progress"))
+                if (watching) Box(Modifier.align(Alignment.TopStart).padding(14.dp)
                     .height(30.dp).clip(RoundedCornerShape(15.dp)).background(Color.Black.copy(alpha = .65f))
                     .padding(horizontal = 12.dp).testTag("episode-watching-badge"), contentAlignment = Alignment.Center) {
                     VText("WATCHING", 16, bold = true)
@@ -327,7 +330,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                 if (image.isNullOrBlank()) VText(card.title, 13, Modifier.padding(8.dp), C.textSecondary, bold = true, lines = 2, align = TextAlign.Center)
                 else AsyncImage(image, card.title, Modifier.fillMaxSize(), contentScale = if (card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
                     onError = { failed = failed + image })
-                if (!media.watched && media.positionMillis > 0) ProgressLine(card.progress?.toFloat() ?: 0f, Modifier.align(Alignment.BottomCenter).padding(8.dp).testTag("episode-progress"))
+                if (watching) ProgressLine(progress, Modifier.align(Alignment.BottomCenter).padding(8.dp).testTag("episode-progress"))
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {

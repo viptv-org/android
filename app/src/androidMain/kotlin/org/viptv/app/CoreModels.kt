@@ -69,6 +69,7 @@ private fun MediaItem.view(): Media = Media(
     sourceFingerprint = sourceFingerprint, episodes = episodes.map { it.view() }, episodeTitle = episodeTitle,
     queueStatus = queueStatus, previousEpisode = previousEpisode?.view(), backdrop = background, thumbnail = thumbnail,
     year = year?.toInt()?.toString(), runtime = runtime, genres = genres, credits = credits, watched = watched == true,
+    resumeActive = resumeActive, completionOnly = completionOnly, watchDateKnown = watchDateKnown,
     imdbRating = imdbRating, posterShape = posterShape, updatedAtMillis = updatedAtMillis?.toLong(), releasedAtMillis = releasedAtMillis?.toLong(), coreItem = this,
 )
 
@@ -78,7 +79,9 @@ internal fun Media.normalizedJson(): String {
     return CoreJson.encode(item.copy(id = id, type = org.viptv.core.wire.MediaKind.valueOf(type.uppercase()), name = name, poster = poster, background = backdrop, thumbnail = thumbnail,
         position = positionMillis / 1000.0, duration = durationMillis?.let { it / 1000.0 }, season = season?.toDouble(), episode = episode?.toDouble(),
         seriesId = seriesId, sourceAddonId = sourceAddonId, sourceFingerprint = sourceFingerprint, queueStatus = queueStatus,
-        previousEpisode = previousEpisode?.let { CoreJson.decode<MediaItem>(it.normalizedJson()) }, episodeTitle = episodeTitle, watched = watched, description = description, genres = genres, credits = credits, runtime = runtime, imdbRating = imdbRating, posterShape = posterShape))
+        previousEpisode = previousEpisode?.let { CoreJson.decode<MediaItem>(it.normalizedJson()) }, episodeTitle = episodeTitle, watched = watched,
+        resumeActive = resumeActive, completionOnly = completionOnly, watchDateKnown = watchDateKnown,
+        description = description, genres = genres, credits = credits, runtime = runtime, imdbRating = imdbRating, posterShape = posterShape))
 }
 
 internal object CorePolicy {

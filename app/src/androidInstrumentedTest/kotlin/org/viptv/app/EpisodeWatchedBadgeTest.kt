@@ -37,6 +37,26 @@ class EpisodeWatchedBadgeTest {
 
     @Test fun partialEpisodeDoesNotClaimCompletion() = renderEpisode(tv = true, watched = false)
 
+    @Test fun activeRewatchShowsWatchedAndWatchingWithPartialProgressOnTvAndPhone() {
+        var tv by mutableStateOf(true)
+        val episode = Media("show:1:1", "episode", name = "Fixture Show", season = 1, episode = 1,
+            episodeTitle = "Rewatch", watched = true, resumeActive = true, positionMillis = 30_000,
+            durationMillis = 120_000)
+        compose.setContent {
+            CompositionLocalProvider(LocalTv provides tv) {
+                ViptvTheme(false, Color.White) {
+                    EpisodeCard(episode, Modifier.width(360.dp), {}, {})
+                }
+            }
+        }
+        compose.onNodeWithTag("episode-watched-badge", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("episode-progress", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("episode-watching-badge", useUnmergedTree = true).assertExists()
+        compose.runOnIdle { tv = false }
+        compose.onNodeWithTag("episode-watched-badge", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("episode-progress", useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithTag("episode-watching-badge", useUnmergedTree = true).assertCountEquals(0)
+    }
     @Test fun changingCardFactsFromWatchedToPartialShowsProgress() {
         var episode by mutableStateOf(Media("show:1:1059", "episode", name = "Fixture Show", season = 1,
             episode = 1059, episodeTitle = "The Future", positionMillis = 30_000,
