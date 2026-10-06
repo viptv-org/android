@@ -45,6 +45,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import org.viptv.app.theme.ViptvColor as C
 
+internal suspend fun requestInitialSourceFocusAfterFrame(
+    isClaimed: () -> Boolean,
+    awaitFrame: suspend () -> Unit,
+    requestFocus: () -> Unit,
+) {
+    if (isClaimed()) return
+    awaitFrame()
+    if (!isClaimed()) requestFocus()
+}
+
 @Composable internal fun SourcePicker(media: Media, sources: List<Source>, controller: AppController) {
     val tv = LocalTv.current
     val state by controller.state.collectAsState()
@@ -132,7 +142,11 @@ import org.viptv.app.theme.ViptvColor as C
         }
         if (state.preparingSourceId != null) VText("Opening your selected source. Back cancels.", if (tv) 20 else 13, Modifier.padding(top = 12.dp), C.textSecondary)
         LaunchedEffect(shown.isNotEmpty()) {
-            if (tv && shown.isNotEmpty() && !claimed) { withFrameNanos {}; runCatching { first.requestFocus() }; claimed = true }
+            if (tv && shown.isNotEmpty()) requestInitialSourceFocusAfterFrame(
+                isClaimed = { claimed },
+                awaitFrame = { withFrameNanos {} },
+                requestFocus = { runCatching { first.requestFocus() }; claimed = true },
+            )
         }
     }
 }
