@@ -580,8 +580,7 @@ private fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNul
 private fun JSONObject.array(vararg keys: String): List<Any?> = (keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray()).let { array -> (0 until array.length()).map { index -> array.opt(index) } }
 private fun Any?.optJSONObject(): JSONObject? = this as? JSONObject
 private fun JSONObject.addon() = Addon(get("id").toString(), optString("name"), optString("manifest_url"), optBoolean("enabled", true))
-// The retired profile quality cap is not modelled: a historical server value is
-// ignored on read and never rewritten or sent with ordinary preference edits.
+// Ignore server `quality` values; preference reads and writes use only supported fields.
 private fun PlaybackPreferences.body() = JSONObject().put("audio_language", audioLanguage).put("subtitle_language", subtitleLanguage).put("subtitles_enabled", subtitlesEnabled).put("subtitle_size", subtitleSize).put("subtitle_style", subtitleStyle).put("autoplay", autoplay)
 private fun JSONObject.preferences(): PlaybackPreferences {
     val item = JSONObject(uniffi.viptv_core.normalize("androidPreferences", toString(), ""))

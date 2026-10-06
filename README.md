@@ -1,63 +1,5 @@
 # VIPTV Android
 
-## Backend v2 development handoff
-
-`refactor/android-backend-cutover` is isolated from the owner's active UI checkout.
-It targets backend `refactor/backend-v2` at `2c2eca2` or later compatible revisions,
-with shared core `8ae9f81`. Do not install this candidate against the older
-production backend: live browsing requires the v2 next/previous cursor contract.
-Further backend work must preserve this v2 wire contract or use a new protocol
-version; no production migration/deployment is implied by this handoff.
-
-Networking/controller changes remove legacy live discovery/playback/catalog calls,
-retain only three channel pages, and fetch bounded viewport schedules. Layouts
-are unchanged. The small `GuideScreen.kt` integration diff reports the viewport,
-restores its saved position/focus and corrects search copy. Review that diff when
-merging UI work; the owner checkout has not been switched or overwritten.
-
-Category controller logic now supports next/previous replacement pages of 200,
-with separate cancellation/retry and scope guards. The owner-facing
-`GuideScreen.kt` now wires observation-only viewport/anchor callbacks and existing
-TV terminal controls; phone paging requires continued drag beyond the existing
-row ends. The isolated Settings screen no longer offers Maximum quality. Original
-UI-checkout integration, physical-device qualification and real backend/gateway
-integration remain separate gates. See TESTING.md.
-
-### Category integration for the UI owner
-
-Keep the existing row, fixed All/My channels/Recent/Search actions and visuals;
-do not add paging buttons or reserve provider IDs. `guideUi.categoryPage` exposes
-the page revision, next/previous tokens, saved viewport, loading/error and desired
-edge focus. Existing `guideUi.categories` remains the current bounded list.
-
-- Report the rendered revision and first/last **category IDs** through
-  `onGuideCategoryViewport(revision, firstId, lastId, offset)`; fixed tab indices
-  are not category indices. Capture the revision belonging to the rendered row,
-  not a newer state from a stale callback.
-- When `awaitingAnchor` is true, restore the page's `focusIndex` (first on forward,
-  last on backward) using existing list/focus mechanics before acknowledging its
-  viewport. Old/unrestored callbacks are ignored, preventing page oscillation.
-  Preserve the saved visible index/offset when returning without replacement.
-- Use `changeGuideCategoryPage(delta, renderedRevision)` at the intentional
-  remote category boundary and `retryGuideCategories()` for an existing retry
-  action. Keep fixed actions, especially Search, independently reachable; do not
-  consume their navigation merely to advance provider categories.
-
-These methods update category state only. They must not reset channel filters,
-programme time, schedules or unrelated playback. No default catalog override is
-invented from response metadata. Your root Android checkout is not modified.
-
-The isolated screen records exact namespaced row keys/index/offset (including
-fixed controls) and actual TV focus. Search-Right advances; All-Left reverses;
-ordinary provider-to-Search/Recent focus moves and Search activation remain.
-Phone terminal overscroll waits for drag/fling settlement and closed overlays
-before restoring the provider anchor. Core/server wire declarations are unchanged.
-
-Actions delivery: main pushes and manual builds produce sideloading artifacts
-(Android universal APK; desktop Windows/Linux installers; Roku ZIP; TV WGT/IPK).
-Other repositories have no Actions workflows. Local checks remain; previous
-CI/release-publication descriptions below are historical. No automatic deploys.
-
 Native phone and Android TV VIPTV app and playback contracts backed by AndroidX Media3. `:app` is the adaptive Jetpack Compose client; the root module is the Android-only playback library it uses. Product controls, focus, screens and playback policy follow the pinned design repository contract.
 
 The initial import was derived from `air-tv/video` at `57551ec48d63c81d407e098214611140230739f4`. Upstream history and the included Apache-2.0 and MIT license texts are retained.
@@ -67,7 +9,7 @@ The initial import was derived from `air-tv/video` at `57551ec48d63c81d407e09821
 - Android API 24+ phones and Android TV. Native TV mode selects the remote layout; phones retain touch, system text entry and rotation.
 - `:app` phone username/password sign-in, TV device pairing/refresh, profiles, Home/Discover/source picker, exact-source Resume, and Media3 direct playback.
 - Media3 playback, headers, external subtitles, track selection, live/DVR semantics, and runtime capability reporting.
-- No desktop, Apple, browser, JavaScript, WebAssembly, MPV, AVFoundation, package publishing, or inherited automation.
+- No desktop, Apple, browser, JavaScript, WebAssembly, MPV, AVFoundation, or package publishing.
 
 ## Shared application core
 
@@ -82,12 +24,53 @@ node scripts/core-sync.mjs check
 
 The same core revision must be adopted by TV-web for shared behavior changes. Installed apps still need rebuilding and delivery.
 
+## Backend compatibility and live guide
+
+Live browsing requires the backend v2 next/previous cursor contract. Do not use
+this app against a backend with the older live contract. Backend changes must
+preserve the v2 wire contract or use a new protocol version; an Android build
+alone does not authorize a backend migration or production deployment.
+
+The guide retains at most three channel pages and fetches bounded viewport
+schedules. Categories use one replacement page of up to 200, with independent
+cancellation/retry and profile/catalog scope guards.
+
+### Category UI integration
+
+Keep the existing row, fixed All/My channels/Recent/Search actions and visuals;
+do not add paging buttons or reserve provider IDs. `guideUi.categoryPage`
+contains the revision, next/previous cursors, saved viewport, loading/error and
+edge focus. `guideUi.categories` is the current bounded list.
+
+- Report the rendered revision and first/last **category IDs** through
+  `onGuideCategoryViewport(revision, firstId, lastId, offset, allowPaging = false)`.
+  Fixed tab indices are not category indices. Capture the revision belonging to
+  the rendered row, not a newer state from a stale callback.
+- When `awaitingAnchor` is true, restore `focusIndex` (first on forward, last on
+  backward) before acknowledging the viewport. Stale/unrestored callbacks are
+  ignored to prevent page oscillation. Returning without replacement preserves
+  the saved visible index/offset.
+- Record exact namespaced row keys/index/offset (including fixed controls) and
+  actual TV focus through `onGuideCategoryRowViewport`.
+- Use `changeGuideCategoryPage(delta, renderedRevision)` at intentional remote
+  boundaries and `retryGuideCategories()` for retry. Search-Right advances and
+  All-Left reverses. Ordinary provider-to-Search/Recent focus moves and Search
+  activation remain available; paging must not consume their navigation.
+- Phone paging requires continued drag beyond the row ends. Wait for drag/fling
+  settlement and closed overlays before restoring the provider anchor.
+
+These callbacks update category state only. They must not reset channel filters,
+programme time, schedules or unrelated playback. Do not invent a default catalog
+override from response metadata.
+
 ## Validation and builds
 
 [DEVELOPMENT.md](DEVELOPMENT.md) documents Windows-first development, private VPS
 SSH configuration, local native builds, and the local Android TV emulator.
 
-Use JDK 17, SDK Platform 36, Node 22+, Rust, cargo-ndk and an Android NDK. The local acceptance build used NDK 28.2.13676358. With the Android SDK/NDK environment configured:
+Use JDK 17, SDK Platform 36, Node 22+, Rust, cargo-ndk and an Android NDK. The
+hosted workflow installs NDK 28.2.13676358. With the Android SDK/NDK environment
+configured:
 
 ```sh
 node scripts/core-sync.mjs check
@@ -98,36 +81,25 @@ scripts/prepare-core.sh android
 ./gradlew --no-daemon :app:assembleDebug :app:lintDebug
 ```
 
-Hosted `build.yml` also builds the pinned native core for host tests and all three Android ABIs. A passing build does not qualify physical playback hardware. Current emulator and physical evidence is recorded separately in [TESTING.md](TESTING.md).
+Hosted `.github/workflows/build.yml` builds the pinned native core for host tests
+and all three Android ABIs, runs library/app unit tests and lint, and packages a
+universal phone/TV debug APK with revision/pin metadata and SHA256SUMS. Main
+pushes and manual dispatch produce sideloading artifacts only. There are no PR
+gates, automatic releases, package/image publishing or deployments; retain local
+checks. Production delivery requires separate authorization.
 
-### Hosted Core8 handoff artifact — 2026-09-30
+A passing build does not qualify physical playback hardware. Emulator and
+physical evidence and outstanding qualification limits are recorded in
+[TESTING.md](TESTING.md).
 
-The existing manual build was dispatched once on `refactor/android-backend-cutover`.
-[Run 36691357270](https://github.com/viptv-org/android/actions/runs/36691357270)
-and APK job `109809085239` succeeded at exact source
-`75bbacffe47eb96d7c93993e04b6a7c8f4ec722b`. Host preparation, library/app unit-test
-tasks, all three Android release native ABIs, normal debug APK assembly and lint
-passed. Lint retains 74 warnings and three baseline-filtered errors. The workflow
-does not upload unit-test XML; its task success is separate from the prior local
-158-test count recorded in TESTING.md.
+### Dated evidence
 
-Downloaded `viptv-android-phone-tv-debug-75bbacff.apk` SHA256:
-`9127959d0aa0d5db1a4bcbabaf3154c6b8c472f1ed236c64b84b970d88109d44`.
-It matches the artifact SHA256SUMS; build.json records Core
-`8ae9f81bb753aaf2de53af5b594ead29845e1a8a`, the current design pin and stable
-development signing. APK archive/signature checks passed (one signer, v2 scheme).
-Manifest identity is `org.viptv.app`, version `0.1.0`, min SDK24/target SDK36.
-Packaged arm64-v8a/armeabi-v7a/x86_64 libraries have the correct ELF architectures,
-active Core/SmartCast bridges and no metadata exports for the eight retired
-provider functions. Fixture CA is absent; packaged network security XML trusts
-system certificates only.
+These records describe specific revisions and conditions, not the current
+checkout or deployment:
 
-The APK and authoritative run/job evidence remain in the ignored local directory
-`qualification/artifacts/hosted-75bbacf-B9Jxt2`. Nothing was installed or deployed;
-no emulator/physical media, codec, remote or native playback qualification is
-implied. Category UI integration and existing hardware gates remain open. This
-evidence-only change leaves controller/UI/frozen wire and the owner's original
-Android checkout untouched.
+- [Hosted Core8 artifact — 2026-09-30](docs/history/2026-09-30-hosted-core8-artifact.md)
+- [Development v2 qualification — 2026-10-01](docs/history/2026-10-01-development-qualification.md)
+- [Undated backend cutover handoff, preserved 2026-10-06](docs/history/2026-10-06-backend-cutover-handoff.md)
 
 ## Design and native preview
 

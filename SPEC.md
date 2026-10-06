@@ -257,6 +257,6 @@ version, build SHA). Emulator evidence never qualifies codec, HDR, DRM, PiP or r
 | `SeekableLive` / DVR seeking | Physical TV seeking within a real DVR window; then `supportsSeekableLive` may become `true`. |
 | Surface reattachment (background/foreground, surface recreate) | Physical phone and TV resuming video on a recreated surface without re-open; then `supportsSurfaceReattachment` may become `true`. |
 | Track switching (audio/video) | Device playback with multiple renditions, confirmed by the next track snapshot. |
-| Subtitle display | Cue path done: connected `AndroidMedia3SubtitleCueTest` (corpus, emulator) delivers in-stream default, forced and sideloaded WebVTT/SRT cues and clears on Off. Remaining: in-app visual check on a physical phone and TV. |
+| Subtitle display | Connected `AndroidMedia3SubtitleCueTest` (corpus, emulator) for in-stream default, forced and sideloaded WebVTT/SRT cues and Off clearing, plus an in-app visual check on a physical phone and TV. Dated cue-test results belong in `TESTING.md`. |
 | Picture-in-picture | Physical phone entering PiP with the activity opted in. |
 | Remote/media keys, focus | Physical Android TV remote (owned by the design contract). |

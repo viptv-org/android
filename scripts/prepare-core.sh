@@ -7,7 +7,7 @@ node scripts/core-sync.mjs check
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 # JVM tests run before slower ABI builds in CI; both compile the same source pin.
 # The native feature builds the backend-owned viewing contract and SmartCast
-# bridge. Retired local provider/addon engines are not part of this snapshot.
+# bridge.
 if [[ "$mode" == host || "$mode" == all ]]; then
   cargo build --locked --manifest-path vendor/core/Cargo.toml -p viptv-core --features native --lib
 fi

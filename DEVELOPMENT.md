@@ -1,26 +1,9 @@
 # Windows-first Android / Android TV development
 
-## Verified v2 setup — 2026-10-01
-
-- Android main `c8f8ffa`, plus the local track-marker/subtitle fixes, is built and
-  running on this Windows PC's TV emulator. Data/sign-in were not cleared.
-- JDK 17 / SDK 36 local host-core, unit-test and three-ABI Android build flow
-  passed: **206 unit tests, zero failures/errors/skips**. Two actual Compose
-  rendering tests also passed on the TV emulator.
-- The selected personal profile is preserved. Home, title details and the
-  account's Cinemeta addon render. Choose source shows the expected empty state:
-  Cinemeta supplies catalogs, not playable streams; a stream provider is still needed.
-- Backend main `1b218e84`, with eight-digit pairing and preserved Stremio-preview
-  work, is active on the VPS at loopback port **3000**, through the unchanged
-  existing dev tunnel. Matching dashboard and TV-web assets are mounted.
-- Public health, dashboard, pairing and TV-web routes passed; four public asset
-  hashes match the reviewed build. Eight-digit pairing/PNG QR checks passed.
-- Backup-first migration assigned the formerly unowned addon to the personal
-  account, kept the other addon's owner unchanged, and encrypted both addons.
-  Fifteen protected account/profile/history tables were preserved; SQLite checks
-  passed. Durable encryption keys and separate backups remain owner-private.
-- Public conversion-gateway activation, personal stream-provider configuration
-  and Stremio import/apply remain **not completed**. Production is untouched.
+For dated build, emulator, backend rollout and provider evidence, see the
+[2026-10-01 qualification record](docs/history/2026-10-01-development-qualification.md).
+It describes the reported revisions and conditions, not current deployment or
+account status.
 
 ## Where development runs
 
@@ -62,7 +45,7 @@ The loader reads `.env` as data, prepends the installed local tools to PATH,
 and sets `CARGO_TARGET_DIR` to this checkout's `vendor/core/target`. It changes
 the current shell only, not machine-wide settings. Use JDK 17, Node 22+,
 SDK Platform 36, Rust, cargo-ndk, and an Android NDK. The configured toolchain
-already exists on this PC; it is not necessary to reinstall Android Studio.
+is selected through private `.env`; check the tools before installing replacements.
 
 The host Rust target is Windows MSVC; Android targets are
 `aarch64-linux-android`, `armv7-linux-androideabi`, and
@@ -144,9 +127,11 @@ ssh -p $env:VIPTV_DEV_SSH_PORT "$($env:VIPTV_DEV_USER)@$($env:VIPTV_DEV_HOST)"
 Inside that SSH session, the organization workspace is `~/code/viptv-org`.
 Each subdirectory is an independent repository. `bash ./update.sh` safely
 fast-forwards the workspace and its clones; inspect their local changes first.
-The existing development backend runs as the user service `viptv-dev.service`,
-bound to loopback port **3000**. The existing enabled `cloudflared.service`
-serves `VIPTV_DEV_ORIGIN`; reuse that tunnel rather than opening a new one:
+Inspect the existing `viptv-dev.service` user unit and its dependencies before
+restarting or changing it. The documented development setup uses loopback port
+**3000** and the existing `cloudflared.service` tunnel for `VIPTV_DEV_ORIGIN`.
+Verify the running configuration rather than inferring it from dated evidence;
+reuse that tunnel instead of opening a new one:
 
 ```sh
 systemctl --user start viptv-dev.service
@@ -166,29 +151,25 @@ commit/hash and never overwrite an unrelated local artifact.
 
 ## Local backend editing and development rollout
 
-The canonical sibling `../backend` and VPS backend checkouts now use the
-reviewed v2 base `1b218e84`. All local numeric-pairing edits are preserved; the
-three Stremio-preview files remain present and untracked against that base.
-The old preview commit is retained on `backup/backend-v1-stremio-preview-20261001`.
-No new commits were made. Preserve this work when pulling future changes.
-
-Backend v2 passed locked all-target tests in isolated targets: 218 on Windows,
-222 on Linux, plus 103 dashboard and 242 TV-web tests. Two inherited real-gateway
-fixtures remain opt-in; no production/gateway playback claim follows from these
-counts. Use a separate backend Cargo target instead of the core target set by
-`scripts/windows-dev.ps1`, for example:
+Inspect the sibling `../backend` and VPS backend checkouts before updating;
+preserve existing edits and untracked preview work. Backend tests need a separate
+Cargo target instead of the core target set by `scripts/windows-dev.ps1`, for
+example:
 
 ```powershell
 $env:CARGO_TARGET_DIR = Join-Path (Get-Location) 'qualification/artifacts/backend-target-windows'
 cargo test --locked --manifest-path ../backend/server/Cargo.toml --all-targets
 ```
 
-The reviewed candidate, migration tools, private backups and durable keyring are
-retained under the VPS backend's ignored `artifacts/backend-v2-20261001` directory.
-Do not delete that directory: the service currently executes its release binary,
-mounts its frontend assets and loads its private keyring environment file.
-Operational plans/evidence also exist locally under
-`qualification/artifacts/backend-v2-evidence`.
+Preserve the VPS backend's ignored `artifacts/backend-v2-20261001` directory,
+including its migration tools, private backups and durable keyring. The recorded
+development service depends on its release binary, frontend assets and private
+keyring environment file. Do not delete or relocate it without checking the
+running service's paths and arranging a safe replacement. Local operational
+plans/evidence are under `qualification/artifacts/backend-v2-evidence`.
+See the [dated rollout record](docs/history/2026-10-01-development-qualification.md)
+for the reported revisions and checks; those checks do not establish the current
+service configuration or qualify production/gateway playback.
 
 Future upgrades must preserve the existing database, canonical HTTPS auth origin,
 loopback bind and tunnel. Offline credential migrations require stopped database
@@ -203,12 +184,6 @@ leading zeroes survive. Secret device tokens remain separate. Pending legacy
 codes retain their existing expiry; QR, account-bound approval, single use and
 rate limits must remain covered by backend tests. Do not sign the owner's TV out
 merely to inspect a new code format.
-The eight-digit change was verified on the development service with 62 Windows
-auth tests, 63 Linux auth tests and five browser/device HTTP-flow tests. Live
-loopback/public code generation and QR responses passed; the TV remained signed in.
-Desktop sign-in handoff rendered the full code. The existing narrow-screen
-account page clips at a 390-pixel viewport; no mobile layout fix is claimed.
-
 
 ## Personal account, Stremio history, and providers
 
@@ -219,45 +194,46 @@ privately in the browser, create a profile, and pair the local TV to that accoun
 Do not put personal passwords, provider URLs/keys, or Stremio exports in Git.
 Keep existing TV sign-in until an intentional account switch is requested.
 
-The current VPS backend has public registration enabled. The initial Stremio
-import implementation lives in the backend/account dashboard; deployment is
-qualified separately before activation. After activation, use **Account → Import
-from Stremio** on the dev site, select an unrestricted destination profile, read
-the preview counts, then explicitly confirm. No personal import was performed
-by implementation or testing. See `backend/docs/STREMIO_IMPORT.md` on the VPS.
-The first version supports saved IMDb titles, movie history/resume and exact
-episode resume; bulk episode watched history, unsupported IDs and likes/loves
-remain deferred. Existing favorites/newer history/manual corrections are retained,
-and repeat imports cannot resurrect locally removed imported favorites. The
-Windows checkout's ignored `.env` holds the saved Stremio credentials for later
-manual use; they are not embedded in bundles or auto-filled by the site.
+Before using registration or Stremio import, verify that the intended development
+backend exposes the feature and consult that backend revision's
+`backend/docs/STREMIO_IMPORT.md`. Importer support and activation are deployment-
+and version-specific; a past implementation report is not proof of availability.
+When available, use **Account → Import from Stremio** on the dev site, select an
+unrestricted destination profile, read the preview counts and unsupported or
+ambiguous entries, then explicitly choose whether to confirm. Keep saved private
+credentials out of bundles and never apply an import without owner confirmation.
+
 The v2 dashboard manages account-owned sources;
 installation/configuration writes require a full account/browser session, not
 paired-TV credentials. Configure personal providers on the dev dashboard while
 signed into the personal account. A catalog-only addon does not provide streams.
 
 TMDB/API keys belong in private backend configuration, never the APK or docs.
-The supplied TMDB key was not configured; no TMDB integration is claimed.
+Verify provider configuration on the intended backend before claiming integration.
 Do not assume a variable alone enables a provider or switch branches silently.
 
-## What to test next
+Registration, personal provider configuration and imports are owner-controlled
+actions; do not perform them merely to refresh qualification evidence.
+
+## Qualification checklist
 
 1. On the Windows TV, browse Home/Discover and open a title's details.
 2. On the dev dashboard, sign into the personal account and configure a legitimate
    stream addon/provider privately. Then reopen Choose source on the TV.
 3. Exercise direct playback, seeking, audio/subtitles and foreground return with
    that source. Real-source/device behavior still needs its own evidence.
-4. After importer activation, open Account → Import from Stremio on the dev
-   dashboard. Verify the selected destination and read-only preview before
-   choosing whether to confirm. Unsupported/ambiguous entries remain for review.
+4. If the importer is available on the intended deployment, open Account → Import
+   from Stremio on the dev dashboard. Verify the selected destination and read-only
+   preview before choosing whether to confirm. Unsupported/ambiguous entries
+   remain for review.
 
-The separate playback-gateway candidate at `d34047b` is prepared and tested under
-ignored qualification artifacts, but is **not publicly activated**. Sources
-requiring relay/remux/transcode need a separately qualified HTTPS gateway, private
-scoped integration key and media/renew/release checks. Keep backend port 3000 and
-the existing tunnel unchanged for initial direct testing; do not expose bootstrap
-key management. The corrected gateway handoff is under
-`qualification/artifacts/gateway-v2-integration/.qualification/REPORT.md`.
+Sources requiring relay/remux/transcode need a separately qualified HTTPS gateway,
+a private scoped integration key and media/renew/release checks. Confirm gateway
+activation and compatibility on the intended deployment before testing these
+sources. Keep backend port 3000 and the existing tunnel unchanged for initial
+direct testing; do not expose bootstrap key management. The dated gateway
+candidate and handoff location are preserved in the
+[qualification record](docs/history/2026-10-01-development-qualification.md).
 
 ## Shared code and delivery
 

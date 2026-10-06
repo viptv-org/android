@@ -55,7 +55,7 @@ data class Source(
     val audio: String? = null,
     /** Direct live playback target; never serialized as a discovered stream identifier. */
     val channelId: String? = null,
-    /** These safe display fields were already projected by shared Rust. */
+    /** True when shared Rust has projected the safe display fields. */
     val displayResolved: Boolean = false,
     val providerKey: String = "",
     val providerLabel: String = "",

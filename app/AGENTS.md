@@ -1,6 +1,6 @@
 # VIPTV native Android app
 
-Read `DESIGN_REF`, `SPEC.md` and the pinned `design-contract/ANDROID_DESIGN.md` before changing `:app`. AND-035 replaces the historical Roku reconstruction with the current shared phone and TV design. Compose stays native; Media3 owns the video surface.
+Read `DESIGN_REF`, `SPEC.md` and the pinned `design-contract/ANDROID_DESIGN.md` before changing `:app`. The pinned design governs the shared phone and TV UI. Compose stays native; Media3 owns the video surface.
 
 Use the native television UI mode to select the uniformly scaled 1920×1080 TV layout. Phones use native density, font scaling, touch, rotation and system text entry. Use the shared controls, cards, sheets and fonts in `DesignUi.kt`. Import design assets/tokens with `scripts/design-sync.mjs`; never edit generated tokens or vendor/core. The remaining `assets/roku` files are shared avatar assets and their provenance, not a separate UI implementation.
 
@@ -8,4 +8,4 @@ Keep shared source/artwork/progress/continuation policy in Rust. `AppController`
 
 Tokens, stream URLs, headers and parent PINs are secrets. Persist credentials only in private app storage, keep PINs transient, and never log them. The debug fixture origin and opt-in CA are for isolated emulators only; release routing and ordinary APK trust remain unchanged.
 
-Run the documented host/native tests, app assembly and lint on a suitably provisioned machine. Use isolated phone/TV emulators for native surface/input claims; do not commandeer an existing emulator or configure wireless debugging. Inspect private matching-content captures and record observed results in `TESTING.md`. Physical decoder, HDR/DRM, real-server managed delivery and store release require separate evidence.
+For implementation changes, run the documented host/native tests, app assembly and lint on a suitably provisioned machine. Documentation-only and comments-only changes need content/diff checks. Use isolated phone/TV emulators for native surface/input claims; do not commandeer an existing emulator or configure wireless debugging. Inspect private matching-content captures and record observed results in `TESTING.md`. Physical decoder, HDR/DRM, real-server managed delivery and store release require separate evidence.

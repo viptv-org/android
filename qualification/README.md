@@ -91,7 +91,13 @@ These scripts exercise the native Compose/Media3 app over local HTTPS using the 
 
 ## Dedicated emulators
 
-Use fresh AVDs for this work. The recorded API 36 AVDs are `viptv-design-phone` (Google APIs x86_64, Pixel 7) on port 5570 and `viptv-design-tv` (Android TV x86_64, 1080p) on port 5572. `drive.py` deliberately accepts only these serials and refuses to send input when VIPTV is not foreground. Never use or stop an unrelated emulator. Run one at a time when memory is constrained.
+Use dedicated fixture AVDs, separate from signed-in interactive devices. The
+API 36 fixture AVDs are `viptv-design-phone` (Google APIs x86_64, Pixel 7) on
+port 5570 and `viptv-design-tv` (Android TV x86_64, 1080p) on port 5572. Headless
+QA uses `viptv-native-qa` on port 5574 and `viptv-native-tv-qa` on port 5576.
+`drive.py` accepts only `emulator-5570`, `emulator-5572`, `emulator-5574` and
+`emulator-5576`, and refuses to send input when VIPTV is not foreground. Never
+use or stop an unrelated emulator. Run one at a time when memory is constrained.
 
 ```sh
 $ANDROID_HOME/emulator/emulator -avd viptv-design-phone -port 5570 -no-snapshot -no-audio -memory 1536 -cores 2
@@ -165,14 +171,14 @@ The media fixture is a 12-second local H.264/AAC HLS test pattern. A decoded fra
 
 When done, stop playback and terminate only the owned fixture processes and test emulator serials. Return any changed font scale to 1.0. No screenshots or secrets belong in Git.
 
-When an emulator reports unknown-host errors while the host resolves the same public API, start it with explicit reachable DNS servers (`-dns-server`, using the host network's configured resolvers). Preserve its AVD data and origin. The API 36 phone/TV acceptance restart retained their real-server sessions; do not clear credentials to repair DNS.
+When an emulator reports unknown-host errors while the host resolves the same public API, start it with explicit reachable DNS servers (`-dns-server`, using the host network's configured resolvers). Preserve its AVD data, origin and real-server session; do not clear credentials to repair DNS.
 
 
 ## Player and progressive-search audit
 
-Headless acceptance may use `viptv-native-qa` (5574) and `viptv-native-tv-qa`
-(5576), separately from the signed-in interactive phone/TV. `drive.py` accepts
-these serials too. Never change the interactive emulators to a fixture origin.
+Use the headless QA AVDs listed under [Dedicated emulators](#dedicated-emulators),
+separately from signed-in interactive phone/TV devices. Never change the
+interactive emulators to a fixture origin.
 An optional `ANDROID_FIXTURE_MEDIA` points to a locally generated MP4;
 `ANDROID_FIXTURE_DURATION` supplies its actual duration for the fixture envelope.
 The fixture serves byte ranges and native playback still decodes through Media3.
