@@ -3,18 +3,26 @@ package org.viptv.app
 import org.viptv.video.PlaybackStatus
 import kotlinx.coroutines.launch
 
-/** The Media3 adapter exposes session-relative HLS time; map it once to title time. */
-internal fun AppController.absolutePositionMillis(): Long {
-    val candidate = PlaybackTimelinePolicy.absolutePositionMillis(player.state.value.positionMillis, playbackTitleOffsetMillis)
-    managedPauseAnchorMillis?.let { return it }
-    return if (player.state.value.status == PlaybackStatus.Error && lastTrustedTitlePositionMillis > 0L) {
-        lastTrustedTitlePositionMillis
-    } else {
-        lastTrustedTitlePositionMillis = candidate
-        candidate
-    }
+/** Coordinate and duration precedence share one cached Rust projection per native observation. */
+private fun AppController.titleProjection(): org.viptv.core.wire.PlaybackTimelineProjection {
+    val playback = player.state.value
+    return CorePlaybackPolicy.timeline(
+        deliveryMode = _state.value.playbackDeliveryMode,
+        segmentPositionMillis = playback.positionMillis,
+        titleOffsetMillis = playbackTitleOffsetMillis,
+        nativeDurationMillis = playback.timeline?.durationMillis,
+        titleDurationMillis = playbackTitleDurationMillis,
+        pauseAnchorMillis = managedPauseAnchorMillis,
+        playerError = playback.status == PlaybackStatus.Error,
+        trustedPositionMillis = lastTrustedTitlePositionMillis,
+    )
 }
-internal fun AppController.titleDurationMillis(): Long? = if (_state.value.playbackDeliveryMode == "direct") player.state.value.timeline?.durationMillis ?: playbackTitleDurationMillis else playbackTitleDurationMillis ?: player.state.value.timeline?.durationMillis
+internal fun AppController.absolutePositionMillis(): Long {
+    val projection = titleProjection()
+    if (projection.updateTrustedPosition) lastTrustedTitlePositionMillis = projection.positionMillis
+    return projection.positionMillis
+}
+internal fun AppController.titleDurationMillis(): Long? = titleProjection().durationMillis
 
 /** Pause captures title time before Media3's rolling window can advance. */
 internal fun AppController.pausePlayback() {

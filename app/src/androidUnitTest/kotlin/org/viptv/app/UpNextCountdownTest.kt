@@ -6,11 +6,11 @@ class UpNextCountdownTest {
     @Test fun pauseBufferingAndMenusDoNotConsumeTheVisibleCountdown() {
         val clock = NextEpisodeCountdown()
         assertFalse(clock.advance(2_250, true))
-        assertEquals(8, UpNextPrompt(Media("next", "series"), clock.remainingMillis).seconds)
+        assertEquals(8, UpNextPrompt(Media("next", "series"), clock.snapshot).seconds)
         assertFalse(clock.advance(60_000, false))
         assertEquals(7_750, clock.remainingMillis)
         assertFalse(clock.advance(7_749, true))
-        assertEquals(1, UpNextPrompt(Media("next", "series"), clock.remainingMillis).seconds)
+        assertEquals(1, UpNextPrompt(Media("next", "series"), clock.snapshot).seconds)
         assertTrue(clock.advance(1, true))
         assertEquals(0, clock.remainingMillis)
     }

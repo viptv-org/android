@@ -11,9 +11,9 @@ enum class MediaCardAction { OpenDetails, ResumeExactSource, PlayQueuedNext }
 object MediaCardPolicy {
     /** Only Continue Watching has a Resume primary action; discovery always opens details. */
     fun primary(resumeSurface: Boolean, media: Media): MediaCardAction =
-        when {
-            resumeSurface && QueuePolicy.hasResolvedNext(media) -> MediaCardAction.PlayQueuedNext
-            resumeSurface && media.positionMillis > 0 && media.type != "live" -> MediaCardAction.ResumeExactSource
+        when (SharedPresentation.home(media, resumeSurface).cardPrimaryAction) {
+            "next" -> MediaCardAction.PlayQueuedNext
+            "resume" -> MediaCardAction.ResumeExactSource
             else -> MediaCardAction.OpenDetails
         }
 }
@@ -78,29 +78,22 @@ object ContinuationSourcePolicy {
 
 object SeekPolicy {
     /** A preview never commits a request and clamps to known VOD duration or DVR window. */
-    fun target(currentMillis: Long, deltaMillis: Long, durationMillis: Long?, rangeStart: Long? = null, rangeEnd: Long? = null): Long? {
-        val raw = currentMillis + deltaMillis
-        val target = when {
-            durationMillis != null -> raw.coerceIn(0, durationMillis)
-            rangeStart != null && rangeEnd != null -> raw.coerceIn(rangeStart, rangeEnd)
-            else -> return null
-        }
-        return target.takeIf { kotlin.math.abs(it - currentMillis) >= 500 }
-    }
+    fun target(currentMillis: Long, deltaMillis: Long, durationMillis: Long?, rangeStart: Long? = null, rangeEnd: Long? = null): Long? =
+        CorePlaybackPolicy.seekPreview(currentMillis, deltaMillis, durationMillis, rangeStart, rangeEnd)
 }
 
 object SeekCommitPolicy {
-    fun usesManagedReplacement(deliveryMode: String): Boolean = !deliveryMode.equals("direct", ignoreCase = true)
+    fun usesManagedReplacement(deliveryMode: String): Boolean = CorePlaybackPolicy.managedReplacement(deliveryMode)
 }
 
 /** Maps a server-managed segment clock onto the title clock used by UX and progress. */
 object PlaybackTimelinePolicy {
     fun titleOffsetMillis(deliveryMode: String, launchPositionMillis: Long): Long =
-        if (SeekCommitPolicy.usesManagedReplacement(deliveryMode)) launchPositionMillis.coerceAtLeast(0) else 0L
+        CorePlaybackPolicy.timeline(deliveryMode = deliveryMode, launchPositionMillis = launchPositionMillis).launchOffsetMillis
     fun absolutePositionMillis(segmentPositionMillis: Long, titleOffsetMillis: Long): Long =
-        segmentPositionMillis.coerceAtLeast(0) + titleOffsetMillis.coerceAtLeast(0)
+        CorePlaybackPolicy.timeline(segmentPositionMillis = segmentPositionMillis, titleOffsetMillis = titleOffsetMillis).positionMillis
     fun segmentPositionMillis(titlePositionMillis: Long, titleOffsetMillis: Long): Long =
-        (titlePositionMillis - titleOffsetMillis).coerceAtLeast(0)
+        CorePlaybackPolicy.timeline(titlePositionMillis = titlePositionMillis, titleOffsetMillis = titleOffsetMillis).segmentPositionMillis
 }
 
 /**
@@ -110,15 +103,16 @@ object PlaybackTimelinePolicy {
  */
 object ManagedPausePolicy {
     fun usesAnchor(deliveryMode: String, live: Boolean = false): Boolean =
-        !live && SeekCommitPolicy.usesManagedReplacement(deliveryMode)
+        CorePlaybackPolicy.pause(deliveryMode, live).usesAnchor
 
-    fun displayPosition(anchorMillis: Long?, nativeTitlePositionMillis: Long): Long = anchorMillis ?: nativeTitlePositionMillis
+    fun displayPosition(anchorMillis: Long?, nativeTitlePositionMillis: Long): Long =
+        CorePlaybackPolicy.timeline(segmentPositionMillis = nativeTitlePositionMillis, pauseAnchorMillis = anchorMillis).positionMillis
 
     fun requiresReplacementOnResume(deliveryMode: String, anchorMillis: Long?): Boolean =
-        usesAnchor(deliveryMode) && anchorMillis != null
+        CorePlaybackPolicy.pause(deliveryMode, anchor = anchorMillis).replaceOnResume
 
     fun anchorAfterOpen(deliveryMode: String, live: Boolean, launchPositionMillis: Long, playWhenReady: Boolean): Long? =
-        if (usesAnchor(deliveryMode, live) && !playWhenReady) launchPositionMillis else null
+        CorePlaybackPolicy.pause(deliveryMode, live, launch = launchPositionMillis, playWhenReady = playWhenReady).anchorAfterOpenMillis
 }
 
 object PlayerChromePolicy {
@@ -129,7 +123,7 @@ object PlayerChromePolicy {
 /** Behind-window recovery is a single managed reprepare, never a jump to live edge. */
 object ManagedRecoveryPolicy {
     fun shouldAttempt(serverManaged: Boolean, networkFailure: Boolean, alreadyAttempted: Boolean): Boolean =
-        serverManaged && networkFailure && !alreadyAttempted
+        CorePlaybackPolicy.recovery(serverManaged, networkFailure, alreadyAttempted)
 }
 
 /** A late preparation has no authority after Back, profile change, or a newer request. */
@@ -165,27 +159,13 @@ object PlaybackRecoveryPolicy {
 }
 
 /**
- * Orders discovered sources for display with the shared Rust `sourceMatch`
- * rank, comparing each source with the others offered (AND-043). Ties keep
+ * Orders discovered sources in one shared Rust `sourceRanks` projection,
+ * comparing the offered collection (AND-043). Ties keep
  * discovery order. This only orders what is shown; it never starts playback.
  */
 object SourceRankPolicy {
     fun order(sources: List<Source>, capabilities: PlaybackClientCapabilities?, audioLanguage: String): List<Source> {
         if (sources.size < 2) return sources
-        val caps = JSONObject().putOpt("maxHeight", capabilities?.maxHeight?.takeIf { it > 0 }).put("hevcSdr", capabilities?.hevcSdr == true)
-        val prefs = JSONObject().put("audioLanguage", audioLanguage)
-        val labels = sources.map(::label)
-        val candidates = org.json.JSONArray().also { array -> labels.forEach { array.put(it) } }
-        val ranks = labels.map { label ->
-            (CorePolicy.value("sourceMatch", JSONObject().put("source", label).put("capabilities", caps).put("preferences", prefs).put("candidates", candidates)) as? JSONObject)
-                ?.optDouble("rank", Double.MAX_VALUE) ?: Double.MAX_VALUE
-        }
-        return sources.indices.sortedWith(compareBy<Int> { ranks[it] }.thenBy { it }).map(sources::get)
+        return SharedPresentation.ranks(sources, capabilities, audioLanguage).orderedIndices.map { sources[it.toInt()] }
     }
-    /** Only safe display facts are ranked; source identifiers and URLs are never sent. */
-    private fun label(source: Source): JSONObject = JSONObject()
-        .put("name", source.name)
-        .putOpt("title", source.quality)
-        .putOpt("audio", source.audio)
-        .put("raw", JSONObject().put("description", source.description))
 }

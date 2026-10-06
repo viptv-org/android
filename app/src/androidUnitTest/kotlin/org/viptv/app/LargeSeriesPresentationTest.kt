@@ -46,6 +46,10 @@ class LargeSeriesPresentationTest {
         val startingEpisode = CoreModels.initialEpisode(series)
         assertEquals("series:1:734", startingEpisode?.id)
         assertEquals("series:1:734", CoreModels.itemRequest(startingEpisode!!).getString("id"))
+        val enriched = CoreModels.enrichDetail(series, series)
+        assertEquals(1_050, enriched.episodes.size)
+        assertEquals(734, enriched.episode)
+        assertTrue(series.normalizedJson(includeEpisodes = false).length < 10_000)
         assertEquals(1_050, series.episodes.size)
     }
 }

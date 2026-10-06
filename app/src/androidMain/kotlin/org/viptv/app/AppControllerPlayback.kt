@@ -120,12 +120,12 @@ private suspend fun AppController.prepareAndStartLocked(
                 sourceAddonId = source.addonId,
                 sourceFingerprint = source.fingerprint,
             )
-            val key = "${playbackMedia.type}.${playbackMedia.id}"
-            val previousKey = (_state.value.route as? Route.Player)?.media?.let { "${it.type}.${it.id}" }
-            if (previousKey != key) autoNextMediaKey = null
-            if (explicitResume && playbackMedia.durationMillis != null && playbackMedia.positionMillis >= playbackMedia.durationMillis - 10_000) {
-                explicitResumeAwaitingCompletionKey = key
-            }
+            val lifecycle = CoreLifecycle.upNextPlayback(
+                playbackMedia, (_state.value.route as? Route.Player)?.media,
+                autoNextMediaKey, explicitResumeAwaitingCompletionKey, explicitResume
+            )
+            autoNextMediaKey = lifecycle.attemptedKey
+            explicitResumeAwaitingCompletionKey = lifecycle.resumeAwaitingKey
             _state.value = _state.value.copy(
                 route = Route.Player(playbackMedia, source, returnDestination, directOrigin, sourceRoute),
                 playerChromeVisible = true,

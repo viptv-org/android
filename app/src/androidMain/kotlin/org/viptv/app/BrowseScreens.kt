@@ -17,6 +17,16 @@ import org.viptv.app.theme.ViptvColor as C
     val tv = LocalTv.current
     val ui = state.discoverUi
     val catalog = ui.catalogs.firstOrNull { it.key == ui.selectedCatalogKey }
+    val groupsByType = remember(ui.catalogs) {
+        ui.catalogs.map { it.key.type }.distinct().associateWith(DiscoverPolicy::grouping)
+    }
+    val types = remember(ui.catalogs) {
+        ui.catalogs.filter { it.key.type != "live" }.map { groupsByType.getValue(it.key.type) }.distinctBy { it.group }
+    }
+    val selectedType = remember(ui.selectedType) { DiscoverPolicy.grouping(ui.selectedType) }
+    val visibleCatalogs = remember(ui.catalogs, selectedType.group) {
+        ui.catalogs.filter { groupsByType.getValue(it.key.type).group == selectedType.group }
+    }
     var choice by remember { mutableStateOf<Pair<String, List<Pair<String, () -> Unit>>>?>(null) }
     var entry by remember { mutableStateOf<CatalogFilter?>(null) }
     val first = LocalContentFocus.current
@@ -25,12 +35,11 @@ import org.viptv.app.theme.ViptvColor as C
     LaunchedEffect(ui.loading) { if (tv && !ui.loading && !claimedFocus) { withFrameNanos {}; claimedFocus = runCatching { first.requestFocus() }.getOrDefault(false) } }
     Column(Modifier.fillMaxSize().padding(start = measure(192, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
         ScreenHeader("Discover", trailing = { PhoneTabActions(state, controller) })
-        val types = ui.catalogs.filter { it.key.type != "live" }.map { DiscoverPolicy.typeGroup(it.key.type) }.distinct()
-        FilterTabs(types.map(DiscoverPolicy::groupLabel), DiscoverPolicy.groupLabel(DiscoverPolicy.typeGroup(ui.selectedType)), { label ->
-            types.firstOrNull { DiscoverPolicy.groupLabel(it) == label }?.let(controller::setDiscoverType)
+        FilterTabs(types.map { it.groupLabel }, selectedType.groupLabel, { label ->
+            types.firstOrNull { it.groupLabel == label }?.group?.let(controller::setDiscoverType)
         }, Modifier.fillMaxWidth(), first)
         LazyRow(Modifier.padding(top = measure(24, 12), bottom = measure(28, 20)), horizontalArrangement = Arrangement.spacedBy(measure(16, 8)), contentPadding = PaddingValues(4.dp)) {
-            items(ui.catalogs.filter { DiscoverPolicy.typeGroup(it.key.type) == DiscoverPolicy.typeGroup(ui.selectedType) }, key = { it.key.stableId }) { item ->
+            items(visibleCatalogs, key = { it.key.stableId }) { item ->
                 AppChip(item.name, { controller.setDiscoverCatalog(item.key) }, item.key == ui.selectedCatalogKey)
             }
             items(catalog?.filters.orEmpty(), key = { it.name }) { filter ->

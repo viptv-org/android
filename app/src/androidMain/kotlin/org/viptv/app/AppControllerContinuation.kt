@@ -67,13 +67,13 @@ internal fun AppController.restoreContinuation(message: String?) {
 
 /** Metadata lookup leaves the current episode playing; only the visible countdown may advance it. */
 internal fun AppController.maybeAutoNext(media: Media, positionMillis: Long, durationMillis: Long?, playing: Boolean, ended: Boolean) {
-    if (_state.value.seekPreview != null || continuationRestore != null) return
     val key = "${media.type}.${media.id}"
-    if (explicitResumeAwaitingCompletionKey == key && !ended) return
-    if (explicitResumeAwaitingCompletionKey == key && ended) explicitResumeAwaitingCompletionKey = null
     val eligible = PlaybackPolicy.canAutoNext(media, positionMillis, durationMillis, playing || ended, seeking = false, nextAvailable = true, autoplay = _state.value.preferences.autoplay)
-    if (!eligible || autoNextMediaKey == key || nextEpisodeJob?.isActive == true) return
-    autoNextMediaKey = key
+    val decision = CoreLifecycle.upNextGate(key, autoNextMediaKey, explicitResumeAwaitingCompletionKey, ended, eligible,
+        busy = nextEpisodeJob?.isActive == true, blocked = _state.value.seekPreview != null || continuationRestore != null)
+    explicitResumeAwaitingCompletionKey = decision.resumeAwaitingKey
+    autoNextMediaKey = decision.attemptedKey
+    if (!decision.start) return
     val generation = playbackGeneration
     upNextJob = scope.launch {
         try {
@@ -95,7 +95,7 @@ internal fun AppController.maybeAutoNext(media: Media, positionMillis: Long, dur
                 val advancing = !playerMenuOpen && !playback.isBuffering && (playback.isPlaying || playback.status == PlaybackStatus.Ended)
                 val done = clock.advance(now - last, advancing)
                 last = now
-                _state.value = _state.value.copy(upNext = UpNextPrompt(next, clock.remainingMillis))
+                _state.value = _state.value.copy(upNext = UpNextPrompt(next, clock.snapshot))
                 if (done) { playUpNext(); return@launch }
             }
         } catch (cancelled: CancellationException) { throw cancelled }

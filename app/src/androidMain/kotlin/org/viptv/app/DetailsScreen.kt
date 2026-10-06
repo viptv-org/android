@@ -300,9 +300,9 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     val enriched = remember(media, artworkContext) { artworkContext?.let { media.withArtworkFrom(it) } ?: media }
     var failed by remember(media.id, enriched.thumbnail, enriched.poster, enriched.backdrop) { mutableStateOf(emptySet<String>()) }
     val card = remember(enriched, failed) { CoreModels.card(enriched, true, failed) }
-    val watching = media.positionMillis > 0 && (media.resumeActive == true || !media.watched)
-    val progress = if (media.resumeActive == true && media.durationMillis != null && media.durationMillis > 0)
-        (media.positionMillis.toFloat() / media.durationMillis).coerceIn(0f, 1f) else card.progress?.toFloat() ?: 0f
+    val episodeProgress = remember(media) { SharedPresentation.episode(media) }
+    val watching = episodeProgress.watching
+    val progress = episodeProgress.progress.toFloat()
     val image = card.image
     var focused by remember { mutableStateOf(false) }
     val closeRail = LocalCloseRail.current

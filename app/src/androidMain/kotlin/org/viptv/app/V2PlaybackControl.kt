@@ -12,7 +12,7 @@ import org.json.JSONObject
 import org.viptv.core.wire.CoreJson
 import org.viptv.core.wire.PlaybackDeliveryKind
 import org.viptv.core.wire.PlaybackLease
-import org.viptv.core.wire.PlaybackLeaseStatus
+import org.viptv.core.wire.PlaybackLeaseDecision
 import java.util.concurrent.ConcurrentHashMap
 import uniffi.viptv_core.normalize
 
@@ -25,7 +25,8 @@ internal class V2PlaybackControl(
     private val leases = ConcurrentHashMap<String, Entry>()
 
     fun remainingMillis(id: String): Long? = leases[id]?.let {
-        minOf(it.lease.expiresAt.toLong() - System.currentTimeMillis(), 60_000L - (System.nanoTime() - it.received) / 1_000_000).coerceAtLeast(0)
+        CorePlaybackPolicy.authority(it.lease.expiresAt.toLong(), System.currentTimeMillis(),
+            (System.nanoTime() - it.received) / 1_000_000, observationCapMillis = 60_000L).remainingMillis
     }
     fun renewAfterMillis(id: String): Long? = leases[id]?.lease?.renewAfterSeconds?.times(1000)
 
@@ -40,18 +41,19 @@ internal class V2PlaybackControl(
         catch (_: Exception) { throw invalid() }
         return id
     }
-    private fun decode(value: JSONObject, id: String): PlaybackLease {
+    private fun decode(value: JSONObject): PlaybackLease {
         val lease = try { CoreJson.decode<PlaybackLease>(normalize("playbackV2", value.toString(), origin)) }
         catch (_: Exception) { throw invalid() }
-        if (lease.id != id) throw invalid()
         return lease
     }
-    private fun ready(lease: PlaybackLease): Boolean {
-        if (lease.status in listOf(PlaybackLeaseStatus.FAILED, PlaybackLeaseStatus.EXPIRED, PlaybackLeaseStatus.RELEASED))
-            throw GatewayError(409, lease.error ?: "This playback session is no longer available. Start playback again.", lease.errorCode ?: "playback_expired")
-        if (lease.expiresAt <= System.currentTimeMillis()) throw GatewayError(410, "This playback session has expired. Start playback again.", "playback_expired")
-        return lease.status == PlaybackLeaseStatus.READY && lease.session != null
-    }
+    private fun ready(lease: PlaybackLease, id: String, heartbeat: Boolean = false, previous: PlaybackLease? = null): Boolean =
+        when (CorePlaybackPolicy.lease(lease, id, System.currentTimeMillis(), heartbeat, previous)) {
+            PlaybackLeaseDecision.INVALID -> throw invalid()
+            PlaybackLeaseDecision.TERMINAL -> throw GatewayError(409, lease.error ?: "This playback session is no longer available. Start playback again.", lease.errorCode ?: "playback_expired")
+            PlaybackLeaseDecision.EXPIRED -> throw GatewayError(410, "This playback session has expired. Start playback again.", "playback_expired")
+            PlaybackLeaseDecision.PENDING -> false
+            PlaybackLeaseDecision.READY -> true
+        }
     suspend fun start(input: JSONObject): PlaybackLaunch {
         val request = JSONObject(input.toString())
         try { normalize("request", JSONObject().put("operation", "playbackV2").put("playback", request).toString(), origin) }
@@ -63,22 +65,22 @@ internal class V2PlaybackControl(
                 val response = control("playbackV2", request = request)
                 val owned = identity(response).also { id = it }
                 currentCoroutineContext().ensureActive()
-                var lease = decode(response, owned)
-                while (!ready(lease)) {
+                var lease = decode(response)
+                while (!ready(lease, owned)) {
                     delay(500)
                     val status = control("playbackV2Status", owned)
                     currentCoroutineContext().ensureActive()
-                    lease = decode(status, owned)
+                    lease = decode(status)
                 }
                 val session = lease.session!!
-                if (session.deliveryKind == PlaybackDeliveryKind.DIRECT &&
-                    (!request.getJSONObject("client").getBoolean("canPlayDirect") || request.optBoolean("forceGateway") || request.optString("conversion", "auto") != "auto")) throw invalid()
+                if (!CorePlaybackPolicy.deliveryCompatible(session.deliveryKind == PlaybackDeliveryKind.DIRECT,
+                    request.getJSONObject("client").getBoolean("canPlayDirect"), request.optBoolean("forceGateway"),
+                    request.optString("conversion", "auto") == "auto")) throw invalid()
                 leases[lease.id] = Entry(lease)
                 CoreModels.playbackNormalized(session)
             }
         } catch (error: Exception) {
-            val refused = error is GatewayError && error.status in 400..499 && error.status != 408
-            if (id != null || !refused) withContext(NonCancellable) {
+            if (CorePlaybackPolicy.failure(error, hasLeaseId = id != null).reconcileAndRelease) withContext(NonCancellable) {
                 withTimeoutOrNull(5_000) {
                     try {
                         val owned = id ?: identity(control("playbackV2", request = request))
@@ -96,10 +98,9 @@ internal class V2PlaybackControl(
     }
     suspend fun renew(id: String) {
         val previous = leases[id]
-        val next = decode(control("playbackV2Heartbeat", id), id)
-        if (!ready(next)) throw invalid()
+        val next = decode(control("playbackV2Heartbeat", id))
+        if (!ready(next, id, heartbeat = true, previous = previous?.lease)) throw invalid()
         if (previous != null) {
-            if (previous.lease.session?.url != next.session?.url || previous.lease.session?.deliveryKind != next.session?.deliveryKind) throw invalid()
             leases.replace(id, previous, Entry(next))
         }
     }

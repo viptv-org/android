@@ -76,14 +76,8 @@ data class SourceProducerOutcome(
 }
 
 /** Join observed producer IDs to account-configured labels; never create a choice from settings alone. */
-internal fun namedSourceProducers(observed: List<SourceProducerOutcome>, addons: List<Addon>, sources: List<Source>): List<SourceProducerOutcome> {
-    val names = addons.associate { "addon:${it.id}" to it.name }
-    return observed.map { producer ->
-        val rowLabel = sources.firstOrNull { SourceDisplayPolicy.providerKey(it) == producer.providerKey }
-            ?.let(SourceDisplayPolicy::providerLabel)
-        producer.copy(label = names[producer.sourceId] ?: rowLabel ?: producer.label)
-    }
-}
+internal fun namedSourceProducers(observed: List<SourceProducerOutcome>, addons: List<Addon>, sources: List<Source>): List<SourceProducerOutcome> =
+    SharedPresentation.namedProducers(observed, addons, sources)
 
 object SourceDisplayPolicy {
     private fun display(source: Source): JSONObject = CorePolicy.value("sourceDisplay", JSONObject().put("name", source.name).put("description", source.description).put("provider", source.provider).putOpt("sourceAddonId", source.addonId)) as JSONObject

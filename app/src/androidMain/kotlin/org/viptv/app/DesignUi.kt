@@ -245,7 +245,7 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
             }
         }
         VText(card.title, if (tv) 24 else if (portrait) 12 else 15, Modifier.padding(top = measure(14, 10)), bold = true, lines = 1)
-        val context = if (tv) card.subtitle else PhonePresentationPolicy.cardContext(media)
+        val context = if (tv) card.subtitle else remember(media) { SharedPresentation.phone(media = media).cardContext }
         if (context.isNotBlank()) VText(context, if (tv) 20 else if (portrait) 12 else 13, Modifier.padding(top = 4.dp), C.textSecondary, lines = 1)
     }
   }

@@ -8,6 +8,17 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class LiveV2WireTest {
+    @Test fun `empty initial channel page retains its continuation cursor`() = runBlocking {
+        FixtureServer(1) { request ->
+            assertEquals("/api/v2/iptv/live/channels?limit=200", request.target)
+            FixtureResponse("""{"catalog_id":1,"generation":7,"items":[],"next_cursor":"next_page","previous_cursor":null}""")
+        }.use { server ->
+            val page = VipTvHttpGateway(server.origin).liveV2(LiveCatalogQuery(limit = 200))
+            assertTrue(page.items.isEmpty())
+            assertEquals("next_page", page.nextCursor)
+            server.assertHealthy()
+        }
+    }
     @Test fun `category cursors cross two hundred and refetch backward without inventing a catalog override`() = runBlocking {
         FixtureServer(3) { request ->
             val offset = when (request.target) {

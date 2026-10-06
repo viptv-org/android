@@ -118,15 +118,12 @@ internal class GuideCategoryPager(
             try {
                 val response = withTimeout(15_000) { fetch(active.query.copy(cursor = cursor, limit = 200)) }
                 if (ticket != generation || currentScope() != active) return@launch
-                if (response.catalogId != active.catalogId || response.generation != active.generation)
-                    throw GatewayError(409, "This playlist changed while you were browsing. Reload the guide.", "catalog_changed")
-                val ids = response.items.map { it.id }
-                if (response.items.size > 200 || ids.distinct().size != ids.size || response.items.any { it.id.isBlank() || it.name.isBlank() } ||
-                    cursor != null && (response.items.isEmpty() || response.items.any { item -> before.items.any { it.id == item.id } } ||
-                        (if (previous) response.previousCursor else response.nextCursor) == cursor))
-                    throw GatewayError(502, "The server repeated or interrupted a category page. Reload the guide.", "invalid_catalog_response")
-                if (response.items.isEmpty() && (response.nextCursor != null || response.previousCursor != null))
-                    throw GatewayError(502, "The server returned invalid category data. Reload the guide.", "invalid_catalog_response")
+                CorePlaybackPolicy.requireLivePage(CorePlaybackPolicy.livePage(
+                    response.catalogId, response.generation, response.items.map { it.id }, response.items.map { it.name },
+                    response.nextCursor, response.previousCursor, checkSnapshot = true,
+                    snapshotCatalogId = active.catalogId, snapshotGeneration = active.generation,
+                    knownIds = before.items.map { it.id }, cursor = cursor, previous = previous,
+                ))
                 page = GuideCategoryPageState(items = response.items.map { LiveCategory(it.id, it.name) }, cursor = cursor,
                     nextCursor = response.nextCursor, previousCursor = response.previousCursor, revision = ticket, loaded = true,
                     focusIndex = if (previous) (response.items.size - 1).coerceAtLeast(0) else 0, awaitingAnchor = response.items.isNotEmpty())

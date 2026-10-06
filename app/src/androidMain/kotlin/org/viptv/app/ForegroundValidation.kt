@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.viptv.core.wire.Identity
+import org.viptv.core.wire.ForegroundAuthorityDecision
 
 sealed interface ForegroundValidationResult {
     data class Valid(val identity: Identity) : ForegroundValidationResult
@@ -61,16 +62,9 @@ class ForegroundValidation(
 }
 
 /** Existing normalized authority facts decide whether cached presentation is safe. */
-internal fun foregroundIdentityResult(expected: Identity, current: Identity, profileId: String?): ForegroundValidationResult {
-    if (current.account.id != expected.account.id) return ForegroundValidationResult.Revoked
-    val prior = expected.profiles.firstOrNull { it.id == profileId }
-    val profile = current.profiles.firstOrNull { it.id == profileId }
-    if (current.account.role != expected.account.role || current.restricted != expected.restricted ||
-        current.profileSetupRequired != expected.profileSetupRequired ||
-        (profileId != null && (profile == null || current.profileId != profileId ||
-            (profile.kid == true) != (prior?.kid == true) ||
-            (profile.setupComplete == true) != (prior?.setupComplete == true)))) {
-        return ForegroundValidationResult.ProfileUnavailable(current)
+internal fun foregroundIdentityResult(expected: Identity, current: Identity, profileId: String?): ForegroundValidationResult =
+    when (CoreLifecycle.authority(expected, current, profileId)) {
+        ForegroundAuthorityDecision.REVOKED -> ForegroundValidationResult.Revoked
+        ForegroundAuthorityDecision.PROFILEUNAVAILABLE -> ForegroundValidationResult.ProfileUnavailable(current)
+        ForegroundAuthorityDecision.VALID -> ForegroundValidationResult.Valid(current)
     }
-    return ForegroundValidationResult.Valid(current)
-}

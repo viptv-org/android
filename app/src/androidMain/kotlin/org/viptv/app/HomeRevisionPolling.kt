@@ -1,6 +1,7 @@
 package org.viptv.app
 
 import kotlinx.coroutines.Job
+import org.viptv.core.wire.HomeRevisionDecision
 
 internal enum class HomeRevisionCheck { Unchanged, Refreshed, RetryLater, Unsupported, ScopeLost }
 
@@ -13,12 +14,22 @@ internal class HomeRevisionPolling(
     private val refresh: suspend () -> Boolean,
 ) {
     suspend fun check(): HomeRevisionCheck {
-        if (!valid()) return HomeRevisionCheck.ScopeLost
-        val current = revision() ?: return HomeRevisionCheck.Unsupported
+        if (!valid()) return CoreLifecycle.homeRevision(false, null, renderedRevision()).checkResult()
+        val current = revision()
+        if (current == null) return CoreLifecycle.homeRevision(true, null, renderedRevision()).checkResult()
         activeLoad()?.join()
-        if (!valid()) return HomeRevisionCheck.ScopeLost
-        if (current == renderedRevision()) return HomeRevisionCheck.Unchanged
-        if (!refresh()) return HomeRevisionCheck.RetryLater
-        return if (valid()) HomeRevisionCheck.Refreshed else HomeRevisionCheck.ScopeLost
+        val decision = CoreLifecycle.homeRevision(valid(), current, renderedRevision())
+        if (decision != HomeRevisionDecision.REFRESH) return decision.checkResult()
+        val refreshed = refresh()
+        return CoreLifecycle.homeRevision(valid(), current, renderedRevision(), refreshed).checkResult()
     }
+}
+
+private fun HomeRevisionDecision.checkResult(): HomeRevisionCheck = when (this) {
+    HomeRevisionDecision.UNCHANGED -> HomeRevisionCheck.Unchanged
+    HomeRevisionDecision.REFRESHED -> HomeRevisionCheck.Refreshed
+    HomeRevisionDecision.RETRYLATER -> HomeRevisionCheck.RetryLater
+    HomeRevisionDecision.UNSUPPORTED -> HomeRevisionCheck.Unsupported
+    HomeRevisionDecision.SCOPELOST -> HomeRevisionCheck.ScopeLost
+    HomeRevisionDecision.REFRESH -> error("Refresh effect required")
 }

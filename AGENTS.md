@@ -17,6 +17,34 @@ Validate with JDK 17 and Android SDK Platform 36. Run Android unit tests for imp
 
 Shared behavior is owned by ../core (viptv-org/core), pinned in CORE_REF. Edit Rust there, regenerate Kotlin/WASM, commit, then run scripts/core-sync.mjs sync ../core. Never edit vendor/core. Keep the Android and TV-web pins together for a shared rule change. Run the local Gradle flow before pushing implementation changes: `scripts/prepare-core.sh host`, `./gradlew --no-daemon :testDebugUnitTest :app:testDebugUnitTest`, then `scripts/prepare-core.sh android && ./gradlew --no-daemon :app:assembleDebug`. The machine has ample memory; emulators are allowed but start them only when a device-level claim needs proof. Generated Kotlin fields come from Rust; Compose view adapters may translate units/layout types but must not invent provider aliases or repeat source/artwork/resume policy.
 
+## Shared decision logic
+
+Use the boundary **platform facts → Rust decision/projection → platform effects**.
+Before adding Kotlin policy, inspect the canonical core API and extend it when
+needed. A pure rule is not Android-specific merely because its first caller is
+an Android screen.
+
+- Rust owns episode/history joins, metadata fallback precedence, watched versus
+  active-rewatch facts, card/hero/queue intents, safe source ranking and producer
+  outcomes, presentation text, and scoped continuation/preview decisions.
+- Rust owns authorization comparison and request/response transition invariants.
+  Inject measured capabilities, elapsed time, scope/generation and configured
+  budgets; do not turn an Android timeout or cache size into a universal rule.
+- Backend facts remain authoritative for release/completion, actual successor,
+  delivery admission and lease expiry. Never infer missing facts or select an
+  automatic substitute source to repair a failed action.
+- Kotlin owns Compose geometry, focus/IME/remote gestures, image loading, Android
+  lifecycle and clocks, HTTP/storage execution, cancellation-safe cleanup and
+  Media3 adaptation. Keep native session fencing even when core also rejects
+  stale application results.
+- Adapt generated DTOs without dropping optional flags, identity or timestamps.
+  Use batch projections for collections; do not call the JSON/FFI bridge once
+  per candidate with the same whole collection or on animation hot paths.
+- Move policy regression vectors to canonical Rust and check actual native/WASM
+  parity. Keep Android integration tests for effect order, cancellation, route
+  return and focus. Regenerate at the source and adopt one immutable core pin
+  in Android and TV-web; never patch generated or vendored code by hand.
+
 ## Comments and documentation
 
 Describe current behavior, contracts and procedures, and explain non-obvious

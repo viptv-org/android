@@ -9,6 +9,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import org.viptv.core.wire.PreviewAction
+import org.viptv.core.wire.PreviewDecision
+import org.viptv.core.wire.PreviewRoute
 
 internal data class SourcePreviewSnapshot(
     val key: String,
@@ -32,7 +35,7 @@ internal class TitleSourcePreview(
     fun refresh() { active?.state?.value?.let(publish) }
 
     fun start(key: String, media: Media) {
-        if (active?.state?.value?.key == key) return
+        if (CoreLifecycle.preview(PreviewAction.START, key, active?.state?.value) == PreviewDecision.RETAIN) return
         begin(key, media, settleMillis)
     }
 
@@ -49,6 +52,7 @@ internal class TitleSourcePreview(
         active = entry
         fun update(next: SourcePreviewSnapshot) {
             if (active !== entry) return
+            if (CoreLifecycle.preview(PreviewAction.UPDATE, key, next, ownerMatches = active === entry) != PreviewDecision.ACCEPT) return
             entry.state.value = next
             publish(next)
         }
@@ -76,34 +80,36 @@ internal class TitleSourcePreview(
     }
 
     suspend fun adopt(key: String, media: Media, onProducers: (List<SourceProducerOutcome>) -> Unit, onSources: (List<Source>) -> Unit): List<Source> {
-        val retained = active?.takeIf { it.state.value.key == key &&
-            (it.job?.isActive == true || it.state.value.sources.isNotEmpty()) }
+        val retained = active?.takeIf {
+            CoreLifecycle.preview(PreviewAction.ADOPT, key, it.state.value, running = it.job?.isActive == true) == PreviewDecision.RETAIN
+        }
         val entry = retained ?: begin(key, media, 0)
         coroutineScope {
             val updates = launch { entry.state.collect { onProducers(it.producers); onSources(it.sources) } }
             try { entry.job?.join() } finally { updates.cancel() }
         }
         val result = entry.state.value
-        if (!result.done) throw CancellationException("Title discovery cancelled")
+        val decision = CoreLifecycle.preview(PreviewAction.RESULT, key, result)
+        if (decision == PreviewDecision.CANCELLED) throw CancellationException("Title discovery cancelled")
         onProducers(result.producers)
         onSources(result.sources)
-        result.error?.let { if (result.sources.isEmpty()) throw it }
+        if (decision == PreviewDecision.FAILED) throw requireNotNull(result.error)
         return result.sources
     }
 }
 
 internal object SourcePreviewPolicy {
-    fun key(profileId: String?, media: Media): String? =
-        if (profileId == null || media.type == "live" || (media.type == "series" && media.episode == null)) null
-        else "$profileId\u0000${media.type}\u0000${media.id}"
+    fun key(profileId: String?, media: Media): String? = CoreLifecycle.previewScope(profileId, media).key
 
-    fun keep(key: String, profileId: String?, route: Route): Boolean =
-        profileId != null && key.startsWith("$profileId\u0000") && when (route) {
-            is Route.Details -> true // The rendered exact target effect replaces a changed target.
-            is Route.Sources -> key(profileId, route.media) == key
-            is Route.Player -> key(profileId, route.media) == key
-            else -> false
+    fun keep(key: String, profileId: String?, route: Route, releasing: Boolean = false): Boolean {
+        val (target, owner) = when (route) {
+            is Route.Details -> route.media to PreviewRoute.DETAILS
+            is Route.Sources -> route.media to PreviewRoute.SOURCES
+            is Route.Player -> route.media to PreviewRoute.PLAYER
+            else -> null to PreviewRoute.OTHER
         }
+        return CoreLifecycle.previewScope(profileId, target, key, owner, releasing).keep
+    }
 }
 
 internal fun AppController.previewSources(media: Media) {
@@ -121,7 +127,7 @@ internal fun AppController.releaseSourcePreview(media: Media) {
     val key = SourcePreviewPolicy.key(_state.value.selectedProfile?.id, media) ?: return
     if (sourcePreview.key != key) return
     val route = _state.value.route
-    if ((route !is Route.Sources && route !is Route.Player) || !SourcePreviewPolicy.keep(key, _state.value.selectedProfile?.id, route)) sourcePreview.cancel()
+    if (!SourcePreviewPolicy.keep(key, _state.value.selectedProfile?.id, route, releasing = true)) sourcePreview.cancel()
 }
 
 internal suspend fun AppController.discoverSourcesFor(media: Media, onProducers: (List<SourceProducerOutcome>) -> Unit, onSources: (List<Source>) -> Unit): List<Source> {

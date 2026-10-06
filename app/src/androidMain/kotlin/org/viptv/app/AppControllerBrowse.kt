@@ -17,18 +17,8 @@ internal fun AppController.activateCard(media: Media, queue: Boolean = false, or
     }
 }
 
-/** Core supplies watched facts; keep one exact episode join for open and playback return. */
-internal fun mergeSeriesProgress(details: Media, progress: List<Media>): Media = details.copy(
-    episodes = details.episodes.map { episode ->
-        val record = progress.firstOrNull { it.id == episode.id }
-            ?: progress.firstOrNull { it.seriesId == details.id && it.season == episode.season && it.episode == episode.episode }
-        if (record == null) episode else episode.copy(
-            positionMillis = record.positionMillis, durationMillis = record.durationMillis ?: episode.durationMillis,
-            watched = record.watched, updatedAtMillis = record.updatedAtMillis,
-            sourceAddonId = record.sourceAddonId, sourceFingerprint = record.sourceFingerprint,
-        )
-    },
-)
+/** Opening, correction and playback return share the canonical episode/history join. */
+internal fun mergeSeriesProgress(details: Media, progress: List<Media>): Media = CoreModels.mergeEpisodeProgress(details, progress)
 
 /** One final save, then one authoritative read; callers guard the active route before applying. */
 internal suspend fun refreshEpisodeReturn(
@@ -80,26 +70,7 @@ internal fun AppController.open(media: Media, returnRoute: Route? = null, showWh
         }
     }.onSuccess { metadata ->
         if (generation != detailGeneration || _state.value.selectedProfile?.id != profile) return@onSuccess
-        // Catalog/history carries artwork and progress that sparse metadata
-        // responses may omit. Metadata may enrich it, never erase it.
-        val detail = metadata.copy(
-            poster = metadata.poster ?: media.poster,
-            season = media.season ?: metadata.season,
-            episode = media.episode ?: metadata.episode,
-            seriesId = media.seriesId ?: metadata.seriesId,
-            backdrop = metadata.backdrop ?: media.backdrop,
-            thumbnail = metadata.thumbnail ?: media.thumbnail,
-            year = metadata.year ?: media.year,
-            imdbRating = metadata.imdbRating ?: media.imdbRating,
-            runtime = metadata.runtime ?: media.runtime,
-            genres = metadata.genres.ifEmpty { media.genres },
-            credits = metadata.credits ?: media.credits,
-            description = metadata.description ?: media.description,
-            positionMillis = metadata.positionMillis.takeIf { it > 0 } ?: media.positionMillis,
-            durationMillis = metadata.durationMillis ?: media.durationMillis,
-            sourceAddonId = metadata.sourceAddonId ?: media.sourceAddonId,
-            sourceFingerprint = metadata.sourceFingerprint ?: media.sourceFingerprint,
-        )
+        val detail = CoreModels.enrichDetail(media, metadata)
         detailReturnDestination = origin
         detailReturnRoute = backRoute
         _state.value = _state.value.copy(route = Route.Details(detail, generation), loading = false,
@@ -151,8 +122,8 @@ internal fun AppController.chooseSources(media: Media, resume: Boolean = false, 
                 loading = _state.value.preparingSourceId != null)
             if (_state.value.route !is Route.Sources || playbackGeneration != beforeStart) return@launch
             val savedIdentity = ResumeIdentity.sourceIdentity(media.sourceAddonId, media.sourceFingerprint)
-            val exact = if (resume) discovered.firstOrNull { ResumeIdentity.sourceIdentity(it) == savedIdentity } else null
-            if (exact != null) start(media, exact, explicitResume = true)
+            val intent = if (resume) PlaybackPolicy.forResume(savedIdentity, discovered, media.positionMillis) else PlaybackIntent.ChooseSource
+            if (intent is PlaybackIntent.Open) start(media, intent.source, explicitResume = true)
             else if (discovered.isEmpty() || resume) update(message = when {
                 discovered.isEmpty() -> "No sources found. Choose another title or try again."
                 savedIdentity == null -> "Choose a source to resume. Your prior source cannot be verified."

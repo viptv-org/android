@@ -1,3 +1,41 @@
+# Shared Android policy migration — 2026-10-06
+
+Android and TV-web adopt core `246a26f4c3788397314ae3e9ffe4d5ffa5e1e74d` through
+the owning sync scripts. Rust owns episode/history and detail enrichment,
+hero/queue actions, watching/progress and phone presentation, batch source ranks,
+producer outcomes, Discover groups/defaults, authorization comparison, scoped
+preview/continuation/countdown decisions, and playback/lease/live-page reducers.
+Android retains clocks, configured budgets, Media3, transport, cancellation-safe
+cleanup, session fences and route/focus effects; backend authority and manual
+source selection remain intact. Root/app AGENTS.md document this boundary.
+
+Episode flag/timestamp and detail-cursor regressions failed before correction.
+Review also reproduced stale history identity/timestamps and an empty initial
+channel page incorrectly receiving category validation; focused regressions and
+the complete app suite pass after correction. Discover projections use bounded
+memoization and composition remembers per-type facts rather than repeating JNI
+calls while rendering.
+
+Verification on this Windows PC with JDK 17 and SDK Platform 36:
+- Rust workspace all-feature tests: 107 passed; strict all-feature/all-target
+  Clippy and workspace formatting passed. Kotlin/TypeScript, UniFFI and real WASM
+  artifacts regenerated at the canonical source.
+- Actual WASM suite passed, including 37 public-normalizer vectors identical to
+  native Rust. TV-web's imported binary has the same SHA-256 as that artifact.
+- `scripts/prepare-core.sh host` and `:testDebugUnitTest :app:testDebugUnitTest`
+  passed: 228 app tests, zero failures/errors/skips; the unchanged 47-test video
+  library task retained its passing result.
+- `scripts/prepare-core.sh android` built arm64-v8a, armeabi-v7a and x86_64;
+  `:app:assembleDebug :app:lintDebug` passed. Lint reports 77 warnings with the
+  existing three-error baseline unchanged.
+- Consumer core integrity checks passed; TV-web passed 285 tests, a final 20-test
+  API rerun, all seven typecheck groups and production build.
+
+Logs are under `.scratch/core-policy-migration/`; the debug APK is
+`app/build/outputs/apk/debug/app-debug.apk`. No emulator, surface/remote, codec,
+HDR, PiP, physical-device, real-server playback or deployment qualification was
+performed. Scoped commits are local; nothing was pushed or deployed.
+
 # Shared playback error normalization — 2026-10-06
 
 Android and TV-web imported core `d104fd91e96ce2bdc468c7aa702222b96f90fe7b` through

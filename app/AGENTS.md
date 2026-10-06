@@ -6,6 +6,18 @@ Use the native television UI mode to select the uniformly scaled 1920×1080 TV l
 
 Keep shared source/artwork/progress/continuation policy in Rust. `AppController` coordinates effects and platform route/focus lifetime; `VipTvHttpGateway` is the backend adapter. Do not automatically choose a substitute source. Exact-source Resume, 700 ms hold with suppressed release, scoped cancellation and originating-route restoration remain required. Live channels use the direct channel path and do not expose pause, seek or Next controls.
 
+Apply the root Shared decision logic boundary to every controller/helper. Do not
+reimplement episode merges, metadata fallback lists, hero/queue action selection,
+watching/progress eligibility, source ranking/producer labels, preview reuse,
+countdown decisions or authority comparison in Kotlin. Feed generated core DTOs
+and observed facts into the shared projection, then execute its intent natively.
+Keep `watched`, `resumeActive`, `completionOnly`, `watchDateKnown`, exact source
+identity and updated/released timestamps intact through view-model copies. A
+watched episode can have an active rewatch; completion-only imports are not resume
+activity. Delivery kind, not a gateway's processing mode, distinguishes native
+direct playback from managed title-clock playback. Route/focus restoration and
+cancellation ownership remain in the native shell.
+
 Tokens, stream URLs, headers and parent PINs are secrets. Persist credentials only in private app storage, keep PINs transient, and never log them. The debug fixture origin and opt-in CA are for isolated emulators only; release routing and ordinary APK trust remain unchanged.
 
 For implementation changes, run the documented host/native tests, app assembly and lint on a suitably provisioned machine. Documentation-only and comments-only changes need content/diff checks. Use isolated phone/TV emulators for native surface/input claims; do not commandeer an existing emulator or configure wireless debugging. Inspect private matching-content captures and record observed results in `TESTING.md`. Physical decoder, HDR/DRM, real-server managed delivery and store release require separate evidence.

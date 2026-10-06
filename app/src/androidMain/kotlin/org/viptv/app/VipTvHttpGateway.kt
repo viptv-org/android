@@ -228,22 +228,10 @@ class VipTvHttpGateway(
         )
         val id = json(request.method, request.path.removePrefix("/api"), request.body?.let { JSONObject(org.viptv.core.wire.CoreJson.encode(it)) }).getString("id")
         var state = jsonStepState()
-        val producers = linkedMapOf<String, SourceProducerOutcome>()
         while (true) {
             val poll = json("GET", pollPath(id, state))
-            val events = JSONObject(uniffi.viptv_core.normalize("streamPoll", poll.toString(), origin)).optJSONArray("events")
-            if (events != null) for (index in 0 until events.length()) {
-                val event = events.optJSONObject(index) ?: continue
-                val producer = event.optString("source")
-                if (!producer.matches(Regex("(?:addon|iptv):[0-9]+"))) continue
-                val prior = producers[producer]
-                val code = event.optString("errorCode").takeUnless { it.isBlank() || it == "null" }
-                val message = event.optString("error").takeUnless { it.isBlank() || it == "null" }
-                producers[producer] = SourceProducerOutcome(producer, errorCode = code ?: prior?.errorCode,
-                    errorMessage = message ?: prior?.errorMessage)
-            }
-            onProducerUpdate(producers.values.toList())
             val output = step(state, poll)
+            onProducerUpdate(SharedPresentation.producers(output))
             val accumulated = output.sources()
             onUpdate(accumulated)
             if (output.optBoolean("done")) {
@@ -344,21 +332,19 @@ class VipTvHttpGateway(
     override suspend fun live(): List<LiveChannel> = liveV2(LiveCatalogQuery(limit = 24)).items.map { LiveChannel(it.id, it.name, it.poster) }
     override suspend fun liveV2(query: LiveCatalogQuery): org.viptv.core.wire.LiveCatalogPage {
         val page = liveV2Decode<org.viptv.core.wire.LiveCatalogPage>("liveCatalogV2", liveV2Control(query.coreInput("livePageV2")))
-        validateLivePage(query, page.catalogId, page.items.size)
-        if (page.items.map { it.id }.distinct().size != page.items.size)
-            throw GatewayError(502, "The server repeated live channel identifiers. Reload the guide.", "invalid_catalog_response")
+        CorePlaybackPolicy.requireLivePage(CorePlaybackPolicy.livePage(
+            page.catalogId, page.generation, page.items.map { it.id }, page.items.map { it.name },
+            page.nextCursor, page.previousCursor, requestedCatalogId = query.catalogId, limit = query.limit, categories = false,
+        ))
         return page
     }
     override suspend fun liveCategoriesV2(query: LiveCatalogQuery): org.viptv.core.wire.LiveCatalogCategories {
         val page = liveV2Decode<org.viptv.core.wire.LiveCatalogCategories>("liveCategoriesV2", liveV2Control(query.coreInput("liveCategoriesV2")))
-        validateLivePage(query, page.catalogId, page.items.size)
-        if (page.items.map { it.id }.distinct().size != page.items.size)
-            throw GatewayError(502, "The server repeated live category identifiers. Reload the guide.", "invalid_catalog_response")
+        CorePlaybackPolicy.requireLivePage(CorePlaybackPolicy.livePage(
+            page.catalogId, page.generation, page.items.map { it.id }, page.items.map { it.name },
+            page.nextCursor, page.previousCursor, requestedCatalogId = query.catalogId, limit = query.limit, categories = true,
+        ))
         return page
-    }
-    private fun validateLivePage(query: LiveCatalogQuery, catalogId: String?, size: Int) {
-        if (size > query.limit || query.catalogId != null && query.catalogId != catalogId)
-            throw GatewayError(502, "The server returned the wrong live playlist page. Reload the guide.", "invalid_catalog_response")
     }
     override suspend fun liveSourceV2(channelId: String): Source = CoreModels.sourceNormalized(
         liveV2Decode("liveSourceV2",liveV2Control(JSONObject().put("operation","liveSourceV2").put("id",channelId))))
@@ -376,8 +362,6 @@ class VipTvHttpGateway(
         catch (_: Exception) { throw GatewayError(502,"The server returned invalid live playlist data. Update the app/server or reload the guide.","invalid_catalog_response") }
     }
     private inline fun <reified T> liveV2Decode(kind: String,value: JSONObject): T = try {
-        if (kind in setOf("liveCatalogV2", "liveCategoriesV2") && !value.has("previous_cursor"))
-            throw IllegalArgumentException("Missing reverse paging contract")
         org.viptv.core.wire.CoreJson.decode(uniffi.viptv_core.normalize(kind,value.toString(),origin))
     } catch (_: Exception) { throw GatewayError(502,"The server returned invalid live playlist data. Update the app/server or reload the guide.","invalid_catalog_response") }
     override suspend fun livePage(request: LiveBrowseRequest): LiveBrowsePage {

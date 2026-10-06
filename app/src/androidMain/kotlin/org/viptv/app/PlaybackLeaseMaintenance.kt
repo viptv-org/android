@@ -7,7 +7,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withTimeout
-import java.io.IOException
 
 /** Renewal does not extend authority until a validated response updates the lease. */
 internal suspend fun maintainPlaybackLease(
@@ -20,7 +19,7 @@ internal suspend fun maintainPlaybackLease(
     while (currentCoroutineContext().isActive) {
         val before = remaining() ?: return
         if (before <= 0) { failed(expiredPlaybackLease()); return }
-        delay(minOf(waitMillis, before))
+        delay(CorePlaybackPolicy.renewalDelay(before, waitMillis))
         val budget = remaining() ?: return
         if (budget <= 0) { failed(expiredPlaybackLease()); return }
         try {
@@ -31,7 +30,7 @@ internal suspend fun maintainPlaybackLease(
             failed(expiredPlaybackLease()); return
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Exception) {
-            if ((error is GatewayError && ((error.status in 1..499 && error.status != 408) || error.code == "invalid_playback_response")) || (error !is GatewayError && error !is IOException)) {
+            if (!CorePlaybackPolicy.failure(error).retryRenewal) {
                 failed(error); return
             }
             waitMillis = 2_000L

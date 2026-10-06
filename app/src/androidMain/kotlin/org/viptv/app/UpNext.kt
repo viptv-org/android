@@ -11,19 +11,28 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.unit.dp
 import org.viptv.app.theme.ViptvColor as C
+import org.viptv.core.wire.CountdownAction
+import org.viptv.core.wire.CountdownDecision
 
-internal const val NEXT_COUNTDOWN_MILLIS = 10_000L
+internal val INITIAL_NEXT_COUNTDOWN: CountdownDecision = CoreLifecycle.countdown(CountdownAction.BEGIN)
+internal val NEXT_COUNTDOWN_MILLIS: Long get() = INITIAL_NEXT_COUNTDOWN.remainingMillis
 
-data class UpNextPrompt(val media: Media, val remainingMillis: Long = NEXT_COUNTDOWN_MILLIS) {
-    val seconds: Long get() = ((remainingMillis + 999) / 1000).coerceAtLeast(0)
+data class UpNextPrompt(val media: Media, val countdown: CountdownDecision = INITIAL_NEXT_COUNTDOWN) {
+    val remainingMillis: Long get() = countdown.remainingMillis
+    val seconds: Long get() = countdown.seconds
 }
 
 /** Count elapsed foreground playback time; pause/buffering/menu time never leaks into the timer. */
 internal class NextEpisodeCountdown {
-    var remainingMillis = NEXT_COUNTDOWN_MILLIS; private set
-    fun advance(elapsedMillis: Long, progressing: Boolean): Boolean {
-        if (progressing) remainingMillis = (remainingMillis - elapsedMillis.coerceAtLeast(0)).coerceAtLeast(0)
-        return remainingMillis == 0L
+    private var state = INITIAL_NEXT_COUNTDOWN
+    val snapshot: CountdownDecision get() = state
+    val remainingMillis: Long get() = state.remainingMillis
+    fun advance(elapsedMillis: Long, progressing: Boolean, scopeMatches: Boolean = true): Boolean {
+        state = CoreLifecycle.countdown(CountdownAction.ADVANCE, state.remainingMillis, state.active, elapsedMillis, progressing, scopeMatches)
+        return state.done
+    }
+    fun cancel() {
+        state = CoreLifecycle.countdown(CountdownAction.CANCEL, state.remainingMillis, state.active)
     }
 }
 

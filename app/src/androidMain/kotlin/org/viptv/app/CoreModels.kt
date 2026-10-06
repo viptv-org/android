@@ -50,8 +50,17 @@ internal object CoreModels {
     }
     private fun track(item: MediaTrack) = PlaybackTrack(item.inputIndex.toInt(), item.codec, item.language, item.languageStatus, item.title, item.selected, item.supported, item.selectable)
     fun enrich(original: Media, metadata: Media): Media = CoreJson.decode<MediaItem>(normalize("enrichHome", JSONObject().put("original", JSONObject(original.normalizedJson())).put("metadata", JSONObject(metadata.normalizedJson())).toString(), "")).view()
-    fun card(media: Media, queue: Boolean = false, failedImages: Set<String> = emptySet()): CardPresentation = CoreJson.decode(normalize("cardPresentation", JSONObject().put("item", JSONObject(media.normalizedJson())).put("context", if (queue) "queue" else "catalog").put("failedImages", org.json.JSONArray(failedImages.toList())).toString(), ""))
-    fun presentation(media: Media): MediaPresentation = CoreJson.decode(normalize("presentation", media.normalizedJson(), ""))
+    // The occurrence contributes scalar facts; the lookup contributes the one full episode catalog.
+    fun enrichDetail(original: Media, metadata: Media): Media = CoreJson.decode<MediaItem>(normalize("enrichDetail", JSONObject().put("original", JSONObject(original.normalizedJson(includeEpisodes = false))).put("metadata", JSONObject(metadata.normalizedJson())).toString(), "")).view()
+    fun mergeEpisodeProgress(details: Media, progress: List<Media>): Media {
+        val input = JSONObject().put("seriesId", details.id)
+            .put("episodes", org.json.JSONArray().also { rows -> details.episodes.forEach { rows.put(JSONObject(it.normalizedJson())) } })
+            .put("history", org.json.JSONArray().also { rows -> progress.forEach { rows.put(JSONObject(it.normalizedJson())) } })
+        val episodes = CoreJson.decode<List<MediaItem>>(normalize("mergeEpisodeProgress", input.toString(), "")).map { it.view() }
+        return details.copy(episodes = episodes)
+    }
+    fun card(media: Media, queue: Boolean = false, failedImages: Set<String> = emptySet()): CardPresentation = CoreJson.decode(normalize("cardPresentation", JSONObject().put("item", JSONObject(media.normalizedJson(includeEpisodes = false))).put("context", if (queue) "queue" else "catalog").put("failedImages", org.json.JSONArray(failedImages.toList())).toString(), ""))
+    fun presentation(media: Media): MediaPresentation = CoreJson.decode(normalize("presentation", media.normalizedJson(includeEpisodes = false), ""))
     fun initialEpisode(media: Media): Media? {
         val input = JSONObject().put("episodes", org.json.JSONArray().also { array -> media.episodes.forEach { array.put(JSONObject(it.normalizedJson())) } })
             .put("original", JSONObject().putOpt("season", media.season).putOpt("episode", media.episode))
@@ -59,7 +68,7 @@ internal object CoreModels {
         val result = normalize("initialEpisode", input.toString(), "")
         return if (result == "null") null else CoreJson.decode<MediaItem>(result).view()
     }
-    fun itemRequest(media: Media): JSONObject = JSONObject(normalize("itemRequest", media.normalizedJson(), ""))
+    fun itemRequest(media: Media): JSONObject = JSONObject(normalize("itemRequest", media.normalizedJson(includeEpisodes = false), ""))
 }
 
 private fun MediaItem.view(): Media = Media(
@@ -74,14 +83,18 @@ private fun MediaItem.view(): Media = Media(
 )
 
 /** Copies carry current progress/artwork into the generated DTO without re-reading backend JSON. */
-internal fun Media.normalizedJson(): String {
+internal fun Media.normalizedJson(includeEpisodes: Boolean = true): String = CoreJson.encode(wireItem(includeEpisodes))
+
+private fun Media.wireItem(includeEpisodes: Boolean = true): MediaItem {
     val item = coreItem ?: CoreJson.decode<MediaItem>(normalize("media", JSONObject().put("id", id).put("type", type).put("name", name).toString(), ""))
-    return CoreJson.encode(item.copy(id = id, type = org.viptv.core.wire.MediaKind.valueOf(type.uppercase()), name = name, poster = poster, background = backdrop, thumbnail = thumbnail,
+    return item.copy(id = id, type = org.viptv.core.wire.MediaKind.valueOf(type.uppercase()), name = name, poster = poster, background = backdrop, thumbnail = thumbnail,
         position = positionMillis / 1000.0, duration = durationMillis?.let { it / 1000.0 }, season = season?.toDouble(), episode = episode?.toDouble(),
         seriesId = seriesId, sourceAddonId = sourceAddonId, sourceFingerprint = sourceFingerprint, queueStatus = queueStatus,
-        previousEpisode = previousEpisode?.let { CoreJson.decode<MediaItem>(it.normalizedJson()) }, episodeTitle = episodeTitle, watched = watched,
+        previousEpisode = previousEpisode?.wireItem(includeEpisodes), episodeTitle = episodeTitle, watched = watched,
         resumeActive = resumeActive, completionOnly = completionOnly, watchDateKnown = watchDateKnown,
-        description = description, genres = genres, credits = credits, runtime = runtime, imdbRating = imdbRating, posterShape = posterShape))
+        description = description, genres = genres, credits = credits, runtime = runtime, imdbRating = imdbRating, posterShape = posterShape,
+        year = year?.toDoubleOrNull(), updatedAtMillis = updatedAtMillis?.toDouble(), releasedAtMillis = releasedAtMillis?.toDouble(),
+        episodes = if (includeEpisodes) episodes.map { it.wireItem() } else emptyList())
 }
 
 internal object CorePolicy {

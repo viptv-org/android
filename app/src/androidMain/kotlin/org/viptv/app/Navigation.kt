@@ -3,14 +3,10 @@ package org.viptv.app
 /** Shared Home hold/Info inventory; ordinary shelf cards do not invent source menus. */
 object HomeHoldPolicy {
     /** Continue Watching is logical Home row zero and always opens Queue Manage. */
-    fun opensQueueManage(continueWatchingRow: Boolean, media: Media): Boolean = continueWatchingRow && QueuePolicy.canManage(media)
+    fun opensQueueManage(continueWatchingRow: Boolean, media: Media): Boolean = SharedPresentation.home(media, continueWatchingRow).opensQueueManage
     /** A series root opens its episode selector; only a resolved episode or movie opens Sources. */
     fun opensSourcesFromHero(continueWatchingRow: Boolean, media: Media): Boolean =
-        !continueWatchingRow && (
-            media.type == "movie" ||
-                media.type == "episode" ||
-                (media.type == "series" && media.season != null && media.episode != null)
-            )
+        SharedPresentation.home(media, continueWatchingRow).opensSourcesFromHero
 }
 
 /** Hero primary differs from an ordinary card only for manual playable media. */

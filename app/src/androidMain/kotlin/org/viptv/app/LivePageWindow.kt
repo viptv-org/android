@@ -13,11 +13,12 @@ internal class LivePageWindow {
     }
     fun add(page: LiveBrowsePage, previous: Boolean) {
         val first = pages.firstOrNull()
-        if (first != null && (page.catalogId != first.catalogId || page.generation != first.generation) || page.channels.isEmpty())
-            throw GatewayError(409, "This playlist changed while you were browsing. Reload the guide.", "catalog_changed")
-        val known = channels.map { it.id }.toSet()
-        if (page.channels.map { it.id }.distinct().size != page.channels.size || page.channels.any { it.id in known })
-            throw GatewayError(502, "The server repeated a live playlist page. Reload the guide.", "invalid_catalog_response")
+        CorePlaybackPolicy.requireLivePage(CorePlaybackPolicy.livePage(
+            page.catalogId, page.generation, page.channels.map { it.id }, page.channels.map { it.name },
+            page.nextCursor, page.previousCursor, categories = false, checkSnapshot = first != null,
+            snapshotCatalogId = first?.catalogId, snapshotGeneration = first?.generation,
+            knownIds = channels.map { it.id }, extendingWindow = true,
+        ))
         if (previous) {
             pages.addFirst(page); start = (start - page.channels.size).coerceAtLeast(0)
             if (pages.size > 3) pages.removeLast()

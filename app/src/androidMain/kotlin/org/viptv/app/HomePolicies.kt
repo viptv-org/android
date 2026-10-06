@@ -2,11 +2,10 @@ package org.viptv.app
 
 /** Queue holds are available only for non-live Continue Watching content. */
 object QueuePolicy {
-    fun canManage(media: Media): Boolean = media.type != "live"
-    fun manageTarget(media: Media): Media = media.previousEpisode ?: media
-    fun canResume(media: Media): Boolean = manageTarget(media).type != "live" && manageTarget(media).positionMillis > 0
-    /** This status is emitted only by the server continuation cache. */
-    fun hasResolvedNext(media: Media): Boolean = media.queueStatus == "next" && media.previousEpisode != null
+    fun canManage(media: Media): Boolean = SharedPresentation.home(media).canManage
+    fun manageTarget(media: Media): Media = if (SharedPresentation.home(media).managePrevious) requireNotNull(media.previousEpisode) else media
+    fun canResume(media: Media): Boolean = SharedPresentation.home(media).canResume
+    fun hasResolvedNext(media: Media): Boolean = SharedPresentation.home(media).hasResolvedNext
 }
 
 enum class HomeFocusSurface { Hero, Card }
@@ -87,23 +86,7 @@ object HomeShelfFocusPolicy {
 
 /** AND-042 phone presentation: content-type shelf headings and minimal card context. */
 object PhonePresentationPolicy {
-    fun shelfHeading(shelf: HomeShelf): String {
-        if (shelf.isQueueShelf) return "Continue watching"
-        val type = shelf.contentType?.takeIf { it.isNotBlank() } ?: return shelf.title
-        val group = DiscoverPolicy.typeGroup(type)
-        val label = if (group == "other") contentTypeLabel(type) else DiscoverPolicy.groupLabel(group)
-        return listOfNotNull(label, shelf.catalogName?.takeIf { it.isNotBlank() }).joinToString(" · ")
-    }
-
-    fun contentTypeLabel(type: String): String = when (type) {
-        "movie" -> "Movie"
-        "series" -> "Series"
-        "anime" -> "Anime"
-        "live" -> "Live TV"
-        else -> type.split('.', '_').filter { it.isNotBlank() }.joinToString(" ") { word -> word.replaceFirstChar(Char::titlecase) }
-    }
-
-    /** One line under phone art: S1 E1 for an episode, otherwise the year (or nothing). */
-    fun cardContext(media: Media): String =
-        if (media.season != null && media.episode != null) "S${media.season} E${media.episode}" else media.year.orEmpty()
+    fun shelfHeading(shelf: HomeShelf): String = SharedPresentation.phone(shelf = shelf).shelfHeading
+    fun contentTypeLabel(type: String): String = SharedPresentation.phone(contentType = type).contentTypeLabel
+    fun cardContext(media: Media): String = SharedPresentation.phone(media = media).cardContext
 }
