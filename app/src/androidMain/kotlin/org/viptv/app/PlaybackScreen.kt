@@ -183,7 +183,6 @@ private enum class TrackMenu { Audio, Subtitles }
                         enabled = playback.timeline?.canSeek == true,
                         onSeek = if (tv) null else { target -> controller.previewSeek(target - (controller.state.value.seekPreview?.targetMillis ?: controller.absolutePositionMillis())) },
                         onCommit = { controller.commitSeek() }, onCancel = { controller.cancelSeek() })
-                    if (tv && row == 0) VText(if (seekPreview != null) "Seeking to " + formatTime(displayPosition) else "Use left or right to seek", 20, color = C.textSecondary)
                 }
                 if (tv) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                     if (!live) {

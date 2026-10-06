@@ -1,3 +1,29 @@
+# Android TV seek-hint layout — 2026-10-06
+
+The TV player omits the focus-dependent "Use left or right to seek" and
+"Seeking to…" text row. Left/right seeking, skip controls, preview/commit and
+cancellation are unchanged; preview time remains in the existing timeline clock.
+
+Two regressions against the real PlaybackScreen failed before removal on the
+isolated API 36 TV AVD `viptv-source-qa`, serial `emulator-5584`. Moving focus
+from transport controls to the timeline moved the track upward by 27 pixels
+(y=814 to y=787); a preview also rendered the unwanted "Seeking to 0:30" row.
+Both tests pass after removal, asserting identical track/title bounds across
+focus changes, stable preview/cancel bounds, absence of both text variants and
+the preview clock. The private 1920×1080 capture was inspected: the timeline,
+endpoint clocks and transport controls remain visible without the extra row.
+Logs and capture are under `.scratch/player-seek-hint/`.
+
+With JDK 17 / SDK Platform 36, host-core preparation and both Gradle unit tasks
+passed: 228 app tests, zero failures/errors, plus the unchanged cached 47-test
+video-library result. All three Android core ABIs built; app/test APK assembly
+and lint passed (zero errors, 77 warnings, existing three-error baseline).
+
+This is native Compose geometry/input evidence with a supplied preview state,
+not media decoding, physical remote or real-server playback qualification.
+The signed-in interactive emulator was untouched. No push or deployment was
+performed as part of this qualification.
+
 # Shared Android policy migration — 2026-10-06
 
 Android and TV-web adopt core `246a26f4c3788397314ae3e9ffe4d5ffa5e1e74d` through
