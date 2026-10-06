@@ -1,3 +1,21 @@
+# Repository sweep and protocol foundation — 2026-10-06
+
+Android and TV-web adopt core `4ca402587df7dbc842d0db522052b1d397f5a03f`.
+This supplies inactive protocol parsing/request types, without enabling native
+torrent capability or playback admission. The Android snapshot passes core and
+design integrity checks.
+
+With JDK 17 and SDK Platform 36, host preparation and both Gradle unit tasks
+passed: 47 library tests and 229 app tests, with no failures, errors or skips.
+All three native Android ABIs built; debug APK assembly and lint passed. Lint
+retains 77 warnings and the existing three-error baseline.
+
+Host port discovery sent unrelated `HEAD /` probes to temporary HTTP fixtures,
+consuming their request budgets and causing API timeouts. The dedicated real
+HTTP regression failed before the fixture fix and passes afterward with the
+full suite. Fixtures return 404 for those probes while preserving API request
+counts and assertions. No emulator, physical device or deployment was exercised.
+
 # Android TV seek-hint layout — 2026-10-06
 
 The TV player omits the focus-dependent "Use left or right to seek" and
