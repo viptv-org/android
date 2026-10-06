@@ -1,3 +1,39 @@
+# Shared playback error normalization — 2026-10-06
+
+Android and TV-web imported core `d104fd91e96ce2bdc468c7aa702222b96f90fe7b` through
+their owning sync scripts. Shared Rust supplies canonical safe messages for known
+backend source/gateway failures through HTTP errors and terminal playback leases.
+Wire types, native decoder mapping, source selection and retry policy are unchanged.
+
+Two native regressions failed before the mapping fix; all three focused tests,
+73 Rust workspace tests under default/all features, strict Clippy and formatting
+passed. Actual WASM passed the same 26 canonical error vectors and its existing
+suite. Kotlin/TypeScript and native UniFFI declarations regenerate unchanged.
+Both consumer integrity checks passed. TV-web passed 43 targeted tests, all
+build/type checks and 26 imported-WASM error vectors.
+
+On this Windows PC, JDK 17 / SDK Platform 36 host-core preparation and the two
+Gradle unit tasks passed. The app executed 200 tests with zero failures/errors/
+skips; the unchanged 47-test video-library task retained its cached passing result.
+The three Android native ABIs built successfully. APK/lint verification in the
+active checkout failed during Kotlin compilation after concurrent app changes
+introduced lifecycle/playback DTO references absent from the pinned core, including
+`CountdownAction` and `PlaybackFailureDecision`. Those changes were left intact;
+the failure log is `.scratch/playback-errors/android-assemble-lint.log`.
+
+An isolated committed Android `05080c4` snapshot with core `d104fd9` passed
+`:app:assembleDebug :app:lintDebug`. It used the three native libraries built
+above; APK inspection confirmed arm64-v8a, armeabi-v7a and x86_64 core slices.
+Lint reported zero errors and 77 warnings under the existing three-error baseline;
+no baseline or suppression changes were made. The debug APK is retained at
+`.scratch/playback-errors/app-debug-d104fd9.apk` (SHA-256
+`62c57a7763700ed266762a2ad7f1db654974e5d26fc695a662cddc23dd61d1e8`).
+The build log is `.scratch/playback-errors/android-isolated-assemble-lint.log`.
+This snapshot excludes the concurrent migration and was not installed on a device.
+
+No emulator, media, surface, remote, codec, HDR or PiP checks were performed.
+No push or deployment was performed as part of this qualification.
+
 # Android TV Home rail focus restoration — 2026-10-03
 
 Reproduced the owner's Right-from-navigation failure with the real Home and
