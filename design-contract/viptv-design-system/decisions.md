@@ -159,3 +159,44 @@ success only scrolls and focuses the card. Invalid input remains editable in
 the dialog, and Back first hides the IME. [The behavior contract](../specs/behavior/episode-number-jump.md)
 defines the full state and acceptance scenarios. This does not change the
 shared Core hero Play/Resume rule or require Roku/TV-web adoption.
+
+## Desktop pointer and playback corrections (DESK-PLAYBACK-2026-10-03)
+
+Owner approved 2026-10-03: the native desktop client uses pointer interaction.
+Disable desktop keyboard shortcuts, Tab navigation, spatial navigation and
+programmatic button arrival focus globally; text fields remain editable by
+clicking and typing. Remove keyboard legends from desktop source pickers.
+Clicking the player backdrop reveals controls and never hides them; existing
+inactivity hiding and popup dismissal remain.
+
+Relative skip clicks accumulate from the latest requested target until the
+engine confirms it, in either direction. Ignore transient zero/old clock
+reports while a seek is pending. Duration becomes available independently of
+seeking, and the timeline draws actual reported buffered ranges. New source
+selection retires the outgoing presentation before preparing the replacement.
+If that explicit replacement fails, keep the player empty: do not restore the
+previous video's duration, tracks, picture or audio. Managed seek/track/next
+operations retain their separate recovery rules.
+
+Returning from playback to the same open source selector retains its provider
+and quality filters, including browser/titlebar Back. Opening a different title
+or episode starts with All. Double-clicking the desktop titlebar during playback
+uses the player's fullscreen action. Both it and the fullscreen button hide app
+chrome and resize the native picture and controls to the fullscreen viewport;
+exit restores the windowed layout. Outside playback, titlebar double-click keeps
+the normal maximize action.
+
+Render player controls as crisp vector icons with legible skip numbers. Native
+desktop source rows use a smooth 16px radius and a 3px accent border for the best
+match/selected source. Show configured provider artwork; missing artwork uses
+a named monogram rather than an unknown-quality dash. All providers includes
+both observed add-on and IPTV producers. Native track titles take precedence;
+unknown-language tracks receive numbered labels, with codec facts when known.
+
+Acceptance: rapid forward/backward presses and pointer scrubbing retain the
+latest target without flashing zero; buffer/duration work before a skip; new
+source preparation shows no outgoing video/audio; selecting All includes both
+producer kinds; source artwork/borders remain smooth; desktop Tab/arrows/media
+keys do not activate or navigate controls; text editing still works. Home uses
+frame-bounded scroll measurement, cached card geometry and offscreen rendering
+containment. Verify scrolling with many loaded shelves on the desktop host.
