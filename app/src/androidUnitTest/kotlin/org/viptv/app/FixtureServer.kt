@@ -20,7 +20,7 @@ internal class FixtureServer(
     val origin = "http://127.0.0.1:${socket.localPort}"
     private val worker = thread(name = "viptv-gateway-wire", isDaemon = true) {
         try {
-            repeat(expectedRequests) {
+            while (requests.size < expectedRequests) {
                 socket.accept().use(::handle)
             }
         } catch (error: Throwable) {
@@ -52,6 +52,13 @@ internal class FixtureServer(
             read += count
         }
         val request = FixtureRequest(parts[0], parts[1], body.concatToString(), headers)
+        // Host port discovery probes do not consume this fixture's API budget.
+        if (request.method == "HEAD" && request.target == "/") {
+            connection.getOutputStream().write(
+                "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray(StandardCharsets.US_ASCII),
+            )
+            return
+        }
         requests += request
         val response = respond(request)
         val bytes = response.body.toByteArray(StandardCharsets.UTF_8)
