@@ -53,6 +53,7 @@ import org.viptv.app.theme.ViptvColor as C
     val shown = sources.filter { provider == null || groups[it]?.first == provider }
     val first = remember(media.id) { FocusRequester() }
     var claimed by remember(media.id) { mutableStateOf(false) }
+    fun chooseProvider(value: String?) { claimed = true; provider = value }
     val providerLabels = groups.values.associate { it.first to it.second } +
         state.sourceProducers.associate { it.providerKey to it.label }
     val selectedProducer = state.sourceProducers.firstOrNull { it.providerKey == provider }
@@ -87,9 +88,9 @@ import org.viptv.app.theme.ViptvColor as C
         Row(Modifier.fillMaxWidth().padding(vertical = measure(28, 18))
             .horizontalScroll(rememberScrollState()).testTag("source-provider-filters"),
             horizontalArrangement = Arrangement.spacedBy(measure(12, 8))) {
-            AppChip("All providers", { provider = null }, provider == null, Modifier.semantics { selected = provider == null })
+            AppChip("All providers", { chooseProvider(null) }, provider == null, Modifier.semantics { selected = provider == null })
             providerLabels.forEach { (id, label) ->
-                key(id) { AppChip(label, { provider = id }, provider == id, Modifier.semantics { selected = provider == id }) }
+                key(id) { AppChip(label, { chooseProvider(id) }, provider == id, Modifier.semantics { selected = provider == id }) }
             }
         }
         SourceDiscoveryStatus(state.sourceLoading, sources.isNotEmpty())

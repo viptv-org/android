@@ -63,6 +63,30 @@ class SourceProviderFiltersTest {
         compose.onNodeWithText("Provider").assertDoesNotExist()
     }
 
+    @Test fun lateResultsDoNotStealFocusAfterProviderInteraction() = withPicker(true, initialSources = emptyList()) { controller ->
+        compose.runOnIdle {
+            controller._state.value = controller.state.value.copy(sourceProducers = listOf(
+                SourceProducerOutcome("empty", "Empty"),
+                SourceProducerOutcome("addon:beta", "Beta"),
+            ))
+        }
+        compose.onNodeWithText("Empty")
+            .performSemanticsAction(SemanticsActions.RequestFocus)
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+            .assertIsFocused().assertIsSelected()
+        compose.runOnIdle {
+            controller._state.value = controller.state.value.copy(sources = listOf(beta))
+        }
+        compose.onNodeWithText("Empty").assertIsFocused()
+        compose.onNodeWithText("All providers")
+            .performSemanticsAction(SemanticsActions.RequestFocus)
+            .assertIsFocused()
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.waitForIdle()
+        compose.onNodeWithText("All providers").assertIsFocused().assertIsSelected()
+        compose.onNodeWithText("Beta result").assertIsDisplayed()
+    }
+
     @Test fun progressiveDiscoveryKeepsProviderWithoutQualityFiltering() = withPicker(false) { controller ->
         compose.onNodeWithText("All qualities").assertDoesNotExist()
         compose.onNodeWithText("All").assertDoesNotExist()
@@ -134,7 +158,7 @@ class SourceProviderFiltersTest {
         assertEquals(cardHeight, compose.onNodeWithText("Source row 12").fetchSemanticsNode().boundsInRoot.height)
     }
 
-    private fun withPicker(tv: Boolean, check: (AppController) -> Unit) {
+    private fun withPicker(tv: Boolean, initialSources: List<Source> = listOf(alpha, beta), check: (AppController) -> Unit) {
         lateinit var controller: AppController
         compose.runOnUiThread {
             val context = object : ContextWrapper(ApplicationProvider.getApplicationContext<Context>()) {
@@ -142,7 +166,7 @@ class SourceProviderFiltersTest {
                     super.getSharedPreferences("source-provider-filter-test.$name", mode)
             }
             controller = AppController(context, "https://127.0.0.1:1")
-            controller._state.value = AppState(route = Route.Sources(media), sources = listOf(alpha, beta))
+            controller._state.value = AppState(route = Route.Sources(media), sources = initialSources)
         }
         try {
             compose.setContent {

@@ -1,3 +1,29 @@
+# Reconciled source picker verification — 2026-10-06
+
+Explicit provider interaction owns TV focus even when discovery starts empty.
+An independent review found that resetting to All providers after late results
+could select the reset while moving focus to the first source card. The focused
+regression reproduced Selected=true with Focused=false before correction and
+passes after provider activation claims the one-time initial-focus handoff.
+
+The final configured API 36 TV VM run passed nine focused provider, list-bottom,
+description and discovery tests. Real signed-in DEV navigation showed one
+horizontal provider row, no quality controls, provider-specific empty-state copy,
+All providers reset with retained focus, and source cards reaching the panel
+bottom. Private captures and logs are `.scratch/native-torrent/reconcile-*`.
+No source was activated from the picker. Navigation briefly opened the existing
+Resume playback while locating the source action and returned immediately; this
+is not media, codec or physical-device qualification.
+
+With JDK 17 and SDK Platform 36, host and three-ABI Android core preparation,
+47 library tests, 232 app tests, app/test APK assembly and lint passed with zero
+test failures/errors/skips and zero lint errors (77 warnings under the existing
+baseline). The 32-test native-artifact validator suite, core/design integrity and
+Git whitespace checks also passed. Normal APK SHA-256:
+`d3dd08bcacae109b9dc57801277d9576004703e8c7a27200d0c4ea5b5f4b4238`.
+The APK was installed with install -r without clearing data or changing origin.
+Native torrent capability remains disabled; no backend deployment occurred.
+
 # Source picker bottom inset — 2026-10-06
 
 The source picker omits decorative panel-bottom padding. Top/side padding,
