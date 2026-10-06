@@ -324,7 +324,7 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
         shape = RoundedCornerShape(measure(20, 16)))
 }
 
-@Composable internal fun AppOverlay(title: String, onDismiss: () -> Unit, full: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+@Composable internal fun AppOverlay(title: String, onDismiss: () -> Unit, full: Boolean = false, bottomPadding: Dp? = null, content: @Composable ColumnScope.() -> Unit) {
     val tv = LocalTv.current
     val density = LocalDensity.current
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
@@ -335,7 +335,8 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
                 .then(if (tv) Modifier.width(if (full) 1728.dp else 820.dp).fillMaxHeight() else Modifier.fillMaxWidth().heightIn(max = 760.dp))
                 .clip(if (tv) RoundedCornerShape(0.dp) else RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                 .background(C.surfaceN1).windowInsetsPadding(if (tv) WindowInsets(0) else WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-                .imePadding().padding(measure(64, 24)).pointerInput(Unit) { detectTapGestures {} }) {
+                .imePadding().padding(start = measure(64, 24), top = measure(64, 24), end = measure(64, 24), bottom = bottomPadding ?: measure(64, 24))
+                .pointerInput(Unit) { detectTapGestures {} }) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     VText(title, if (tv) 44 else 24, Modifier.weight(1f), display = true, lines = 2)
                     if (!tv) AppIconButton("close", "Close", onDismiss, Modifier.size(44.dp))

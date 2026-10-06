@@ -1,3 +1,58 @@
+# Source picker bottom inset — 2026-10-06
+
+The source picker omits decorative panel-bottom padding. Top/side padding,
+phone safe-area/IME insets and every other overlay's default padding remain.
+Provider badges retain one horizontal scrolling row without a quality filter.
+
+A real SourcePicker regression failed at the list-bottom assertion: y=1048
+rather than the panel's y=1080 at the fixture's 0.5 density, corresponding to
+64dp padding. It passes with the source-only override, including scrolling to
+and fully displaying the final card. A stable list tag keeps the test addressable
+when lazy scrolling disposes its first row. All eight focused device tests passed
+on the configured API 36 TV VM, including provider and discovery regressions;
+phone-mode Compose checks do not qualify separate phone hardware.
+
+JDK 17 / SDK Platform 36 unit tests, app/test APK assembly and lint passed:
+228 app tests, zero failures/errors, and the cached passing 47-test library
+result; lint zero errors, 77 warnings with the existing baseline retained.
+Normal APK SHA-256:
+`deee12c780ce4f00bac476e38f3216bde5b5e8272c0b0eeb32392962ae99e15f`.
+It was installed with install -r, without clearing data or changing the origin.
+Logs are `.scratch/native-torrent/source-padding-*`. No native torrent, media
+decoding or physical-device qualification, commit, push or backend deployment
+was performed for this UI change.
+
+# Visible source provider choices — 2026-10-06
+
+Choose a source exposes core-projected provider choices directly, including empty
+producers, with a single-provider selection and All providers reset. Badges stay
+on one horizontally scrolling row without wrapping or a dropdown. No quality-filter row
+or quality-filter state remains; source-card quality facts are unchanged. Filter
+activation retains TV focus on the choice instead of requesting the first result.
+
+The first three provider regressions failed against the dropdown baseline. Final
+instrumentation passed all seven tests: phone-mode provider switching/reset and
+horizontal touch scrolling, progressive arrivals across qualities and empty producer
+outcomes, TV D-pad overflow scrolling with fixed row height and badge Y positions,
+retained focus, plus existing description and discovery-status regressions.
+These ran on the configured API 36 TV VM;
+phone-mode Compose rendering is not separate phone-device qualification.
+
+JDK 17 / SDK Platform 36 host/native preparation, both unit-test tasks, app/test
+APK assembly and lint passed: 228 app tests with zero failures/errors/skips;
+unchanged video-library task retained its passing 47-test result. Lint reported
+zero errors and 77 warnings under the existing baseline. Normal debug APK audit
+found all three core ABIs and no fixture CA. SHA-256:
+`3900a5469479ff314044e3d1b0836f9b4c13ae5d91e613798c65d656cef3aed1`.
+
+The configured signed-in TV VM received install -r with no uninstall, data clear
+or origin change. Real DEV Home/details/source-picker navigation remained signed
+in; the final picker captures show one scrolling provider row and no quality
+controls. Private captures are in `qualification/artifacts/source-provider-tabs/`;
+logs are `.scratch/native-torrent/provider-scroll-*`. No media playback, native
+torrent, codec, HDR, PiP or physical-device qualification is claimed. No commit,
+push or backend deployment was performed for this change.
+
 # Android TV seek-hint layout — 2026-10-06
 
 The TV player omits the focus-dependent "Use left or right to seek" and

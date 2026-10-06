@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -48,12 +49,10 @@ import org.viptv.app.theme.ViptvColor as C
     val tv = LocalTv.current
     val state by controller.state.collectAsState()
     var provider by remember(media.id) { mutableStateOf<String?>(null) }
-    var quality by remember(media.id) { mutableStateOf<String?>(null) }
-    var picker by remember { mutableStateOf(false) }
     val groups = remember(sources) { sources.associateWith { SourceDisplayPolicy.providerKey(it) to SourceDisplayPolicy.providerLabel(it) } }
-    val shown = sources.filter { (provider == null || groups[it]?.first == provider) && (quality == null || it.quality == quality) }
-    val first = remember(media.id, provider, quality) { FocusRequester() }
-    var claimed by remember(media.id, provider, quality) { mutableStateOf(false) }
+    val shown = sources.filter { provider == null || groups[it]?.first == provider }
+    val first = remember(media.id) { FocusRequester() }
+    var claimed by remember(media.id) { mutableStateOf(false) }
     val providerLabels = groups.values.associate { it.first to it.second } +
         state.sourceProducers.associate { it.providerKey to it.label }
     val selectedProducer = state.sourceProducers.firstOrNull { it.providerKey == provider }
@@ -83,19 +82,22 @@ import org.viptv.app.theme.ViptvColor as C
             }
         } else Artwork(CoreModels.presentation(media).heroImage, null, Modifier.fillMaxWidth().height(320.dp))
     }
-    AppOverlay("Choose a source", controller::back) {
+    AppOverlay("Choose a source", controller::back, bottomPadding = 0.dp) {
         VText(media.name + " · " + sources.size + " found", if (tv) 22 else 13, color = C.textSecondary, lines = 1)
-        LazyRow(Modifier.fillMaxWidth().padding(vertical = measure(28, 18)), horizontalArrangement = Arrangement.spacedBy(measure(12, 8))) {
-            item { AppChip("All", { quality = null }, quality == null) }
-            items(sources.mapNotNull { it.quality }.distinct()) { value -> AppChip(value, { quality = value }, quality == value) }
-            item { AppChip(provider?.let { providerLabels[it] } ?: "All providers", { picker = true }, provider != null) }
+        Row(Modifier.fillMaxWidth().padding(vertical = measure(28, 18))
+            .horizontalScroll(rememberScrollState()).testTag("source-provider-filters"),
+            horizontalArrangement = Arrangement.spacedBy(measure(12, 8))) {
+            AppChip("All providers", { provider = null }, provider == null, Modifier.semantics { selected = provider == null })
+            providerLabels.forEach { (id, label) ->
+                key(id) { AppChip(label, { provider = id }, provider == id, Modifier.semantics { selected = provider == id }) }
+            }
         }
         SourceDiscoveryStatus(state.sourceLoading, sources.isNotEmpty())
         if (shown.isEmpty()) EmptyState(
             emptyMessage,
-            if (state.sourceLoading) "" else "Choose another provider or quality, or check your addons in Settings.", "list",
+            if (state.sourceLoading) "" else "Choose another provider, or check your addons in Settings.", "list",
             retry = if (state.sourceLoading) null else { { val route = state.route as? Route.Sources; controller.chooseSources(media, route?.resume == true, route?.origin ?: SourceReturn.Details, queueEpisodeReturn = route?.queueEpisodeReturn == true) } })
-        else LazyColumn(Modifier.fillMaxWidth().then(if (tv) Modifier.weight(1f) else Modifier.heightIn(max = 440.dp)), verticalArrangement = Arrangement.spacedBy(measure(14, 12)), contentPadding = PaddingValues(4.dp)) {
+        else LazyColumn(Modifier.fillMaxWidth().testTag("source-results").then(if (tv) Modifier.weight(1f) else Modifier.heightIn(max = 440.dp)), verticalArrangement = Arrangement.spacedBy(measure(14, 12)), contentPadding = PaddingValues(4.dp)) {
             itemsIndexed(shown, key = { _, source -> source.id }) { index, source ->
                 var focused by remember(source.id) { mutableStateOf(false) }
                 val hoverSource = remember(source.id) { MutableInteractionSource() }
@@ -118,7 +120,7 @@ import org.viptv.app.theme.ViptvColor as C
                             VText(SourceDisplayPolicy.title(source).replace('\n', ' '), if (tv) 26 else 15, color = foreground, bold = true, lines = 2)
                             SourceDescriptionWindow(if (opening) "Opening source…" else SourceDisplayPolicy.body(source),
                                 if (tv) 20 else 12, if (tv && focused) C.textOnLightSecondary else C.textSecondary,
-                                active = (focused || hovered) && resumed && !picker && state.dialog == null)
+                                active = (focused || hovered) && resumed && state.dialog == null)
                         }
                         if (opening) CircularProgressIndicator(Modifier.size(measure(28, 24)), color = foreground, strokeWidth = 3.dp)
                         else if (tv) VIcon("play", color = foreground)
@@ -128,11 +130,10 @@ import org.viptv.app.theme.ViptvColor as C
             }
         }
         if (state.preparingSourceId != null) VText("Opening your selected source. Back cancels.", if (tv) 20 else 13, Modifier.padding(top = 12.dp), C.textSecondary)
-        LaunchedEffect(shown.isNotEmpty(), picker) {
-            if (tv && shown.isNotEmpty() && !claimed && !picker) { withFrameNanos {}; runCatching { first.requestFocus() }; claimed = true }
+        LaunchedEffect(shown.isNotEmpty()) {
+            if (tv && shown.isNotEmpty() && !claimed) { withFrameNanos {}; runCatching { first.requestFocus() }; claimed = true }
         }
     }
-    if (picker) ChoiceDialog("Provider", listOf("All providers" to { provider = null; picker = false }) + providerLabels.map { (id, label) -> label to { provider = id; picker = false } }, { picker = false })
 }
 
 /** Reserved above the list so progressive arrivals do not move its controls. */
