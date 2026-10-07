@@ -184,6 +184,8 @@ class Qualification:
         require(selector in {"org.viptv.app.OwnedNativePipelineTest", "org.viptv.app.OwnedNativePipelineTest#manualOwnedNativeObservation"}, "Use only the full owned pipeline class or dedicated manual observation")
         require(hold_seconds == 0 or 180 <= hold_seconds <= 300, "Observation interval must be bounded to 180–300 seconds")
         require(bool(hold_seconds) == selector.endswith("#manualOwnedNativeObservation"), "Manual observation requires its dedicated selector and bounded interval")
+        execution = self.directory / "fixture-execution.json"
+        require(not execution.exists(), "Use a fresh finite backend/configuration/APK and new run directory for each fixture selector")
         self.device()
         existing = self.command("reverse-before", ["reverse", "--list"]).decode().splitlines()
         matches_by_port = {}
@@ -206,6 +208,7 @@ class Qualification:
         if hold_seconds:
             command += ["-e", "ownedNativeManualSeconds", str(hold_seconds)]
         command += [FIXTURE + ".test/androidx.test.runner.AndroidJUnitRunner"]
+        write_private(execution, json.dumps({"selector": selector, "hold_seconds": hold_seconds, "started_at": timestamp()}, indent=2) + "\n")
         label = "owned-manual-instrumentation" if hold_seconds else "owned-instrumentation"
         output = self.command(label, command, max(300, hold_seconds + 120)).decode(errors="replace")
         skips = () if hold_seconds else ("manualOwnedNativeObservation",)

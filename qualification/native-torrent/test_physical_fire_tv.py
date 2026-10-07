@@ -74,6 +74,13 @@ class PhysicalQualificationTest(unittest.TestCase):
                 self.q.fixture("org.viptv.app.OwnedNativePipelineTest")
             self.assertEqual([call.args[0] for call in command.call_args_list], ["reverse-before"])
 
+    def test_consumed_fixture_session_cannot_be_reused_for_manual_observation(self):
+        (self.directory / "fixture-execution.json").write_text('{"selector":"completed-full-class"}')
+        with patch.object(self.q, "command") as command:
+            with self.assertRaises(RuntimeError):
+                self.q.fixture("org.viptv.app.OwnedNativePipelineTest#manualOwnedNativeObservation", 180)
+            command.assert_not_called()
+
     def test_sound_and_physical_remote_cannot_be_inferred_from_events(self):
         (self.directory / "events.json").write_text('{"selected_audio":true,"position_advanced":true}')
         for case in ["audible_audio", "physical_remote_focus"]:

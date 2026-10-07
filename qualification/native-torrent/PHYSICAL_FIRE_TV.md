@@ -103,8 +103,18 @@ only: `owned-native-evidence.json`, `owned-expiry-evidence.json`,
 configuration remain private. Missing files stay missing facts; they do not become
 passing cases. Preserve failed native cache trees for diagnosis.
 
-For an actual person at the TV, run the dedicated 180–300 second observation
-selector in one terminal. It opens the actual MainActivity, real controller and
+For an actual person at the TV, prepare a **fresh finite backend, configuration and
+matching private fixture APK** using ticket 12's runbook, then initialize a new
+physical run directory and install the fresh matching fixture APK/test APK. The
+regular class intentionally disables its synthetic producer and signs out in its
+final scope test; MainActivity may rotate synthetic session credentials during
+manual playback. Reusing either backend/configuration for another selector would
+test an invalid session rather than owned playback. The runner refuses to execute
+a second fixture selector in the same run directory, including after a failure.
+Preserve and reference earlier normal JNI/device evidence as an earlier observation;
+do not silently relabel it as a new execution.
+
+Run the dedicated 180–300 second observation selector in one terminal. It opens the actual MainActivity, real controller and
 normal player/Sources UI in the isolated package. The bounded test may rewind the
 same owned title at its end; user Back and pause remain authoritative.
 
