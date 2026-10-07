@@ -172,7 +172,7 @@ class Qualification:
 
     def probe(self):
         self.device()
-        output = self.command("normal-jni-instrumentation", ["shell", "am", "instrument", "-w", "-e", "class",
+        output = self.command("normal-jni-instrumentation", ["shell", "am", "instrument", "-w", "-r", "-e", "class",
                               "org.viptv.app.NativeTorrentArtifactLoadTest", "-e", "nativeTorrentExpectedAbi", "armeabi-v7a",
                               NORMAL + ".test/androidx.test.runner.AndroidJUnitRunner"], 120).decode(errors="replace")
         passed = instrumentation_passed(output, 2)
@@ -204,7 +204,7 @@ class Qualification:
                 self.command("reverse-" + str(port), ["reverse", local, local])
                 created.append(port)
                 write_private(saved, json.dumps(sorted(set(prior + created))))
-        command = ["shell", "am", "instrument", "-w", "-e", "class", selector]
+        command = ["shell", "am", "instrument", "-w", "-r", "-e", "class", selector]
         if hold_seconds:
             command += ["-e", "ownedNativeManualSeconds", str(hold_seconds)]
         command += [FIXTURE + ".test/androidx.test.runner.AndroidJUnitRunner"]

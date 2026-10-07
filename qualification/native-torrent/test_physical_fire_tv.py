@@ -94,6 +94,25 @@ class PhysicalQualificationTest(unittest.TestCase):
         self.assertFalse(physical.instrumentation_passed(output, 2))
         self.assertFalse(physical.instrumentation_passed("OK (2 tests)\nINSTRUMENTATION_CODE: -1", 2))
 
+    def test_probe_requests_raw_completed_instrumentation_statuses(self):
+        def output(_label, command, *_args):
+            self.assertIn("-r", command)
+            return successful_output(["actualGeneratedFacadesLoadWithoutReplacingCoreOrJna",
+                                      "cleartextIsRestrictedToLiteralIpv4Loopback"]).encode()
+        with patch.object(self.q, "device"), patch.object(self.q, "record"), patch.object(self.q, "command", side_effect=output):
+            self.q.probe()
+
+    def test_fixture_requests_raw_completed_instrumentation_statuses(self):
+        def output(label, command, *_args):
+            if label == "reverse-before":
+                return b"owned tcp:19445 tcp:19445\nowned tcp:19446 tcp:19446"
+            if label == "owned-instrumentation":
+                self.assertIn("-r", command)
+                return successful_output(["ownedPipeline"]).encode()
+            return b"{}"
+        with patch.object(self.q, "device"), patch.object(self.q, "record"), patch.object(self.q, "command", side_effect=output):
+            self.q.fixture("org.viptv.app.OwnedNativePipelineTest")
+
     def test_only_declared_manual_observation_skip_is_accepted(self):
         output = successful_output(["ownedPipeline"])
         output += "INSTRUMENTATION_STATUS: test=manualOwnedNativeObservation\nINSTRUMENTATION_STATUS_CODE: -4\n"
