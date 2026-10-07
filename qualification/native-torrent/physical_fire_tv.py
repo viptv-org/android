@@ -263,8 +263,15 @@ class Qualification:
             pss = re.search(r"TOTAL PSS:\s*(\d+)", memory) or re.search(r"^\s*TOTAL\s+(\d+)", memory, re.MULTILINE)
             disk = self.command("disk-" + str(index), ["shell", "run-as", FIXTURE, "du", "-sk", "no_backup"]).decode()
             size = re.match(r"\s*(\d+)\b", disk)
-            require(pss and size, "Device resource counters unavailable; no sustained-resource verdict inferred")
-            samples.append({"elapsed_seconds": round(time.monotonic() - start, 3), "pss_kib": int(pss.group(1)), "private_storage_kib": int(size.group(1))})
+            pid = self.command("pid-" + str(index), ["shell", "pidof", FIXTURE]).decode().strip()
+            require(re.fullmatch(r"[1-9][0-9]*", pid), "Owned fixture process is unavailable or ambiguous")
+            status = self.command("threads-" + str(index), ["shell", "run-as", FIXTURE, "cat", "/proc/" + pid + "/status"]).decode()
+            threads = re.search(r"^Threads:\s*(\d+)$", status, re.MULTILINE)
+            descriptors = self.command("descriptors-" + str(index), ["shell", "run-as", FIXTURE, "ls", "-1", "/proc/" + pid + "/fd"]).decode().splitlines()
+            require(pss and size and threads and descriptors and all(re.fullmatch(r"\d+", item.strip()) for item in descriptors), "Device resource counters unavailable; no sustained-resource verdict inferred")
+            samples.append({"elapsed_seconds": round(time.monotonic() - start, 3), "pss_kib": int(pss.group(1)),
+                            "private_storage_kib": int(size.group(1)), "process_threads": int(threads.group(1)),
+                            "open_file_descriptors": len(descriptors)})
             write_private(self.directory / "owned-resources.json", json.dumps(samples, indent=2) + "\n")
             if time.monotonic() - start >= seconds:
                 break

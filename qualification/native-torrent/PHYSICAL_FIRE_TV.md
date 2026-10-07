@@ -144,8 +144,9 @@ and never certify the actual paired remote. Screenshots/XML must show the releva
 focused control and rendered cue. A pointer-driven route supplies no remote focus
 proof.
 
-Resource samples retain elapsed seconds, app PSS KiB and isolated no-backup storage
-KiB. They do not infer continuous decoding, audible sound, thread/socket completion,
+Resource samples retain elapsed seconds, app PSS KiB, isolated no-backup storage
+KiB, owned-process thread count and open file-descriptor count. They read only the
+isolated process through its own debug identity. Counts do not infer continuous decoding, audible sound, thread/socket completion,
 budget release or sustained public-peer behavior. Record actual observation duration,
 title replays, pauses, initial/final storage, retained failed-settlement trees and
 instrumented worker/HTTP joins. Compare before/after measurements rather than only
