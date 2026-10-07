@@ -33,9 +33,34 @@ class VipTvHttpGateway(
     private val television: Boolean = false,
 ) : BackendGateway {
     private val playbackV2 = V2PlaybackControl(origin, ::json)
+    private val nativeControls = java.util.concurrent.ConcurrentHashMap.newKeySet<NativePlaybackControl>()
+    private val nativeAuthGeneration = java.util.concurrent.atomic.AtomicLong()
+    internal fun invalidateNativeScope() {
+        nativeAuthGeneration.incrementAndGet()
+        nativeControls.toList().forEach { it.retireLocal() }
+        nativeControls.clear()
+    }
+    /** Qualification is an injected measured fact; production selection remains disabled by its owner. */
+    internal fun nativePlaybackControl(
+        scope: String,
+        generation: Long,
+        cache: NativeTorrentCache,
+        jobs: kotlinx.coroutines.CoroutineScope,
+        preventReads: () -> Unit,
+        invalidated: () -> Unit,
+        clock: NativePlaybackClock = androidNativePlaybackClock,
+    ): NativePlaybackControl {
+        val epoch = nativeAuthGeneration.get()
+        val current = { epoch == nativeAuthGeneration.get() }
+        lateinit var control: NativePlaybackControl
+        control = NativePlaybackControl(origin, scope, generation, current,
+            NativePlaybackTransport(origin, { accessToken }, current, cache, onUnauthorized, client),
+            playbackV2, jobs, clock, preventReads, invalidated, { nativeControls.remove(control) })
+        return control.also(nativeControls::add)
+    }
     fun playbackRemainingMillis(id: String): Long? = playbackV2.remainingMillis(id)
     fun playbackRenewAfterMillis(id: String): Long? = playbackV2.renewAfterMillis(id)
-    fun setAccessToken(value: String?) { accessToken = value }
+    fun setAccessToken(value: String?) { if (value == null) invalidateNativeScope(); accessToken = value }
     private val titleArtwork = java.util.concurrent.ConcurrentHashMap<String, Media>()
     private var metadataEpoch = 0L
     fun clearProfileCache() = synchronized(titleArtwork) { metadataEpoch++; titleArtwork.clear() }
@@ -70,7 +95,7 @@ class VipTvHttpGateway(
         val array = root.optJSONArray("profiles") ?: JSONArray()
         return (0 until array.length()).map { index -> array.getJSONObject(index).profile() } to root.opt("profile_id")?.toString()
     }
-    override suspend fun selectProfile(profileId: String) { json("POST", "/auth/profile", JSONObject().put("profile_id", profileId)); clearProfileCache() }
+    override suspend fun selectProfile(profileId: String) { json("POST", "/auth/profile", JSONObject().put("profile_id", profileId)); invalidateNativeScope(); clearProfileCache() }
     override suspend fun catalogRevision(): String? = try {
         json("GET", "/catalogs/revision").getString("revision")
     } catch (error: GatewayError) {
@@ -403,11 +428,11 @@ class VipTvHttpGateway(
         json("PATCH", "/profiles/${enc(profile.id)}", profilePayload(name, avatarStyle, avatarChoice, setupComplete = true)).profile()
     override suspend fun deleteProfile(profile: Profile) { json("DELETE", "/profiles/${enc(profile.id)}") }
     override suspend fun unlockParent(pin: String) { json("POST", "/parent/unlock", JSONObject().put("pin", pin)) }
-    override suspend fun logout() { json("POST", "/auth/logout", JSONObject()) }
+    override suspend fun logout() { json("POST", "/auth/logout", JSONObject()); invalidateNativeScope() }
     private fun session(value: JSONObject, adopt: Boolean = true): DeviceSession {
         val token = value.getString("access_token")
         val session = DeviceSession(token, value.getString("refresh_token"), value.opt("profile_id")?.takeUnless { it == JSONObject.NULL }?.toString(), uniffi.viptv_core.normalize("tokens", value.toString(), origin))
-        if (adopt) { clearProfileCache(); accessToken = token }
+        if (adopt) { invalidateNativeScope(); clearProfileCache(); accessToken = token }
         return session
     }
     private suspend fun coreRequest(operation: String, profileId: String, media: Media, values: JSONObject = JSONObject()): JSONObject {

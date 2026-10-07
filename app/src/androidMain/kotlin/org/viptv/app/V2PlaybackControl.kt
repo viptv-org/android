@@ -54,7 +54,7 @@ internal class V2PlaybackControl(
             PlaybackLeaseDecision.PENDING -> false
             PlaybackLeaseDecision.READY -> true
         }
-    suspend fun start(input: JSONObject): PlaybackLaunch {
+    suspend fun start(input: JSONObject, initialResponse: JSONObject? = null): PlaybackLaunch {
         val request = JSONObject(input.toString())
         try { normalize("request", JSONObject().put("operation", "playbackV2").put("playback", request).toString(), origin) }
         catch (_: Exception) { throw invalid() }
@@ -62,7 +62,7 @@ internal class V2PlaybackControl(
         var id: String? = null
         try {
             return withTimeout(45_000) {
-                val response = control("playbackV2", request = request)
+                val response = initialResponse ?: control("playbackV2", request = request)
                 val owned = identity(response).also { id = it }
                 currentCoroutineContext().ensureActive()
                 var lease = decode(response)
