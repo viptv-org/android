@@ -55,6 +55,10 @@ internal class NativeTorrentCache private constructor(
     val reservedControlBytes: Long
         @Synchronized get() = controlBytes
 
+    /** The entire payload capacity remains assigned to a quarantined owned tree after manager close. */
+    val heldPayloadCapacityBytes: Long
+        @Synchronized get() = if (state == State.Closed) 0 else NativeTorrentCacheLimits.PAYLOAD_BYTES
+
     override fun toString() = "NativeTorrentCache(<redacted>)"
 
     /** Control responses, retained grant input and native metadata use one aggregate ceiling. */

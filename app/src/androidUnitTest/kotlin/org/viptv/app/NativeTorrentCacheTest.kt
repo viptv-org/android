@@ -124,6 +124,7 @@ class NativeTorrentCacheTest {
         assertFalse(cache.isAvailable)
         assertTrue(requireNotNull(path).exists())
         assertEquals(123, cache.reservedControlBytes)
+        assertEquals(NativeTorrentCacheLimits.PAYLOAD_BYTES, cache.heldPayloadCapacityBytes)
         assertFailsWith<NativeTorrentCacheUnavailable> { NativeTorrentCache.open(parent, { _, _ -> Manager(events) }) }
         assertFalse(events.contains("manager.close"))
         // Quarantined ownership deliberately survives until process exit.
@@ -141,6 +142,7 @@ class NativeTorrentCacheTest {
         assertFalse(cache.closeScope())
         assertFalse(cache.isAvailable)
         assertEquals(321, cache.reservedControlBytes)
+        assertEquals(NativeTorrentCacheLimits.PAYLOAD_BYTES, cache.heldPayloadCapacityBytes)
         assertTrue(requireNotNull(path).exists())
         assertFailsWith<NativeTorrentCacheUnavailable> { NativeTorrentCache.open(parent, { _, _ -> Manager(events) }) }
         assertFalse(cache.toString().contains(parent.path))
