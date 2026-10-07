@@ -50,6 +50,28 @@ used the client cohort. Android's `CORE_REF`, `TORRENT_REF` and corresponding
 vendor locks identify the actual imported sources; the normal artifact importer
 and APK inventory checks bind packaged bytes to those locks.
 
+The final normal development APK was built from Android source inputs
+`e1da3d1ea48c4820f04bb616bc362d3663acd38a`, including controller `1063a99`.
+Its SHA-256 is
+`6b0e7be3a3d95bc0eed57a38e222da4c32bfe604396286d2c52ec52ee65c15ab`.
+Subsequent artifact-verifier commits `0ee5fe1` and `fe9aaa2` validate SDK 36
+manifest output and compiled trust resources without changing that sealed APK.
+Normal packaged-byte, manifest/trust, alignment, unit, APK, lint and test-APK
+checks pass. Actual Android JNI loading and runtime network policy remain
+NOT RUN for every ABI in that report; the configured ARMv7 device was offline,
+and no ARM64 or x86_64 device was configured.
+
+| Normal gateway library process ABI | Packaged SHA-256 |
+| --- | --- |
+| armeabi-v7a | `88dc15e1fab490d023996ce6255db34313ef3166aa340a73dc39212427be83a6` |
+| arm64-v8a | `3a1ab0ef7737389d0309c585665f3b5b3852aaa2978bb5687a457e85dab2c636` |
+| x86_64 | `7b260575187393a6e7f1f9117f80253c81dbda1d7ca762e5601748099bf3eb4e` |
+
+These hashes identify normal build evidence, not a capability-enabled release.
+The inventory contains 264 archive-free packages and 16 toolchain notice
+entries; its distribution clearance remains false. Separate fixture APKs and
+their actual device results must retain their own hashes and qualification scope.
+
 ## Evidence required for capability
 
 | Gate | Host evidence | Android/device evidence still required for enablement |
