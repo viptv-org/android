@@ -1,3 +1,24 @@
+# Shared browser-accessible Android TV emulator — 2026-10-07
+
+Normal debug APK from Android `cebd090bc1475c571bf16caf2bf0f94987b49662`,
+core `8ef18be39ca08e96c40b20f40666f62a5f2eadfc` and gateway
+`ec134b9bf86fcd06efc4db5b4e94891989b86c02` was installed with `install -r`
+on the designated shared x86_64 Android TV emulator. All three viewer services
+were active and Android boot completion was verified. App data and the existing
+backend selection/sign-in were preserved. The existing Development profile
+remained selected; this does not verify a personal account association.
+
+Single-worker normal APK assembly and artifact checks passed: three native ABIs,
+pinned library checksums/notices, minimum API 24, 16 KiB alignment, system-only
+certificate trust and no fixture assets or qualification receipt. APK SHA-256:
+`7fca96eec7252199e3b00096f753819b6856eec5ef6feafeb148736ff58295ec`.
+
+Inspected captures show the signed-in profile chooser and loaded Home catalog,
+hero artwork and title cards. The app was left running on Home for owner use.
+Private captures/build receipts are under ignored `.scratch/native-torrent/`.
+No playback, physical hardware or native torrent qualification is claimed.
+Native advertisement remains disabled; no backend service change occurred.
+
 # Reconciled source picker verification — 2026-10-06
 
 Explicit provider interaction owns TV focus even when discovery starts empty.
