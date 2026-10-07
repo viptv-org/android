@@ -10,6 +10,8 @@ dist-js/
 qualification/fixtures/
 qualification/artifacts/
 qualification/__pycache__/
+qualification/native-torrent/**/__pycache__/
+qualification/native-torrent/__pycache__/
 /corpus/output/
 /corpus/**/__pycache__/
 /corpus/**/*.py[cod]
