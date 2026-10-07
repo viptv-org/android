@@ -1709,3 +1709,55 @@ These are core interface/artifact checks. Android native engine, HTTP control
 adapter and player integration belong to subsequent tickets; no device install,
 emulator, media/network qualification, capability activation, push or deployment
 was performed.
+
+
+## Owned default-native Android TV pipeline — 2026-10-07
+
+The isolated API 36 x86_64 Android TV AVD `viptv-native-owned-qa` passed all
+six automated `OwnedNativePipelineTest` cases in 138.6 seconds. The bounded
+human observation selector was skipped. Android runtime `8e1ffec`, backend
+`d66085be95ad6e7d3401bf8be326172ee7f66d09`, gateway
+`ec134b9bf86fcd06efc4db5b4e94891989b86c02`, core
+`8ef18be39ca08e96c40b20f40666f62a5f2eadfc`, and design
+`ae1f09d` supplied the run. Controller cases assert the real default runtime
+availability; they do not force capability availability. Only the engine cache
+factory injects explicit owned loopback TCP peers with DHT disabled. The normal
+APK retains its public network policy and system trust.
+
+The real authorization/Core/JNI/loopback/Media3 pipeline decoded the owned
+H.264/AAC surface, confirmed English cues and alternate audio, and matched
+exact selected bytes for episode indices 1 and 2. Same-file independent grants
+survived another grant's retirement. Token and unselected-index requests were
+refused. Actual metadata Back cancellation, invalid-index/full-payload capacity
+refusal, missing-piece Media3 seek and pending HTTP-body cancellation passed.
+The common local retirement joined in 8 ms. Scheduled heartbeat extended the
+grant while backgrounded; after deliberately cancelling only its heartbeat
+worker, actual elapsed expiry retired authority and joined locally in 12 ms.
+
+HTTP/HLS decode, seek and older-server 404 negotiation kept ordinary leases.
+The actual controller returned title position 8,022 ms, honored paused producer
+revocation, closed the profile scope, revoked sign-out authority and kept native
+input out of app state and authentication preferences. The first device run
+exposed a nonempty native heartbeat body; `8e1ffec` sends the endpoint's required
+zero-byte body, with an outgoing HTTP regression and successful renewed deadline
+check. The corrected complete device run passed without that failure.
+
+| Sealed artifact | SHA256 |
+| --- | --- |
+| Isolated fixture APK | `65a1ba490c92a467905a57850f16b6f01f5717c7183a14fcec4908bec1f7a818` |
+| Fixture instrumentation APK | `c70750b9cc8864381f41ac5736c9f28b247667e0ec355cc7d8aa4cd6b6b729b9` |
+| Backend test executable | `9c1ebf52805f33ce9d80e486bcd15fb8be7bc29d15113149cf18d2a4800c6839` |
+
+Matching configuration, explicit fixture trust, isolated application identity,
+x86_64 JNI hashes and 16 KiB APK library alignment passed before installation.
+The owned torrent charges its complete 268,435,457-byte payload. Runtime logs
+passed the synthetic native-value audit. Detailed results and the retained first
+run are ignored under `.scratch/native-torrent/emulator-20261007-heartbeat-fix/`
+and `.scratch/native-torrent/emulator-20261007-default/`. Owned backend/TLS/peer
+listeners and reverse mappings were closed. This QA work did not install or
+change the normal application on the shared emulator.
+
+These observations qualify the named owned emulator effects. Physical sound,
+codec/HDR/PiP and remote behavior, sustained public-peer/resource behavior, and
+arbitrary blocked OS I/O remain separate observations. The fixture does not
+claim every host, emulator and physical condition in NT-01 through NT-08.

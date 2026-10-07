@@ -173,6 +173,9 @@ class OwnedNativePipelineTest {
                     .also { bitmap.recycle() }
             }
             assertTrue(pixels.distinct().size > 8, "decoded surface must contain the owned test pattern")
+            java.io.File(context.noBackupFilesDir, "owned-decoded-evidence.json").writeText(JSONObject()
+                .put("actual_jni", true).put("decoded_surface", true).put("cue", true)
+                .put("alternate_audio", true).put("exact_episode_index", 1).toString())
             player.pause()
             val grant = first.playbackId()
             first.renew()
@@ -206,11 +209,26 @@ class OwnedNativePipelineTest {
             assertTrue(cache.isAvailable)
             assertTrue(coordinator.retire(candidate))
             assertTrue(coordinator.retire(independent))
+            val next = control(3)
+            coordinator.ownControl(next, 3)
+            val nextSource = config.getJSONArray("sources").getJSONObject(1)
+            assertEquals(2, nextSource.getInt("index"))
+            assertIs<NativePlaybackStart.Native>(next.start(request(nextSource.getString("stream_id")), true, true, cache))
+            val nextEpisode = coordinator.prepare(next, 3)
+            val nextFixture = config.getJSONArray("files").getJSONObject(2)
+            val nextBytes = withContext(Dispatchers.IO) { bytes(nextEpisode.capability.url, nextFixture.getLong("sample_offset"), 64) }
+            val nextHash = java.security.MessageDigest.getInstance("SHA-256").digest(nextBytes).joinToString("") { "%02x".format(it.toInt() and 255) }
+            assertEquals(nextFixture.getString("sample_sha256"), nextHash, "second exact episode must retain its selected index")
+            active = next
+            coordinator.accept(nextEpisode) { player.open(PlaybackSource(it.url), playWhenReady = true) }
+            await { player.state.value.isPlaying && player.state.value.positionMillis > 500 }
+            await { player.audioTracks.value.size >= 2 && player.subtitleTracks.value.size >= 2 }
+            assertTrue(coordinator.retire(nextEpisode))
             assertTrue(coordinator.closeScope())
             assertEquals(0L, cache.reservedControlBytes)
             assertEquals(0L, cache.heldPayloadCapacityBytes)
             val evidence = JSONObject().put("actual_jni", true).put("decoded_surface", true).put("cue", true)
-                .put("alternate_audio", true).put("independent_grant", true).put("joined_local_millis", shutdownMillis)
+                .put("alternate_audio", true).put("exact_episode_indices", JSONArray().put(1).put(2)).put("independent_grant", true).put("joined_local_millis", shutdownMillis)
                 .put("elapsed_millis", SystemClock.elapsedRealtime() - started).put("invalidations", invalidations)
             java.io.File(context.noBackupFilesDir, "owned-native-evidence.json").writeText(evidence.toString())
         } finally {
@@ -396,7 +414,7 @@ class OwnedNativePipelineTest {
         val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
         val controller = withContext(Dispatchers.Main.immediate) { androidx.lifecycle.ViewModelProvider(activity)[ViptvModel::class.java].controller }
         val parent = java.io.File(context.noBackupFilesDir, "owned-manual-${UUID.randomUUID()}").apply { mkdirs() }
-        controller.nativePlaybackQualified = { true }
+        assertTrue(controller.nativePlaybackAvailable(), "bundled supported Android runtime must enable native by default")
         controller.nativeScopeOwnerOverride = NativeTorrentScopeOwner({
             NativeTorrentCache.open(parent, { directory, capacity -> NativeTorrentEngineCacheManager(
                 TorrentClient.newNativeOwned(directory.path, capacity.toULong(), listOf(config.getString("peer")))) }, nowNanos = SystemClock::elapsedRealtimeNanos)
@@ -440,7 +458,7 @@ class OwnedNativePipelineTest {
             .putString("access", config.getString("access_token")).putString("refresh", "owned-unused-refresh").commit())
         val parent = java.io.File(context.noBackupFilesDir, "owned-controller-${UUID.randomUUID()}").apply { mkdirs() }
         val controller = withContext(Dispatchers.Main.immediate) { AppController(context, config.getString("origin")) }
-        controller.nativePlaybackQualified = { true }
+        assertTrue(controller.nativePlaybackAvailable(), "bundled supported Android runtime must enable native by default")
         controller.nativeScopeOwnerOverride = NativeTorrentScopeOwner({
             NativeTorrentCache.open(parent, { directory, capacity ->
                 NativeTorrentEngineCacheManager(TorrentClient.newNativeOwned(directory.path, capacity.toULong(), listOf(config.getString("peer"))))
@@ -488,13 +506,13 @@ class OwnedNativePipelineTest {
             withContext(Dispatchers.Main.immediate) { controller.chooseProfile(controller.state.value.profiles.first { it.id == "2" }) }
             await { controller.state.value.selectedProfile?.id == "2" }
             await { epoch.coordinator.cache.heldPayloadCapacityBytes == 0L }
-            assertFalse(controller.nativePlaybackQualified.invoke() && controller.nativePlaybackEpoch === epoch)
+            assertFalse(controller.nativePlaybackAvailable.invoke() && controller.nativePlaybackEpoch === epoch)
             controller.signOut().join()
             await { store.getString("access", null) == null }
             val refused = runCatching { VipTvHttpGateway(config.getString("origin"), authenticatedAccess, television = true).foregroundIdentity() }.exceptionOrNull()
             assertTrue(refused is GatewayError && refused.status == 401, "signed-out fixture session must lose backend authority")
             java.io.File(context.noBackupFilesDir, "owned-controller-evidence.json").writeText(JSONObject()
-                .put("actual_identity", true).put("actual_controller", true).put("returned_position", position)
+                .put("actual_identity", true).put("actual_controller", true).put("default_native_runtime", true).put("returned_position", position)
                 .put("paused_producer_revocation", true).put("profile_scope_closed", true).put("actual_signout_revoked", true).put("state_and_auth_preferences_native_secret_free", true).toString())
         } finally {
             withContext(Dispatchers.Main.immediate) { controller.close() }
