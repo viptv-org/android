@@ -72,6 +72,44 @@ The inventory contains 264 archive-free packages and 16 toolchain notice
 entries; its distribution clearance remains false. Separate fixture APKs and
 their actual device results must retain their own hashes and qualification scope.
 
+The final owned-media harness report binds Android fixture source `9f07a3b`,
+normal isolation checker `7394c14` and backend fixture `ef7f2a7` to the same
+gateway/core/design cohort. Its actual Linux authorization-to-Core-to-UniFFI-to-
+owned-TCP selected-byte case passes, with 119 ms grant-to-ready and 4 ms common
+local join. This is Linux FFI evidence; Android JNI and Media3 remain NOT RUN.
+The complete device NT-01 through NT-08 qualification remains NOT RUN.
+
+| Separately sealed artifact | SHA-256 |
+| --- | --- |
+| Owned fixture APK | `9db7109eb1e1dff47fd10e55706cdb9087323b9eafcd19b7a8e4d8af710abec0` |
+| Owned instrumentation APK | `b02e7f0cc8a452e65668a4a968d408b68110dfce7d2d57b465e4393235fa3dfb` |
+| Normal APK rebuilt after the fixture | `7085c886ce559086ad2899f935b4aa19a43ce93ce1a703fc8585bc738a465039` |
+
+The post-fixture normal APK passes locked normal-library/notices, system-CA,
+alignment and fixture constructor/Activity/configuration/CA exclusion checks.
+Actual Gradle requests for a fixture release or a fixture CA without isolation
+are refused. These normal separation checks and compiled instrumentation do not
+qualify a device. See [owned qualification evidence](NATIVE_TORRENT_OWNED_QUALIFICATION.md)
+for the fixture library hashes, measured host scope and runnable private handoff.
+
+Physical runner commits `dad6d3a`, `f1e843d`, `3ce6913` and `8b98cab` provide
+the configured ARMv7 device workflow, private resource captures and separate
+human audio/paired-remote/final-session verdicts. Thirteen host safety/evidence
+regressions and offline evidence initialization/reporting pass without device or
+network calls. The final physical report records every actual installation,
+JNI, runtime-policy, decoded playback, audio, remote, lifecycle and resource
+case NOT RUN: the configured device remains unavailable. No app state, origin,
+credentials or playback changed during that ticket, and the owner's current
+playback/sign-in state was not observed. See the
+[physical runbook](../qualification/native-torrent/PHYSICAL_FIRE_TV.md).
+
+Final artifact, owned-harness and physical handoffs are received. The readiness
+decision is **NOT READY**, with both production gates disabled. The remaining
+conditions are the unconditional blocked-OS-IO settlement bound, actual Android
+JNI/Media3 and physical human evidence, separately authorized public-network and
+sustained-resource qualification, and complete distribution review. These are
+open qualification conditions, not undocumented activation steps.
+
 ## Evidence required for capability
 
 | Gate | Host evidence | Android/device evidence still required for enablement |
