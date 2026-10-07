@@ -48,6 +48,9 @@ function fixture() {
     const project = resolve(root, 'project');
     mkdirSync(source); mkdirSync(project);
     const files = { LICENSE: Buffer.from('License test vector'), 'PROVENANCE.md': Buffer.from('Provenance test vector'),
+        'THIRD_PARTY/native-dependencies.json': Buffer.from('Dependency inventory test vector'),
+        'THIRD_PARTY/native-NOTICES.txt': Buffer.from('Dependency notices test vector'),
+        'THIRD_PARTY/native-SHA256SUMS.txt': Buffer.from('Dependency checksums test vector'),
         [binding]: Buffer.from('Kotlin test vector') };
     for (const abi of ['armeabi-v7a', 'arm64-v8a', 'x86_64']) files[library(abi)] = elf(abi);
     for (const [path, bytes] of Object.entries(files)) put(source, path, bytes);
@@ -83,6 +86,12 @@ test('rejects missing required ABI before writes', () => {
     assert.throws(() => syncArtifacts(project, source, revision), /Incomplete/);
     untouched(project);
 });
+test('rejects an artifact bundle without its dependency notice inventory before writes', () => {
+    const { source, project, lock, save } = fixture();
+    delete lock.files['THIRD_PARTY/native-NOTICES.txt']; save();
+    assert.throws(() => syncArtifacts(project, source, revision), /Incomplete/);
+    untouched(project);
+});
 test('rejects modified binding bytes without normalizing checksums', () => {
     const { source, project } = fixture();
     put(source, binding, 'Changed\r\n');
@@ -115,7 +124,7 @@ for (const path of ['../escape', '/absolute', 'C:/escape', 'THIRD_PARTY/../escap
 }
 test('rejects source directory links', () => {
     const { source, project } = fixture();
-    const target = resolve(source, 'notices'); mkdirSync(target);
+    const target = resolve(source, 'notices'); renameSync(resolve(source, 'THIRD_PARTY'), target);
     symlinkSync(target, resolve(source, 'THIRD_PARTY'), 'junction');
     const lock = JSON.parse(readFileSync(resolve(source, 'manifest.json')));
     lock.files['THIRD_PARTY/license.txt'] = 'a'.repeat(64);

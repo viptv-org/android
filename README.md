@@ -24,6 +24,13 @@ node scripts/core-sync.mjs check
 
 The same core revision must be adopted by TV-web for shared behavior changes. Installed apps still need rebuilding and delivery.
 
+`TORRENT_REF` pins a separate archive-free gateway Kotlin/Android native snapshot.
+Gradle verifies its checksums and packages its dependency notices alongside the
+three supported ABI libraries without replacing core or JNA. See
+[native artifact adoption](docs/NATIVE_TORRENT_ARTIFACTS.md) for source generation,
+import, APK alignment and actual ABI loading checks. Artifact presence or loading
+does not establish native playback qualification or distribution clearance.
+
 ## Backend compatibility and live guide
 
 Live browsing requires the backend v2 next/previous cursor contract. Do not use

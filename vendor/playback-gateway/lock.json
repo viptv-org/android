@@ -1,0 +1,22 @@
+{
+  "files": {
+    "LICENSE": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+    "PROVENANCE.md": "f7fb2696a05941df6939f805cb58a839a2f6df4d83ebe6f3c27375050522d6eb",
+    "THIRD_PARTY/native-Cargo.lock": "8bf461df7dcd7e0f3d3e5387b5c04deae3b5c59da2228fc0af63851da8299dcc",
+    "THIRD_PARTY/native-NOTICES.txt": "992af3e4cef4f8412c6127dc8a514b5915dc21c5e8dc774c8fc3eaee074720c7",
+    "THIRD_PARTY/native-SHA256SUMS.txt": "3f4045414a9174b2b4e2d85d93f38d2813ebbdcd3e02b71c0ee22270e678f8cb",
+    "THIRD_PARTY/native-arm64-v8a-dependencies.txt": "628c7e4b4b134459ba9ebee44f5f7dc984dbff5c66d18e186c8300c2edb67d8c",
+    "THIRD_PARTY/native-armeabi-v7a-dependencies.txt": "48250bc9bb15fa71217897de51144715770ccb5625ba560e073c37d997c53d72",
+    "THIRD_PARTY/native-dependencies.json": "4c2b060bfefb0d0b16b78be1b01851316d986cd8f6e9c1f1cc4dc5121c225a3c",
+    "THIRD_PARTY/native-toolchain-NOTICES.txt": "474cecb9ea287ab1552772699b587f98e322f031b2b55b3f6fd1644c957eb5b4",
+    "THIRD_PARTY/native-x86_64-dependencies.txt": "f88fcd8e958ac4faeda1f967fe9a024be412ac7eeb4dde897cd261ac07fc6010",
+    "THIRD_PARTY/rqbit-UPSTREAM.json": "0b92996f0c689bda791fa44a39cf1fa78c26d248a406c28f9cd37e443e37c149",
+    "ffi/generated/android/jniLibs/arm64-v8a/libplayback_gateway_ffi.so": "3a1ab0ef7737389d0309c585665f3b5b3852aaa2978bb5687a457e85dab2c636",
+    "ffi/generated/android/jniLibs/armeabi-v7a/libplayback_gateway_ffi.so": "88dc15e1fab490d023996ce6255db34313ef3166aa340a73dc39212427be83a6",
+    "ffi/generated/android/jniLibs/x86_64/libplayback_gateway_ffi.so": "7b260575187393a6e7f1f9117f80253c81dbda1d7ca762e5601748099bf3eb4e",
+    "ffi/generated/kotlin/uniffi/playback_gateway_ffi/playback_gateway_ffi.kt": "ece688c0047c7371cbf160750781d8c3f8234b20b1807a8e8f272fd638977008"
+  },
+  "repository": "viptv-org/playback-gateway",
+  "revision": "764e518b66e024ac18d6dd7f14e489b696b8301e",
+  "version": 1
+}

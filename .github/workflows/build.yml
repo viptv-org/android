@@ -35,6 +35,7 @@ jobs:
       - run: ./gradlew --no-daemon :testDebugUnitTest :app:testDebugUnitTest
       - run: scripts/prepare-core.sh android
       - run: ./gradlew --no-daemon :app:assembleDebug :app:lintDebug
+      - run: python3 scripts/check-native-torrent-apk.py app/build/outputs/apk/debug/app-debug.apk
       - name: Package universal phone and TV APK
         env:
           BUILD_SHA: ${{ github.sha }}
@@ -50,7 +51,7 @@ jobs:
           output=pathlib.Path('artifacts');output.mkdir(exist_ok=True)
           apk=output/f'viptv-android-phone-tv-debug-{os.environ["BUILD_SHA"][:8]}.apk';shutil.copy2(source,apk)
           (output/'SHA256SUMS').write_text(hashlib.sha256(apk.read_bytes()).hexdigest()+'  '+apk.name+'\n')
-          (output/'build.json').write_text(json.dumps({'revision':os.environ['BUILD_SHA'],'design':pathlib.Path('DESIGN_REF').read_text().strip(),'core':pathlib.Path('CORE_REF').read_text().strip(),'signing':'stable development key','platforms':['phone','android-tv']}))
+          (output/'build.json').write_text(json.dumps({'revision':os.environ['BUILD_SHA'],'design':pathlib.Path('DESIGN_REF').read_text().strip(),'core':pathlib.Path('CORE_REF').read_text().strip(),'torrent':pathlib.Path('TORRENT_REF').read_text().strip(),'native_torrent_qualified':False,'signing':'stable development key','platforms':['phone','android-tv']}))
           PY
       - uses: actions/upload-artifact@v4
         with:

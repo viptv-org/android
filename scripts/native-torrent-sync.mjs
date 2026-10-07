@@ -6,7 +6,8 @@ import { pathToFileURL } from 'node:url';
 const repository = 'viptv-org/playback-gateway';
 const binding = 'ffi/generated/kotlin/uniffi/playback_gateway_ffi/playback_gateway_ffi.kt';
 const machines = { 'armeabi-v7a': 40, 'arm64-v8a': 183, x86_64: 62 };
-const required = ['LICENSE', 'PROVENANCE.md', binding,
+const required = ['LICENSE', 'PROVENANCE.md', 'THIRD_PARTY/native-dependencies.json',
+    'THIRD_PARTY/native-NOTICES.txt', 'THIRD_PARTY/native-SHA256SUMS.txt', binding,
     ...Object.keys(machines).map(abi => `ffi/generated/android/jniLibs/${abi}/libplayback_gateway_ffi.so`)];
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
