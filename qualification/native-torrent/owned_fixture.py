@@ -133,7 +133,11 @@ class OwnedPeer:
         self.stopped = threading.Event()
         self.lock = threading.Lock()
         self.clients = set()
-        self.counters = {"connections": 0, "requests": 0, "served_bytes": 0, "held_requests": 0}
+        self.counters = {"connections": 0, "requests": 0, "served_bytes": 0, "held_requests": 0,
+                         "accepted_handshakes": 0, "refused_handshakes": 0, "extended_handshakes": 0,
+                         "metadata_requests": 0, "metadata_responses": 0, "held_metadata_requests": 0,
+                         "connection_errors": 0, "handshake_bytes_received": 0,
+                         "connection_eof": 0, "connection_timeout": 0, "connection_other_error": 0}
         self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listener.bind(("127.0.0.1", port))
         self.listener.listen(16)
@@ -211,13 +215,26 @@ class OwnedPeer:
         if start < 0 or start >= len(self.metadata):
             raise ValueError("invalid metadata piece")
         self.send(client, bytes([20, extension]) + encode({b"msg_type": 1, b"piece": piece, b"total_size": len(self.metadata)}) + self.metadata[start:start + 16384])
+        with self.lock:
+            self.counters["metadata_responses"] += 1
 
     def serve(self, client):
         try:
             client.settimeout(2)
-            handshake = self.receive(client, 68)
+            handshake = bytearray()
+            while len(handshake) < 68:
+                block = client.recv(68 - len(handshake))
+                if not block:
+                    raise EOFError()
+                handshake.extend(block)
+                with self.lock:
+                    self.counters["handshake_bytes_received"] += len(block)
             if handshake[:20] != b"\x13BitTorrent protocol" or handshake[28:48] != self.hash:
+                with self.lock:
+                    self.counters["refused_handshakes"] += 1
                 return
+            with self.lock:
+                self.counters["accepted_handshakes"] += 1
             client.sendall(b"\x13BitTorrent protocol" + b"\x00\x00\x00\x00\x00\x10\x00\x00" + self.hash + b"-OWNED1-000000000000")
             count = len(self.info[b"pieces"]) // 20
             bitfield = bytearray(math.ceil(count / 8))
@@ -251,15 +268,21 @@ class OwnedPeer:
                 client.settimeout(2)
                 message = self.receive(client, length)
                 if message[:2] == b"\x14\x00":
+                    with self.lock:
+                        self.counters["extended_handshakes"] += 1
                     value, _ = decode(message[2:])
                     extension = value.get(b"m", {}).get(b"ut_metadata", 1)
                 elif message[:2] == b"\x14\x01":
                     value, _ = decode(message[2:])
                     if value.get(b"msg_type") == 0:
+                        with self.lock:
+                            self.counters["metadata_requests"] += 1
                         piece = value[b"piece"]
                         if self.metadata_held():
                             if piece not in pending_metadata and len(pending_metadata) < 256:
                                 pending_metadata.append(piece)
+                                with self.lock:
+                                    self.counters["held_metadata_requests"] += 1
                         else:
                             self.metadata_piece(client, extension, piece)
                 elif message[:1] == b"\x06" and len(message) == 13:
@@ -278,8 +301,11 @@ class OwnedPeer:
                     request = struct.unpack("!III", message[1:])
                     if request in pending:
                         pending.remove(request)
-        except (OSError, EOFError, ValueError, KeyError, IndexError, TypeError, OverflowError):
-            pass
+        except (OSError, EOFError, ValueError, KeyError, IndexError, TypeError, OverflowError) as error:
+            with self.lock:
+                self.counters["connection_errors"] += 1
+                field = "connection_timeout" if isinstance(error, TimeoutError) else "connection_eof" if isinstance(error, EOFError) else "connection_other_error"
+                self.counters[field] += 1
         finally:
             with self.lock:
                 self.clients.discard(client)
