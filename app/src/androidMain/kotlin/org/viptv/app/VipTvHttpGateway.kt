@@ -312,16 +312,37 @@ class VipTvHttpGateway(
         subtitlesOff: Boolean,
         delivery: PlaybackDeliveryOptions,
     ): PlaybackLaunch {
+        return playbackV2.start(playbackRequest(source, positionMillis, capabilities, audioTrackIndex,
+            subtitleTrackIndex, subtitlesOff, delivery))
+    }
+
+    /** Both delivery branches use the actual Rust request seam and a fresh idempotency key. */
+    internal suspend fun playbackRequest(
+        source: Source,
+        positionMillis: Long,
+        capabilities: PlaybackClientCapabilities,
+        audioTrackIndex: Int? = null,
+        subtitleTrackIndex: Int? = null,
+        subtitlesOff: Boolean = false,
+        delivery: PlaybackDeliveryOptions = PlaybackDeliveryOptions(),
+        preferredAudioLanguage: String? = null,
+        preferredSubtitleLanguage: String? = null,
+        preferredSubtitlesEnabled: Boolean? = null,
+    ): JSONObject {
         val selectedSource = source.channelId?.let { liveSourceV2(it) } ?: source
-            val intent = JSONObject().put("requestId", java.util.UUID.randomUUID().toString())
-                .put("platform", if (television) "android_tv" else "android")
-                .put("playback", JSONObject().put("streamId", selectedSource.id).put("position", if (source.channelId != null) 0.0 else seconds(positionMillis))
-                    .put("capabilities", capabilities.toCoreJson()).putOpt("audioTrackIndex", audioTrackIndex)
-                    .putOpt("subtitleTrackIndex", subtitleTrackIndex).put("subtitlesOff", subtitlesOff)
-                    .put("managedOnly", delivery.forceGateway).put("forceTranscode", delivery.forceTranscode))
-            val canonical = try { JSONObject(uniffi.viptv_core.normalize("playbackV2Intent", intent.toString(), origin)) }
-            catch (_: Exception) { throw GatewayError(400, "This device could not report a supported playback configuration.", "invalid_playback_request") }
-            return playbackV2.start(canonical)
+        val playback = JSONObject().put("streamId", selectedSource.id)
+            .put("position", if (source.channelId != null) 0.0 else seconds(positionMillis))
+            .put("capabilities", capabilities.toCoreJson()).putOpt("audioTrackIndex", audioTrackIndex)
+            .putOpt("subtitleTrackIndex", subtitleTrackIndex).put("subtitlesOff", subtitlesOff)
+            .put("managedOnly", delivery.forceGateway).put("forceTranscode", delivery.forceTranscode)
+        val intent = JSONObject().put("requestId", java.util.UUID.randomUUID().toString())
+            .put("platform", if (television) "android_tv" else "android").put("playback", playback)
+        if (preferredAudioLanguage != null || preferredSubtitleLanguage != null || preferredSubtitlesEnabled != null) {
+            intent.put("preferences", JSONObject().putOpt("audioLanguage", preferredAudioLanguage)
+                .putOpt("subtitleLanguage", preferredSubtitleLanguage).putOpt("subtitlesEnabled", preferredSubtitlesEnabled))
+        }
+        return try { JSONObject(uniffi.viptv_core.normalize("playbackV2Intent", intent.toString(), origin)) }
+        catch (_: Exception) { throw GatewayError(400, "This device could not report a supported playback configuration.", "invalid_playback_request") }
     }
     override suspend fun heartbeat(playbackId: String) {
         playbackV2.renew(playbackId)

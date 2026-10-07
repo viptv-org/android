@@ -38,6 +38,7 @@ internal fun AppController.navigate(destination: Destination) = scope.launch {
 /** Invalidates an in-flight source/playback request before a user leaves its surface. */
 internal fun AppController.invalidatePlaybackPreparation() {
     playbackGeneration++; playbackStartJob?.cancel(); playbackStartJob = null
+    nativeEffects?.cancelPending()
     _state.value = _state.value.copy(preparingSourceId = null, loading = if (_state.value.preparingSourceId != null) false else _state.value.loading)
 }
 

@@ -8,7 +8,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 
-internal fun AppController.start(media: Media, source: Source, explicitResume: Boolean = false) {
+internal fun AppController.start(media: Media, source: Source, explicitResume: Boolean = false, deliveryOptions: PlaybackDeliveryOptions = PlaybackDeliveryOptions(), retryIntent: NativePlaybackRetryIntent? = null) {
     cancelUpNext()
     if (_state.value.preparingSourceId != null) return
     if (_state.value.route is Route.Guide) cancelGuideWork()
@@ -18,9 +18,8 @@ internal fun AppController.start(media: Media, source: Source, explicitResume: B
     playbackStartJob = scope.launch {
         managedRecoveryKey = null
         managedRecoveryInFlightKey = null
-        activePlaybackDelivery = PlaybackDeliveryOptions()
         if (!PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) return@launch
-        val started = prepareAndStart(media, source, explicitResume, playWhenReady = true, resetTrackChoices = true, expectedGeneration = requestGeneration)
+        val started = prepareAndStart(media, source, explicitResume, playWhenReady = retryIntent?.playWhenReady ?: true, resetTrackChoices = retryIntent == null, expectedGeneration = requestGeneration, deliveryOptions = deliveryOptions)
         if (!started && PlaybackRequestPolicy.isCurrent(requestGeneration, playbackGeneration)) showPlaybackRecovery(media, source)
     }
 }
@@ -72,51 +71,86 @@ private suspend fun AppController.prepareAndStartLocked(
     val requestedSubtitlesOff = if (resetTrackChoices) false else subtitlesOff
     _state.value = _state.value.copy(preparingSourceId = source.id, loading = true, message = null)
     var nativeBoundaryCrossed = false
+    val retryIntent = if (deliveryOptions.forceGateway) nativeRetryIntent else null
     return try {
-        val (launch, deliveredOptions) = openPlaybackDelivery(
-            initial = deliveryOptions,
-            prepare = { options -> gateway.playback(
-                source = source,
-                positionMillis = media.positionMillis,
-                capabilities = PlaybackClientCapabilities.from(player.capabilities.value),
-                audioTrackIndex = requestedAudio,
-                subtitleTrackIndex = requestedSubtitle,
-                subtitlesOff = requestedSubtitlesOff,
-                delivery = options,
-            ) },
-            open = { launch ->
-                nativeBoundaryCrossed = true
-                player.open(
-                    PlaybackSource(
-                        launch.url,
-                        mimeType = when (launch.format) { "hls" -> "application/x-mpegURL"; "dash" -> "application/dash+xml"; else -> null },
-                        headers = launch.headers,
-                        startPositionMillis = launch.nativeStartPositionMillis,
-                        options = org.viptv.video.PlaybackOptions(
-                            preferredAudioLanguage = launch.preferredAudioLanguage ?: launch.audioTracks.firstOrNull { it.selected }?.language ?: _state.value.preferences.audioLanguage.takeIf { it.isNotBlank() },
-                            preferredSubtitleLanguage = launch.preferredSubtitleLanguage ?: launch.subtitleTracks.firstOrNull { it.selected }?.language ?: _state.value.preferences.subtitleLanguage.takeIf { it.isNotBlank() },
-                            subtitlesEnabled = launch.subtitlesEnabled ?: _state.value.preferences.subtitlesEnabled),
-                        title = media.name,
-                        kindHint = if (launch.live || media.type == "live") PlaybackKind.Live else PlaybackKind.OnDemand,
-                    ),
-                    playWhenReady = playWhenReady,
-                )
-            },
-            release = gateway::stopPlayback,
-            isCurrent = { PlaybackRequestPolicy.isCurrent(generation, playbackGeneration) },
-        )
+        suspend fun ordinary(prepared: PlaybackLaunch? = null): OpenedPlayback {
+            val (launch, deliveredOptions) = openPlaybackDelivery(
+                initial = deliveryOptions,
+                prepare = { options -> prepared ?: gateway.playback(
+                    source = source,
+                    positionMillis = media.positionMillis,
+                    capabilities = PlaybackClientCapabilities.from(player.capabilities.value),
+                    audioTrackIndex = requestedAudio,
+                    subtitleTrackIndex = requestedSubtitle,
+                    subtitlesOff = requestedSubtitlesOff,
+                    delivery = options,
+                ) },
+                open = { launch ->
+                    nativeBoundaryCrossed = true
+                    if (nativeEffects?.retireOutgoing() == false) throw NativeTorrentCoordinatorUnavailable()
+                    retirePlaybackSession()
+                    player.open(
+                        PlaybackSource(
+                            launch.url,
+                            mimeType = when (launch.format) { "hls" -> "application/x-mpegURL"; "dash" -> "application/dash+xml"; else -> null },
+                            headers = launch.headers,
+                            startPositionMillis = launch.nativeStartPositionMillis,
+                            options = org.viptv.video.PlaybackOptions(
+                                preferredAudioLanguage = retryIntent?.audioLanguage ?: launch.preferredAudioLanguage ?: launch.audioTracks.firstOrNull { it.selected }?.language ?: _state.value.preferences.audioLanguage.takeIf { it.isNotBlank() },
+                                preferredSubtitleLanguage = retryIntent?.subtitleLanguage ?: launch.preferredSubtitleLanguage ?: launch.subtitleTracks.firstOrNull { it.selected }?.language ?: _state.value.preferences.subtitleLanguage.takeIf { it.isNotBlank() },
+                                subtitlesEnabled = retryIntent?.subtitlesEnabled ?: launch.subtitlesEnabled ?: _state.value.preferences.subtitlesEnabled),
+                            title = media.name,
+                            kindHint = if (launch.live || media.type == "live") PlaybackKind.Live else PlaybackKind.OnDemand,
+                        ),
+                        playWhenReady = playWhenReady,
+                    )
+                },
+                release = gateway::stopPlayback,
+                isCurrent = { PlaybackRequestPolicy.isCurrent(generation, playbackGeneration) },
+            )
             activePlaybackDelivery = deliveredOptions
-            playbackTitleOffsetMillis = PlaybackTimelinePolicy.titleOffsetMillis(launch.timelineMode, launch.positionMillis)
-            playbackTitleDurationMillis = launch.durationMillis ?: media.durationMillis
-            lastTrustedTitlePositionMillis = launch.positionMillis
-            managedPauseAnchorMillis = ManagedPausePolicy.anchorAfterOpen(launch.timelineMode, launch.live, launch.positionMillis, playWhenReady)
+            nativePlaybackIntent = null
             replacePlaybackSession(launch.sessionId)
+            return OpenedPlayback.ordinary(launch)
+        }
+        val effects = if (media.type != "live" && source.channelId == null) nativePlaybackEffects() else null
+        val opened = if (effects == null) ordinary() else {
+            val epoch = checkNotNull(nativePlaybackEpoch)
+            val preferences = _state.value.preferences
+            val request = gateway.playbackRequest(source, media.positionMillis, PlaybackClientCapabilities.from(player.capabilities.value),
+                requestedAudio, requestedSubtitle, requestedSubtitlesOff, deliveryOptions,
+                preferences.audioLanguage.takeIf { it.isNotBlank() }, preferences.subtitleLanguage.takeIf { it.isNotBlank() },
+                preferences.subtitlesEnabled)
+            lateinit var control: NativePlaybackControl
+            control = gateway.nativePlaybackControl(epoch.scope, generation, epoch.coordinator.cache, scope,
+                preventReads = { effects.preventReads(control) }, invalidated = { effects.invalidated(control) })
+            when (val prepared = effects.prepare(control, request, generation)) {
+                is NativePlaybackEffects.Prepared.Legacy -> ordinary(prepared.launch)
+                is NativePlaybackEffects.Prepared.Native -> {
+                    val position = effects.accept(prepared, media.name, playWhenReady,
+                        boundary = {
+                            nativeBoundaryCrossed = true
+                            retirePlaybackSession()
+                            val state = prepared.candidate.control.state()
+                            nativePlaybackIntent = NativePlaybackRetryIntent(playWhenReady, state.audioLanguage, state.subtitleLanguage,
+                                state.subtitlesEnabled ?: false)
+                            nativeRetryIntent = nativePlaybackIntent
+                        }, open = player::open)
+                    activePlaybackDelivery = deliveryOptions
+                    OpenedPlayback.native(position)
+                }
+            }
+        }
+            playbackTitleOffsetMillis = PlaybackTimelinePolicy.titleOffsetMillis(opened.timelineMode, opened.positionMillis)
+            playbackTitleDurationMillis = opened.durationMillis ?: media.durationMillis
+            lastTrustedTitlePositionMillis = opened.positionMillis
+            managedPauseAnchorMillis = ManagedPausePolicy.anchorAfterOpen(opened.timelineMode, opened.live, opened.positionMillis, playWhenReady)
             selectedAudioTrackIndex = requestedAudio
             selectedSubtitleTrackIndex = requestedSubtitle
             subtitlesOff = requestedSubtitlesOff
             val playbackMedia = media.copy(
-                positionMillis = launch.positionMillis,
-                durationMillis = launch.durationMillis ?: media.durationMillis,
+                positionMillis = opened.positionMillis,
+                durationMillis = opened.durationMillis ?: media.durationMillis,
                 sourceAddonId = source.addonId,
                 sourceFingerprint = source.fingerprint,
             )
@@ -129,12 +163,14 @@ private suspend fun AppController.prepareAndStartLocked(
             _state.value = _state.value.copy(
                 route = Route.Player(playbackMedia, source, returnDestination, directOrigin, sourceRoute),
                 playerChromeVisible = true,
-                playbackTracks = PlaybackTrackChoices(launch.audioTracks, launch.subtitleTracks, launch.subtitlesSupported),
-                playbackDeliveryMode = launch.timelineMode,
+                playbackTracks = opened.tracks,
+                playbackDeliveryMode = opened.timelineMode,
                 dialog = null,
                 loading = false,
                 preparingSourceId = null,
             )
+            nativeRetryIntent = null
+            nativeStoppedMedia = null
             continuationRestore = null
             startProgressPersistence(playbackMedia)
             schedulePlayerChromeDismissal()
@@ -161,6 +197,14 @@ internal fun AppController.onPlayerEvent(event: PlaybackEvent) {
     val playWhenReady = player.state.value.playWhenReady
     val key = "${route.media.type}:${route.media.id}:${route.source.id}"
     if (managedRecoveryInFlightKey == key) return
+    val native = nativeEffects?.takeIf { it.hasActive }
+    if (native != null) {
+        captureNativeRetryIntent()
+        scope.launch { native.failActive(org.viptv.video.PlaybackFailure(event.error)) }
+        retirePlaybackSession()
+        showPlaybackRecovery(route)
+        return
+    }
     player.stop()
     retirePlaybackSession()
     if (!ManagedRecoveryPolicy.shouldAttempt(
@@ -225,8 +269,18 @@ internal fun AppController.retryPlaybackRecovery() {
     val dialog = _state.value.dialog?.takeIf { it.kind == DialogKind.PlaybackRecovery } ?: return
     val media = dialog.media ?: return
     val source = dialog.source ?: return
-    _state.value = _state.value.copy(dialog = null, message = null)
-    start(media, source, explicitResume = false)
+    scope.launch {
+        val decision = nativeEffects?.recoveryDecision() ?: "ordinaryRetry"
+        if (_state.value.dialog !== dialog) return@launch
+        when (decision) {
+            "waitForRetirement" -> return@launch
+            "authRecovery" -> { fail(GatewayError(403, "Your session is no longer authorized.", "unauthorized")); return@launch }
+            "chooseSource" -> { chooseAnotherSourceForRecovery(); return@launch }
+        }
+        _state.value = _state.value.copy(dialog = null, message = null)
+        start(media, source, explicitResume = false, deliveryOptions = PlaybackDeliveryOptions(forceGateway = decision == "forceGatewayRetry"),
+            retryIntent = nativeRetryIntent.takeIf { decision == "forceGatewayRetry" })
+    }
 }
 
 internal fun AppController.chooseAnotherSourceForRecovery() {

@@ -10,7 +10,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 /** Delivery changes never select another source or infer codec support from an extension. */
 data class PlaybackDeliveryOptions(val forceGateway: Boolean = false, val forceTranscode: Boolean = false)
 
-/** Application effects for one exact source. Each failed native admission is released first. */
+/** Ordinary delivery effects for one exact source. Each failed player open releases its lease. */
 internal suspend fun openPlaybackDelivery(
     initial: PlaybackDeliveryOptions,
     prepare: suspend (PlaybackDeliveryOptions) -> PlaybackLaunch,
@@ -35,5 +35,20 @@ internal suspend fun openPlaybackDelivery(
         currentCoroutineContext().ensureActive()
         if (!isCurrent()) throw CancellationException("Playback was replaced")
         throw error
+    }
+}
+
+/** Safe player facts shared by the controller after an ordinary or private native open. */
+internal class OpenedPlayback(
+    val positionMillis: Long,
+    val durationMillis: Long?,
+    val timelineMode: String,
+    val live: Boolean,
+    val tracks: PlaybackTrackChoices,
+) {
+    companion object {
+        fun ordinary(launch: PlaybackLaunch) = OpenedPlayback(launch.positionMillis, launch.durationMillis,
+            launch.timelineMode, launch.live, PlaybackTrackChoices(launch.audioTracks, launch.subtitleTracks, launch.subtitlesSupported))
+        fun native(positionMillis: Long) = OpenedPlayback(positionMillis, null, "direct", false, PlaybackTrackChoices())
     }
 }

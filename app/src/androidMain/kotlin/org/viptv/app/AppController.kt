@@ -127,6 +127,27 @@ class AppController(context: Context, private val origin: String) {
     internal val playbackPrepareMutex = Mutex()
     internal var playbackGeneration = 0L
     internal var playbackInteractionVersion = 0L
+    // Qualification is supplied only by an isolated debug/test fixture until rollout gates pass.
+    internal var nativePlaybackQualified: () -> Boolean = { false }
+    internal var nativeScopeOwnerOverride: NativeTorrentScopeOwner? = null
+    private val nativeScopeOwnerDelegate = lazy {
+        NativeTorrentScopeOwner({ openNativeTorrentCache(context) }, ::createNativeCoordinator)
+    }
+    internal val nativeScopeOwner: NativeTorrentScopeOwner get() = nativeScopeOwnerDelegate.value
+    internal var nativePlaybackEpoch: NativeTorrentScopeEpoch? = null
+    internal var nativeEffects: NativePlaybackEffects? = null
+    internal var nativeStoppedMedia: Media? = null
+    internal var nativeRetryIntent: NativePlaybackRetryIntent? = null
+    internal var nativePlaybackIntent: NativePlaybackRetryIntent? = null
+    private var nativeDeviceAuthorizationEpoch = java.util.UUID.randomUUID().toString()
+    internal fun hasNativeScopeOwner() = nativeScopeOwnerDelegate.isInitialized() || nativeScopeOwnerOverride != null
+    internal fun rotateNativeAuthorizationEpoch() { nativeDeviceAuthorizationEpoch = java.util.UUID.randomUUID().toString() }
+    internal fun nativeAuthorizationFacts(): org.json.JSONObject? {
+        val account = verifiedIdentity?.account?.id ?: return null
+        val profile = _state.value.selectedProfile?.id ?: return null
+        return org.json.JSONObject().put("serverOrigin", origin).put("accountId", account).put("profileId", profile)
+            .put("deviceAuthorizationEpoch", nativeDeviceAuthorizationEpoch)
+    }
     internal val guideScheduleCache = mutableMapOf<String, GuideScheduleCache>()
     internal var explicitResumeAwaitingCompletionKey: String? = null
     internal var autoNextMediaKey: String? = null
@@ -152,6 +173,7 @@ class AppController(context: Context, private val origin: String) {
                 ForegroundValidationResult.Revoked -> {
                     cancelForegroundValidation()
                     authenticationGeneration++
+                    invalidateNativeAuthorization()
                     verifiedIdentity = null; quietSessionAdoption = false
                     stopPlayback((_state.value.route as? Route.Player)?.media)
                     cancelAuthenticatedWork()
@@ -161,6 +183,7 @@ class AppController(context: Context, private val origin: String) {
                     coreSession.begin()
                 }
                 is ForegroundValidationResult.ProfileUnavailable -> {
+                    invalidateNativeAuthorization()
                     verifiedIdentity = result.identity
                     cancelForegroundValidation()
                     stopPlayback((_state.value.route as? Route.Player)?.media)
@@ -326,7 +349,9 @@ class AppController(context: Context, private val origin: String) {
                     return
                 }
                 quietSessionAdoption = false
+                val principalChanged = verifiedIdentity?.account?.id != view.identity?.account?.id
                 verifiedIdentity = view.identity
+                if (principalChanged) invalidateNativeAuthorization()
                 if (keepProfilesOnIdentityRefresh) {
                     keepProfilesOnIdentityRefresh = false
                     _state.value = _state.value.copy(route = Route.Profiles, profiles = profiles, selectedProfile = chosen, loading = false)
@@ -334,6 +359,7 @@ class AppController(context: Context, private val origin: String) {
                 }
                 val changed = chosen?.id != _state.value.selectedProfile?.id
                 val enter = changed || _state.value.route == Route.Pairing || _state.value.route == Route.Profiles
+                if (changed) invalidateNativeAuthorization()
                 if (changed) _state.value = _state.value.copy(shelves = emptyList(), favorites = emptyList(), queue = emptyList(), discoverUi = DiscoverUiState(), searchQuery = "", searchResults = emptyList(), searchSections = emptyList(), guideUi = GuideUiState(), homeFocus = HomeFocusSnapshot())
                 _state.value = _state.value.copy(profiles = profiles, selectedProfile = chosen, loading = false, message = null)
                 chosen?.let { profile -> scope.launch { loadHome(profile, generation, enter) } }
@@ -342,6 +368,7 @@ class AppController(context: Context, private val origin: String) {
                 verifiedIdentity = view.identity
                 val lostProfile = _state.value.selectedProfile != null
                 if (lostProfile) {
+                    invalidateNativeAuthorization()
                     cancelForegroundValidation()
                     stopPlayback((_state.value.route as? Route.Player)?.media)
                     cancelAuthenticatedWork()
@@ -350,7 +377,7 @@ class AppController(context: Context, private val origin: String) {
                 _state.value = AppState(sessionRestoring = false, route = Route.Profiles, profiles = profiles,
                     message = if (lostProfile) "This profile is no longer available. Choose a profile." else null)
             }
-            "PAIRING" -> { gateway.clearProfileCache(); quietSessionAdoption = false; _state.value = AppState(route = Route.Pairing, sessionRestoring = false, message = expiredSessionNotice); if (television) beginPairing() }
+            "PAIRING" -> { invalidateNativeAuthorization(); gateway.clearProfileCache(); quietSessionAdoption = false; _state.value = AppState(route = Route.Pairing, sessionRestoring = false, message = expiredSessionNotice); if (television) beginPairing() }
             "ERROR" -> {
                 if (quietSessionAdoption) {
                     quietSessionAdoption = false
@@ -458,6 +485,7 @@ class AppController(context: Context, private val origin: String) {
             }
             return
         }
+        if (_state.value.selectedProfile?.id != profile.id) invalidateNativeAuthorization()
         quietSessionAdoption = false
         keepProfilesOnIdentityRefresh = false
         cancelUpNext()
@@ -474,8 +502,9 @@ class AppController(context: Context, private val origin: String) {
     fun openProfileManagement() { _state.value = _state.value.copy(managingProfiles = true); navigate(Destination.Profile) }
     fun toggleProfileManagement() { _state.value = _state.value.copy(managingProfiles = !_state.value.managingProfiles) }
 
-    fun signOut() = scope.launch { cancelForegroundValidation(); guarded("Enter parent PIN to sign out") { homeRevisionJob?.cancel(); homeRevisionJob = null; renderedCatalogRevision = null; revisionOwner = null; quietSessionAdoption = false; authenticationGeneration++; stopPlayback((_state.value.route as? Route.Player)?.media); pendingCoreAction = coreSession::signOut; coreSession.signOut() } }
+    fun signOut() = scope.launch { cancelForegroundValidation(); guarded("Enter parent PIN to sign out") { homeRevisionJob?.cancel(); homeRevisionJob = null; renderedCatalogRevision = null; revisionOwner = null; quietSessionAdoption = false; authenticationGeneration++; invalidateNativeAuthorization(); stopPlayback((_state.value.route as? Route.Player)?.media); pendingCoreAction = coreSession::signOut; coreSession.signOut() } }
     fun close() {
+        invalidateNativeAuthorization()
         sourcePreview.cancel(); capabilityProbe?.cancel()
         homeRevisionJob?.cancel(); homeRevisionJob = null
         foregroundValidation.close(); authenticationGeneration++; sessionRefreshJob?.cancel(); pendingProfileRefreshWait?.cancel()
@@ -492,6 +521,7 @@ class AppController(context: Context, private val origin: String) {
      * replaying credentials against a different server.
      */
     fun wipeCredentialsForOriginChange() {
+        invalidateNativeAuthorization()
         gateway.clearProfileCache()
         store.edit().remove("access").remove("refresh").remove("core.session").remove("token").remove("profile").commit()
         gateway.setAccessToken(null)
@@ -581,11 +611,12 @@ class AppController(context: Context, private val origin: String) {
     internal fun stopPlayback(media: Media? = null): Job? {
         cancelUpNext()
         invalidatePlaybackPreparation()
-        if (!playerDelegate.isInitialized()) return null
+        if (!playerDelegate.isInitialized()) { nativeEffects?.stop(); return null }
         val position = absolutePositionMillis()
         val profileId = _state.value.selectedProfile?.id
         progressJob?.cancel()
         val finalSave = media?.let { item -> scope.launch { persistProgress(profileId, item, position) } }
+        nativeEffects?.stop()
         player.stop()
         player.detachSurface()
         playbackTitleOffsetMillis = 0L
