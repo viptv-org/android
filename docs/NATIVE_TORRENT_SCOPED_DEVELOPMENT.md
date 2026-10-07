@@ -21,7 +21,9 @@ Android TV model, API and process ABI. The closed target list contains the
 configured AFTLAS01/API 30/ARMv7 TV and the shared
 sdk_google_atv64_x86_64/API 36/x86_64 TV emulator. Each receipt admits exactly
 one tuple and requires its own actual evidence; evidence from one target does
-not qualify the other. The build refuses stale inputs.
+not qualify the other. The build refuses stale executable inputs. Modified
+owner guides are preserved and listed as `documentationOnlyChanges` in the
+emitted asset; this exception cannot admit code, artifact or pin changes.
 The runtime checks its actual model/API/process ABI, TV platform, normal APK
 library hashes, facade initialization and suspend-aware clock. A cache owner
 must also initialize successfully and remain available before advertisement.

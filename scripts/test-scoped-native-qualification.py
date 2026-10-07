@@ -23,6 +23,8 @@ class ScopedQualificationTest(unittest.TestCase):
         self.receipt = self.root / "receipt.json"
         for name in ("CORE_REF", "TORRENT_REF", "DESIGN_REF"):
             (self.root / name).write_text("a" * 40 + "\n")
+        (self.root / "app").mkdir()
+        (self.root / "app/AGENTS.md").write_text("Owner guide\n")
         paths = ["vendor/playback-gateway/lock.json", "vendor/core/lock.json"]
         for abi in ("armeabi-v7a", "x86_64"):
             paths.extend([
@@ -89,6 +91,15 @@ class ScopedQualificationTest(unittest.TestCase):
         self.prepare(self.measured(qualification.MEASURED_TARGETS[1]))
         qualification.prepare(self.root, None, self.output)
         self.assertFalse((self.output / "native-torrent/scoped-qualification.json").exists())
+
+    def test_modified_owner_guide_is_recorded_but_code_changes_refused(self):
+        (self.root / "app/AGENTS.md").write_text("Owner's edited guide\n")
+        self.prepare(self.measured(qualification.MEASURED_TARGETS[1]))
+        emitted = json.loads((self.output / "native-torrent/scoped-qualification.json").read_text())
+        self.assertEqual(emitted["documentationOnlyChanges"], ["app/AGENTS.md"])
+        (self.root / "app/uncommitted.kt").write_text("val changed = true\n")
+        with self.assertRaisesRegex(ValueError, "committed"):
+            self.prepare(self.measured(qualification.MEASURED_TARGETS[1]))
 
 
 if __name__ == "__main__":
