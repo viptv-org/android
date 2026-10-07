@@ -10,6 +10,20 @@ export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 # bridge.
 if [[ "$mode" == host || "$mode" == all ]]; then
   cargo build --locked --manifest-path vendor/core/Cargo.toml -p viptv-core --features native --lib
+  # Cargo may use a shared target directory while Gradle deliberately loads
+  # the canonical host library under this snapshot. Publish the new product,
+  # rather than accidentally loading an older ABI left at that path.
+  core_target=$(cargo metadata --locked --no-deps --format-version 1 --manifest-path vendor/core/Cargo.toml | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>process.stdout.write(JSON.parse(s).target_directory));')
+  case "$(uname -s)" in
+    Darwin) core_library=libviptv_core.dylib ;;
+    MINGW*|MSYS*|CYGWIN*) core_library=viptv_core.dll ;;
+    *) core_library=libviptv_core.so ;;
+  esac
+  core_destination="vendor/core/target/debug/$core_library"
+  mkdir -p "$(dirname "$core_destination")"
+  if [[ ! "$core_target/debug/$core_library" -ef "$core_destination" ]]; then
+    cp "$core_target/debug/$core_library" "$core_destination"
+  fi
 fi
 if [[ "$mode" == android || "$mode" == all ]]; then
   cd vendor/core

@@ -294,7 +294,10 @@ class NativePlaybackControlTest {
         val entered = CountDownLatch(1)
         val pauseReceipt = java.util.concurrent.atomic.AtomicBoolean()
         val samples = java.util.concurrent.atomic.AtomicLong(100_000)
-        val executor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "native-receipt-test") }
+        val receiptThread = java.util.concurrent.atomic.AtomicReference<Thread>()
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+            Thread(task, "native-receipt-test").also { receiptThread.set(it) }
+        }
         val dispatcher = executor.asCoroutineDispatcher()
         try { NativeControlHttpFixture { request ->
             val value = when {
@@ -306,7 +309,7 @@ class NativePlaybackControlTest {
         }.use { server ->
             val clock = NativePlaybackClock {
                 val sample = samples.incrementAndGet()
-                if (Thread.currentThread().name == "native-receipt-test" && pauseReceipt.compareAndSet(true, false)) {
+                if (Thread.currentThread() === receiptThread.get() && pauseReceipt.compareAndSet(true, false)) {
                     entered.countDown()
                     Thread.sleep(150)
                 }
