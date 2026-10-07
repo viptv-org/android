@@ -90,6 +90,13 @@ class NativePlaybackControlTest {
             assertEquals(0, server.requests.size)
             assertFailsWith<GatewayError> { transport.request("GET", "/v2/playback/id") }
         }
+        val malformedOrigin = "http://fixture.invalid:invalidport"
+        val failure = assertFailsWith<GatewayError> {
+            NativePlaybackTransport(malformedOrigin, { "fixture" }, { true }, owner).request("GET", "/v2/playback-protocol", negotiation = true)
+        }
+        assertFalse(failure.message.contains(malformedOrigin))
+        assertTrue(owner.isAvailable)
+        assertEquals(0, owner.reservedControlBytes)
         assertTrue(owner.closeScope())
     }
 
@@ -216,6 +223,9 @@ class NativePlaybackControlTest {
             transport.request("GET", "/v2/playback-protocol", negotiation = true).use { assertEquals(200, it.status) }
             assertEquals(1, refreshes)
             assertEquals(listOf("Bearer expired_fixture", "Bearer fresh_fixture"), server.requests.map { it.headers["authorization"] })
+            val failedRefresh = NativePlaybackTransport(server.origin, { "expired_fixture" }, { true }, owner,
+                { throw java.io.IOException("Synthetic refresh failure") })
+            assertEquals(401, assertFailsWith<GatewayError> { failedRefresh.request("GET", "/v2/playback-protocol", negotiation = true) }.status)
         }
         assertTrue(owner.closeScope())
     }
@@ -252,6 +262,65 @@ class NativePlaybackControlTest {
             assertEquals(listOf("POST", "GET"), server.requests.takeLast(2).map { it.method })
             control.stop()
         }
+        assertTrue(owner.closeScope())
+    }
+
+    @Test fun repeatedRetirementCancelsRacingRemoteReleaseBeforeScopeJoin() = runBlocking {
+        val owner = cache()
+        val releaseEntered = CountDownLatch(1)
+        NativeControlHttpFixture { request ->
+            when {
+                request.target.endsWith("playback-protocol") -> NativeHttpReply("""{"version":1,"native_torrent_versions":[1]}""".toByteArray())
+                request.method == "DELETE" -> { releaseEntered.countDown(); NativeHttpReply("""{"ok":true}""".toByteArray(), delayMillis = 5_000) }
+                else -> NativeHttpReply(ready().toByteArray())
+            }
+        }.use { server ->
+            val control = control(server, owner, this)
+            control.start(input(), true, true, owner)
+            control.retireLocal()
+            val release = async(Dispatchers.Default) { runCatching { control.releaseRemote() } }
+            assertTrue(withContext(Dispatchers.IO) { releaseEntered.await(5, TimeUnit.SECONDS) })
+            control.retireLocal()
+            assertTrue(withContext(Dispatchers.IO) { control.joinLocal(System.nanoTime() + 2_000_000_000) })
+            assertTrue(release.await().isFailure)
+            control.closeAfterSettlement()
+            assertEquals(0, owner.reservedControlBytes)
+        }
+        assertTrue(owner.closeScope())
+    }
+
+    @Test fun receiptSamplingCannotBeOvertakenByConcurrentReadAuthorization() = runBlocking {
+        val owner = cache()
+        val entered = CountDownLatch(1)
+        val pauseReceipt = java.util.concurrent.atomic.AtomicBoolean()
+        val samples = java.util.concurrent.atomic.AtomicLong(100_000)
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "native-receipt-test") }
+        val dispatcher = executor.asCoroutineDispatcher()
+        try { NativeControlHttpFixture { request ->
+            val value = when {
+                request.target.endsWith("playback-protocol") -> """{"version":1,"native_torrent_versions":[1]}"""
+                request.method == "DELETE" -> """{"ok":true}"""
+                else -> { if (request.target.endsWith("heartbeat")) pauseReceipt.set(true); ready() }
+            }
+            NativeHttpReply(value.toByteArray())
+        }.use { server ->
+            val clock = NativePlaybackClock {
+                val sample = samples.incrementAndGet()
+                if (Thread.currentThread().name == "native-receipt-test" && pauseReceipt.compareAndSet(true, false)) {
+                    entered.countDown()
+                    Thread.sleep(150)
+                }
+                sample
+            }
+            val control = control(server, owner, this, clock = clock)
+            control.start(input(), true, true, owner)
+            val renewal = async(dispatcher) { control.renew() }
+            assertTrue(withContext(Dispatchers.IO) { entered.await(5, TimeUnit.SECONDS) })
+            assertNotNull(withContext(Dispatchers.Default) { control.authorize() })
+            renewal.await()
+            assertNotNull(control.remainingMillis())
+            control.stop()
+        } } finally { dispatcher.close() }
         assertTrue(owner.closeScope())
     }
 }

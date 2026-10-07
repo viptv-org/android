@@ -7,6 +7,15 @@ clock. Production capability remains off until the artifact, lifecycle, device
 and network qualification gates pass. Ordinary `BackendGateway.playback` keeps
 its existing HTTP/gateway contract.
 
+The canonical `nativeTorrent` / `authorizationScope` Rust operation compares
+transient configured HTTPS origin, account, profile and stable device authorization
+epoch facts. It normalizes origins, validates opaque identifiers, and returns
+`create`, `keep`, `retire` or `reject`. Token rotation and playback generation are
+excluded from those facts. A changed or revoked scope must settle and delete its
+old owner before creating another; malformed/unavailable facts reject admission
+and require retiring any existing owner. Scope facts have no serializable public
+DTO, and Rust debug representations redact them.
+
 Every qualified start negotiates through the generated Rust request builder.
 Negotiation has a five-second total deadline and 4096-byte body bound. Native
 control has a ten-second deadline, 16 KiB start-body bound and 6 MiB response

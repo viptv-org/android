@@ -164,25 +164,28 @@ internal class NativePlaybackControl(
         val sent = elapsed()
         transport.request(wire.getString("method"), wire.getString("path").removePrefix("/api"),
             wire.optJSONObject("body")?.toString()?.toByteArray(Charsets.UTF_8)).use { response ->
-            requireCurrent()
-            val received = elapsed()
-            val rtt = Math.subtractExact(received, sent).takeIf { it >= 0 } ?: throw invalid()
-            val observation = JSONObject().put("scope", scope).put("generation", generation).put("sequence", ++sequence)
-                .put("operation", when (operation) { "playbackV2" -> "start"; "playbackV2Heartbeat" -> "heartbeat"; else -> "poll" })
-                .put("receivedAtMillis", received).put("roundTripMillis", rtt)
-                .put("uncertaintyMillis", 0).put("maxUncertaintyMillis", 0)
-                .put("trustedWallUpperUnixMillis", JSONObject.NULL).put("suspendAware", true)
-            synchronized(this) { try {
-                holder.acceptMeasuredBytes(response.status.toUShort(), response.bytes, observation.toString())
-            } catch (_: Exception) {
-                retireLocal()
-                if (response.status in listOf(401, 403)) throw GatewayError(response.status, "Your session is no longer authorized.", "unauthorized")
-                throw invalid()
-            }
-            anchorWall = holder.trustedWallUpperUnixMillis()?.toLong()
-            anchorElapsed = received
-            ownedPlaybackId = holder.playbackId()
-            if (anchorWall != null && firstGrantReceipt == null) firstGrantReceipt = received
+            synchronized(this) {
+                requireCurrent()
+                // Receipt sampling and adoption share the read guard; a concurrent read's
+                // elapsed sample cannot overtake this response before Rust sees it.
+                val received = elapsed()
+                val rtt = Math.subtractExact(received, sent).takeIf { it >= 0 } ?: throw invalid()
+                val observation = JSONObject().put("scope", scope).put("generation", generation).put("sequence", ++sequence)
+                    .put("operation", when (operation) { "playbackV2" -> "start"; "playbackV2Heartbeat" -> "heartbeat"; else -> "poll" })
+                    .put("receivedAtMillis", received).put("roundTripMillis", rtt)
+                    .put("uncertaintyMillis", 0).put("maxUncertaintyMillis", 0)
+                    .put("trustedWallUpperUnixMillis", JSONObject.NULL).put("suspendAware", true)
+                try {
+                    holder.acceptMeasuredBytes(response.status.toUShort(), response.bytes, observation.toString())
+                } catch (_: Exception) {
+                    retireLocal()
+                    if (response.status in listOf(401, 403)) throw GatewayError(response.status, "Your session is no longer authorized.", "unauthorized")
+                    throw invalid()
+                }
+                anchorWall = holder.trustedWallUpperUnixMillis()?.toLong()
+                anchorElapsed = received
+                ownedPlaybackId = holder.playbackId()
+                if (anchorWall != null && firstGrantReceipt == null) firstGrantReceipt = received
             }
             val status = state().status
             if (status == "ready") startEffects()
@@ -241,7 +244,12 @@ internal class NativePlaybackControl(
     fun remainingMillis(): Long? = try { authorize(); state().deadlineMillis?.minus(elapsed()) } catch (_: Exception) { null }
     fun retireLocal(notify: Boolean = true) {
         synchronized(this) {
-            if (retired) return
+            if (retired) {
+                transport.cancelActive()
+                heartbeat?.cancel()
+                expiry?.cancel()
+                return
+            }
             retired = true
             preventReads()
             bridge?.invalidate()

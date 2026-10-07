@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
@@ -24,10 +25,17 @@ import okhttp3.Response
 /** Identity bytes reach Rust before JSON/UTF-8 allocation. Responses retain cache accounting. */
 internal class NativePlaybackResponse(
     val status: Int,
-    val bytes: ByteArray,
+    bytes: ByteArray,
     private val settled: () -> Unit,
 ) : AutoCloseable {
-    override fun close() = settled()
+    @Volatile private var bodyBytes: ByteArray? = bytes
+    private val closed = java.util.concurrent.atomic.AtomicBoolean()
+    val bytes: ByteArray get() = checkNotNull(bodyBytes)
+    override fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        bodyBytes = null
+        settled()
+    }
     override fun toString() = "NativePlaybackResponse(<redacted>)"
 }
 
@@ -58,12 +66,16 @@ internal class NativePlaybackTransport(
         if (body != null && body.size > 16_384) throw invalidResponse()
         val deadline = if (negotiation) 5_000L else 10_000L
         val limit = if (negotiation) 4_096L else 6_291_456L
+        var authorizationRefused = false
         try { return withTimeout(deadline) {
             val token = bearer()
             val first = exchange(method, path, body, token, limit, deadline)
             if (first.status == 401 && refresh != null) {
+                authorizationRefused = true
                 first.close()
-                val renewed = refresh.invoke(token)
+                val renewed = try { refresh.invoke(token) }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { throw GatewayError(401, "Your session is no longer authorized.", "unauthorized") }
                 if (!currentScope()) throw invalidScope()
                 if (renewed != null && renewed != token) return@withTimeout exchange(method, path, body, renewed, limit, deadline)
                 throw GatewayError(401, "Your session is no longer authorized.", "unauthorized")
@@ -71,11 +83,19 @@ internal class NativePlaybackTransport(
             first
         } } catch (_: TimeoutCancellationException) {
             currentCoroutineContext().ensureActive()
+            if (authorizationRefused) throw GatewayError(401, "Your session is no longer authorized.", "unauthorized")
             throw IOException("Playback control request timed out")
         }
     }
 
     private suspend fun exchange(method: String, path: String, body: ByteArray?, token: String?, limit: Long, deadline: Long): NativePlaybackResponse {
+        val request = try {
+            Request.Builder().url(origin.trimEnd('/') + "/api" + path)
+                .header("Accept", "application/json").header("Accept-Encoding", "identity")
+                .apply { token?.let { header("Authorization", "Bearer $it") } }
+                .method(method, body?.toRequestBody(JSON_TYPE)
+                    ?: if (method in listOf("POST", "PUT", "PATCH")) ByteArray(0).toRequestBody(null) else null).build()
+        } catch (_: Exception) { throw invalidResponse() }
         // Okio's bounded buffer and the returned byte array can overlap briefly.
         val reservation = cache.reserveControl(2 * limit + 16_384)
         val work = HttpWork(cache::remainingSettlementNanos)
@@ -83,11 +103,6 @@ internal class NativePlaybackTransport(
         active.add(work)
         try {
             val response = suspendCancellableCoroutine<NativePlaybackResponse> { continuation ->
-                val request = Request.Builder().url(origin.trimEnd('/') + "/api" + path)
-                    .header("Accept", "application/json").header("Accept-Encoding", "identity")
-                    .apply { token?.let { header("Authorization", "Bearer $it") } }
-                    .method(method, body?.toRequestBody(JSON_TYPE)
-                        ?: if (method in listOf("POST", "PUT", "PATCH")) ByteArray(0).toRequestBody(null) else null).build()
                 val call = client.newCall(request)
                 call.timeout().timeout(deadline, TimeUnit.MILLISECONDS)
                 work.attach(call)
