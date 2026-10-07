@@ -6,7 +6,7 @@ import java.nio.channels.FileLock
 import java.util.IdentityHashMap
 import java.util.UUID
 
-/** Platform limits are supplied to the generic engine; full payload accounting stays there. */
+/** Platform limits are supplied to the generic engine; input-cache accounting stays there. */
 internal object NativeTorrentCacheLimits {
     const val PAYLOAD_BYTES = 2_147_483_648L
     const val CONTROL_BYTES = 67_108_864L
