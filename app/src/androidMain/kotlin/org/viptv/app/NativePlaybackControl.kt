@@ -189,6 +189,10 @@ internal class NativePlaybackControl(
             }
             val status = state().status
             if (status == "ready") startEffects()
+            if (status in listOf("failed", "expired", "released", "invalidated")) {
+                retireLocal()
+                throw expired()
+            }
             // Private bodies are never allocated as JSONObject or generic UI events.
             if (status == "legacy") response.bytes.toString(Charsets.UTF_8) else null
         }

@@ -323,6 +323,28 @@ class NativePlaybackControlTest {
         } } finally { dispatcher.close() }
         assertTrue(owner.closeScope())
     }
+
+    @Test fun terminalRenewalInvalidatesPausedWorkWithoutWaitingForAnotherRead() = runBlocking {
+        val owner = cache()
+        var invalidations = 0
+        NativeControlHttpFixture { request ->
+            val value = when {
+                request.target.endsWith("playback-protocol") -> """{"version":1,"native_torrent_versions":[1]}"""
+                request.method == "DELETE" -> """{"ok":true}"""
+                request.target.endsWith("heartbeat") -> JSONObject(ready()).put("status", "failed").put("delivery", JSONObject.NULL)
+                    .put("error_code", "producer_unavailable").put("error", "Synthetic producer refusal").toString()
+                else -> ready()
+            }
+            NativeHttpReply(value.toByteArray())
+        }.use { server ->
+            val control = control(server, owner, this, invalidated = { invalidations++ })
+            control.start(input(), true, true, owner)
+            assertFailsWith<GatewayError> { control.renew() }
+            assertEquals(1, invalidations)
+            control.stop()
+        }
+        assertTrue(owner.closeScope())
+    }
 }
 
 private class NativeHttpReply(val bytes: ByteArray, val status: Int = 200, val headers: Map<String, String> = emptyMap(), val delayMillis: Long = 0)
