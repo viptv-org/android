@@ -29,6 +29,10 @@ class NativeTorrentArtifactLoadTest {
         assertTrue(NativeTorrentArtifacts.isLoaded())
         assertEquals(2_147_483_648uL, defaultTorrentOptions().maxCacheBytes)
         CoreBridge().use { core -> assertTrue(core.view().isNotEmpty()) }
+        assertEquals(
+            InstrumentationRegistry.getArguments().getString("nativeTorrentExpectedQualified") == "true",
+            NativeTorrentQualification(InstrumentationRegistry.getInstrumentation().targetContext).isAvailable(),
+        )
     }
 
     @Test fun cleartextIsRestrictedToLiteralIpv4Loopback() {

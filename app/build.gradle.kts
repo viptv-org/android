@@ -161,6 +161,9 @@ val scopedNativeReceipt = providers.gradleProperty("nativeTorrentScopedQualifica
 if (scopedNativeReceipt.isPresent) {
     require(!fixtureArtifacts.isPresent && !fixtureCa.isPresent) { "Scoped qualification requires normal artifacts and system trust" }
     require(gradle.startParameter.taskNames.none { it.contains("release", ignoreCase = true) }) { "Scoped experimental native playback is development-only" }
+    androidComponents {
+        beforeVariants(selector().withBuildType("release")) { it.enable = false }
+    }
 }
 val scopedNativeAssets = layout.buildDirectory.dir("generated/scopedNativeAssets")
 android.sourceSets.getByName("main").assets.srcDir(scopedNativeAssets)
