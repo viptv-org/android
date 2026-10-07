@@ -20,6 +20,7 @@ The first observed engine failure survives deadline races and joined cleanup.
 | `native_control_timeout` | A bounded control request did not complete. Check server health and connectivity. |
 | `native_acquisition_timeout` | The overall startup budget expired without a more specific engine-stage fact. |
 | `media3_<numeric code>` | Media3 reported this measured player code. An observed HTTP status remains in its explanation. Check the numeric Media3 error and the selected media's supported format. |
+| `media3_open_timeout` | Media3 did not report READY before its configured opening deadline. The dialog/log reports that budget in milliseconds. Native metadata and local endpoint creation have already completed for a native source; this fact alone does not identify absent peers or a decoder failure. |
 
 The adapter writes only validated native codes to `NativePlaybackDiagnostic` and
 numeric player/HTTP facts to `PlaybackDiagnostic`. Use the host's private device

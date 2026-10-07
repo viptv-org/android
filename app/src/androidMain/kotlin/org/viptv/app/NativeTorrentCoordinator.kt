@@ -52,6 +52,7 @@ internal class NativeTorrentOwnedWork(
     private var acquisition: NativeTorrentAcquisitionEffect? = null
     private var handle: NativeTorrentHandleEffect? = null
     private var cancelled = false
+    private var validating = false
     private var cancellationAtNanos: Long? = null
     private var started = false
     private var closed = false
@@ -74,14 +75,20 @@ internal class NativeTorrentOwnedWork(
                 synchronized(this) {
                     handle = prepared
                     if (cancelled) cancelHandle(prepared)
+                    if (cancelled) throw NativeTorrentCoordinatorUnavailable()
+                    validating = true
                 }
                 val capability = prepared.validatedCapability()
                 synchronized(this) {
                     if (cancelled) throw NativeTorrentCoordinatorUnavailable()
                     ready.complete(capability)
+                    validating = false
                 }
             } catch (error: Exception) {
-                ready.completeExceptionally(nativeTorrentFailure(error))
+                synchronized(this) {
+                    ready.completeExceptionally(nativeTorrentFailure(error))
+                    validating = false
+                }
             } finally { finished.countDown() }
         }
     }
@@ -92,7 +99,9 @@ internal class NativeTorrentOwnedWork(
         if (cancelled) return
         cancelled = true
         cancellationAtNanos = nowNanos()
-        ready.completeExceptionally(NativeTorrentCoordinatorUnavailable())
+        // Metadata refusal invalidates authority during validation. Let the worker
+        // publish that measured cause instead of replacing it with cleanup's cancellation.
+        if (!validating) ready.completeExceptionally(NativeTorrentCoordinatorUnavailable())
         // Joins launch together, including across all cache works. Each FFI call
         // has its own engine timer; the caller enforces the common scope deadline.
         acquisition?.let(::cancelAcquisition)

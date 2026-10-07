@@ -41,4 +41,5 @@ android {
         minSdk = 24
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    testOptions { targetSdk = 36 }
 }

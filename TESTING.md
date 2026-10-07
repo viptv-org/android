@@ -1894,3 +1894,40 @@ source opening and visual dialog inspection await a shared-emulator window.
 The existing shared emulator, account and app data remain untouched by the sweep.
 See [native source diagnostics](docs/NATIVE_TORRENT_DIAGNOSTICS.md) for safe codes
 and device log collection. Private captures and APKs are excluded from git.
+# Large native files and preserved validation failures — 2026-10-07
+
+Core `df62d8a893bbfbd8c2cd471b07c40efa6a78a4aa` removes the residual 2 GiB
+logical-file admission limit. Exact hash/index/expected-size checks remain;
+rolling-cache reservations retain their existing capacity and disk limits.
+The strict adapter reports an exact-file refusal as `native_file_unavailable`.
+Owned work preserves that failure when authority invalidation cancels it during
+validation, and never publishes a capability after cancellation.
+
+The shared serve-avd emulator reproduced `native_playback_failed` after metadata
+arrival. A private probe identified a positive file larger than 2 GiB with valid
+index/count and matching expected-size facts. The 100 GiB real-core bridge and
+owned-work invalidation regressions failed before their fixes. Core's 121 tests,
+473 native/actual-WASM native-torrent vectors and strict Clippy pass. Android
+passes 48 library and 293 app unit tests, 33 importer tests, all three core ABI
+builds, normal APK assembly and baseline-aware lint.
+
+Retesting reaches Media3 for the formerly rejected large source. Its emulator
+HEVC decoder reports `media3_4003`; another source reaches the Media3 opening
+deadline, and a later attempt reports `native_metadata_timeout`. A retry also
+reports an HTTP 502 session response. These observations qualify attribution,
+not successful public-swarm playback, 4K decoding or physical TV acceptance.
+
+The Media3 opening deadline reports its configured budget and
+`media3_open_timeout`. `AndroidMedia3OpenTimeoutTest` uses a real on-device player
+and an owned stalled loopback HTTP stream: it fails against the old timeout
+message, then passes against the fix with a measured 500 ms budget. Instrumentation
+targets SDK 36; the library test package otherwise inherited an obsolete target
+and Android blocked its installation. The ordinary app's target is unchanged.
+
+The final normal APK SHA256 is
+`c10c195a630dc140f05c1263a11f9d5925067119cfd07480bc6eab6a020d8205`.
+Its real APK probe verifies exact pins, three-ABI native/core/JNA content, normal
+system trust, loopback policy and 16 KiB ZIP alignment. It contains the timeout
+diagnostic and no temporary probe. Installation preserves app data/sign-in;
+the installed base APK was read back and its hash matches. Private captures
+remain ignored. No physical TV or backend deployment changed.

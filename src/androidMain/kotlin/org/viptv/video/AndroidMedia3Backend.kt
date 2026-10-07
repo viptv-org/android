@@ -122,8 +122,11 @@ internal class AndroidMedia3Backend(
         } catch (_: TimeoutCancellationException) {
             this.sessionId = null
             withContext(Dispatchers.Main.immediate) { player.stop() }
+            runCatching { android.util.Log.w("PlaybackDiagnostic", "media3_open_timeout budget_ms=$openTimeoutMillis") }
             throw PlaybackFailure(
-                PlaybackError(PlaybackErrorCode.Network, "Media3 timed out while opening media", recoverable = true),
+                PlaybackError(PlaybackErrorCode.Network,
+                    "Media3 did not become ready within $openTimeoutMillis ms.\n\nDiagnostic: media3_open_timeout",
+                    recoverable = true),
             )
         } catch (error: CancellationException) {
             this.sessionId = null

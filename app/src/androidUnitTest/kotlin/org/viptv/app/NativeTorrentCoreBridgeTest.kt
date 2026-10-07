@@ -15,6 +15,23 @@ import uniffi.viptv_core.NativeTorrentBridge
 class NativeTorrentCoreBridgeTest {
     private fun corpus() = JSONObject(File(requireNotNull(System.getProperty("viptv.core.nativeVectors"))).readText())
 
+    @Test fun generatedMetadataValidationAcceptsLargeRollingFilesAndRejectsSizeMismatch() {
+        val vectors = corpus()
+        NativeTorrentBridge(vectors.getJSONObject("context").toString()).use { bridge ->
+            val body = JSONObject(vectors.getJSONArray("cases").getJSONObject(0)
+                .getJSONArray("steps").getJSONObject(0).getString("body"))
+            val size = 100uL * 1024uL * 1024uL * 1024uL
+            body.getJSONObject("delivery").getJSONObject("grant").put("expected_file_size", size.toLong())
+            bridge.acceptBytes(200u, body.toString().toByteArray(), vectors.getJSONObject("observation").toString())
+            val clock = vectors.getJSONObject("clock").toString()
+            val hash = vectors.getString("infoHash")
+            val index = vectors.getLong("fileIndex").toUInt()
+            assertTrue(bridge.metadataMatchesNative(hash, index, 4u, size, true, clock))
+            assertFalse(bridge.metadataMatchesNative(hash, index, 4u, size + 1uL, true, clock))
+            assertFails { bridge.privateInputValue(clock) }
+        }
+    }
+
     @Test fun generatedPrivateHolderIsRedactedAndRetiredBytesCannotReopenIt() {
         val vectors = corpus()
         NativeTorrentBridge(vectors.getJSONObject("context").toString()).use { bridge ->

@@ -44,13 +44,13 @@ private class StrictHandle(
 ) : NativeTorrentHandleEffect {
     override fun validatedCapability(): NativeTorrentCapability {
         val files = handle.files()
-        val selected = files.singleOrNull { it.index == index } ?: throw NativeTorrentCoordinatorUnavailable()
+        val selected = files.singleOrNull { it.index == index } ?: throw NativeTorrentFailure("native_file_unavailable")
         val fileCount = handle.metadataFileCount()
         val matches = control.withAuthorizedGrant { bridge, facts ->
             bridge.metadataMatchesNative(hash, index, fileCount, selected.size, true, facts)
         }
         if (!matches) {
-            throw NativeTorrentCoordinatorUnavailable()
+            throw NativeTorrentFailure("native_file_unavailable")
         }
         return NativeTorrentCapability.validated(handle.streamUrl(index), index)
     }

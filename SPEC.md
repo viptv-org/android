@@ -236,9 +236,10 @@ delivery. A container extension alone is never a reason to request conversion.
   only the factory ID.
 - Source URIs, headers, cookies, licenses and local paths never enter error messages, events,
   statistics, state or exceptions.
-- The library contains no logging and no telemetry or analytics transport; statistics stay in
-  process for the embedding app. The opt-in instrumented measurement test never logs its fixture
-  URL.
+- Diagnostic logging contains only Media3 numeric error codes, observed HTTP status, or the
+  closed `media3_open_timeout` code and configured deadline in milliseconds. No telemetry or
+  analytics transport is present; statistics stay in process for the embedding app. The opt-in
+  instrumented measurement test never logs its fixture URL.
 
 ## Device validation matrix
 
