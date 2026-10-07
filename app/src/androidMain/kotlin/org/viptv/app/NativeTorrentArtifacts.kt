@@ -2,7 +2,7 @@ package org.viptv.app
 
 import uniffi.playback_gateway_ffi.defaultTorrentOptions
 
-/** ABI loading is a platform fact; it does not advertise qualified native playback. */
+/** ABI loading is a required platform fact for native playback capability. */
 internal object NativeTorrentArtifacts {
     private val availability = NativeTorrentArtifactAvailability { defaultTorrentOptions() }
 

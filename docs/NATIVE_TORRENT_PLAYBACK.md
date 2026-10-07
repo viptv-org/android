@@ -1,10 +1,11 @@
 # Native delivery at the player boundary
 
 `AppControllerPlayback` uses the existing Rust playback-intent construction for
-both ordinary and native-capable starts. Qualification defaults to false. A
-qualified VOD start first adopts the Rust-approved authorization scope, then
-registers its private control before negotiation or admission. Live and ordinary
-unqualified starts keep the existing delivery path. Unavailable native storage
+both ordinary and native-capable starts. Native is enabled by default in normal
+debug and release builds on supported Android runtimes. A native-capable VOD
+start first adopts the Rust-approved authorization scope, then registers its
+private control before negotiation or admission. Live and unavailable native
+starts keep the existing delivery path. Unavailable native storage
 prevents native admission while independently authorized ordinary delivery
 remains eligible.
 
@@ -44,8 +45,8 @@ preserving media position, pause intent and local language/subtitle intent.
 Resume, seek and native track effects recheck the live grant. Existing background
 behavior exits and retires playback; it does not reopen a cancelled byte URL.
 
-The internal qualification and scope-owner injection fields exist for isolated
-debug/test fixtures. Production callers leave them at their disabled defaults;
+The internal runtime-availability and scope-owner injection fields exist for isolated
+debug/test fixtures. Normal callers use measured runtime facts and a private cache owner;
 owned-seeder constructors belong only in debug/instrumented sources. Host tests
 exercise the actual controller effect seam and canonical Rust private bridge
 against controlled HTTP and acquisition effects. JNI, decoded video, audible

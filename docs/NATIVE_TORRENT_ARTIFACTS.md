@@ -55,9 +55,11 @@ separate instrumented checks.
 
 `NativeTorrentArtifacts.isLoaded()` initializes the actual generated facade
 without starting transport. Missing ABI, linkage failure or failed facade
-initialization produces an unavailable platform fact. Loading alone never
-authorizes capability advertisement; cache, transport, lifecycle and applicable
-qualification gates remain independent.
+initialization produces an unavailable platform fact. Normal debug and release
+builds use this fact with the supported process ABI, suspend-aware clock,
+literal-loopback policy and available private cache owner before advertising
+native capability. No enablement receipt or target-device allowlist is required.
+Loading remains separate from decoded playback and device qualification.
 
 For each actual supported process ABI, coordinate the configured device window
 before installing either APK. Preserve the owner's application data, sign-in,

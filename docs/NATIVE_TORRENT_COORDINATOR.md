@@ -69,8 +69,8 @@ foreground gate; it does not grant permission to restart transport.
 The controller integration owns its main-thread player-stop callback and invokes
 scope adoption when authenticated resource facts change. It must retire pending
 starts on Back/close as well as active candidates, preserve existing recovery
-and focus behavior, and keep native advertisement disabled until the separate
-qualification gates pass.
+and focus behavior. Native advertisement requires available runtime prerequisites
+and this authorization-scoped cache owner in normal debug and release builds.
 
 The control read-prevention callback first stops the Media3 session belonging to
 that control, then calls `coordinator.cancelNative(control)` immediately. Pending

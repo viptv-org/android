@@ -12,8 +12,12 @@ import uniffi.playback_gateway_ffi.defaultTorrentOptions
 import uniffi.viptv_core.CoreBridge
 import org.junit.Assume.assumeTrue
 
-/** Run on each supported process ABI; loading is independent of playback qualification. */
+/** Run on each supported process ABI; loading and runtime defaults are measured separately. */
 class NativeTorrentArtifactLoadTest {
+    @Test fun nativeCapabilityIsAvailableWithoutAnEnablementReceipt() {
+        assertTrue(NativeTorrentRuntime.isAvailable())
+    }
+
     @Test fun actualGeneratedFacadesLoadWithoutReplacingCoreOrJna() {
         val expectedAbi = InstrumentationRegistry.getArguments().getString("nativeTorrentExpectedAbi")
         assumeTrue("Explicit process ABI required for native loading evidence", expectedAbi != null)
@@ -29,10 +33,7 @@ class NativeTorrentArtifactLoadTest {
         assertTrue(NativeTorrentArtifacts.isLoaded())
         assertEquals(2_147_483_648uL, defaultTorrentOptions().maxCacheBytes)
         CoreBridge().use { core -> assertTrue(core.view().isNotEmpty()) }
-        assertEquals(
-            InstrumentationRegistry.getArguments().getString("nativeTorrentExpectedQualified") == "true",
-            NativeTorrentQualification(InstrumentationRegistry.getInstrumentation().targetContext).isAvailable(),
-        )
+        assertTrue(NativeTorrentRuntime.isAvailable())
     }
 
     @Test fun cleartextIsRestrictedToLiteralIpv4Loopback() {

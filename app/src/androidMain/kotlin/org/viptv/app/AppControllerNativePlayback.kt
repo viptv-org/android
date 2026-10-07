@@ -6,11 +6,11 @@ import org.json.JSONObject
 
 /** Transient native owners are separate from ordinary leases and saved application state. */
 internal suspend fun AppController.nativePlaybackEffects(): NativePlaybackEffects? {
-    if (!nativePlaybackQualified()) return null
+    if (!nativePlaybackAvailable()) return null
     val facts = nativeAuthorizationFacts() ?: return null
     val owner = nativeScopeOwnerOverride ?: nativeScopeOwner
     val epoch = try { owner.adopt(facts) } catch (_: NativeTorrentCoordinatorUnavailable) { null } ?: return null
-    if (!epoch.coordinator.cache.isAvailable || !nativePlaybackQualified()) return null
+    if (!epoch.coordinator.cache.isAvailable || !nativePlaybackAvailable()) return null
     if (nativePlaybackEpoch !== epoch) {
         nativePlaybackEpoch = epoch
         nativeEffects = NativePlaybackEffects(epoch.coordinator, scope, ::stopNativePlayer, {

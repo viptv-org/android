@@ -82,8 +82,9 @@ consume gateway HLS through their existing decoder. The owner-approved
 [SRC-TORRENT-NATIVE-001](torrent-native-android.md) defines the sole Android/
 Android TV exception: separately negotiated, qualified exact-index v1 VOD with
 private grants, public peer/DHT policy and a narrow literal-127.0.0.1 byte
-capability. That exception is approved for implementation, not runtime-qualified
-or baseline; native stays disabled until its gates pass. Ordinary HTTP direct
+capability. Supported Android clients enable it by default for all authorized
+accounts without a torrent-enable setting or operator allowlist. Qualification
+and deployment evidence remain separately recorded. Ordinary HTTP direct
 remains unchanged. No path sends a magnet, metainfo or archive URL directly to
 a decoder, and archives never enter native torrent delivery.
 

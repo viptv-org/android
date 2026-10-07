@@ -1,211 +1,88 @@
-# Native torrent readiness and activation boundary
+# Native torrent runtime availability and evidence
 
-General production native playback remains unqualified and disabled. Android's
-normal constructor requires an explicit measured development receipt; absent
-that receipt it advertises no native capability. Backend policy defaults off;
-a separate strict operator configuration can authorize one paired Android TV
-development session family. Authenticated `[1]` protocol support describes the
-implemented wire protocol and supplies no admission. The owner's narrow
-experimental development decision and its unchanged failed-settlement limitation
-are recorded in [scoped development enablement](NATIVE_TORRENT_SCOPED_DEVELOPMENT.md).
+The owner-approved native contract is pinned by `DESIGN_REF` under
+[the native Android behavior specification](../design-contract/specs/behavior/torrent-native-android.md).
+Normal debug and release builds enable native capability by default on supported
+Android phones and Android TVs. No receipt, account/device allowlist, operator
+enablement or user setting is required.
 
-The owner-approved contract is SRC-TORRENT-NATIVE-001 at design
-`83d338b6ffc1fc5e7f14ad4059f6159b8ee84509`. Implementation, host validation,
-owned-network Android playback and physical/public-network qualification are
-independent results. The local readiness record must bind each result to the
-actual source revision, APK hash, artifact lock, device process ABI and applicable
-platform; a passing test from another artifact or ABI does not transfer that
-qualification.
+## Runtime prerequisites
 
-## Current release decision
+`NativeTorrentRuntime.isAvailable()` requires API 24+, a supported bundled
+process ABI, successful actual facade initialization, cleartext permission for
+literal IPv4 `127.0.0.1` and a coherent suspension-aware elapsed clock. The
+controller must also adopt valid server/account/profile/device authorization
+facts and initialize an available exclusively owned private cache. Any failed
+prerequisite omits native advertisement; independently authorized HTTP/HLS
+delivery remains eligible.
 
-Keep both production gates disabled. The maintained dependency and selected
-acquisition implementations report honest failed settlement for an arbitrary
-stalled synchronous OS IO call, retaining work and cache ownership. They do not
-establish the contract's unconditional two-second quiescence bound. Passing
-cooperative cancellation and owned-seeder media tests cannot close that gap.
-Before enabling native, either demonstrate the required bound for the intended
-execution/storage environment or obtain and immutably adopt an owner-reviewed
-contract revision that addresses the measured failure. Do not silently relax
-the timeout, discard reservations, or reinterpret a failed join as completion.
+Backend admission is enabled by default for supported Android clients and still
+requires successful closed-protocol negotiation, current resource authorization,
+an enabled account-owned producer, the exact selected VOD/source/hash/file index,
+a valid private grant and available capacity. Native-ineligible sources retain
+their ordinary authorized delivery. An admitted native failure uses existing
+explicit recovery and cannot silently choose another source or gateway.
 
-Public DHT/TCP egress and sustained peer/resource qualification require a separate
-authorized run. Owned loopback/private seeders with DHT disabled prove only their
-isolated policy. Physical audible playback requires direct human confirmation;
-an AAC declaration, decoder track or Media3 Ready state does not supply it.
-Untested ABI/device behavior remains unqualified. Preserved license inventories
-and archive exclusion also leave the recorded distribution review outstanding.
+## Settlement and qualification limits
 
-## Immutable implementation cohort
+Reads stop before owned transport is cancelled and joined. All local work shares
+the two-second settlement deadline; failed settlement keeps the manager
+quarantined, its exclusive ownership and its reservations. Arbitrary stalled
+synchronous OS IO has no proven unconditional two-second completion bound. Native
+defaults accept this documented limit and retain the fail-closed quarantine
+behavior. A later completion or a replacement timer cannot convert failed
+settlement into successful retirement.
 
-| Component | Reviewed implementation revision | Evidence scope |
-| --- | --- | --- |
-| Design | `83d338b6ffc1fc5e7f14ad4059f6159b8ee84509` | Approved closed native v1 contract |
-| Shared client core | `91c5a4f53845ce0579f47caf1d57a74446710247` | Strict private transport, shared scope/recovery/clock decisions; actual native/WASM parity |
-| Generic gateway | `764e518b66e024ac18d6dd7f14e489b696b8301e` | Maintained task ownership, network/metadata policy, selected acquisition, disk/full-payload accounting and normal UniFFI metadata cardinality |
-| Backend | `65650c32615b35aa58e3fe424bac9d063add41ec` | Authenticated negotiation/admission/renewal, exact source and request tombstones; production policy disabled |
-| Android player integration | `1063a99` | Private native Media3 boundary and explicit recovery; production qualification disabled |
+Implementation, host validation, actual Android ABI loading, owned-network
+Media3 playback and physical/public-network observations are separate results.
+A host pass does not establish JNI decoding, emulator evidence does not qualify
+physical hardware, and owned private seeders with DHT disabled do not establish
+public-peer behavior. Record PASS, FAIL or NOT RUN with the exact source pins,
+APK/library hashes, device process ABI and tested scope. Outstanding physical,
+public-network, sustained-resource or distribution evidence does not add a
+global runtime enablement gate.
 
-The backend's committed `server/shared/NATIVE_CONTRACTS.json` records its
-independent source exports: core `28e1149` and generic policy `f0f8c0d`. Do not
-replace those records with the later client-core pin or imply a backend build
-used the client cohort. Android's `CORE_REF`, `TORRENT_REF` and corresponding
-vendor locks identify the actual imported sources; the normal artifact importer
-and APK inventory checks bind packaged bytes to those locks.
+Source and packaged bytes are identified by `CORE_REF`, `TORRENT_REF` and their
+vendor locks. Preserve archive-free dependency/license inventories, source stamps
+and 16 KiB ELF/APK alignment. An inventory alone does not settle distribution
+obligations.
 
-The final normal development APK was built from Android source inputs
-`e1da3d1ea48c4820f04bb616bc362d3663acd38a`, including controller `1063a99`.
-Its SHA-256 is
-`6b0e7be3a3d95bc0eed57a38e222da4c32bfe604396286d2c52ec52ee65c15ab`.
-Subsequent artifact-verifier commits `0ee5fe1` and `fe9aaa2` validate SDK 36
-manifest output and compiled trust resources without changing that sealed APK.
-Normal packaged-byte, manifest/trust, alignment, unit, APK, lint and test-APK
-checks pass. Actual Android JNI loading and runtime network policy remain
-NOT RUN for every ABI in that report; the configured ARMv7 device was offline,
-and no ARM64 or x86_64 device was configured.
+## Normal and fixture separation
 
-| Normal gateway library process ABI | Packaged SHA-256 |
-| --- | --- |
-| armeabi-v7a | `88dc15e1fab490d023996ce6255db34313ef3166aa340a73dc39212427be83a6` |
-| arm64-v8a | `3a1ab0ef7737389d0309c585665f3b5b3852aaa2978bb5687a457e85dab2c636` |
-| x86_64 | `7b260575187393a6e7f1f9117f80253c81dbda1d7ca762e5601748099bf3eb4e` |
+Normal gateway artifacts exclude archive extraction, the control server and
+`test-network-policy`. The normal app uses `newNativePublic`, private
+`noBackupFilesDir`, system-CA trust and literal-loopback cleartext permission.
+Private grants, local capabilities and random cache/scope identities stay outside
+launches, saved state, logs, diagnostics and history.
 
-These hashes identify normal build evidence, not a capability-enabled release.
-The inventory contains 264 archive-free packages and 16 toolchain notice
-entries; its distribution clearance remains false. Separate fixture APKs and
-their actual device results must retain their own hashes and qualification scope.
+Owned-private constructors, seeded peers, fixture CAs and configuration belong
+only to the separate debug fixture application. Rebuild normal APKs without
+fixture properties, then inspect their actual libraries, notices, trust and
+configuration exclusion. Preserve the shared emulator's account, origin,
+profile and data; install only a verified normal APK with the existing signing
+identity.
 
-The final owned-media harness report binds Android fixture source `9f07a3b`,
-normal isolation checker `7394c14` and backend fixture `ef7f2a7` to the same
-gateway/core/design cohort. Its actual Linux authorization-to-Core-to-UniFFI-to-
-owned-TCP selected-byte case passes, with 119 ms grant-to-ready and 4 ms common
-local join. This is Linux FFI evidence; Android JNI and Media3 remain NOT RUN.
-The complete device NT-01 through NT-08 qualification remains NOT RUN.
-
-| Separately sealed artifact | SHA-256 |
-| --- | --- |
-| Owned fixture APK | `9db7109eb1e1dff47fd10e55706cdb9087323b9eafcd19b7a8e4d8af710abec0` |
-| Owned instrumentation APK | `b02e7f0cc8a452e65668a4a968d408b68110dfce7d2d57b465e4393235fa3dfb` |
-| Normal APK rebuilt after the fixture | `7085c886ce559086ad2899f935b4aa19a43ce93ce1a703fc8585bc738a465039` |
-
-The post-fixture normal APK passes locked normal-library/notices, system-CA,
-alignment and fixture constructor/Activity/configuration/CA exclusion checks.
-Actual Gradle requests for a fixture release or a fixture CA without isolation
-are refused. These normal separation checks and compiled instrumentation do not
-qualify a device. See [owned qualification evidence](NATIVE_TORRENT_OWNED_QUALIFICATION.md)
-for the fixture library hashes, measured host scope and runnable private handoff.
-
-Physical runner commits `dad6d3a`, `f1e843d`, `3ce6913` and `8b98cab` provide
-the configured ARMv7 device workflow, private resource captures and separate
-human audio/paired-remote/final-session verdicts. Thirteen host safety/evidence
-regressions and offline evidence initialization/reporting pass without device or
-network calls. The final physical report records every actual installation,
-JNI, runtime-policy, decoded playback, audio, remote, lifecycle and resource
-case NOT RUN: the configured device remains unavailable. No app state, origin,
-credentials or playback changed during that ticket, and the owner's current
-playback/sign-in state was not observed. See the
-[physical runbook](../qualification/native-torrent/PHYSICAL_FIRE_TV.md).
-
-Final artifact, owned-harness and physical handoffs are received. The readiness
-decision is **NOT READY**, with both production gates disabled. The remaining
-conditions are the unconditional blocked-OS-IO settlement bound, actual Android
-JNI/Media3 and physical human evidence, separately authorized public-network and
-sustained-resource qualification, and complete distribution review. These are
-open qualification conditions, not undocumented activation steps.
-
-## Evidence required for capability
-
-| Gate | Host evidence | Android/device evidence still required for enablement |
-| --- | --- | --- |
-| NT-01 negotiation | Core/backend closed schemas, fallback/auth refusal, Android bounded control and request shaping | Actual qualified start and old-server/disabled-policy behavior on the target artifact |
-| NT-02 admission/input | Backend exact authorized VOD/source/index proof, vetted metadata and fetch; Rust private bridge | Authorized exact-index JNI/Media3 path, wrong-index/hash/size refusal without another file or transport |
-| NT-03 grants | Actual Rust/Android control clocks, request sequencing, heartbeat and retirement effects | Preparation/pause renewal, suspension/foreground, expiry/revocation and scoped cleanup with real transport |
-| NT-04 isolation | Real owned engine/FFI token/range/cancellation fixtures plus sticky failed settlement | Total startup and joined reader/listener/peer quiescence measurements on supported devices; unresolved blocked-OS-IO bound |
-| NT-05 network | Generic IPv4/IPv6/DNS/DHT/TCP policy and metadata/allocation fixtures | Separately authorized public-peer egress/resource qualification and pinned bootstrap inventory |
-| NT-06 cache/lifecycle | Real filesystem lock/restart and full-payload/disk/accounting tests; controller effects | JNI/Media3 candidates, overlapping grants, Back/scope/process lifecycle and physical retained/deleted ownership |
-| NT-07 artifacts | Archive-free normal dependency graph, notices/checksums/source stamps, ABI/ELF/APK alignment and normal build | Actual supported process-ABI loading, compatible minSdk and completed distribution review |
-| NT-08 Android TV | Canonical Rust decisions and actual controller effect regressions | Owned exact-episode decoded playback, missing-piece seek, tracks/cues, pause, history/focus/remote/lifecycle and physical audible confirmation |
-
-Record PASS, FAIL or NOT RUN for each scenario and evidence class. A host pass
-cannot stand in for an Android pass, an emulator cannot stand in for physical
-hardware, and a fixture cannot stand in for production public networking. A
-skipped ABI load test is NOT RUN. Remote/audio/UI observations must identify what
-was actually observed, preserving the owner's account, server and history.
-
-## Production and fixture separation
-
-- Normal gateway artifacts select the `torrent` facade graph, with engine
-  defaults disabled. Normal graphs exclude `archive`, `unrar-rs`, the control
-  server and `test-network-policy`; the owned-private constructor is gated by
-  that last feature. Normal generated bindings and libraries must come from the
-  same committed source and retain the original source/dependency notices.
-- Android normal source selects `newNativePublic` and app-private
-  `noBackupFilesDir`; its runtime load fact never raises qualification. The
-  private grant bridge, transient capability and random cache/scope receipts do
-  not become generic launches, saved state, backup, logs or history inputs.
-- Normal application trust is system CA only. Its cleartext exception is only
-  literal IPv4 `127.0.0.1`, without subdomains; neither localhost/LAN aliases nor
-  a global cleartext exception is approved. Application backup is disabled.
-- Isolated owned-policy libraries, backend fixtures, fixture CAs and qualified
-  controller overrides belong in explicit debug/instrumented fixture builds.
-  Their APKs, libraries, hashes and results are recorded separately and must not
-  replace the normal `TORRENT_REF` artifact cohort or count as a distribution
-  candidate. Build normal APKs without fixture properties and check their real
-  packaged bytes/trust configuration, rather than relying only on source XML.
-
-The implementation and guard details live in
+The maintained procedures are
 [artifact adoption](NATIVE_TORRENT_ARTIFACTS.md),
 [control](NATIVE_TORRENT_CONTROL.md),
-[coordinator](NATIVE_TORRENT_COORDINATOR.md) and
-[player boundary](NATIVE_TORRENT_PLAYBACK.md). Qualification evidence and private
-environment/device values stay outside tracked documentation.
+[coordinator](NATIVE_TORRENT_COORDINATOR.md),
+[player boundary](NATIVE_TORRENT_PLAYBACK.md) and
+[owned qualification](NATIVE_TORRENT_OWNED_QUALIFICATION.md).
+The [runtime default guide](NATIVE_TORRENT_RUNTIME.md) describes normal device installs.
+Qualification captures, credentials and environment/device values stay outside
+tracked documentation. Source/build success does not prove a deployed service;
+environment rollouts use the owner's authorized private runbook.
 
-## Concrete scoped enablement proposal
+## Rollback and retirement
 
-The current proposal distributes no capability-enabled APK and changes no
-backend policy. Keep the reviewed source pins and build the normal development
-APK through the documented importer/check flow. Record its final Android commit,
-APK SHA-256, three gateway ABI hashes, three core ABI hashes, artifact-lock hash,
-normal trust evidence and signing identity in the ignored qualification record.
-Record any fixture APK as a separate artifact with no production qualification.
+A rollback restores an earlier verified normal artifact with the same signing
+identity while preserving app data and the selected server. Retire active and
+pending grants through player-stop, control invalidation, joined native work and
+backend lease release/request tombstones. Hiding capability alone does not retire
+authority. Reject late results and retain quarantine/accounting after any failed
+settlement. Ordinary delivery remains subject to its existing authorization;
+an already admitted native source receives no silent fallback.
 
-When every applicable gate passes, prepare a separate reviewed change that
-replaces Android's disabled qualification fact with a predicate bound to the
-qualified platform/process ABI and exact artifact cohort. It must require
-successful native facade initialization, cache ownership and a suspend-aware
-clock, and must not introduce a fixture owner, private peer selector or test CA.
-Preserve native-field omission on other clients and on any unavailable platform.
-
-Prepare backend policy enablement as a separate explicit, scoped change in the
-native admission registry. The supported development operator schema is documented in
-[scoped development enablement](NATIVE_TORRENT_SCOPED_DEVELOPMENT.md). Bind its
-authorized account/device/platform scope, admission limit and reviewable rollback;
-do not replace the global false default with unconditional admission. Keep
-protocol support reporting separate from policy and preserve unsupported-client,
-HTTP/direct/gateway/live and explicit-recovery behavior. An approved source patch
-is not evidence that a deployed environment runs it.
-
-Only after those concrete patches/artifact hashes and the complete evidence are
-reviewed can the owner authorize distribution or environment activation through
-the private deployment runbook. No build/CI success, local install or served
-protocol response supplies deployment proof. Verify any separately authorized
-deployment with the private runbook's actual served asset/artifact revision.
-
-## Rollback
-
-Disable new native admission and restore Android qualification to false for the
-affected cohort. Retire active/pending native authority through the existing
-player-stop, control invalidation, joined acquisition/cache and backend
-release/request-tombstone path; hiding capability alone does not retire grants.
-Reject late results and retain quarantine/accounting when settlement fails.
-Restore the previously approved disabled normal artifact with its original
-signing identity while preserving application data and the selected server.
-Ordinary authorized delivery remains available. Do not silently replace an
-already-admitted native source with gateway/transcoding; existing explicit Retry
-still needs retired authority, exact-source identity and a fresh request ID.
-
-Backend rollback restores the false admission policy and existing resource
-revocation/expiry semantics. Do not claim immediate remote peer revocation from
-removing protocol support; disclosed torrent identity cannot be recalled from a
-modified client. Preserve deployment data/volumes and use only the owner's
-separately authorized runbook for an environment rollback.
+Backend rollback preserves resource revocation/expiry and deployment data.
+Disclosed torrent identity cannot be recalled from a modified client. Device
+installs and source pushes do not authorize production deployment.

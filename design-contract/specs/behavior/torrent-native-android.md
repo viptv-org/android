@@ -1,8 +1,12 @@
 # SRC-TORRENT-NATIVE-001 — Authorized Android native torrent VOD
 
-Status: owner-approved for implementation on 2026-10-06; not implemented,
-qualified, deployed or baseline. Native capability remains disabled until the
-acceptance gates below pass. This is the normative, closed v1 contract, not a
+Status: owner-approved for implementation on 2026-10-06, with default availability
+approved on 2026-10-07. Supported Android clients enable native torrent transport
+by default for every authorized account. No user setting, operator enable flag,
+account/device allowlist or qualification receipt controls availability. Runtime
+compatibility and resource authorization still apply. Implementation, deployment
+and qualification evidence must be recorded separately. This is the normative,
+closed v1 contract, not a
 list of proposed API names. Implementation requires review/commit of this
 amendment and immutable adoption under [DESIGN_SYNC](../../DESIGN_SYNC.md).
 
@@ -54,8 +58,8 @@ account/profile/device/title identifiers or product policy.
 
 ## Admission and privacy decision
 
-Native requires all of: backend native policy enabled; successful protocol
-negotiation; qualified `android` or `android_tv` capability; explicitly selected
+Native requires all of: successful protocol negotiation; runtime-supported
+`android` or `android_tv` capability; explicitly selected
 opaque source; exact authorized VOD identity; canonical BitTorrent v1 hash; and
 an explicit valid add-on `fileIdx`. Source wire index is integer 0..65535; the
 resolved metadata must have at most 4096 files and contain that exact index.
@@ -70,7 +74,7 @@ at admission, poll and renewal. Native is independent of `can_play_direct`.
 conversion bypass native. Existing server-owned controls `audio_track`,
 `subtitle_track`, `audio_language` or `subtitles_off=true` also bypass native;
 preferred language hints alone do not. Archive/RAR, private trackers, webseeds,
-v2/hybrid torrents, live, unsupported media and non-qualified clients retain the
+v2/hybrid torrents, live, unsupported media and unsupported clients retain the
 authorized gateway path or existing safe unsupported state. Native eligibility
 is not a promise that Media3 can decode arbitrary media.
 
@@ -102,7 +106,8 @@ body: `{"version":1,"native_torrent_versions":[1]}` when the backend implements
 the entire v1 extension, or `{"version":1,"native_torrent_versions":[]}` without
 it. Both fields are required; only integer `1` is allowed, at most once. This
 advertises protocol support, not account admission, capacity or qualification.
-Native policy can independently refuse a request. Use `Cache-Control: no-store`,
+Authorization, source eligibility and bounded capacity can refuse a request;
+there is no configurable torrent-enable policy. Use `Cache-Control: no-store`,
 zero redirects, a 4096-byte body limit and a 5-second total request deadline.
 
 Negotiate before each new native-capable start, scoped to the configured backend
@@ -113,7 +118,7 @@ that field and use the unchanged legacy v2 shape/path; do not infer support from
 `can_play_direct`, gateway capabilities or a failed optimistic POST. 401/403 or
 known resource-authorization refusal follows existing auth recovery, not legacy
 admission. Origin/session/profile change invalidates the result; late results
-cannot authorize another generation. A client without native qualification
+cannot authorize another generation. A client without native runtime support
 omits the field even after negotiation. Web/TV-web/desktop/Roku never advertise
 it. Older clients receive only `direct`/`gateway`, with no native fields.
 
@@ -152,7 +157,7 @@ means omit or use the listed default; do not send null except where allowed.
 | `native_torrent` | closed object `{"version":1,"network_policy":"public_dht_tcp_v1"}` | optional; omit when unsupported, never null |
 
 `native_torrent.version` is integer 1 and `network_policy` is exactly
-`public_dht_tcp_v1`; both required, no other fields. Only qualified Android
+`public_dht_tcp_v1`; both required, no other fields. Only runtime-supported Android
 platforms may send it. A malformed or unsupported extension is
 `invalid_playback_request`, never silently ignored. Idempotency binds the entire
 normalized request, authenticated principal/device/session and exact opaque
@@ -384,8 +389,11 @@ may expose the byte service on a peer-facing interface.
 
 Synthetic qualification uses a separate non-production test policy with DHT
 disabled and explicitly owned private/loopback TCP seeders. The production wire
-cannot request that policy. No public torrents, real provider credentials,
-public fixture listeners or VPS TV emulator are authorized by this contract.
+cannot request that policy. Owned synthetic fixtures use a separate QA emulator
+or explicitly requested physical device, preserving the shared interactive
+emulator's sign-in and trust configuration. Normal authorized viewing may use
+the account's configured providers and public peers. Fixture listeners remain
+private; credentials never enter tracked artifacts.
 
 The byte endpoint binds literal IPv4 `127.0.0.1` on an ephemeral port and requires
 an unpredictable in-memory capability (at least 128 random bits) per grant.
@@ -483,21 +491,25 @@ the resolved dependency graph, notices and packaged artifact/license inventory.
 The cited gateway archive dependency has an unresolved GPL compatibility finding;
 archive-free does not itself clear every remaining license obligation. Preserve
 existing Android ABIs/minSdk/JNA/core libraries. Build generic cancellation,
-selected-only bytes and independent grants before packaging. Do not distribute
-capability-enabled libraries merely because they load or host tests pass.
+selected-only bytes and independent grants before packaging. ABI loading and
+host tests alone do not establish decoder, physical-device or public-peer
+qualification; preserve the actual acceptance results with enabled artifacts.
 
 Commit/review design first; backend and shared Rust core adopt its immutable
 revision, regenerate Kotlin/WASM and update Android/TV-web core pins coherently.
 TV-web does not advertise native. Import Android design through design-sync,
 never edit vendored mirrors. Native advertisement requires binding/ABI loading,
-archive-free inventory, private cache readiness and applicable gates below.
+archive-free inventory and measured private cache readiness. Acceptance results
+below document quality and qualification; they are not a configurable enable
+gate or per-account restriction. Supported debug and release builds use the same
+default availability rule.
 No commit/push/deployment or production activation follows from design approval.
 
 Acceptance IDs (record actual source/design/core/app/artifact revisions and
 pass/fail/not-run separately; no qualification is claimed here):
 
-1. **NT-01 Negotiation:** old server 404/405 and closed DTO; old client; disabled
-   policy; `[1]`/`[]`; wrong/unknown/duplicate schema; auth refusal; redirected,
+1. **NT-01 Negotiation:** old server 404/405 and closed DTO; old client;
+   runtime unavailable; `[1]`/`[]`; wrong/unknown/duplicate schema; auth refusal; redirected,
    timed-out/oversized negotiation; profile/origin switch and late responses.
    Unsupported clients get only unchanged HTTP/gateway leases.
 2. **NT-02 Admission/input:** force-gateway/conversion/track gates; wrong account,

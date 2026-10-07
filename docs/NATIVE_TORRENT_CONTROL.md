@@ -2,9 +2,9 @@
 
 `VipTvHttpGateway.nativePlaybackControl` constructs a private control owner for
 one opaque authorization epoch and playback generation. The coordinator supplies
-measured qualification, its private cache, lifecycle callbacks and a suspend-aware
-clock. Production capability remains off until the artifact, lifecycle, device
-and network qualification gates pass. Ordinary `BackendGateway.playback` keeps
+runtime availability, its private cache, lifecycle callbacks and a suspend-aware
+clock. Normal builds advertise native capability when those prerequisites are
+available, without a receipt or operator enablement. Ordinary `BackendGateway.playback` keeps
 its existing HTTP/gateway contract.
 
 The canonical `nativeTorrent` / `authorizationScope` Rust operation compares
@@ -16,7 +16,7 @@ old owner before creating another; malformed/unavailable facts reject admission
 and require retiring any existing owner. Scope facts have no serializable public
 DTO, and Rust debug representations redact them.
 
-Every qualified start negotiates through the generated Rust request builder.
+Every native-capable start negotiates through the generated Rust request builder.
 Negotiation has a five-second total deadline and 4096-byte body bound. Native
 control has a ten-second deadline, 16 KiB start-body bound and 6 MiB response
 bound. The dedicated OkHttp client disables redirects and implicit connection

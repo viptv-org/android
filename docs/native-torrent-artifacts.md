@@ -2,8 +2,9 @@
 
 Authority: Android's pinned
 [authorized native torrent contract](../design-contract/specs/behavior/torrent-native-android.md).
-Artifact integrity is not playback qualification. Native capability stays disabled
-until the contract's transport, authorization and device gates pass.
+Artifact integrity is not playback qualification. Normal debug and release
+builds enable native capability from their actual runtime prerequisites; see
+[runtime availability](NATIVE_TORRENT_READINESS.md).
 
 ## Producer and trust boundary
 
@@ -71,5 +72,5 @@ NDK-built libraries still require dynamic-dependency, ELF and APK ZIP-alignment
 checks, matching UniFFI loading on supported ABIs, and owned-media authorization
 through the real native engine and Media3. Record cancellation/settlement,
 exact-file denial, independent grants, lease rejection and scope-change cleanup
-before enabling native playback on the owner's TV. Preserve sign-in/data when
+for the tested device and artifact. Preserve sign-in/data when
 installing the normal debug APK. Do not use fixture trust as production policy.

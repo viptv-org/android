@@ -155,26 +155,6 @@ if (fixtureCa.isPresent) {
 
 // Private fixture configuration uses the owning plugin's typed DSL/classpath.
 val fixtureArtifacts = providers.gradleProperty("nativeTorrentFixtureArtifacts")
-// The optional private receipt binds a normal debug build to measured device
-// and artifact facts. Its absence leaves ordinary native capability unavailable.
-val scopedNativeReceipt = providers.gradleProperty("nativeTorrentScopedQualification")
-if (scopedNativeReceipt.isPresent) {
-    require(!fixtureArtifacts.isPresent && !fixtureCa.isPresent) { "Scoped qualification requires normal artifacts and system trust" }
-    require(gradle.startParameter.taskNames.none { it.contains("release", ignoreCase = true) }) { "Scoped experimental native playback is development-only" }
-    androidComponents {
-        beforeVariants(selector().withBuildType("release")) { it.enable = false }
-    }
-}
-val scopedNativeAssets = layout.buildDirectory.dir("generated/scopedNativeAssets")
-android.sourceSets.getByName("main").assets.srcDir(scopedNativeAssets)
-val prepareScopedNativeQualification by tasks.registering(Exec::class) {
-    workingDir(rootProject.projectDir)
-    outputs.upToDateWhen { false }
-    val arguments = mutableListOf("python3", "scripts/prepare-scoped-native-qualification.py", "--output", scopedNativeAssets.get().asFile.path)
-    if (scopedNativeReceipt.isPresent) arguments += listOf("--receipt", rootProject.file(scopedNativeReceipt.get()).path)
-    commandLine(arguments)
-}
-tasks.named("preBuild") { dependsOn(prepareScopedNativeQualification) }
 if (fixtureArtifacts.isPresent) {
     val fixtureConfiguration = providers.gradleProperty("nativeTorrentFixtureConfig")
     require(fixtureConfiguration.isPresent) { "Isolated native fixture configuration required" }

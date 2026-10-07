@@ -52,8 +52,10 @@ def main():
         names = archive.namelist()
         require(not any("viptv_fixture_ca" in name for name in names), "Fixture CA must not ship")
         require(not any("native-fixture/" in name for name in names), "Owned fixture configuration must not ship")
+        require("assets/native-torrent/scoped-qualification.json" not in names, "Native runtime must not require a scoped enablement receipt")
         dex = b"".join(archive.read(name) for name in names if re.fullmatch(r"classes[0-9]*\.dex", name))
         require(b"newNativeOwned" not in dex and b"OwnedNativeFixtureActivity" not in dex, "Owned fixture code must not ship")
+        require(b"Lorg/viptv/app/NativeTorrentRuntime;" in dex and b"Lorg/viptv/app/NativeTorrentQualification;" not in dex, "Normal native capability must use runtime prerequisites")
         for abi in ABIS:
             for library in ["libviptv_core.so", "libjnidispatch.so", "libplayback_gateway_ffi.so"]:
                 name = f"lib/{abi}/{library}"
