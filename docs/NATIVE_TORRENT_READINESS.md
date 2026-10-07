@@ -1,10 +1,13 @@
 # Native torrent readiness and activation boundary
 
-Production native playback is disabled. Android's ordinary constructor leaves
-`nativePlaybackQualified` false; the backend constructs its registry with
-`native_policy_enabled = false`. The backend's authenticated `[1]` protocol
-support response describes implemented wire support and does not enable native
-admission. No environment variable enables either production gate.
+General production native playback remains unqualified and disabled. Android's
+normal constructor requires an explicit measured development receipt; absent
+that receipt it advertises no native capability. Backend policy defaults off;
+a separate strict operator configuration can authorize one paired Android TV
+development session family. Authenticated `[1]` protocol support describes the
+implemented wire protocol and supplies no admission. The owner's narrow
+experimental development decision and its unchanged failed-settlement limitation
+are recorded in [scoped development enablement](NATIVE_TORRENT_SCOPED_DEVELOPMENT.md).
 
 The owner-approved contract is SRC-TORRENT-NATIVE-001 at design
 `83d338b6ffc1fc5e7f14ad4059f6159b8ee84509`. Implementation, host validation,
@@ -174,9 +177,9 @@ clock, and must not introduce a fixture owner, private peer selector or test CA.
 Preserve native-field omission on other clients and on any unavailable platform.
 
 Prepare backend policy enablement as a separate explicit, scoped change in the
-native admission registry. There is no supported environment flag to flip in
-the current implementation. Specify the authorized account/device/platform
-scope, admission limit and reviewable rollback before adding an operator switch;
+native admission registry. The supported development operator schema is documented in
+[scoped development enablement](NATIVE_TORRENT_SCOPED_DEVELOPMENT.md). Bind its
+authorized account/device/platform scope, admission limit and reviewable rollback;
 do not replace the global false default with unconditional admission. Keep
 protocol support reporting separate from policy and preserve unsupported-client,
 HTTP/direct/gateway/live and explicit-recovery behavior. An approved source patch
