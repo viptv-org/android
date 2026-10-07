@@ -25,7 +25,7 @@ def verify(directory, reference, configuration):
             raise ValueError("fixture product identity invalid")
         if hashlib.sha256(path.read_bytes()).hexdigest() != checksum:
             raise ValueError("fixture product checksum mismatch")
-    if "fun newNativeOwned(" not in (directory / next(name for name in required if name.endswith(".kt"))).read_text():
+    if not re.search(r"\bfun\s+`?newNativeOwned`?\s*\(", (directory / next(name for name in required if name.endswith(".kt"))).read_text()):
         raise ValueError("owned fixture constructor unavailable")
     if configuration.stat().st_size > 16384:
         raise ValueError("fixture configuration too large")

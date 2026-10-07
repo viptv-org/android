@@ -450,6 +450,7 @@ class OwnedNativePipelineTest {
         try {
             await { controller.state.value.selectedProfile?.id == "1" && !controller.state.value.loading && controller.nativeAuthorizationFacts() != null }
             await { activity.texture.isAvailable }
+            val authenticatedAccess = assertNotNull(store.getString("access", null))
             withContext(Dispatchers.Main.immediate) { controller.player.attach(activity.texture) }
             val media = Media("owned_episode_1", "series", "Owned episode", seriesId = "owned_series", season = 1, episode = 1)
             val source = Source(config.getJSONArray("sources").getJSONObject(0).getString("stream_id"), "Owned episodes", displayResolved = true)
@@ -488,7 +489,7 @@ class OwnedNativePipelineTest {
             assertFalse(controller.nativePlaybackQualified.invoke() && controller.nativePlaybackEpoch === epoch)
             controller.signOut().join()
             await { store.getString("access", null) == null }
-            val refused = runCatching { VipTvHttpGateway(config.getString("origin"), config.getString("access_token"), television = true).foregroundIdentity() }.exceptionOrNull()
+            val refused = runCatching { VipTvHttpGateway(config.getString("origin"), authenticatedAccess, television = true).foregroundIdentity() }.exceptionOrNull()
             assertTrue(refused is GatewayError && refused.status == 401, "signed-out fixture session must lose backend authority")
             java.io.File(context.noBackupFilesDir, "owned-controller-evidence.json").writeText(JSONObject()
                 .put("actual_identity", true).put("actual_controller", true).put("returned_position", position)

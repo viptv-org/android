@@ -35,6 +35,14 @@ class FixtureVerifierTest(unittest.TestCase):
     def test_exact_private_products_accept(self):
         verify(self.products, self.reference, self.config)
 
+    def test_actual_uniffi_backtick_constructor_spelling_accepts(self):
+        name = "kotlin/uniffi/playback_gateway_ffi/playback_gateway_ffi.kt"
+        content = b"@Throws(TorrentException::class) fun `newNativeOwned`(`cacheDir`: String)"
+        (self.products / name).write_bytes(content)
+        self.manifest["files"][name] = hashlib.sha256(content).hexdigest()
+        self.stamp()
+        verify(self.products, self.reference, self.config)
+
     def test_normal_policy_or_unpinned_source_rejected(self):
         for field, value in [("features", ["torrent"]), ("source_revision", "b" * 40), ("fixture_only", False), ("dht", True)]:
             original = self.manifest[field]

@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -41,10 +42,14 @@ def main():
     if target != output / "target":
         library.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(target / "release/libplayback_gateway_ffi.so", library)
-    run(source, ["cargo", "run", "--locked", "-p", "playback-gateway-ffi", "--bin", "playback-uniffi-bindgen", "--features", features + ",bindgen",
-                 "--", "generate", "--library", str(library), "--language", "kotlin", "--no-format", "--out-dir", str(output / "kotlin")], env)
+    # Release stripping removes UniFFI's inspection metadata. Generate from the
+    # same-feature unstripped library; runtime checksum checks validate the release ABI.
+    run(source, ["cargo", "build", "--locked", "-p", "playback-gateway-ffi", "--lib", "--no-default-features", "--features", features], env)
+    metadata_library = target / "debug/libplayback_gateway_ffi.so"
+    run(source, ["cargo", "run", "--locked", "-p", "playback-gateway-ffi", "--bin", "playback-uniffi-bindgen", "--no-default-features", "--features", features + ",bindgen",
+                 "--", "generate", "--library", str(metadata_library), "--language", "kotlin", "--no-format", "--out-dir", str(output / "kotlin")], env)
     bindings = output / "kotlin/uniffi/playback_gateway_ffi/playback_gateway_ffi.kt"
-    if "fun newNativeOwned(" not in bindings.read_text():
+    if not re.search(r"\bfun\s+`?newNativeOwned`?\s*\(", bindings.read_text()):
         raise SystemExit("fixture-only constructor missing")
     env["RUSTFLAGS"] = "-C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-z,common-page-size=16384"
     for abi in args.abi or []:
@@ -60,6 +65,7 @@ def main():
                 "rustc": subprocess.check_output(["rustc", "--version"], text=True).strip(),
                 "rustflags": env["RUSTFLAGS"],
                 "host_rustflags": host_rustflags,
+                "binding_metadata_sha256": hashlib.sha256(metadata_library.read_bytes()).hexdigest(),
                 "dht": False, "network": "explicit_owned_tcp_peers", "files": {str(path.relative_to(output)): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}}
     (output / "fixture-build.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print("Isolated owned-policy artifacts exported.")

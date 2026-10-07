@@ -158,3 +158,7 @@ grant available for a bounded physical observation without adding product autopl
 Collect `no_backup/owned-manual-evidence.json` with fixture `run-as`. Audible sound,
 physical remote and focus verdicts must be recorded by the observer separately.
 Without the argument this one test is explicitly skipped; it is not a PASS.
+Run this selector against a fresh backend/configuration and matching APK assets,
+separately from the full class: its final controller case intentionally disables
+the synthetic producer and signs out, and a real session restoration can rotate
+credentials. A mutated backend must not be reused as another selector's baseline.
