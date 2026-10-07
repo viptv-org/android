@@ -38,10 +38,15 @@ def main():
     require(re.search(r"^(?:minSdkVersion|sdkVersion):'24'$", badging, re.MULTILINE), "Native APK must retain minSdk 24")
     manifest = subprocess.check_output([aapt, "dump", "xmltree", str(args.apk), "--file", "AndroidManifest.xml"], text=True)
     resources = subprocess.check_output([aapt, "dump", "resources", str(args.apk)], text=True)
-    policy = subprocess.check_output([aapt, "dump", "xmltree", str(args.apk), "--file", "res/xml/network_security_config.xml"], text=True)
-    policy_id = re.search(r"resource (0x[0-9a-f]+) xml/network_security_config\b", resources)
+    policy_resource = re.search(
+        r"resource (0x[0-9a-f]+) xml/network_security_config\b\s+\(\) \(file\) (res/[^\s]+\.xml) type=XML",
+        resources,
+    )
+    require(policy_resource, "APK must contain its default network security policy resource")
+    # Release resource optimization can rename the packaged XML file.
+    policy = subprocess.check_output([aapt, "dump", "xmltree", str(args.apk), "--file", policy_resource.group(2)], text=True)
     manifest_id = re.search(r"android:networkSecurityConfig[^\n]*=@(0x[0-9a-f]+)", manifest)
-    require(policy_id and manifest_id and policy_id.group(1) == manifest_id.group(1), "APK must use the checked network security policy")
+    require(manifest_id and policy_resource.group(1) == manifest_id.group(1), "APK must use the checked network security policy")
     require(re.search(r"android:usesCleartextTraffic[^\n]*=false", manifest), "APK must retain default cleartext refusal")
     require("OwnedNativeFixtureActivity" not in manifest, "Owned fixture Activity must not ship in normal manifest")
     require(policy.count("E: base-config ") == 1 and policy.count("E: domain-config ") == 1, "Unexpected APK network policy scopes")
