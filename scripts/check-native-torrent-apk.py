@@ -43,6 +43,7 @@ def main():
     manifest_id = re.search(r"android:networkSecurityConfig[^\n]*=@(0x[0-9a-f]+)", manifest)
     require(policy_id and manifest_id and policy_id.group(1) == manifest_id.group(1), "APK must use the checked network security policy")
     require(re.search(r"android:usesCleartextTraffic[^\n]*=false", manifest), "APK must retain default cleartext refusal")
+    require("OwnedNativeFixtureActivity" not in manifest, "Owned fixture Activity must not ship in normal manifest")
     require(policy.count("E: base-config ") == 1 and policy.count("E: domain-config ") == 1, "Unexpected APK network policy scopes")
     require(re.findall(r"A: cleartextTrafficPermitted=(true|false)", policy) == ["false", "true"], "APK cleartext must require the exact loopback exception")
     require(policy.count("E: certificates ") == 1 and re.findall(r'A: src="([^"\n]+)"', policy) == ["system"], "Normal APK must trust only system CAs")
@@ -50,6 +51,9 @@ def main():
     with args.apk.open("rb") as raw, zipfile.ZipFile(args.apk) as archive:
         names = archive.namelist()
         require(not any("viptv_fixture_ca" in name for name in names), "Fixture CA must not ship")
+        require(not any("native-fixture/" in name for name in names), "Owned fixture configuration must not ship")
+        dex = b"".join(archive.read(name) for name in names if re.fullmatch(r"classes[0-9]*\.dex", name))
+        require(b"newNativeOwned" not in dex and b"OwnedNativeFixtureActivity" not in dex, "Owned fixture code must not ship")
         for abi in ABIS:
             for library in ["libviptv_core.so", "libjnidispatch.so", "libplayback_gateway_ffi.so"]:
                 name = f"lib/{abi}/{library}"
