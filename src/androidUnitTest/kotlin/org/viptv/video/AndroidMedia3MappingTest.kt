@@ -8,6 +8,15 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class AndroidMedia3MappingTest {
+    @Test fun measuredMedia3CodeSurvivesWithoutRawExceptionDetails() {
+        val code = PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+        val error = object : PlaybackException("https://private.invalid/?token=do-not-display", null, code,
+            android.os.Bundle.EMPTY, 0L) {}.toAirError()
+        assertEquals(PlaybackErrorCode.Network, error.code)
+        assertEquals("Diagnostic: media3_$code", error.message.lineSequence().last())
+        assertFalse(error.message.contains("private.invalid"))
+        assertFalse(error.message.contains("do-not-display"))
+    }
     @Test fun `HTTP access limits and missing sources are not decoder or transport refusals`() {
         for (status in listOf(401, 403, 404, 410, 429)) {
             val failure = media3HttpError(status)

@@ -13,8 +13,11 @@ internal fun beginNativeTorrentAcquisition(cache: NativeTorrentCache, control: N
         val index = bridge.privateFileIndex(facts)
         val size = bridge.privateExpectedFileSize(facts)
         val input = bridge.privateInputValue(facts)
-        fun remaining() = remainingBudgetMillis().takeIf { it in 1..30_000 }?.toUInt()
-            ?: throw NativeTorrentCoordinatorUnavailable()
+        fun remaining(): UInt {
+            val millis = remainingBudgetMillis()
+            if (millis <= 0) throw NativeTorrentFailure("native_acquisition_timeout")
+            return millis.takeIf { it <= 30_000 }?.toUInt() ?: throw NativeTorrentCoordinatorUnavailable()
+        }
         val acquisition = when (bridge.privateInputKind(facts)) {
             "magnet" -> manager.client.beginSelected(input, hash, index, size, remaining())
             "metainfo" -> {

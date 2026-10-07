@@ -314,6 +314,7 @@ internal fun AppController.backFromPlaybackRecovery() {
 }
 
 internal fun playbackFailureMessage(error: Throwable): String = when (error) {
+    is NativePlaybackNetworkFailure -> nativeTorrentFailureMessage(error.reason)
     is NativeTorrentFailure -> nativeTorrentFailureMessage(error.reason)
     is NativeTorrentCacheUnavailable -> nativeTorrentFailureMessage("native_cache_unavailable")
     is NativeTorrentCoordinatorUnavailable -> nativeTorrentFailureMessage("native_playback_failed")

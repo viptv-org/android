@@ -14,6 +14,46 @@ import org.json.JSONObject
 
 /** Real loopback HTTP fixtures test byte/deadline behavior; they claim no Android TLS/device qualification. */
 class NativePlaybackControlTest {
+    @Test fun overallStartupDeadlineReportsFailureButOwnerCancellationStaysCancellation() = runBlocking {
+        for (cancelOwner in listOf(false, true)) {
+            val owner = cache()
+            val jobs = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            NativeControlHttpFixture { request ->
+                NativeHttpReply((if (request.target.endsWith("playback-protocol")) """{"version":1,"native_torrent_versions":[1]}"""
+                    else if (request.method == "DELETE") """{"ok":true}"""
+                    else """{"id":"playback_fixture","status":"starting","delivery":null,"error_code":null,"error":null,"expires_at":1700000060,"renew_after_seconds":20}""").toByteArray())
+            }.use { server ->
+                val control = NativePlaybackControl("https://fixture.invalid", "scope_fixture", 7, { true },
+                    NativePlaybackTransport(server.origin, { "fixture_bearer" }, { true }, owner), legacy(), jobs,
+                    NativePlaybackClock { 100_000 }, {}, {}, startupBudgetMillis = if (cancelOwner) 45_000 else 500)
+                try {
+                    if (cancelOwner) {
+                        val task = async(Dispatchers.Default) { control.start(input(), true, true, owner) }
+                        withTimeout(2_000) { while (synchronized(server.requests) { server.requests.none { it.method == "POST" } }) delay(5) }
+                        task.cancel()
+                        assertFailsWith<CancellationException> { task.await() }
+                    } else {
+                        val failure = assertFailsWith<NativeTorrentFailure> { control.start(input(), true, true, owner) }
+                        assertEquals("native_acquisition_timeout", failure.reason)
+                    }
+                } finally { jobs.cancel(); assertTrue(owner.closeScope()) }
+            }
+        }
+    }
+    @Test fun refusedConnectionRetainsTypedFactAcrossActualHttpCallback() = runBlocking {
+        val port = ServerSocket(0).use { it.localPort }
+        val owner = cache()
+        try {
+            val transport = NativePlaybackTransport("http://127.0.0.1:$port", { "private_bearer" }, { true }, owner)
+            val failure = assertFailsWith<NativePlaybackNetworkFailure> {
+                transport.request("GET", "/v2/playback-protocol", negotiation = true)
+            }
+            assertEquals("native_connection_failed", failure.reason)
+            assertEquals("Diagnostic: native_connection_failed", playbackFailureMessage(failure).lineSequence().last())
+            assertFalse(failure.toString().contains("private_bearer"))
+            assertFalse(failure.toString().contains(port.toString()))
+        } finally { assertTrue(owner.closeScope()) }
+    }
     private fun cache(): NativeTorrentCache = NativeTorrentCache.open(Files.createTempDirectory("native-control-").toFile(), { _, _ ->
         object : NativeTorrentCacheManager {
             override fun hasFailedSettlement() = false
@@ -143,7 +183,8 @@ class NativePlaybackControlTest {
             NativeControlHttpFixture { NativeHttpReply("{}".toByteArray(), delayMillis = if (negotiation) 5_500 else 10_500) }.use { server ->
                 val transport = NativePlaybackTransport(server.origin, { "fixture" }, { true }, owner)
                 val before = System.nanoTime()
-                assertFailsWith<java.io.IOException> { transport.request("GET", "/v2/playback-protocol", negotiation = negotiation) }
+                val failure = assertFailsWith<NativePlaybackNetworkFailure> { transport.request("GET", "/v2/playback-protocol", negotiation = negotiation) }
+                assertEquals("native_control_timeout", failure.reason)
                 assertTrue((System.nanoTime() - before) / 1_000_000 < if (negotiation) 7_000 else 12_000)
                 assertEquals(0, owner.reservedControlBytes)
             }

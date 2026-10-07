@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/design",
-  "revision": "2cf33c35e916bcf1ea99d90ce6d2d872697a6c62",
+  "revision": "d9562790ea69d5e29cb4ec2630b814a7f30f9761",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
@@ -44,7 +44,7 @@
     },
     "design-contract/viptv-design-system/copy.md": {
       "source": "viptv-design-system/copy.md",
-      "sha256": "5471d80ff8908f64a7e00dda913b4711a28b38a4068fe3eb2eb1828db8faccee"
+      "sha256": "b5bfc142b5dac4cea5d55c578235c4ec656313caf42c809ac7b1a62bfd3e617f"
     },
     "design-contract/viptv-design-system/decisions.md": {
       "source": "viptv-design-system/decisions.md",
@@ -56,7 +56,7 @@
     },
     "design-contract/specs/behavior/torrent-native-android.md": {
       "source": "specs/behavior/torrent-native-android.md",
-      "sha256": "50882c0d8c0b5b38459deaffc62fe40efbc53dfecb2ea18d98c274877ed37261"
+      "sha256": "6d1ab0246bc203bc8a4d0d3fd727fda7300bd59b1600eff6e9e4b14722dcbd8f"
     },
     "app/src/androidMain/assets/design/fonts/README.md": {
       "source": "assets/fonts/README.md",

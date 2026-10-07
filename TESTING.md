@@ -1856,3 +1856,41 @@ These observations qualify the named owned emulator effects. Physical sound,
 codec/HDR/PiP and remote behavior, sustained public-peer/resource behavior, and
 arbitrary blocked OS I/O remain separate observations. The fixture does not
 claim every host, emulator and physical condition in NT-01 through NT-08.
+# Actionable native source failure diagnostics — 2026-10-07
+
+The normal app adopts gateway `698372df3734f6ec8019f70591b549280f47c28f`,
+core `ed83a0b9f24c6431f6ccca7c9426cb1da7f53ba5` and design
+`d9562790ea69d5e29cb4ec2630b814a7f30f9761`. A connected peer that supplies no
+metadata reproduced the generic `StartupTimeout` before the fix; the regression
+passes with `MetadataTimeout`. The first measured cache/session/metadata/
+initialization/endpoint failure survives deadline races and joined retirement.
+Typed DNS/TLS/connection/control deadlines survive the actual HTTP callback,
+remain IO failures for heartbeat retries, and enter shared canonical copy.
+The recovery explanation includes its validated diagnostic code. Media3 retains
+its measured numeric code and observed HTTP status, without raw exception text.
+Overall startup expiry reports a failure; actual owner cancellation still cancels.
+
+48 library and 290 app unit tests pass, including the real refused-connection
+callback, request timeout/cleanup, startup expiry versus owner cancellation,
+private exception redaction and every native FFI reason's shared projection.
+33 importer tests and core/design/torrent integrity pass. All three core/native
+ABIs build; normal app assembly, lint and instrumentation APK assembly pass.
+The real APK probe passes minSdk 24, three-ABI core/native/JNA contents, exact
+pins/checksums/notices, system-CA/literal-loopback trust and 16 KiB ZIP alignment.
+A DEX probe confirms the diagnostic codes and log tags are packaged.
+Normal APK SHA256:
+`8c42a63849bceb7a3f562dabb2d164f2af93cfccc4adc1888cbfc9fa666df4f5`.
+
+Gateway's locked owned-network workspace passes 215 tests (56 opt-in tests
+ignored); blocked cache and actual storage initialization remain distinct from
+metadata timeout. Core passes 120 tests, strict all-target Clippy and actual-WASM
+parity including 49 canonical errors and 457 native vectors. TV-web adopts the
+same core and passes typechecking, 285 single-fork tests and production build.
+
+The three reported user attempts have no retained diagnostic log sufficient to
+assign their individual root causes. No absent-seeder/public-swarm claim is made.
+This diagnostic APK has not been installed during this sweep; decoded Android
+source opening and visual dialog inspection await a shared-emulator window.
+The existing shared emulator, account and app data remain untouched by the sweep.
+See [native source diagnostics](docs/NATIVE_TORRENT_DIAGNOSTICS.md) for safe codes
+and device log collection. Private captures and APKs are excluded from git.

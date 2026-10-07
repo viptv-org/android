@@ -43,6 +43,7 @@ internal class NativePlaybackControl(
     private val preventReads: () -> Unit,
     private val invalidated: () -> Unit,
     private val released: () -> Unit = {},
+    private val startupBudgetMillis: Long = 45_000,
 ) {
     private val serial = Mutex()
     private val releaseSerial = Mutex()
@@ -103,7 +104,7 @@ internal class NativePlaybackControl(
             bridge = NativeTorrentBridge(JSONObject().put("origin", origin).put("scope", scope)
                 .put("generation", generation).put("qualified", qualified).put("negotiated", true)
                 .put("vod", vod).put("request", request).toString())
-            return withTimeout<NativePlaybackStart>(45_000) {
+            return withTimeout<NativePlaybackStart>(startupBudgetMillis) {
                 var response = request("playbackV2", request = request)
                 while (true) {
                     currentCoroutineContext().ensureActive()
@@ -132,6 +133,11 @@ internal class NativePlaybackControl(
         } catch (error: Exception) {
             retireLocal()
             withContext(NonCancellable) { withTimeoutOrNull(10_000) { runCatching { releaseRemote() } } }
+            if (error is kotlinx.coroutines.TimeoutCancellationException) {
+                // A completed local deadline is a failure; owner cancellation remains cancellation.
+                currentCoroutineContext().ensureActive()
+                throw NativeTorrentFailure("native_acquisition_timeout")
+            }
             throw error
         }
     }

@@ -5,6 +5,9 @@ three Android libraries and dependency notices from one immutable gateway
 revision. Treat this snapshot like `vendor/core`: regenerate at its source and
 use the importer; do not edit vendored bindings, notices or checksums.
 
+For observed startup stages, visible error codes and safe device log collection,
+see [native source diagnostics](NATIVE_TORRENT_DIAGNOSTICS.md).
+
 The gateway's native feature graph excludes archive extraction, `unrar-rs`,
 the control server and fixture network policy. The dependency inventory includes
 normal and build dependencies for armeabi-v7a, arm64-v8a and x86_64, their package

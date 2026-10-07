@@ -100,7 +100,7 @@ internal class NativePlaybackTransport(
         } } catch (_: TimeoutCancellationException) {
             currentCoroutineContext().ensureActive()
             if (authorizationRefused) throw GatewayError(401, "Your session is no longer authorized.", "unauthorized")
-            throw IOException("Playback control request timed out")
+            throw NativePlaybackNetworkFailure("native_control_timeout")
         }
     }
 
@@ -120,14 +120,16 @@ internal class NativePlaybackTransport(
         try {
             val response = suspendCancellableCoroutine<NativePlaybackResponse> { continuation ->
                 val call = client.newCall(request)
-                call.timeout().timeout(deadline, TimeUnit.MILLISECONDS)
+                // The coroutine owns the earlier request deadline and its typed fact.
+                // Keep a later transport backstop so competing timers cannot flatten it.
+                call.timeout().timeout(deadline + 1_000, TimeUnit.MILLISECONDS)
                 work.attach(call)
                 continuation.invokeOnCancellation { work.cancel() }
                 call.enqueue(object : Callback {
                     override fun onFailure(call: Call, e: IOException) {
                         work.finished.countDown()
                         work.consumed.countDown()
-                        if (continuation.isActive) continuation.resumeWithException(IOException("Playback control request failed"))
+                        if (continuation.isActive) continuation.resumeWithException(nativePlaybackNetworkFailure(e))
                     }
                     override fun onResponse(call: Call, response: Response) {
                         var result: NativePlaybackResponse? = null
@@ -140,7 +142,8 @@ internal class NativePlaybackTransport(
                                 val bytes = source.readByteArray()
                                 if (enforceCurrentScope && !currentScope()) throw invalidScope()
                                 result = NativePlaybackResponse(it.code, bytes) { work.consumed.countDown(); retire(work) }
-                            } catch (_: Exception) { failure = invalidResponse() }
+                            } catch (error: IOException) { failure = nativePlaybackNetworkFailure(error) }
+                            catch (_: Exception) { failure = invalidResponse() }
                         }
                         work.finished.countDown()
                         if (result == null || !continuation.isActive) work.consumed.countDown()
