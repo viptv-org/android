@@ -11,6 +11,11 @@ import kotlinx.coroutines.sync.withLock
 internal fun AppController.start(media: Media, source: Source, explicitResume: Boolean = false, deliveryOptions: PlaybackDeliveryOptions = PlaybackDeliveryOptions(), retryIntent: NativePlaybackRetryIntent? = null) {
     cancelUpNext()
     if (_state.value.preparingSourceId != null) return
+    if (retryIntent == null) {
+        nativeEffects?.resetRecovery()
+        nativeRetryIntent = null
+        nativeStoppedMedia = null
+    }
     if (_state.value.route is Route.Guide) cancelGuideWork()
     playbackStartJob?.cancel()
     val requestGeneration = ++playbackGeneration
@@ -110,6 +115,7 @@ private suspend fun AppController.prepareAndStartLocked(
             )
             activePlaybackDelivery = deliveredOptions
             nativePlaybackIntent = null
+            nativeEffects?.resetRecovery()
             replacePlaybackSession(launch.sessionId)
             return OpenedPlayback.ordinary(launch)
         }

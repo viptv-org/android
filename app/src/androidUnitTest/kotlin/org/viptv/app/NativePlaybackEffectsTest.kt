@@ -126,6 +126,8 @@ class NativePlaybackEffectsTest {
             }
             assertFalse(h.effects.hasActive)
             assertEquals("forceGatewayRetry", h.effects.recoveryDecision())
+            h.effects.resetRecovery()
+            assertEquals("ordinaryRetry", h.effects.recoveryDecision())
             assertEquals(1, server.requests.count { it.method == "POST" })
             assertEquals(1, server.requests.count { it.method == "DELETE" })
             assertTrue(h.events.indexOf("player.stop") < h.events.indexOf("bytes.stop"))

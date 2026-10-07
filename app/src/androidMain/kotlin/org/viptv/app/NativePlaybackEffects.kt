@@ -30,6 +30,7 @@ internal class NativePlaybackEffects(
     private var replacingControl: NativePlaybackControl? = null
     private var failure: Recovery? = null
     val hasActive: Boolean get() = active != null
+    fun resetRecovery() { failure = null }
 
     /** The control callback also runs before a handle exists; unrelated outgoing reads survive. */
     fun preventReads(control: NativePlaybackControl) {
