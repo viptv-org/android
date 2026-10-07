@@ -50,6 +50,7 @@ class HttpsIngressTest(unittest.TestCase):
     def test_real_tls_range_and_head_have_exact_owned_bytes(self):
         status, headers, payload = self.request("GET", "/owned/episode.mp4", headers={"Range": "bytes=42-99"})
         self.assertEqual(206, status)
+        self.assertEqual("close", headers["Connection"])
         self.assertEqual(self.payload[42:100], payload)
         self.assertEqual(f"bytes 42-99/{len(self.payload)}", headers["Content-Range"])
         status, headers, payload = self.request("HEAD", "/owned/episode.mp4")

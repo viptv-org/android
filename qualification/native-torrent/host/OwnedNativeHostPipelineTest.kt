@@ -49,11 +49,22 @@ class OwnedNativeHostPipelineTest {
         val ssl = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
         val http = OkHttpClient.Builder().sslSocketFactory(ssl.socketFactory, trust).build()
         val origin = config.getString("origin")
+        http.newCall(okhttp3.Request.Builder().url(origin + "/api/v2/playback-protocol")
+            .header("Authorization", "Bearer " + config.getString("access_token")).build()).execute().use { assertEquals(200, it.code) }
         val jobs = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val cacheParent = directory.resolve("host-cache").apply { mkdirs() }
         val cache = NativeTorrentCache.open(cacheParent, { path, capacity -> NativeTorrentEngineCacheManager(
             TorrentClient.newNativeOwned(path.path, capacity.toULong(), listOf(config.getString("peer")))) }, nowNanos = ::now)
         val coordinator = NativeTorrentCoordinator(cache, ::now, { true }, {}, main = Dispatchers.Default)
+        val probe = NativePlaybackTransport(origin, { config.getString("access_token") }, { true }, cache, client = http)
+        probe.request("GET", "/v2/playback-protocol", negotiation = true).use {
+            assertEquals(200, it.status)
+            assertEquals("\"advertise\"", uniffi.viptv_core.normalize("nativeTorrent", JSONObject().put("operation", "negotiation")
+                .put("platform", "android_tv").put("qualified", true).put("scopeMatches", true).put("status", it.status)
+                .put("authorizationRefused", false).put("body", String(it.bytes, Charsets.UTF_8)).toString(), ""))
+        }
+        assertEquals("/api/v2/playback-protocol", JSONObject(uniffi.viptv_core.normalize("request",
+            JSONObject().put("operation", "playbackProtocolV2").toString(), origin)).getString("path"))
         fun control(generation: Long): NativePlaybackControl {
             lateinit var value: NativePlaybackControl
             val transport = NativePlaybackTransport(origin, { config.getString("access_token") }, { true }, cache, client = http)
@@ -71,7 +82,8 @@ class OwnedNativeHostPipelineTest {
             assertIs<NativePlaybackStart.Native>(first.start(request(), true, true, cache))
             val accepted = assertNotNull(first.firstGrantAcceptedAtMillis())
             val candidate = coordinator.prepare(first, 1)
-            assertTrue(now() / 1_000_000 - accepted <= 30_000)
+            val startupMillis = now() / 1_000_000 - accepted
+            assertTrue(startupMillis <= 30_000)
             val selected = config.getJSONArray("files").getJSONObject(1)
             assertEquals(selected.getString("prefix_sha256"), sha(withContext(Dispatchers.IO) { read(candidate.capability.url, 0) }))
             assertEquals(selected.getString("sample_sha256"), sha(withContext(Dispatchers.IO) { read(candidate.capability.url, selected.getLong("sample_offset")) }))
@@ -84,11 +96,16 @@ class OwnedNativeHostPipelineTest {
             assertTrue(withContext(Dispatchers.IO) { cache.retire(candidate.work, deadline) && first.joinLocal(deadline) })
             val joinedMillis = (now() - began) / 1_000_000
             assertTrue(now() <= deadline)
+            val retired = URL(candidate.capability.url).openConnection() as HttpURLConnection
+            retired.connectTimeout = 1000; retired.readTimeout = 1000
+            try { assertTrue(runCatching { retired.responseCode in listOf(401, 403, 404, 410) }.getOrDefault(true)) }
+            finally { retired.disconnect() }
             assertEquals(selected.getString("prefix_sha256"), sha(withContext(Dispatchers.IO) { read(independent.capability.url, 0) }))
             assertTrue(coordinator.retire(candidate)); assertTrue(coordinator.retire(independent)); assertTrue(coordinator.closeScope())
             assertEquals(0L, cache.heldPayloadCapacityBytes)
             directory.resolve("host-pipeline-evidence.json").writeText(JSONObject().put("platform", "linux_host")
                 .put("actual_backend_authorization", true).put("actual_core_bridge", true).put("actual_owned_tcp_ffi", true)
+                .put("grant_to_native_ready_millis", startupMillis)
                 .put("exact_selected_bytes", true).put("independent_grants", true).put("joined_local_millis", joinedMillis)
                 .put("android_jni", "NOT RUN").put("media3_decode", "NOT RUN").toString())
         } finally {

@@ -153,4 +153,49 @@ if (fixtureCa.isPresent) {
     tasks.matching { it.name == "preDebugBuild" }.configureEach { dependsOn(prepareFixtureTrust) }
 }
 
-apply(from = "../qualification/native-torrent/fixture.gradle.kts")
+// Private fixture configuration uses the owning plugin's typed DSL/classpath.
+val fixtureArtifacts = providers.gradleProperty("nativeTorrentFixtureArtifacts")
+if (fixtureArtifacts.isPresent) {
+    val fixtureConfiguration = providers.gradleProperty("nativeTorrentFixtureConfig")
+    require(fixtureConfiguration.isPresent) { "Isolated native fixture configuration required" }
+    require(fixtureCa.isPresent) { "Isolated loopback fixture trust required" }
+    require(gradle.startParameter.taskNames.none { it.contains("release", ignoreCase = true) }) { "Owned native fixtures are debug-only" }
+    val products = rootProject.file(fixtureArtifacts.get())
+    val configuration = rootProject.file(fixtureConfiguration.get())
+    val normalKotlin = rootProject.file("vendor/playback-gateway/ffi/generated/kotlin").canonicalFile
+    val normalJni = rootProject.file("vendor/playback-gateway/ffi/generated/android/jniLibs").canonicalFile
+    val roots = rootProject.file("qualification/native-torrent")
+    kotlin {
+        sourceSets.getByName("androidMain").kotlin.apply {
+            setSrcDirs(srcDirs.filter { it.canonicalFile != normalKotlin } + products.resolve("kotlin") + roots.resolve("androidMain/kotlin"))
+        }
+        sourceSets.getByName("androidInstrumentedTest").kotlin.srcDir(roots.resolve("androidInstrumentedTest/kotlin"))
+    }
+    val fixtureAssets = layout.buildDirectory.dir("generated/ownedNativeFixtureAssets")
+    android {
+        buildTypes.getByName("debug").apply {
+            applicationIdSuffix = ".nativefixture"
+            versionNameSuffix = "-owned-native-fixture"
+        }
+        sourceSets.getByName("main").jniLibs.apply {
+            setSrcDirs(srcDirs.filter { it.canonicalFile != normalJni } + products.resolve("jniLibs"))
+        }
+        sourceSets.getByName("debug").apply {
+            manifest.srcFile(roots.resolve("androidMain/AndroidManifest.xml"))
+            assets.srcDir(fixtureAssets)
+        }
+    }
+    androidComponents {
+        beforeVariants(selector().withBuildType("release")) { it.enable = false }
+    }
+    val verifyOwnedFixture by tasks.registering(Exec::class) {
+        workingDir(rootProject.projectDir)
+        commandLine("python3", roots.resolve("verify_fixture_artifacts.py"), products, rootProject.file("TORRENT_REF"), configuration)
+    }
+    val prepareOwnedFixtureConfiguration by tasks.registering(Copy::class) {
+        dependsOn(verifyOwnedFixture)
+        from(configuration) { rename { "config.json" } }
+        into(fixtureAssets.map { it.dir("native-fixture") })
+    }
+    tasks.named("preBuild") { dependsOn(verifyOwnedFixture, prepareOwnedFixtureConfiguration) }
+}

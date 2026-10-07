@@ -25,6 +25,13 @@ def certificate(directory):
 
 
 class Ingress(BaseHTTPRequestHandler):
+    def end_headers(self):
+        # Finite fixture requests use independent TLS sockets. Declare closure
+        # explicitly so strict clients cannot reuse a socket the server closed.
+        self.send_header("Connection", "close")
+        self.close_connection = True
+        super().end_headers()
+
     def log_message(self, *_):
         pass  # Request paths, bearer headers and grant bodies must never enter logs.
 

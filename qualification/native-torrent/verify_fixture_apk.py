@@ -18,7 +18,7 @@ def verify(apk, artifacts, root, aapt):
     assert "package: name='org.viptv.app.nativefixture'" in badging
     assert re.search(r"^(?:minSdkVersion|sdkVersion):'24'$", badging, re.MULTILINE)
     manifest = subprocess.check_output([str(aapt), "dump", "xmltree", str(apk), "--file", "AndroidManifest.xml"], text=True)
-    activity = re.search(r"E: activity .*?A: android:name[^\n]*OwnedNativeFixtureActivity[^\n]*\n(?:(?!E:).)*", manifest, re.DOTALL)
+    activity = re.search(r"E: activity .*?A: [^\n]*android:name[^\n]*OwnedNativeFixtureActivity[^\n]*\n(?:(?!E:).)*", manifest, re.DOTALL)
     assert activity and "android:exported" in activity.group() and "=false" in activity.group()
     policy = subprocess.check_output([str(aapt), "dump", "xmltree", str(apk), "--file", "res/xml/network_security_config.xml"], text=True)
     assert re.findall(r"A: cleartextTrafficPermitted=(true|false)", policy) == ["false", "true"]

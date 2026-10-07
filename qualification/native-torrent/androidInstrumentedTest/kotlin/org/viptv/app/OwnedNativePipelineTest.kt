@@ -152,7 +152,7 @@ class OwnedNativePipelineTest {
             assertTrue(withContext(Dispatchers.IO) { denied(wrongToken) })
             assertTrue(withContext(Dispatchers.IO) { denied(unselected) })
             active = first
-            coordinator.accept(candidate) { player.open(PlaybackSource(it.url, emptyMap()), playWhenReady = true) }
+            coordinator.accept(candidate) { player.open(PlaybackSource(it.url, headers = emptyMap()), playWhenReady = true) }
             await { player.state.value.isPlaying && player.state.value.positionMillis > 1000 }
             assertTrue(SystemClock.elapsedRealtime() - firstAccepted <= 30_000, "accepted grant through actual player readiness exceeds startup budget")
             await { player.audioTracks.value.size >= 2 && player.subtitleTracks.value.size >= 2 }
@@ -461,8 +461,10 @@ class OwnedNativePipelineTest {
             await(30_000) { controller.state.value.route is Route.Player && controller.player.state.value.isPlaying }
             val epoch = assertNotNull(controller.nativePlaybackEpoch)
             val candidate = assertNotNull(epoch.coordinator.authorizeActive())
-            assertFalse(controller.state.value.toString().contains(candidate.capability.url))
-            assertFalse(store.all.toString().contains(candidate.capability.url))
+            for (privateNativeValue in listOf(candidate.capability.url, config.getString("info_hash"), "magnet:?xt=urn:btih:")) {
+                assertFalse(controller.state.value.toString().contains(privateNativeValue), "safe app state leaked native input")
+                assertFalse(store.all.toString().contains(privateNativeValue), "auth preferences leaked native input")
+            }
             withContext(Dispatchers.Main.immediate) { controller.player.seekTo(8000) }
             await { controller.player.state.value.isPlaying && controller.player.state.value.positionMillis > 8000 }
             withContext(Dispatchers.Main.immediate) { controller.exitPlayback() }
