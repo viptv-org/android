@@ -1,3 +1,23 @@
+# Default native availability on shared Android TV — 2026-10-07
+
+The shared interactive emulator received normal system-trust APK `8e1ffec`
+with `install -r`, preserving the requested personal account/profile and data.
+APK SHA-256:
+`936b41c2e35b655721b85707b5b9e57db0b22908f4df8b19e9886c29aa41e484`.
+Supported Android runtimes advertise native transport without an enable setting,
+operator allowlist or qualification receipt. The development backend was
+updated to `d66085be95ad6e7d3401bf8be326172ee7f66d09`; running executable
+checksum and HTTPS health were verified, with existing configuration, database,
+providers, history, profiles, keyring, frontend assets and tunnel preserved.
+
+The signed-in source picker displayed 179 source choices, including Torrentio,
+rather than the reported unsupported-formats message. A manually selected
+1080p source rendered actual video after Resume. That normal source observation
+does not independently prove its delivery kind or sustained public-peer native
+behavior. The separate owned native pipeline evidence below proves actual
+engine/Media3 decoding and renewal for synthetic selected-file grants.
+No production deployment or physical-device qualification is claimed.
+
 # Shared browser-accessible Android TV emulator — 2026-10-07
 
 Following the owner's explicit account-switch request, the existing emulator
