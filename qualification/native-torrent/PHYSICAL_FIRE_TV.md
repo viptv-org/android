@@ -53,6 +53,26 @@ That constructor, Activity, CA and configuration must remain absent from normal
 artifacts. The fixture wire still carries `public_dht_tcp_v1`; only the test engine
 injection receives explicitly reversed literal-loopback peers with DHT disabled.
 
+The ticket 12 final handoff records Android runtime `9f07a3b`, verifier `7394c14`,
+runbook `460741a`, backend `ef7f2a7`, gateway `764e518b` and core `91c5a4f`.
+Its sealed fixture APK SHA-256 is
+`9db7109eb1e1dff47fd10e55706cdb9087323b9eafcd19b7a8e4d8af710abec0`;
+the instrumentation APK SHA-256 is
+`b02e7f0cc8a452e65668a4a968d408b68110dfce7d2d57b465e4393235fa3dfb`.
+These artifacts preserve build evidence; their finite backend session has stopped.
+Create a fresh owned directory, backend session, matching configuration and matching
+APK/test APK using `README.md` before executing a selector. Record those newly
+built APK hashes instead of using the stopped session's artifacts for a runtime run.
+
+At the final ticket 13 handoff, the configured TV's last observed connection was
+offline and no availability update had arrived. The runner's 13 host safety/evidence
+regressions and private preparation passed. No ticket 13 device query, installation,
+instrumentation, playback or state change occurred. All physical cases remain
+NOT-RUN, including audible sound and the owner's final signed-in state. Ticket 12's
+real Linux authorized Core/FFI/owned-TCP run measured 119 ms readiness and 4 ms common
+local join; those measurements supply host pipeline evidence only. Native capability
+qualification remains off.
+
 ## Normal APK identity, JNI and runtime policy
 
 After the owner makes the existing connection available, follow the private
