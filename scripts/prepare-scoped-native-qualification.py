@@ -8,6 +8,10 @@ import re
 import subprocess
 
 DECISION = "scoped_experimental_sticky_quarantine_v1"
+MEASURED_TARGETS = (
+    {"processAbi": "armeabi-v7a", "apiLevel": 30, "model": "AFTLAS01"},
+    {"processAbi": "x86_64", "apiLevel": 36, "model": "sdk_google_atv64_x86_64"},
+)
 
 
 def sha(path):
@@ -35,8 +39,9 @@ def prepare(root, receipt_path, output):
     if set(qualification) != {"normalJni", "ownedMedia3", "evidenceSha256"} or qualification["normalJni"] != "pass" or qualification["ownedMedia3"] != "pass":
         raise ValueError("Actual normal JNI and owned Media3 passes required")
     platform = receipt["platform"]
-    if set(platform) != {"processAbi", "apiLevel", "model"} or platform != {"processAbi": "armeabi-v7a", "apiLevel": 30, "model": "AFTLAS01"}:
-        raise ValueError("Only the configured measured development TV cohort is admitted")
+    if set(platform) != {"processAbi", "apiLevel", "model"} or platform not in MEASURED_TARGETS:
+        raise ValueError("Only an explicitly measured development TV cohort is admitted")
+    abi = platform["processAbi"]
     cohort = receipt["cohort"]
     expected = {
         "coreRevision": (root / "CORE_REF").read_text().strip(),
@@ -44,8 +49,8 @@ def prepare(root, receipt_path, output):
         "designRevision": (root / "DESIGN_REF").read_text().strip(),
         "gatewayLockSha256": sha(root / "vendor/playback-gateway/lock.json"),
         "coreLockSha256": sha(root / "vendor/core/lock.json"),
-        "gatewayLibrarySha256": sha(root / "vendor/playback-gateway/ffi/generated/android/jniLibs/armeabi-v7a/libplayback_gateway_ffi.so"),
-        "coreLibrarySha256": sha(root / "app/src/androidMain/jniLibs/armeabi-v7a/libviptv_core.so"),
+        "gatewayLibrarySha256": sha(root / f"vendor/playback-gateway/ffi/generated/android/jniLibs/{abi}/libplayback_gateway_ffi.so"),
+        "coreLibrarySha256": sha(root / f"app/src/androidMain/jniLibs/{abi}/libviptv_core.so"),
     }
     if cohort != expected:
         raise ValueError("Normal artifact cohort differs from measured receipt")
