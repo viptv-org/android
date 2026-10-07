@@ -60,6 +60,7 @@ android {
     sourceSets.getByName("main").jniLibs.srcDir("src/androidMain/jniLibs")
     testOptions.unitTests.all {
         it.systemProperty("jna.library.path", rootProject.file("vendor/core/target/debug").absolutePath)
+        it.systemProperty("viptv.core.nativeVectors", rootProject.file("vendor/core/tests/native-torrent-vectors.json").absolutePath)
     }
     namespace = "org.viptv.app"
     compileSdk = 36

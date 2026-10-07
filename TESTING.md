@@ -1652,3 +1652,31 @@ The owned emulator was stopped and its AVD removed after qualification.
 This proves the combined component/controller behavior on the named emulator;
 authenticated Title flows, TV Guide re-audit, long-media track-panel return and
 physical Android TV acceptance remain open.
+
+# Private native core bridge adoption — 2026-10-07
+
+Android and TV-web adopt core `28e114949a5bef205ca0aa125d7f6fd2851b6c25` through their owning sync
+scripts. Canonical Rust owns closed native grant/input parsing, original UTF-8
+bytes, metainfo identity/path bounds, scoped clocks/renewal and explicit
+negotiation/recovery decisions. Private holder values stay outside ordinary
+launch/session/source models. Generated Kotlin interfaces are consumed without
+Kotlin policy copies. Native capability remains disabled.
+
+With existing JDK 17 / SDK Platform 36 and one worker, core/design integrity,
+host core preparation, 47 library and 236 app unit tests, three-ABI Android core
+preparation, debug APK assembly and lint pass. The two new app tests call the
+actual generated UniFFI byte/scalar interfaces against the canonical corpus,
+prove native/Kotlin string redaction and permanent retirement after invalid
+UTF-8 or an exact-file mismatch. Test failures/errors/skips are zero. Lint has
+zero unfiltered errors and 77 warnings under the existing baseline. The APK
+contains arm64-v8a, armeabi-v7a and x86_64 core libraries. APK SHA-256:
+`0d668b84f419c731fd788d8d4bae79a932966c236922edd22d8d3e0ab6128b3b`.
+
+The source cohort separately passes 116 Rust tests, strict Clippy and 414
+native/actual-WASM grant, request, clock, capability, recovery and privacy
+vectors plus existing protocol/presentation suites. Local command logs are
+`.scratch/native-torrent/evidence/05/` and core `target/native-torrent-05/`.
+These are core interface/artifact checks. Android native engine, HTTP control
+adapter and player integration belong to subsequent tickets; no device install,
+emulator, media/network qualification, capability activation, push or deployment
+was performed.
