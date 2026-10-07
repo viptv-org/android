@@ -84,7 +84,7 @@ in [the native contract](../specs/behavior/torrent-native-android.md).
 | `native_playback_failed` | The selected source could not start on this device. Try another source or retry playback. |
 | `native_acquisition_timeout` | This device took too long to prepare the selected source. Try another source or retry playback. |
 | `native_metadata_timeout` | Torrent file information did not arrive in time. Try another source or retry playback. |
-| `native_payload_limit` | This torrent does not fit the device's 2 GiB playback cache budget, including its other files. Choose another source or retry playback. |
+| `native_payload_limit` | The device's playback cache has no room for this stream. Stop another stream, choose another source or retry playback. |
 | `native_storage_unavailable` | This device could not reserve storage for playback. Free some space, choose another source or retry playback. |
 | `native_cache_unavailable` | The device's playback cache is unavailable. Choose another source or retry playback. |
 | `native_metadata_invalid` | This source has invalid or unsupported torrent file information. Choose another source. |

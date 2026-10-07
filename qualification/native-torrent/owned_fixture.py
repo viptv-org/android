@@ -62,7 +62,7 @@ def atomic_json(path, value):
 
 
 def pad_owned_payload(payload, minimum_bytes):
-    """Keep exact episode indices while admitting a real undersized native budget."""
+    """Keep exact episode indices while forcing bounded native piece storage."""
     current = sum(path.stat().st_size for path in payload.iterdir())
     if current < minimum_bytes:
         with (payload / "03-owned-padding.bin").open("wb") as output:
@@ -89,8 +89,8 @@ def generate(directory, seconds):
             "-metadata:s:s:0", "language=eng", "-metadata:s:s:1", "language=spa", "-disposition:s:0", "0",
             "-disposition:s:1", "0", "-movflags", "+faststart", str(payload / f"0{episode}-episode.mp4"),
         ], check=True)
-    # The engine accepts budgets of at least 256 MiB. One additional payload byte
-    # makes payload_bytes - 1 a valid budget that exact acquisition must refuse.
+    # Exceed the native 256 MiB piece budget to exercise rolling storage while
+    # keeping explicit episode indices stable.
     pad_owned_payload(payload, 256 * 1024 * 1024 + 1)
     files = sorted(payload.iterdir())
     content = b"".join(path.read_bytes() for path in files)

@@ -87,6 +87,26 @@ class OwnedNativeHostPipelineTest {
             val selected = config.getJSONArray("files").getJSONObject(1)
             assertEquals(selected.getString("prefix_sha256"), sha(withContext(Dispatchers.IO) { read(candidate.capability.url, 0) }))
             assertEquals(selected.getString("sample_sha256"), sha(withContext(Dispatchers.IO) { read(candidate.capability.url, selected.getLong("sample_offset")) }))
+            val pieceCaches = cacheParent.walkTopDown().filter { it.isFile && it.name == "pieces.cache" }.toList()
+            assertTrue(config.getLong("payload_bytes") > 268435456L)
+            assertEquals(1, pieceCaches.size)
+            assertTrue(pieceCaches.single().length() <= 268435456L)
+            fun frame(input: String, seconds: Int): String {
+                val process = ProcessBuilder("ffmpeg", "-v", "error", "-nostdin", "-ss", seconds.toString(),
+                    "-i", input, "-frames:v", "1", "-an", "-sn", "-threads", "1", "-f", "md5", "-")
+                    .redirectError(directory.resolve("host-decode-private.log")).start()
+                try {
+                    assertTrue(process.waitFor(15, java.util.concurrent.TimeUnit.SECONDS), "owned decoder timed out")
+                    assertEquals(0, process.exitValue(), "owned native input decode failed")
+                    return process.inputStream.bufferedReader().readText().trim().also { assertTrue(it.startsWith("MD5=")) }
+                } finally {
+                    if (process.isAlive) { process.destroyForcibly(); process.waitFor() }
+                }
+            }
+            val source = directory.resolve("owned-episodes/01-episode.mp4").path
+            val sought = withContext(Dispatchers.IO) { frame(candidate.capability.url, 3) }
+            assertEquals(frame(source, 3), sought, "native cached seek must decode the requested source frame")
+            assertNotEquals(frame(source, 0), sought)
             val second = control(2); coordinator.ownControl(second, 2)
             assertIs<NativePlaybackStart.Native>(second.start(request(), true, true, cache))
             val independent = coordinator.prepare(second, 2)
@@ -106,6 +126,7 @@ class OwnedNativeHostPipelineTest {
             directory.resolve("host-pipeline-evidence.json").writeText(JSONObject().put("platform", "linux_host")
                 .put("actual_backend_authorization", true).put("actual_core_bridge", true).put("actual_owned_tcp_ffi", true)
                 .put("grant_to_native_ready_millis", startupMillis)
+                .put("rolling_cache", true).put("ffmpeg_decoded_seek", true)
                 .put("exact_selected_bytes", true).put("independent_grants", true).put("joined_local_millis", joinedMillis)
                 .put("android_jni", "NOT RUN").put("media3_decode", "NOT RUN").toString())
         } finally {

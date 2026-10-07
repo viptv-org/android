@@ -40,7 +40,8 @@ python3 qualification/native-torrent/owned_fixture.py generate PRIVATE_MEDIA_DIR
 The torrent contains a readme at index 0 and H.264/AAC episodes at indices 1 and 2.
 Both episodes have real English/Spanish AAC and mov_text tracks, with timed owned
 subtitle cues. `manifest.json` records canonical info hash, metainfo and file SHA256,
-full payload length, explicit indices and prefix hashes. No tracker, webseed, private
+full logical payload length, explicit indices and prefix hashes. A padding file
+forces the native rolling storage path without changing episode indices. No tracker, webseed, private
 flag or peer hint is present in metainfo. The TCP peer serves BEP3 pieces and BEP9
 metadata only for that exact hash, verifies payload hashes before listening, and binds
 literal `127.0.0.1`. Atomic private hold files allow actual metadata/piece waits.
@@ -92,7 +93,9 @@ canonical bridge, BEP9 metadata, exact selected bytes and independent grant sett
 python3 qualification/native-torrent/run_host_pipeline.py PRIVATE_ARTIFACT_DIRECTORY PRIVATE_MEDIA_DIRECTORY --core-library-directory PRIVATE_MATCHING_CORE_LIBRARY_DIRECTORY
 ```
 
-This uses Linux `CLOCK_BOOTTIME` and real native IO. Its private
+This uses Linux `CLOCK_BOOTTIME`, real native IO and host FFmpeg. It verifies
+rolling cache allocation and compares a decoded seek frame with the owned
+source frame; Android JNI/Media3 evidence remains separate. Its private
 `host-pipeline-evidence.json` explicitly marks Android JNI and Media3 as NOT RUN.
 Use JDK 17 and the configured SDK path, with the already built normal Android classes
 as compiler dependencies. Host results cannot fill physical device acceptance gates.
@@ -121,7 +124,7 @@ force-stop, clear, reinstall or change preferences in `org.viptv.app`.
 The tests cover actual decoded surface pixels and cue delivery, real alternate track
 confirmation, exact selected bytes, token/index refusal, pause renewal and foreground
 revalidation, independent overlapping grants, metadata Back cancellation, wrong-index
-and aggregate capacity refusal, a held real HTTP piece body with concurrent joins,
+and aggregate piece-cache capacity refusal, a held real HTTP piece body with concurrent joins,
 actual scheduled heartbeat and elapsed expiry after a test-only heartbeat worker
 fault, ordinary HTTP/HLS and a 404 negotiation endpoint, and actual AppController
 identity restoration/Media3/return-position/paused producer refusal/profile/sign-out

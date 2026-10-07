@@ -1,7 +1,8 @@
 # SRC-TORRENT-NATIVE-001 — Authorized Android native torrent VOD
 
 Status: owner-approved for implementation on 2026-10-06, with default availability
-approved on 2026-10-07. Supported Android clients enable native torrent transport
+approved on 2026-10-07. The owner approved rolling native piece caching on
+2026-10-07 for video files larger than device storage. Supported Android clients enable native torrent transport
 by default for every authorized account. No user setting, operator enable flag,
 account/device allowlist or qualification receipt controls availability. Runtime
 compatibility and resource authorization still apply. Implementation, deployment
@@ -419,16 +420,30 @@ authorization epoch. That epoch changes on sign-out/re-pairing, principal/profil
 server change or device/account authorization revocation, not ordinary playback
 replacement or renewal. Grants/generations are separate authorities within it.
 
-Enforce 2147483648 bytes (2 GiB) aggregate full-torrent payload reservations,
-including unselected files and retired-but-unsettled work. Same-owner shared
-payload reserves once only when sharing is proven; each independently stoppable
-grant still has separate authority. Enforce available disk and a separate
-67108864-byte (64 MiB) aggregate metainfo/control-cache ceiling; limit each
-metainfo to 4 MiB. Accounting is not a promise of an exact filesystem ceiling.
-No silent enlargement or active-entry eviction. Candidate/outgoing work shares
-the budget; acquisition/capacity failure preserves outgoing playback. Reservations
-remain charged until readers/tasks settle; reap only idle entries, never a
-live/settling manager's directory.
+Enforce 2147483648 bytes (2 GiB) aggregate input-cache reservations, including
+retired-but-unsettled work. Ordinary selected-file torrents larger than the
+268435456-byte (256 MiB) per-input piece budget reserve that bounded cache,
+not their full logical payload or unselected-file lengths. Smaller inputs reserve
+their full payload. Same-owner sharing reserves once only when proven; each
+independently stoppable grant retains separate authority. Enforce measured
+available disk and a separate 67108864-byte (64 MiB) aggregate metainfo/control
+ceiling; limit each metainfo to 4 MiB. Accounting is not an exact filesystem
+ceiling. A rolling cache must hold at least two torrent pieces; refuse admission
+when its required piece slots or aggregate reservation cannot fit.
+
+Download only active readers' bounded windows. Reuse unprotected piece slots
+and invalidate have/chunk accounting atomically before re-download. Verify pieces
+before exposing bytes, including cross-file boundary pieces. Pin current reads,
+in-flight writes and checksum work; never evict a live grant or whole active
+input. Backward seeks outside retained data fetch pieces again and may wait for
+peers within existing read deadlines. Do not advertise evictable pieces to peers
+or serve uploads from this cache. No full-sized sparse payload files or persisted
+availability may bypass the bound. Compressed archives remain native-ineligible.
+
+Candidate/outgoing work shares the budget; acquisition/capacity failure preserves
+outgoing playback. Reservations remain charged until readers/tasks settle and
+shared cache file descriptors close; reap only idle entries, never a live/settling
+manager's directory. No silent budget enlargement.
 
 Changing scope/epoch stops all old-scope transport, waits for settlement, closes
 the manager and deletes its owned cache before native admission in another scope.
@@ -493,9 +508,10 @@ This amendment changes only the explanation and retains the existing dialog
 geometry, focus order, actions, timings, accessibility and source/title/queue
 return behavior. No raw diagnostic string enters this projection.
 
-`native_payload_limit` requires an observed full-torrent aggregate reservation
-refusal against the 2 GiB budget, including unselected files and unsettled work;
-a displayed source size alone is insufficient. `native_metadata_timeout`
+`native_payload_limit` requires an observed input-cache reservation refusal
+against the 2 GiB aggregate budget or a piece-slot requirement exceeding the
+per-input budget, including unsettled work. A displayed source size alone
+is insufficient. `native_metadata_timeout`
 requires the engine's metadata deadline fact; the total acquisition deadline
 uses `native_acquisition_timeout`. Neither asserts absent peers or seeders.
 Storage and cache failures remain distinct where the adapter can establish
@@ -584,3 +600,14 @@ Host, emulator and physical evidence are independent. Physical codec/HDR/PiP,
 sustained public-peer/resource qualification and production activation remain
 separate gates; emulator evidence cannot certify them. Approved-for-implementation
 is not implemented, qualified, adopted by consumers or baseline.
+
+## Rolling cache acceptance
+
+**NT-10 Bounded large native input:** admit an exact authorized video larger than
+2 GiB through the native acquisition/facade, retain only its configured piece
+cache, and read ranges beyond 32-bit offsets. Verify byte identity, forward/backward
+seek and re-download after eviction, unselected-file refusal, independent grant
+revocation, outgoing survival on candidate capacity refusal, partial-piece retry,
+cancellation and joined cleanup with reservations held through file closure.
+Record host TCP/FFI and Android decoded playback separately; a virtual large
+input does not qualify a full movie, public swarm or physical decoder.

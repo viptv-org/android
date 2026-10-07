@@ -22,9 +22,12 @@ app ownership markers/receipts, rejects symbolic links, preserves unrelated
 storage, and restores no grants, source input, session or DHT state. Root receipts
 remain until owned directory deletion succeeds, including partial cleanup.
 
-The generic manager reserves the sum of all metadata file lengths, including
-unselected files, against the supplied 2 GiB payload limit and measured available
-disk. Its registry proves payload sharing and retains retiring/unsettled
+The native facade enables a 256 MiB rolling piece cache per large input. Smaller
+torrents reserve their full payload. The generic manager charges these reservations
+against the supplied 2 GiB aggregate limit and measured available disk; a large
+logical torrent or unselected file does not require full-payload device storage.
+At least two pieces must fit. Eviction resets availability before re-download,
+protects current reads/writes/checksums and advertises no evictable peer pieces. Its registry proves payload sharing and retains retiring/unsettled
 reservations. Independent acquisitions/listeners retain separate grant authority.
 Candidate capacity refusal does not retire the outgoing grant.
 

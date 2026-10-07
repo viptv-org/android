@@ -1,10 +1,10 @@
 {
   "repository": "viptv-org/core",
-  "revision": "adb8a7165977cc1c827b5695f1924524928a1d9e",
+  "revision": "0f500daad567c11db9ff6608f225341a01fe4afa",
   "files": {
     "Cargo.lock": "f69654cd47b20d98dce64ecfa3ad995e61a4e355510af0046e7377373b348654",
     "Cargo.toml": "aaadafb7d7043ae4788352e5784c05398c9020647acea903cc0940a158a77845",
-    "DESIGN_REF": "1024910ea4cc87d59143513c4f7b023a502ed8df421d77722fe2e91057e23a0c",
+    "DESIGN_REF": "bcd69b7cd69ca34c9518e0743f460d4b5ecdcb6a0e54caac5c46c070a6ea1382",
     "adapters/android/src/androidTest/kotlin/tv/viptv/core/HttpTransportTest.kt": "5b3d4b1af872a66ea8a077929d90e7f5f05c3fce965b2abe8c7b9fa034c7cf6d",
     "adapters/android/src/androidTest/kotlin/tv/viptv/core/SmartCastTransportTest.kt": "899be20d9e3e7e73ad60b7f95fd9da5acfa0766c23fdb69269bcd25e853e22f4",
     "adapters/android/src/main/kotlin/tv/viptv/core/HttpTransport.kt": "4f86d0720504554c02d4a7ce35d682c0c87e32084404c180d322709af2567c0a",
@@ -25,7 +25,7 @@
     "crates/viptv-core/src/app/types.rs": "e614f5d2a0137de53b201143802046ba4d92917fcb20578ded8efff24bcce8d0",
     "crates/viptv-core/src/app/update.rs": "848ac7856e0e7914daeb6957f0fd053848053f949692ce51917d8f29f5da0469",
     "crates/viptv-core/src/bin/uniffi-bindgen.rs": "f7a2dd11fb370e9595bdfa6c32fc41a9b67a60bbab06ec711cb7a03eb873ffa6",
-    "crates/viptv-core/src/domain/api_error.rs": "304cf8656af6a32ab59a1ef6de192c1e21f5b9d587dfaf9f086e34f61377fe3d",
+    "crates/viptv-core/src/domain/api_error.rs": "2c0a0453c30e4f2dd1c73336c4a2e22cbec81645e783f3d6aeafe769a96deb32",
     "crates/viptv-core/src/domain/identity.rs": "71816e7f49c377c04dca4072b856713a4fcf80ab46572cce7c84e0b4775a1b2c",
     "crates/viptv-core/src/domain/live_v2.rs": "3157b29a173611b00ca860788fc4a04b86cfaacc3be42fc9598ffee34872d7f1",
     "crates/viptv-core/src/domain/media.rs": "2e12a1de486e324476137ad115f44716ab89d14254f0c8f4ee3220cf52ae671d",
@@ -81,8 +81,8 @@
     "generated/kotlin/org/viptv/core/types/Types.kt": "e5672a0076a7050b5ec48386ae72ad3e116eac537975ace1443a9c6f9e4e9f0c",
     "generated/native-kotlin/uniffi/viptv_core/viptv_core.kt": "a33698a2481ec93e9e7160d84ee8244bb45b984441c36e87cfc86c3579d3af3e",
     "tests/bridge-vectors.json": "7ad453fa12aa772fb6eeaf53543a513100891c9b6c74f78723f88088b19fcfa5",
-    "tests/native-torrent-vectors.json": "874da616039286b0eee304f8759151f0185115f0fd3add832ef7e68b3a636b40",
-    "tests/playback-error-vectors.json": "0459ce2706ac67b9e9cd7c9d2f229a7909a19649f1b51a69c52d6eba14c9c24b",
+    "tests/native-torrent-vectors.json": "f5dab65d6231c1be8ebdab5d2f537d077e5807e34a4517b978dd2337db9e53e7",
+    "tests/playback-error-vectors.json": "0e5f9712a15067e4ecbcaa96c23e3a2ef0ff8c0d0028cdd21f689dcb66fd4d87",
     "tests/playback-protocol-vectors.json": "ef20faa68d81065ddbeece9ec8faeb6a1993ae7f6e60f69a6ef2612f974a2bc7"
   }
 }
