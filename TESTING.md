@@ -1,3 +1,45 @@
+# Native rolling piece cache — 2026-10-07
+
+Normal app source `8d9ab835356d4f2e98719d34848c785b0a2e1094` adopts gateway
+`1513e462b4c0f54ef5aa1b74b77bef325b9ee70f`, core
+`0f500daad567c11db9ff6608f225341a01fe4afa` and design
+`2cf33c35e916bcf1ea99d90ce6d2d872697a6c62`. Large native inputs use a
+256 MiB per-input rolling piece cache within the 2 GiB aggregate ceiling, rather
+than requiring their full logical torrent payload to fit. Exact-file authority,
+independent grants, disk admission and joined cleanup remain enforced.
+
+An isolated clean main checkout passes 47 library and 287 app unit tests, all
+three core/native ABI builds, 33 snapshot/importer tests, normal APK assembly,
+lint and instrumentation APK assembly. The real APK probe verifies minSdk 24,
+three-ABI core/native/JNA contents, exact pins/checksums/notices, system-CA trust,
+literal-loopback cleartext policy and 16 KiB ZIP alignment. The normal APK SHA256
+is `3d4dd8d8f9dbb55274fbe7cb6ca5899bdff5afd3ff2443847119027fbe311f71`.
+Unrelated hero UI edits are absent from this package.
+
+Gateway's locked workspace suite with owned-network fixture features passes
+213 tests (56 opt-in tests ignored). A valid 100 GiB virtual exact-file input
+reads distant and backward ranges through a 4 MiB cache and re-downloads evicted
+pieces. A 64 KiB fixture verifies cross-file reads, sequential EOF, concurrent
+independent grants and revocation. Unit/facade cases verify bounded sharing,
+piece-slot and aggregate refusal while preserving outgoing work.
+
+The actual Android Kotlin adapter, generated UniFFI facade, Rust core and a real
+isolated backend/owned TCP peer pass a Linux host pipeline in 4.874 seconds.
+It verifies the rolling cache, exact selected bytes, a host-FFmpeg decoded seek
+frame against the source, and independent-grant cleanup. Native readiness takes
+173 ms; joined local retirement takes 6 ms. The owned cache is reclaimed and
+both fixture listeners close. This is host transport/decode evidence, not Android
+JNI, Media3, physical sound, public swarm, 4K or production acceptance.
+
+No APK was installed and no shared-emulator state or production service changed.
+Android decoded playback remains pending a coordinated device window. The isolated
+fixture source includes cache-allocation and candidate-refusal checks for that run.
+The isolated x86_64 fixture app and instrumentation APK also compile. A scoped
+APK probe passes fixture identity, private constructor/checksum, trust policy,
+notices and 16 KiB ZIP alignment. The full three-ABI fixture probe is not claimed:
+only x86_64 fixture products were built; all three normal product ABIs passed
+their normal APK probe above.
+
 # Native startup diagnosis and failure facts — 2026-10-07
 
 The normal system-trust APK with SHA-256
