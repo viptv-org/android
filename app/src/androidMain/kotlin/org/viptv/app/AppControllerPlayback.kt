@@ -292,6 +292,7 @@ internal fun AppController.retryPlaybackRecovery() {
 internal fun AppController.chooseAnotherSourceForRecovery() {
     val dialog = _state.value.dialog?.takeIf { it.kind == DialogKind.PlaybackRecovery } ?: return
     val media = dialog.media ?: return
+    sourcePreview.cancel()
     when (val route = _state.value.route) {
         is Route.Player -> {
             stopPlayback(media)
@@ -300,7 +301,10 @@ internal fun AppController.chooseAnotherSourceForRecovery() {
                 queueEpisodeReturn = route.sourceRoute?.queueEpisodeReturn == true)
         }
         is Route.Sources -> { _state.value = _state.value.copy(dialog = null, message = null); chooseSources(media, origin = route.origin, queueEpisodeReturn = route.queueEpisodeReturn) }
-        else -> Unit
+        else -> {
+            _state.value = _state.value.copy(dialog = null, message = null)
+            chooseSources(media)
+        }
     }
 }
 

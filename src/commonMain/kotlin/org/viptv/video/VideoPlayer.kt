@@ -32,7 +32,15 @@ data class PlaybackOptions(
     val preferredAudioLanguage: String? = null,
     val preferredSubtitleLanguage: String? = null,
     val subtitlesEnabled: Boolean? = null,
-)
+    /** Optional transport budgets; null retains the backend's configured defaults. */
+    val openTimeoutMillis: Long? = null,
+    val httpReadTimeoutMillis: Int? = null,
+) {
+    init {
+        require(openTimeoutMillis == null || openTimeoutMillis in 1..120_000)
+        require(httpReadTimeoutMillis == null || httpReadTimeoutMillis in 1..120_000)
+    }
+}
 
 data class ExternalSubtitleSource(
     val id: String,

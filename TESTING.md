@@ -1,3 +1,44 @@
+# Native source HTTP errors and public torrent playback — 2026-10-07
+
+The native control HTTP regression reproduces a real backend
+`404 source_not_found` incorrectly reported as 502, then passes with the actual
+status and canonical refresh instruction preserved. Recovery discards retained
+source discovery before requesting fresh handles, including recovery from a
+non-player route. Controller recovery has device observations rather than a
+new isolated callback test; no full host controller fixture covers that seam.
+
+Native Media3 reads allow 35 seconds and opening allows 60 seconds, covering
+an engine piece wait of up to 30 seconds. Ordinary-source defaults, acquisition
+bounds, grant fencing and cleanup remain intact. The connected stalled-HTTP
+regression fails when the per-source override is ignored, then passes both the
+500 ms default and 750 ms override against real Media3 connections.
+
+Validation passes 48 library and 294 app unit tests, app lint against its existing
+baseline, all three core/native ABIs, normal APK assembly and the real APK
+integrity probe. The normal system-trust APK was installed with data/sign-in
+preserved. Its SHA-256 is
+`81a9a7315e7db2df60e9a0f6e0834bfd716b1bfc3b18a76c4c544ed378166fe7`.
+Pins: core `df62d8a893bbfbd8c2cd471b07c40efa6a78a4aa`, gateway
+`698372df3734f6ec8019f70591b549280f47c28f` and design
+`d9562790ea69d5e29cb4ec2630b814a7f30f9761`.
+
+The isolated owned native device pipeline case A passes in 11.089 seconds,
+using actual JNI, an isolated backend and a TCP torrent peer. It verifies decoded
+Media3 surfaces, exact file index, subtitles, alternate audio selection, seek,
+renewal, independent grants, authority denial and joined cleanup. The rolling
+cache is 256 MiB. This is one pipeline case, not the entire qualification class
+or physical-TV sound/codec acceptance.
+
+A manually selected public Torrentio H.264 source also decodes actual video in
+the normal app, continues playing through renewals and holds a 256 MiB native
+piece cache. A roughly 30-minute backward seek resumes with decoded video
+and PLAYING state. A separate host read of the same native input took 10.9 seconds,
+exceeding the ordinary 8-second HTTP read default. Other public inputs can still
+fail metadata acquisition when peers do not respond; an HEVC selection reports
+a measured decoder failure on this emulator. This observation does not qualify
+all public swarms, codecs, 4K hardware or production deployment. Raw captures
+and provider/session details remain private and untracked.
+
 # Native rolling piece cache — 2026-10-07
 
 Normal app source `8d9ab835356d4f2e98719d34848c785b0a2e1094` adopts gateway

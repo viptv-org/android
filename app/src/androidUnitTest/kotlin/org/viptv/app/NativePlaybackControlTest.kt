@@ -14,6 +14,28 @@ import org.json.JSONObject
 
 /** Real loopback HTTP fixtures test byte/deadline behavior; they claim no Android TLS/device qualification. */
 class NativePlaybackControlTest {
+    @Test fun unavailableSourcePreservesBackendStatusAndRefreshReason() = runBlocking {
+        val owner = cache()
+        val calls = mutableListOf<JSONObject>()
+        NativeControlHttpFixture { request ->
+            when {
+                request.target.endsWith("playback-protocol") -> NativeHttpReply("""{"version":1,"native_torrent_versions":[1]}""".toByteArray())
+                request.method == "DELETE" -> NativeHttpReply("""{"ok":true}""".toByteArray())
+                else -> NativeHttpReply("""{"error_code":"source_not_found","error":"private provider details"}""".toByteArray(), 404)
+            }
+        }.use { server ->
+            val control = control(server, owner, this, legacy = legacy(calls))
+            val failure = assertFailsWith<GatewayError> { control.start(input(), true, true, owner) }
+            assertEquals(404, failure.status)
+            assertEquals("source_not_found", failure.code)
+            assertContains(failure.message, "Refresh the sources")
+            assertFalse(failure.message.contains("private provider details"))
+            assertTrue(control.selectionWasRefused())
+            assertTrue(calls.isEmpty())
+        }
+        assertTrue(owner.closeScope())
+    }
+
     @Test fun overallStartupDeadlineReportsFailureButOwnerCancellationStaysCancellation() = runBlocking {
         for (cancelOwner in listOf(false, true)) {
             val owner = cache()

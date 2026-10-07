@@ -83,7 +83,8 @@ internal class NativePlaybackEffects(
                 open(PlaybackSource(capability.url, headers = emptyMap(), title = title,
                     kindHint = PlaybackKind.OnDemand, startPositionMillis = position,
                     options = PlaybackOptions(preferredAudioLanguage = state.audioLanguage,
-                        preferredSubtitleLanguage = state.subtitleLanguage, subtitlesEnabled = state.subtitlesEnabled)), playWhenReady)
+                        preferredSubtitleLanguage = state.subtitleLanguage, subtitlesEnabled = state.subtitlesEnabled,
+                        openTimeoutMillis = 60_000, httpReadTimeoutMillis = 35_000)), playWhenReady)
             }
             failure = null
             position

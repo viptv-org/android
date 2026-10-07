@@ -22,6 +22,14 @@ The first observed engine failure survives deadline races and joined cleanup.
 | `media3_<numeric code>` | Media3 reported this measured player code. An observed HTTP status remains in its explanation. Check the numeric Media3 error and the selected media's supported format. |
 | `media3_open_timeout` | Media3 did not report READY before its configured opening deadline. The dialog/log reports that budget in milliseconds. Native metadata and local endpoint creation have already completed for a native source; this fact alone does not identify absent peers or a decoder failure. |
 
+Native control failures preserve the backend HTTP status and canonical error code.
+`404 source_not_found` means the selected source handle is unavailable; refresh the
+sources and select again. Backend handles last 30 minutes. A stale handle is not
+a Cloudflare 502 or a torrent cache/decoder failure. Recovery discards retained
+title discovery before fetching new source handles. Malformed successful lease
+responses remain a separate protocol-validation failure. Error response parsing
+is bounded to 4 KiB and discards provider error text.
+
 The adapter writes only validated native codes to `NativePlaybackDiagnostic` and
 numeric player/HTTP facts to `PlaybackDiagnostic`. Use the host's private device
 configuration and explicit serial to collect these tags:
@@ -34,3 +42,8 @@ No source URL, torrent hash, peer address, capability, header, credential, local
 path or raw exception text is attached to these diagnostic lines. Keep any wider
 device capture private. Host fixtures qualify code preservation, not the cause of
 an earlier uncaptured user attempt or public-swarm availability.
+
+Native byte delivery uses a 35-second HTTP read budget and a 60-second player
+opening budget. The engine can wait up to 30 seconds for a requested piece;
+shorter HTTP defaults can repeatedly abandon otherwise valid downloads. These
+player budgets do not extend the native acquisition deadline or grant authority.
