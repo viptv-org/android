@@ -28,7 +28,7 @@ def prepare(root, receipt_path, output):
     source_revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     if receipt["sourceRevision"] != source_revision:
         raise ValueError("Qualification source revision differs from build")
-    changed = subprocess.check_output(["git", "diff", "HEAD", "--", "app", "src", "scripts", "CORE_REF", "TORRENT_REF", "DESIGN_REF"], cwd=root)
+    changed = subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=normal", "--", "app", "src", "scripts", "CORE_REF", "TORRENT_REF", "DESIGN_REF"], cwd=root)
     if changed:
         raise ValueError("Qualification build inputs must be committed")
     qualification = receipt["qualification"]
