@@ -127,8 +127,9 @@ class AppController(context: Context, private val origin: String) {
     internal val playbackPrepareMutex = Mutex()
     internal var playbackGeneration = 0L
     internal var playbackInteractionVersion = 0L
-    // Qualification is supplied only by an isolated debug/test fixture until rollout gates pass.
-    internal var nativePlaybackQualified: () -> Boolean = { false }
+    private val nativeQualification = NativeTorrentQualification(context)
+    // Missing development receipts, unmeasured cohorts and release builds stay unavailable.
+    internal var nativePlaybackQualified: () -> Boolean = nativeQualification::isAvailable
     internal var nativeScopeOwnerOverride: NativeTorrentScopeOwner? = null
     private val nativeScopeOwnerDelegate = lazy {
         NativeTorrentScopeOwner({ openNativeTorrentCache(context) }, ::createNativeCoordinator)
