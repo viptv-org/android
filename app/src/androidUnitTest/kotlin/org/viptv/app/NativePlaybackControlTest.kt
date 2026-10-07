@@ -161,6 +161,42 @@ class NativePlaybackControlTest {
         assertTrue(owner.closeScope())
     }
 
+    @Test fun nativeHeartbeatAndReleaseSendNoHttpBody() = runBlocking {
+        val owner = cache()
+        var now = 100_000L
+        NativeControlHttpFixture { request ->
+            when {
+                request.target.endsWith("playback-protocol") -> NativeHttpReply("""{"version":1,"native_torrent_versions":[1]}""".toByteArray())
+                request.method == "DELETE" -> NativeHttpReply("""{"ok":true}""".toByteArray())
+                request.target.endsWith("heartbeat") -> if (request.body.isEmpty()) {
+                    NativeHttpReply(ready().replace("1700000000", "1700000001").replace("1700000060", "1700000061").toByteArray())
+                } else NativeHttpReply("{}".toByteArray(), 400)
+                else -> NativeHttpReply(ready().toByteArray())
+            }
+        }.use { server ->
+            val control = control(server, owner, this, clock = NativePlaybackClock { now })
+            try {
+                assertIs<NativePlaybackStart.Native>(control.start(input(), true, true, owner))
+                assertTrue(server.requests.single { it.target == "/api/v2/playback" }.body.isNotEmpty())
+                val initialDeadline = requireNotNull(control.state().deadlineMillis)
+                now += 1_000
+                val renewal = runCatching { control.renew() }
+                val heartbeat = server.requests.single { it.target.endsWith("heartbeat") }
+                assertEquals("", heartbeat.body)
+                assertEquals("0", heartbeat.headers["content-length"])
+                assertNull(heartbeat.headers["content-type"])
+                renewal.getOrThrow()
+                assertTrue(requireNotNull(control.state().deadlineMillis) > initialDeadline)
+                assertNotNull(control.authorize())
+                control.stop()
+                assertEquals("", server.requests.single { it.method == "DELETE" }.body)
+            } finally {
+                control.stop()
+            }
+        }
+        assertTrue(owner.closeScope())
+    }
+
     @Test fun cancelBeforeResponseUsesRequestTombstoneAndCannotPublishLateGrant() = runBlocking {
         val owner = cache()
         val entered = CountDownLatch(1)

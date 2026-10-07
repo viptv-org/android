@@ -25,6 +25,8 @@ bounded raw bytes before the generated Rust private parser sees them. Session
 refresh can replay one rejected bearer within the same total deadline. Invalid
 or unsupported negotiation retains the legacy request shape; authorization
 refusal and replaced scopes never trigger admission fallback.
+Native heartbeats send a zero-byte POST body. Lease release and ambiguous
+request cancellation use bodyless DELETE requests.
 
 Rust derives a trusted receipt-time upper bound from the authenticated integer
 server time, full measured request round trip, supplied bounded uncertainty and

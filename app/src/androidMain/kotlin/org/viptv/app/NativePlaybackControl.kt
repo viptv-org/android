@@ -169,9 +169,12 @@ internal class NativePlaybackControl(
         val id = if (operation == "playbackV2") null else holder.playbackId() ?: throw invalid()
         val wire = JSONObject(normalize("request", JSONObject().put("operation", operation)
             .putOpt("id", id).putOpt("playback", request).toString(), origin))
+        // Native heartbeat is bodyless; OkHttp constructs its zero-byte POST body.
+        val body = if (operation == "playbackV2Heartbeat") null
+            else wire.optJSONObject("body")?.toString()?.toByteArray(Charsets.UTF_8)
         val sent = elapsed()
         transport.request(wire.getString("method"), wire.getString("path").removePrefix("/api"),
-            wire.optJSONObject("body")?.toString()?.toByteArray(Charsets.UTF_8)).use { response ->
+            body).use { response ->
             synchronized(this) {
                 requireCurrent()
                 // Receipt sampling and adoption share the read guard; a concurrent read's
