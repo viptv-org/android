@@ -1,5 +1,13 @@
 # Shared browser-accessible Android TV emulator — 2026-10-07
 
+Following the owner's explicit account-switch request, the existing emulator
+session was signed out through Settings and paired through the normal
+authenticated device approval flow to the requested personal account. Its
+existing primary profile was selected. An inspected Home capture shows the
+personal Continue Watching entries and resume progress. No playback was started,
+profile created or history imported. The temporary approval browser session was
+logged out; credentials and captures remain outside tracked files.
+
 Normal debug APK from Android `cebd090bc1475c571bf16caf2bf0f94987b49662`,
 core `8ef18be39ca08e96c40b20f40666f62a5f2eadfc` and gateway
 `ec134b9bf86fcd06efc4db5b4e94891989b86c02` was installed with `install -r`
