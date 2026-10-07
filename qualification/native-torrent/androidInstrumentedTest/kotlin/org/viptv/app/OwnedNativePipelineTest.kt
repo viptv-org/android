@@ -348,13 +348,13 @@ class OwnedNativePipelineTest {
         try {
             await { activity.texture.isAvailable }
             withContext(Dispatchers.Main.immediate) { player.attach(activity.texture) }
-            for (olderServer in listOf(false, true)) {
+            for ((qualified, olderServer) in listOf(false to false, true to false, true to true)) {
                 fixtureControl(config, JSONObject().put("legacy_protocol", olderServer))
                 val sources = config.getJSONArray("ordinary_sources")
                 for (index in 0 until sources.length()) {
                     val control = gateway.nativePlaybackControl("owned_ordinary", 1, cache, jobs, {}, {})
                     coordinator.ownControl(control, 1)
-                    val legacy = assertIs<NativePlaybackStart.Legacy>(control.start(request(sources.getJSONObject(index).getString("stream_id")), qualified = olderServer, vod = true, cache = cache))
+                    val legacy = assertIs<NativePlaybackStart.Legacy>(control.start(request(sources.getJSONObject(index).getString("stream_id")), qualified = qualified, vod = true, cache = cache))
                     val launch = legacy.launch
                     assertEquals("direct", launch.mode)
                     assertEquals(emptyMap(), launch.headers)
@@ -379,6 +379,55 @@ class OwnedNativePipelineTest {
             player.close(); jobs.cancel()
             instrumentation.runOnMainSync { activity.finish() }
             if (cache.heldPayloadCapacityBytes == 0L) parent.deleteRecursively()
+        }
+    }
+
+    @Test fun manualOwnedNativeObservation() = runBlocking {
+        val seconds = InstrumentationRegistry.getArguments().getString("ownedNativeManualSeconds")?.toIntOrNull()
+        org.junit.Assume.assumeTrue("explicit bounded human observation argument required", seconds != null)
+        val observationSeconds = requireNotNull(seconds)
+        require(observationSeconds in 180..300) { "ownedNativeManualSeconds must be 180..300" }
+        val config = configuration()
+        assertTrue(context.packageName.endsWith(".nativefixture"))
+        ServerOrigin.save(context, config.getString("origin"))
+        val store = context.getSharedPreferences("viptv.auth", android.content.Context.MODE_PRIVATE)
+        assertTrue(store.edit().clear().putString("core.session", config.getJSONObject("core_session").toString())
+            .putString("access", config.getString("access_token")).putString("refresh", "owned-unused-refresh").commit())
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        val controller = withContext(Dispatchers.Main.immediate) { androidx.lifecycle.ViewModelProvider(activity)[ViptvModel::class.java].controller }
+        val parent = java.io.File(context.noBackupFilesDir, "owned-manual-${UUID.randomUUID()}").apply { mkdirs() }
+        controller.nativePlaybackQualified = { true }
+        controller.nativeScopeOwnerOverride = NativeTorrentScopeOwner({
+            NativeTorrentCache.open(parent, { directory, capacity -> NativeTorrentEngineCacheManager(
+                TorrentClient.newNativeOwned(directory.path, capacity.toULong(), listOf(config.getString("peer")))) }, nowNanos = SystemClock::elapsedRealtimeNanos)
+        }, controller::createNativeCoordinator)
+        try {
+            await { controller.state.value.selectedProfile?.id == "1" && !controller.state.value.loading && controller.nativeAuthorizationFacts() != null }
+            val media = Media("owned_episode_1", "series", "Owned episode", seriesId = "owned_series", season = 1, episode = 1)
+            val source = Source(config.getJSONArray("sources").getJSONObject(0).getString("stream_id"), "Owned episodes", displayResolved = true)
+            withContext(Dispatchers.Main.immediate) {
+                controller._state.value = controller.state.value.copy(route = Route.Sources(media), sources = listOf(source))
+                controller.start(media, source)
+            }
+            await(30_000) { controller.state.value.route is Route.Player && controller.player.state.value.isPlaying }
+            val began = SystemClock.elapsedRealtime()
+            var testOnlyLoops = 0
+            while (SystemClock.elapsedRealtime() - began < observationSeconds * 1000L) {
+                // Keep the short owned clip available for observation without reopening a lease.
+                // Human Back/pause remain authoritative; the fixture never restarts a Sources route.
+                if (controller.state.value.route is Route.Player && controller.player.state.value.isPlaying && controller.player.state.value.positionMillis >= 38_000) {
+                    withContext(Dispatchers.Main.immediate) { controller.player.seekTo(0) }
+                    testOnlyLoops++
+                }
+                delay(100)
+            }
+            java.io.File(context.noBackupFilesDir, "owned-manual-evidence.json").writeText(JSONObject()
+                .put("actual_main_activity", true).put("observation_seconds", seconds).put("test_only_same_title_loops", testOnlyLoops)
+                .put("final_route", controller.state.value.route::class.simpleName)
+                .put("physical_sound", "human_verdict_required").put("remote_focus", "human_verdict_required").toString())
+        } finally {
+            withContext(Dispatchers.Main.immediate) { controller.close() }
+            instrumentation.runOnMainSync { activity.finish() }
         }
     }
 

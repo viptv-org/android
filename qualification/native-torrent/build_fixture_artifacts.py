@@ -33,6 +33,7 @@ def main():
     output.mkdir(parents=True, mode=0o700)
     target = args.target_directory.resolve() if args.target_directory else output / "target"
     env = dict(os.environ, CARGO_BUILD_JOBS="1", CARGO_TARGET_DIR=str(target))
+    host_rustflags = env.get("RUSTFLAGS", "")
     features = "torrent,test-network-policy"
     # Host cdylib is also needed for UniFFI's library-mode generation.
     run(source, ["cargo", "build", "--locked", "--release", "-p", "playback-gateway-ffi", "--no-default-features", "--features", features], env)
@@ -58,6 +59,7 @@ def main():
                 "cargo_lock_sha256": hashlib.sha256((source / "Cargo.lock").read_bytes()).hexdigest(),
                 "rustc": subprocess.check_output(["rustc", "--version"], text=True).strip(),
                 "rustflags": env["RUSTFLAGS"],
+                "host_rustflags": host_rustflags,
                 "dht": False, "network": "explicit_owned_tcp_peers", "files": {str(path.relative_to(output)): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}}
     (output / "fixture-build.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print("Isolated owned-policy artifacts exported.")

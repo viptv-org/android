@@ -60,7 +60,7 @@ verification and notices remain required.
 Compile the ignored backend fixture without starting production services:
 
 ```sh
-CARGO_BUILD_JOBS=1 cargo test --manifest-path ../backend/server/Cargo.toml --lib --no-run --message-format=json
+CARGO_BUILD_JOBS=1 CARGO_TARGET_DIR=PRIVATE_BACKEND_TARGET_DIRECTORY cargo test --manifest-path ../backend/server/Cargo.toml --lib --no-run --message-format=json
 ```
 
 Use the `viptv_server` test executable from compiler-artifact JSON as the next command's
@@ -71,6 +71,9 @@ only in that test process, and binds literal loopback. It expires after 900 seco
 Index 99 is an intentionally invalid exact-file fixture. This proves real middleware
 and lease authorization with a synthetic pre-issued session; it does not prove the
 human sign-in UI. A second owned profile permits actual profile scope invalidation.
+Keep the backend target directory distinct from Android/core targets: Rust's
+unhashed core cdylib/rlib products can otherwise overwrite a different source export
+while Cargo considers the older workspace's dependency fingerprint fresh.
 
 ```sh
 python3 qualification/native-torrent/serve_pipeline.py PRIVATE_MEDIA_DIRECTORY --backend-executable PRIVATE_BACKEND_TEST_EXECUTABLE
@@ -81,6 +84,18 @@ TLS certificate. The ingress forwards only `/api/` to the real backend and has a
 fixture-only authenticated control endpoint for held pieces/metadata and revocation.
 No public listener or ordinary production API is added. The fixture process owns only
 its synthetic database. Stop the environment after the device run.
+
+For separate Linux evidence, the real host cdylib can exercise authorization, the
+canonical bridge, BEP9 metadata, exact selected bytes and independent grant settlement:
+
+```sh
+python3 qualification/native-torrent/run_host_pipeline.py PRIVATE_ARTIFACT_DIRECTORY PRIVATE_MEDIA_DIRECTORY --core-library-directory PRIVATE_MATCHING_CORE_LIBRARY_DIRECTORY
+```
+
+This uses Linux `CLOCK_BOOTTIME` and real native IO. Its private
+`host-pipeline-evidence.json` explicitly marks Android JNI and Media3 as NOT RUN.
+Use JDK 17 and the configured SDK path, with the already built normal Android classes
+as compiler dependencies. Host results cannot fill physical device acceptance gates.
 
 ## Isolated Android build and device proof
 
@@ -132,3 +147,14 @@ pending before cancellation, and failed settlement must retain its owned manager
 payload and charges. Preserve failed cache trees for diagnosis, without copying
 native secrets into diagnostics. No successful owned fixture authorizes production
 activation. See the local ticket 12 evidence and the rollout matrix for current runs.
+
+The dedicated instrumentation selector
+`org.viptv.app.OwnedNativePipelineTest#manualOwnedNativeObservation` requires
+`ownedNativeManualSeconds=180` through `300`. It launches the actual `MainActivity`
+in the isolated fixture package, with the real player, Sources UI and remote handlers.
+The short owned title seeks to zero near its end only while playing on its Player
+route; human pause and Back remain authoritative. This test-only loop keeps the same
+grant available for a bounded physical observation without adding product autoplay.
+Collect `no_backup/owned-manual-evidence.json` with fixture `run-as`. Audible sound,
+physical remote and focus verdicts must be recorded by the observer separately.
+Without the argument this one test is explicitly skipped; it is not a PASS.
