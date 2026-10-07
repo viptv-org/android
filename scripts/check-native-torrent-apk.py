@@ -36,6 +36,17 @@ def main():
     require(aapt, "Configure the installed Android SDK/aapt2 for actual APK minSdk verification")
     badging = subprocess.check_output([aapt, "dump", "badging", str(args.apk)], text=True)
     require(re.search(r"^(?:minSdkVersion|sdkVersion):'24'$", badging, re.MULTILINE), "Native APK must retain minSdk 24")
+    manifest = subprocess.check_output([aapt, "dump", "xmltree", str(args.apk), "--file", "AndroidManifest.xml"], text=True)
+    resources = subprocess.check_output([aapt, "dump", "resources", str(args.apk)], text=True)
+    policy = subprocess.check_output([aapt, "dump", "xmltree", str(args.apk), "--file", "res/xml/network_security_config.xml"], text=True)
+    policy_id = re.search(r"resource (0x[0-9a-f]+) xml/network_security_config\b", resources)
+    manifest_id = re.search(r"android:networkSecurityConfig[^\n]*=@(0x[0-9a-f]+)", manifest)
+    require(policy_id and manifest_id and policy_id.group(1) == manifest_id.group(1), "APK must use the checked network security policy")
+    require(re.search(r"android:usesCleartextTraffic[^\n]*=false", manifest), "APK must retain default cleartext refusal")
+    require(policy.count("E: base-config ") == 1 and policy.count("E: domain-config ") == 1, "Unexpected APK network policy scopes")
+    require(re.findall(r"A: cleartextTrafficPermitted=(true|false)", policy) == ["false", "true"], "APK cleartext must require the exact loopback exception")
+    require(policy.count("E: certificates ") == 1 and re.findall(r'A: src="([^"\n]+)"', policy) == ["system"], "Normal APK must trust only system CAs")
+    require(re.findall(r"A: includeSubdomains=(true|false)", policy) == ["false"] and re.findall(r"T: '([^']+)'", policy) == ["127.0.0.1"], "APK cleartext exception must be literal IPv4 loopback only")
     with args.apk.open("rb") as raw, zipfile.ZipFile(args.apk) as archive:
         names = archive.namelist()
         require(not any("viptv_fixture_ca" in name for name in names), "Fixture CA must not ship")
@@ -55,7 +66,7 @@ def main():
         for path, expected in lock["files"].items():
             if path in ["LICENSE", "PROVENANCE.md"] or path.startswith("THIRD_PARTY/"):
                 require(hashlib.sha256(archive.read("assets/playback-gateway/" + path)).hexdigest() == expected, "Native notice missing or altered in APK")
-    print("Verified real APK minSdk 24, three-ABI native/core/JNA contents, pinned checksums, notices and 16 KiB ZIP alignment; ABI/device loading is a separate check.")
+    print("Verified real APK minSdk 24, three-ABI native/core/JNA contents, pinned checksums, notices, system-CA/literal-loopback policy and 16 KiB ZIP alignment; ABI/device loading is a separate check.")
 
 
 if __name__ == "__main__":
