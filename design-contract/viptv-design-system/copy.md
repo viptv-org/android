@@ -70,6 +70,29 @@ Responsive player picture mode (WEB-PLAYER-FIT-001): visible toggle **"Fit"** / 
 - The TV accepted the launch request. Check its screen to confirm VIPTV opened.
 - This code expired. (TV pairing, with "Try again")
 
+## Native playback failure reasons (SRC-TORRENT-NATIVE-001)
+
+These strings replace the generic native startup explanation only when a
+platform reports the corresponding observed fact to shared Rust. Unknown
+failures use `native_playback_failed`. A deadline is not proof of absent peers
+or seeders. Raw engine/player text, hashes, URLs, paths and credentials are never
+presentation inputs. Existing recovery actions and geometry remain as specified
+in [the native contract](../specs/behavior/torrent-native-android.md).
+
+| Observed reason | Exact copy |
+|---|---|
+| `native_playback_failed` | The selected source could not start on this device. Try another source or retry playback. |
+| `native_acquisition_timeout` | This device took too long to prepare the selected source. Try another source or retry playback. |
+| `native_metadata_timeout` | Torrent file information did not arrive in time. Try another source or retry playback. |
+| `native_payload_limit` | This torrent does not fit the device's 2 GiB playback cache budget, including its other files. Choose another source or retry playback. |
+| `native_storage_unavailable` | This device could not reserve storage for playback. Free some space, choose another source or retry playback. |
+| `native_cache_unavailable` | The device's playback cache is unavailable. Choose another source or retry playback. |
+| `native_metadata_invalid` | This source has invalid or unsupported torrent file information. Choose another source. |
+| `native_file_unavailable` | The exact file selected by this source is missing or does not match its file information. Refresh the sources or choose another source. |
+| `native_authorization_expired` | This playback session has expired. Start playback again to reconnect. |
+| `native_network_unavailable` | This device could not connect to the selected source. Check your connection, choose another source or retry playback. |
+| `native_codec_unsupported` | This device cannot decode the selected source's audio or video format. Choose another source or retry playback. |
+
 ## Dialogs
 
 | Dialog | Title | Actions |

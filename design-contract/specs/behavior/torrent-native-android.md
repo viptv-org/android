@@ -8,7 +8,7 @@ compatibility and resource authorization still apply. Implementation, deployment
 and qualification evidence must be recorded separately. This is the normative,
 closed v1 contract, not a
 list of proposed API names. Implementation requires review/commit of this
-amendment and immutable adoption under [DESIGN_SYNC](../../DESIGN_SYNC.md).
+amendment and immutable adoption under [DESIGN_SYNC](../../docs/process/DESIGN_SYNC.md).
 
 Approval provenance: local Markdown ticket 01, `01-native-delivery-contract.md`,
 and the owner-approved `.scratch/native-torrent/contract-proposal.md` in Android;
@@ -31,9 +31,10 @@ cancellation or independent grants.
 An authorized Android/Android TV viewer plays the exact file explicitly selected
 by an enabled account-owned add-on for the selected VOD title/exact episode.
 Media3 remains the decoder. No magnet entry, file chooser, source-entry form,
-new setting, UI copy, assets or layout are introduced. Other clients retain
+new setting, assets or layout are introduced. The observed native failure copy
+below uses the existing error surface. Other clients retain
 [SRC-TORRENT-GATEWAY-001](torrent-gateway-sources.md); ordinary HTTP delivery and
-[BE-002](../../BACKEND_V2.md) resource policy are unchanged.
+[BE-002](../../plans/backend-v2/BACKEND_V2.md) resource policy are unchanged.
 
 The [Roku behavior contract](roku-ux-contract.md), SRC-PROVIDERS-001 and player
 controls in [components](../../viptv-design-system/components.md), and existing
@@ -482,6 +483,41 @@ saved-state bundles, generic JSON/UI events, serializable launch/history,
 logs/exceptions/analytics/toString/crash attachments or diagnostics may contain
 them, including reflected presentation fields. Rust/generated transport types
 need redacted representations. No JVM secret-zeroization promise is made.
+
+### Observed failure explanation
+
+The existing startup/player failure surface displays shared Rust's canonical
+message for the adapter's closed failure fact, using the exact strings in
+[native playback failure copy](../../viptv-design-system/copy.md#native-playback-failure-reasons-src-torrent-native-001).
+This amendment changes only the explanation and retains the existing dialog
+geometry, focus order, actions, timings, accessibility and source/title/queue
+return behavior. No raw diagnostic string enters this projection.
+
+`native_payload_limit` requires an observed full-torrent aggregate reservation
+refusal against the 2 GiB budget, including unselected files and unsettled work;
+a displayed source size alone is insufficient. `native_metadata_timeout`
+requires the engine's metadata deadline fact; the total acquisition deadline
+uses `native_acquisition_timeout`. Neither asserts absent peers or seeders.
+Storage and cache failures remain distinct where the adapter can establish
+them. Invalid/unsupported metadata, exact-file mismatch, authorization expiry,
+transport connectivity and codec support require their respective observed
+facts; unknown failures use `native_playback_failed`.
+
+Platforms report bounded closed reason codes, shared Rust owns code-to-copy
+projection, and recovery continues through the existing retirement/refusal
+decision. Timeout, capacity and storage failure are not selection refusal.
+Authorization/selection refusals cannot become a gateway bypass. Never
+automatically retry, choose a source or change delivery after native admission.
+
+**NT-09 Failure explanation:** show the canonical explanation for each observed
+reason through startup and player failure, preserving its stable reason code
+through asynchronous acquisition. Test a payload reservation refusal separately
+from a metadata timeout and a total acquisition timeout; unknown or malformed
+reasons and secret-bearing diagnostic fields cannot become visible copy.
+Native and actual WASM produce the same code/message. Existing Retry waits for
+authority retirement and follows authorization/selection refusal; Choose another
+source and Back preserve source/title/queue focus and position/pause intent.
+Record engine/adapter fact qualification separately from copy-vector coverage.
 
 ## Distribution, immutable adoption and acceptance gates
 

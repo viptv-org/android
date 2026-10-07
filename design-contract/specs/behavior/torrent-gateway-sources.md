@@ -7,7 +7,7 @@ Review and implementation/device qualification remain pending.
 Source revisions: design `18b19af378b27655e3b6401f17b92321739dba83`; gateway
 `76d100b8fce0922aefca203e791c10e41f83019c` (reviewed transport source
 `889dbe6359668aedf0190f731898fda4c3a034d7`). Existing account ownership and
-playback policy remain [BE-002](../../BACKEND_V2.md); source interactions remain
+playback policy remain [BE-002](../../plans/backend-v2/BACKEND_V2.md); source interactions remain
 [the Roku behavior contract](roku-ux-contract.md) and SRC-PROVIDERS-001 in
 [components](../../viptv-design-system/components.md). Each implementation
 must reference a reviewed immutable design commit before adopting this draft.

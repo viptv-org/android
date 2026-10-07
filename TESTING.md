@@ -1,3 +1,36 @@
+# Native startup diagnosis and failure facts — 2026-10-07
+
+The normal system-trust APK with SHA-256
+`e7c6729f6f02e2f45be6d9883b0ff113c1f157ea2900c2cd7ae53d138b9663e4`
+was verified and installed with `install -r` on the shared API 36 x86_64 TV
+emulator. Existing sign-in, profile, server selection and app data were preserved.
+The source pins are core `adb8a7165977cc1c827b5695f1924524928a1d9e`,
+design `5b68802c6f5ea91dc248defb047439f3ea96cce5`, and gateway
+`d91582a2c4d5aa56b442e497bb1d291eb60fdd8e`.
+
+The original first raw Torrentio source for Limitless, displayed as 38.62 GB,
+reached native full-payload admission and reported `native_payload_limit`.
+The complete, legible recovery message states that the torrent does not fit the
+device's 2 GiB playback cache budget, including its other files. The generic
+selected-source startup message did not recur in this replay. Manually selected
+raw 1.4 GB and 751 MB YIFY rows each reached the total startup deadline and
+reported `native_acquisition_timeout`. No decoded public-source playback or
+native loopback-byte success is claimed; the existing owned-fixture decode
+qualification below remains separate. Source cycling stopped after these attempts.
+
+The diagnosed Android race allowed expiry authorization to advance the core's
+observed clock between startup authorization and private grant getters. A real
+UniFFI regression failed before the shared read guard and passed with the guard
+covering grant extraction and metadata validation. Closed engine failure facts
+survive FFI and Android worker completion into core-owned copy; unknown adapter
+diagnostics remain flattened. Host checks passed: 47 video/library tests and
+287 app tests, including distinct capacity/selection recovery after retirement.
+App assembly, app lint and real APK integrity checks passed. Gateway validation
+passed 187 workspace tests and five strict FFI acquisition fixtures in isolated
+network namespaces; 55 opt-in workspace fixtures remained ignored. All three
+normal native ABIs built and passed alignment checks. Temporary diagnostic
+instrumentation was removed. Private captures and raw logs are not tracked.
+
 # Default native availability on shared Android TV — 2026-10-07
 
 The shared interactive emulator received normal system-trust APK `8e1ffec`

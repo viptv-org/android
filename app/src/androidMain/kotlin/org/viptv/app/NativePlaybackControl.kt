@@ -264,7 +264,9 @@ internal class NativePlaybackControl(
         throw error
     }
 
-    fun privateBridge(): NativeTorrentBridge { authorize(); return requireNotNull(bridge) }
+    /** Clock sampling and private getters share the expiry/renewal read guard. */
+    @Synchronized internal fun <T> withAuthorizedGrant(effect: (NativeTorrentBridge, String) -> T): T =
+        effect(requireNotNull(bridge), authorize())
     fun firstGrantAcceptedAtMillis(): Long? = firstGrantReceipt
     fun hasNativeAdmission(): Boolean = firstGrantReceipt != null
     fun isLocallyRetired(): Boolean = retired

@@ -1,6 +1,6 @@
 # Design-first cross-platform synchronization
 
-This process maintains the product contract as TV implementations evolve. The current authority is the versioned specification and asset source in this repository. The visual source for the redesign is the [VIPTV Redesign canvas](https://claude.ai/artifact/UX1E5AtPUoSKnaSLPou3Pp); its committed export in `viptv-design-system/` (hashed in `reference/FILES.json`) is what apps pin, so a canvas change reaches implementations only through a reviewed export and a new immutable design commit. It separates three facts: an app faithfully contains its pinned contract, its pin is current with a chosen design revision, and its rendered behavior meets that contract. Each requires different evidence.
+This process maintains the product contract as TV implementations evolve. The current authority is the versioned specification and asset source in this repository. The visual source for the redesign is the [VIPTV Redesign canvas](https://claude.ai/artifact/UX1E5AtPUoSKnaSLPou3Pp); its committed export in `../../viptv-design-system` (hashed in `reference/FILES.json`) is what apps pin, so a canvas change reaches implementations only through a reviewed export and a new immutable design commit. It separates three facts: an app faithfully contains its pinned contract, its pin is current with a chosen design revision, and its rendered behavior meets that contract. Each requires different evidence.
 
 ## Change and delivery sequence
 

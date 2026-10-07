@@ -22,7 +22,12 @@ if (mode === 'sync') {
   const docs = ['DESIGN.md', 'DESIGN_SYNC.md', 'ANDROID_DESIGN.md', 'TV_POLISH.md', 'specs/behavior/home-addon-refresh.md', 'specs/behavior/episode-number-jump.md', 'specs/behavior/android-tv-media-rows.md', 'specs/behavior/torrent-gateway-sources.md', 'viptv-design-system/README.md', 'viptv-design-system/components.md', 'viptv-design-system/copy.md', 'viptv-design-system/decisions.md', 'viptv-design-system/tokens/tokens.json'];
   const nativeTorrentContract = 'specs/behavior/torrent-native-android.md';
   if (names.includes(nativeTorrentContract)) docs.push(nativeTorrentContract);
-  const mappings = docs.map(path => [path, `design-contract/${path}`]);
+  const relocated = {
+    'DESIGN_SYNC.md': 'docs/process/DESIGN_SYNC.md',
+    'ANDROID_DESIGN.md': 'docs/platforms/ANDROID_DESIGN.md',
+    'TV_POLISH.md': 'docs/platforms/TV_POLISH.md',
+  };
+  const mappings = docs.map(path => [names.includes(path) ? path : relocated[path] ?? path, `design-contract/${path}`]);
   for (const path of names) {
     if (path.startsWith('assets/fonts/')) mappings.push([path, path.endsWith('.ttf') ? `app/src/androidMain/res/font/${path.split('/').at(-1)}` : `app/src/androidMain/assets/design/fonts/${path.split('/').at(-1)}`]);
     if (path.startsWith('assets/roku/roku/images/lucide/') && !path.endsWith('.svg')) mappings.push([path, `app/src/androidMain/assets/design/lucide/${path.split('/').at(-1)}`]);

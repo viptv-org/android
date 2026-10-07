@@ -184,7 +184,7 @@ at `b7e36df` is the comparison for Home composition and queue content.
   in the Provider choice, including zero-result and safe failed producers.
   Stable installed identity and configured name distinguish add-ons that share
   upstream branding. Selecting a producer with no playable row shows the
-  outcome copy in `viptv-design-system/components.md`; unsupported source
+  outcome copy in `../../viptv-design-system/components.md`; unsupported source
   formats explain the HTTP(S)-only limit. Pending producers and global discovery
   use the actual job state, without fake progress percentages. Partial playable
   rows remain selectable, late events retain filter/focus, and Retry/Back keep

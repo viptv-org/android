@@ -35,6 +35,43 @@ class NativePlaybackControlTest {
         NativePlaybackControl("https://fixture.invalid", "scope_fixture", 7, current,
             NativePlaybackTransport(server.origin, { "fixture_bearer" }, current, cache), legacy, jobs, clock, prevented, invalidated)
 
+    @Test fun nativeGrantGettersShareReadGuardWithConcurrentAuthorization() = runBlocking {
+        val owner = cache()
+        val now = java.util.concurrent.atomic.AtomicLong(100_000)
+        val jobs = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        NativeControlHttpFixture { request ->
+            NativeHttpReply((if (request.target.endsWith("playback-protocol")) """{"version":1,"native_torrent_versions":[1]}"""
+                else if (request.method == "DELETE") """{"ok":true}""" else ready()).toByteArray())
+        }.use { server ->
+            val control = control(server, owner, jobs, clock = NativePlaybackClock { now.get() })
+            assertIs<NativePlaybackStart.Native>(control.start(input(), true, true, owner))
+            val attempted = CountDownLatch(1)
+            val finished = CountDownLatch(1)
+            var reader: Thread? = null
+            try {
+                control.withAuthorizedGrant { bridge, facts ->
+                    reader = thread {
+                        now.incrementAndGet()
+                        attempted.countDown()
+                        try { control.authorize() } finally { finished.countDown() }
+                    }
+                    assertTrue(attempted.await(1, TimeUnit.SECONDS))
+                    assertFalse(finished.await(150, TimeUnit.MILLISECONDS))
+                    assertEquals(corpus().getString("infoHash"), bridge.privateInfoHash(facts))
+                    bridge.privateFileIndex(facts)
+                    bridge.privateExpectedFileSize(facts)
+                    bridge.privateInputValue(facts)
+                }
+                assertTrue(finished.await(1, TimeUnit.SECONDS))
+            } finally {
+                reader?.join(1_000)
+                control.stop()
+                jobs.cancel()
+            }
+        }
+        assertTrue(owner.closeScope())
+    }
+
     @Test fun negotiationFailuresKeepLegacyShapeAndNeverAdvertise() = runBlocking {
         for ((status, body) in listOf(404 to "{}", 405 to "{}", 200 to """{"version":1,"native_torrent_versions":[]}""",
             200 to """{"version":1,"native_torrent_versions":[1],"other":true}""", 200 to """{"version":1,"version":1,"native_torrent_versions":[1]}""", 200 to "malformed")) {

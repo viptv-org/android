@@ -314,6 +314,9 @@ internal fun AppController.backFromPlaybackRecovery() {
 }
 
 internal fun playbackFailureMessage(error: Throwable): String = when (error) {
+    is NativeTorrentFailure -> nativeTorrentFailureMessage(error.reason)
+    is NativeTorrentCacheUnavailable -> nativeTorrentFailureMessage("native_cache_unavailable")
+    is NativeTorrentCoordinatorUnavailable -> nativeTorrentFailureMessage("native_playback_failed")
     is org.viptv.video.PlaybackFailure -> error.error.message
     is GatewayError -> {
         val safe = error.message.take(240).takeUnless { it.contains(Regex("(?i)https?://|bearer |authorization|cookie[=:]|password[=:]")) }

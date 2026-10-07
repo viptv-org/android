@@ -80,8 +80,8 @@ internal class NativeTorrentOwnedWork(
                     if (cancelled) throw NativeTorrentCoordinatorUnavailable()
                     ready.complete(capability)
                 }
-            } catch (_: Exception) {
-                ready.completeExceptionally(NativeTorrentCoordinatorUnavailable())
+            } catch (error: Exception) {
+                ready.completeExceptionally(nativeTorrentFailure(error))
             } finally { finished.countDown() }
         }
     }

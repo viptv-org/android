@@ -4,7 +4,7 @@
 
 Status: proposed for Android phone and TV, tracked by design issue 6. Source
 revision is the immutable design commit introducing this section. Visual sources
-are the committed Title and TvTitle boards in `viptv-design-system/reference/`.
+are the committed Title and TvTitle boards in `../../viptv-design-system/reference`.
 This replaces their placeholder source information with account-backed facts;
 TV control sizes, placement and navigation remain unchanged.
 
@@ -298,7 +298,7 @@ normalization, artwork, source identity, progress and continuation rules.
   Share rail coordinates between collapsed/expanded states. Focused items do
   not move or resize; rows scroll enough to reveal every selected item.
   Horizontal media-card rows follow the proposed
-  [AND-TV-ROW-EDGE-001](specs/behavior/android-tv-media-rows.md) exception:
+  [AND-TV-ROW-EDGE-001](../../specs/behavior/android-tv-media-rows.md) exception:
   their viewport reaches the right edge while retaining small existing focus
   padding instead of the general 96px right inset. Headers, text and non-media content retain
   the safe inset. TV-034's 1824px final-card bound remains for shared TV-web.
@@ -385,7 +385,7 @@ in AND-035; implementations record adoption and measured evidence separately.
 - SRC-OVERFLOW-001 (proposed, design revision of this commit): On the Android
   phone Choose a Source sheet and TV source panel, render every provider's source
   description in the shared two-line fixed-height window defined in
-  `viptv-design-system/components.md`. Wrap long tokens. Overflow starts at its
+  `../../viptv-design-system/components.md`. Wrap long tokens. Overflow starts at its
   first line and slowly scrolls downward only while the row has TV/keyboard focus
   or pointer hover; blur, hover exit, replacement and filter changes reset it.
   Reduced motion keeps the first two lines still; accessibility exposes the full
@@ -401,7 +401,7 @@ in AND-035; implementations record adoption and measured evidence separately.
   safe failure. Use the shared producer event identity and configured name, not
   the upstream release's branding; the source rows retain their existing shared
   display projection. For a selected empty producer, show the outcome copy in
-  `viptv-design-system/components.md`. A `source_format_unsupported` event
+  `../../viptv-design-system/components.md`. A `source_format_unsupported` event
   explains that only HTTP(S) streams are supported here. Keep other producers'
   playable rows active through pending and failed responses. Preserve filter,
   row focus, exact-source selection, Retry and Back cancellation. Do not infer

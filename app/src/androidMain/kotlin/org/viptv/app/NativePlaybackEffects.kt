@@ -142,6 +142,7 @@ internal class NativePlaybackEffects(
         val receipt = Recovery(control, control.hasNativeAdmission(), false, control.authorizationWasRefused() || refusal?.status in listOf(401, 403),
             // Invalid/unknown selection evidence cannot authorize a gateway bypass.
             control.selectionWasRefused() || refusal?.code == "invalid_playback_response" || error is NativeTorrentCoordinatorUnavailable ||
+                (error is NativeTorrentFailure && error.reason in setOf("native_metadata_invalid", "native_file_unavailable", "native_playback_failed")) ||
                 (refusal != null && refusal.status in listOf(400, 404, 409, 422)))
         failure = receipt
         receipt.retired = retire(control)

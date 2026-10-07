@@ -28,7 +28,8 @@ class NativePlaybackEffectsTest {
     private val url = "http://127.0.0.1:1234/${"a".repeat(64)}/3/stream.mp4"
     private val protocol = """{"version":1,"native_torrent_versions":[1]}"""
 
-    private class Harness(val startsFailAfter: Int = Int.MAX_VALUE, val settlement: Boolean = true) : AutoCloseable {
+    private class Harness(val startsFailAfter: Int = Int.MAX_VALUE, val settlement: Boolean = true,
+        val startFailure: Exception = NativeTorrentCoordinatorUnavailable()) : AutoCloseable {
         val events: MutableList<String> = Collections.synchronizedList(mutableListOf())
         val now = AtomicLong(100_000_000_000)
         val jobs = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
@@ -42,7 +43,7 @@ class NativePlaybackEffectsTest {
         val coordinator = NativeTorrentCoordinator(cache, now::get, { it == 7L }, { events.add("player.stop") },
             main = Dispatchers.Unconfined, beginAcquisition = { _, _, _ ->
                 starts++
-                if (starts > startsFailAfter) throw NativeTorrentCoordinatorUnavailable()
+                if (starts > startsFailAfter) throw startFailure
                 object : NativeTorrentAcquisitionEffect {
                     override fun waitReady() = object : NativeTorrentHandleEffect {
                         override fun validatedCapability() = NativeTorrentCapability.validated("http://127.0.0.1:1234/${"a".repeat(64)}/3/stream.mp4", 3u)
@@ -134,6 +135,25 @@ class NativePlaybackEffectsTest {
             assertTrue(h.events.indexOf("bytes.join") < h.events.indexOf("bytes.close"))
             assertEquals(0L, h.cache.reservedControlBytes)
         } }
+    }
+
+    @Test fun nativeCapacityAndInvalidSelectionKeepDistinctRecoveryAfterJoinedRetirement() = runBlocking {
+        for ((failure, expected) in listOf(
+            uniffi.playback_gateway_ffi.TorrentException.PayloadLimit() to "forceGatewayRetry",
+            uniffi.playback_gateway_ffi.TorrentException.MetadataInvalid() to "chooseSource",
+        )) {
+            FixtureServer(3) { incoming -> FixtureResponse(when {
+                incoming.target.endsWith("playback-protocol") -> protocol
+                incoming.method == "DELETE" -> """{"ok":true}"""
+                else -> ready()
+            }) }.use { server -> Harness(startsFailAfter = 0, startFailure = failure).use { h ->
+                assertFailsWith<NativeTorrentFailure> { h.effects.prepare(h.control(server), request(), 7) }
+                assertEquals(expected, h.effects.recoveryDecision())
+                assertFalse(h.effects.hasActive)
+                assertEquals(0L, h.cache.reservedControlBytes)
+                assertEquals(1, server.requests.count { it.method == "DELETE" })
+            } }
+        }
     }
 
     @Test fun failedNativeSettlementCannotAuthorizeRetryOrDiscardItsReservations() = runBlocking {
