@@ -60,6 +60,8 @@ internal class NativeTorrentCache private constructor(
         @Synchronized get() = if (state == State.Closed) 0 else NativeTorrentCacheLimits.PAYLOAD_BYTES
 
     override fun toString() = "NativeTorrentCache(<redacted>)"
+    internal fun remainingSettlementNanos(deadlineNanos: Long): Long =
+        (deadlineNanos - nowNanos()).coerceAtLeast(0)
 
     /** Control responses, retained grant input and native metadata use one aggregate ceiling. */
     @Synchronized
@@ -95,12 +97,12 @@ internal class NativeTorrentCache private constructor(
 
     /** Candidate failure retires only that candidate; other current grants retain authority. */
     @Synchronized
-    fun retire(work: NativeTorrentCacheWork): Boolean {
+    fun retire(work: NativeTorrentCacheWork, deadlineNanos: Long = nowNanos() + NativeTorrentCacheLimits.SETTLEMENT_NANOS): Boolean {
         synchronized(this) {
             if (!works.containsKey(work)) return state != State.Unavailable
             if (state != State.Available) return false
         }
-        val deadline = nowNanos() + NativeTorrentCacheLimits.SETTLEMENT_NANOS
+        val deadline = deadlineNanos
         val joined = try {
             work.preventReads()
             work.cancel()
@@ -120,6 +122,12 @@ internal class NativeTorrentCache private constructor(
                 false
             }
         }
+    }
+
+    /** A caller's common native/control deadline failure cannot be repaired by starting another timer. */
+    @Synchronized
+    internal fun retainFailedSettlement() {
+        if (state != State.Closed) quarantine()
     }
 
     /** Scope changes execute stop -> join -> manager close -> owned deletion -> unlock. */
