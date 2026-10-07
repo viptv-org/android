@@ -45,11 +45,15 @@ internal class NativePlaybackControl(
     private val released: () -> Unit = {},
 ) {
     private val serial = Mutex()
+    private val releaseSerial = Mutex()
+    private var remoteReleased = false
     private var bridge: NativeTorrentBridge? = null
     private var sequence = 0L
     private var requestId: String? = null
     private var ownedPlaybackId: String? = null
     @Volatile private var retired = false
+    @Volatile private var authorizationRefused = false
+    @Volatile private var selectionRefused = false
     @Volatile private var revalidated = true
     @Volatile private var backgroundRevision = 0L
     private var anchorElapsed: Long? = null
@@ -108,7 +112,11 @@ internal class NativePlaybackControl(
                         "legacy" -> {
                             val value = response ?: throw invalid()
                             retireLocal(notify = false)
-                            return@withTimeout NativePlaybackStart.Legacy(legacy.start(request, JSONObject(value)))
+                            val adopted = legacy.start(request, JSONObject(value))
+                            // V2 now owns the ordinary lease; native-local cleanup must not release it.
+                            ownedPlaybackId = null
+                            requestId = null
+                            return@withTimeout NativePlaybackStart.Legacy(adopted)
                         }
                         "ready" -> return@withTimeout NativePlaybackStart.Native(this@NativePlaybackControl)
                         "starting" -> {
@@ -178,6 +186,7 @@ internal class NativePlaybackControl(
                 try {
                     holder.acceptMeasuredBytes(response.status.toUShort(), response.bytes, observation.toString())
                 } catch (_: Exception) {
+                    if (response.status in listOf(401, 403)) authorizationRefused = true else selectionRefused = true
                     retireLocal()
                     if (response.status in listOf(401, 403)) throw GatewayError(response.status, "Your session is no longer authorized.", "unauthorized")
                     throw invalid()
@@ -190,6 +199,7 @@ internal class NativePlaybackControl(
             val status = state().status
             if (status == "ready") startEffects()
             if (status in listOf("failed", "expired", "released", "invalidated")) {
+                if (status == "failed") selectionRefused = true
                 retireLocal()
                 throw expired()
             }
@@ -198,7 +208,16 @@ internal class NativePlaybackControl(
         }
     }
 
-    suspend fun renew() { request("playbackV2Heartbeat") }
+    suspend fun renew() {
+        try { request("playbackV2Heartbeat") }
+        catch (error: Exception) {
+            if (error is GatewayError && error.status in listOf(401, 403)) {
+                authorizationRefused = true
+                retireLocal()
+            }
+            throw error
+        }
+    }
     suspend fun poll() { request("playbackV2Status") }
 
     @Synchronized fun background() {
@@ -244,6 +263,10 @@ internal class NativePlaybackControl(
 
     fun privateBridge(): NativeTorrentBridge { authorize(); return requireNotNull(bridge) }
     fun firstGrantAcceptedAtMillis(): Long? = firstGrantReceipt
+    fun hasNativeAdmission(): Boolean = firstGrantReceipt != null
+    fun isLocallyRetired(): Boolean = retired
+    fun authorizationWasRefused(): Boolean = authorizationRefused
+    fun selectionWasRefused(): Boolean = selectionRefused
     fun playbackId(): String? = ownedPlaybackId
     fun remainingMillis(): Long? = try { authorize(); state().deadlineMillis?.minus(elapsed()) } catch (_: Exception) { null }
     fun retireLocal(notify: Boolean = true) {
@@ -255,6 +278,7 @@ internal class NativePlaybackControl(
                 return
             }
             retired = true
+            transport.captureRetirementCredential()
             preventReads()
             bridge?.invalidate()
             transport.cancelActive()
@@ -286,17 +310,19 @@ internal class NativePlaybackControl(
         check(retired)
         bridge?.close()
         bridge = null
+        transport.clearRetirementCredential()
     }
-    suspend fun releaseRemote() {
-        if (!currentScope()) return
+    suspend fun releaseRemote() = releaseSerial.withLock {
+        if (remoteReleased) return@withLock
         val id = ownedPlaybackId
         val operation = if (id != null) "playbackV2Stop" else "playbackV2CancelRequest"
         val wire = JSONObject(normalize("request", JSONObject().put("operation", operation)
-            .put(if (id != null) "id" else "requestId", id ?: requestId ?: return).toString(), origin))
-        transport.request(wire.getString("method"), wire.getString("path").removePrefix("/api")).use {
+            .put(if (id != null) "id" else "requestId", id ?: requestId ?: return@withLock).toString(), origin))
+        transport.retirementRequest(wire.getString("path").removePrefix("/api")).use {
             if (it.status != 200) throw invalid()
             normalize("nativeTorrent", JSONObject().put("operation", "releaseResponse")
                 .put("body", Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(it.bytes)).toString()).toString(), "")
+            remoteReleased = true
         }
     }
     private fun requireCurrent() { if (retired || !currentScope()) { retireLocal(); throw expired() } }

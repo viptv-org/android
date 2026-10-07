@@ -50,6 +50,22 @@ internal class NativePlaybackTransport(
     private val client = client.newBuilder().followRedirects(false).followSslRedirects(false)
         .retryOnConnectionFailure(false).build()
     private val active = java.util.concurrent.ConcurrentHashMap.newKeySet<HttpWork>()
+    private var retirementCredential: String? = null
+    private var retirementCredentialCaptured = false
+    @Synchronized fun captureRetirementCredential() {
+        if (retirementCredentialCaptured) return
+        retirementCredential = bearer()
+        retirementCredentialCaptured = true
+    }
+    @Synchronized fun clearRetirementCredential() { retirementCredential = null }
+    /** Only generated DELETE cleanup uses the retired scope's captured credential; it never refreshes. */
+    suspend fun retirementRequest(path: String): NativePlaybackResponse {
+        val token = synchronized(this) {
+            if (!retirementCredentialCaptured) throw invalidScope()
+            retirementCredential
+        }
+        return withTimeout(10_000) { exchange("DELETE", path, null, token, 4_096, 10_000, enforceCurrentScope = false) }
+    }
     fun cancelActive() { active.forEach { it.cancel() } }
     fun remainingSettlementNanos(deadlineNanos: Long): Long = cache.remainingSettlementNanos(deadlineNanos)
     /** Run on the independent teardown IO worker after cancellation, before scope deletion. */
@@ -88,7 +104,7 @@ internal class NativePlaybackTransport(
         }
     }
 
-    private suspend fun exchange(method: String, path: String, body: ByteArray?, token: String?, limit: Long, deadline: Long): NativePlaybackResponse {
+    private suspend fun exchange(method: String, path: String, body: ByteArray?, token: String?, limit: Long, deadline: Long, enforceCurrentScope: Boolean = true): NativePlaybackResponse {
         val request = try {
             Request.Builder().url(origin.trimEnd('/') + "/api" + path)
                 .header("Accept", "application/json").header("Accept-Encoding", "identity")
@@ -122,7 +138,7 @@ internal class NativePlaybackTransport(
                                 val source = it.body?.source() ?: throw invalidResponse()
                                 if (it.body!!.contentLength() > limit || source.request(limit + 1)) throw invalidResponse()
                                 val bytes = source.readByteArray()
-                                if (!currentScope()) throw invalidScope()
+                                if (enforceCurrentScope && !currentScope()) throw invalidScope()
                                 result = NativePlaybackResponse(it.code, bytes) { work.consumed.countDown(); retire(work) }
                             } catch (_: Exception) { failure = invalidResponse() }
                         }
