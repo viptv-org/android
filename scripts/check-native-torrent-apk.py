@@ -35,7 +35,7 @@ def main():
         aapt = str(candidates[-1]) if candidates else None
     require(aapt, "Configure the installed Android SDK/aapt2 for actual APK minSdk verification")
     badging = subprocess.check_output([aapt, "dump", "badging", str(args.apk)], text=True)
-    require(re.search(r"^sdkVersion:'24'$", badging, re.MULTILINE), "Native APK must retain minSdk 24")
+    require(re.search(r"^(?:minSdkVersion|sdkVersion):'24'$", badging, re.MULTILINE), "Native APK must retain minSdk 24")
     with args.apk.open("rb") as raw, zipfile.ZipFile(args.apk) as archive:
         names = archive.namelist()
         require(not any("viptv_fixture_ca" in name for name in names), "Fixture CA must not ship")
