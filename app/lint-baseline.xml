@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <issues format="6" by="lint 8.13.2">
-  <!-- UniFFI probes java.lang.ref.Cleaner with Class.forName and falls back to JNA on API 24–32. Preserve the pinned generated source; baseline only these three guarded calls. -->
+  <!-- UniFFI probes java.lang.ref.Cleaner with Class.forName and falls back to JNA on API 24–32. Preserve the pinned generated source; baseline only these exact guarded calls in the core and gateway snapshots. -->
   <issue id="NewApi" message="Call requires API level 33 (current min is 24): `java.lang.ref.Cleaner#create`">
     <location file="../vendor/core/generated/native-kotlin/uniffi/viptv_core/viptv_core.kt" line="1264" column="41" />
   </issue>
@@ -9,5 +9,14 @@
   </issue>
   <issue id="NewApi" message="Call requires API level 33 (current min is 24): `java.lang.ref.Cleaner.Cleanable#clean`">
     <location file="../vendor/core/generated/native-kotlin/uniffi/viptv_core/viptv_core.kt" line="1273" column="38" />
+  </issue>
+  <issue id="NewApi" message="Call requires API level 33 (current min is 24): `java.lang.ref.Cleaner#create`">
+    <location file="../vendor/playback-gateway/ffi/generated/kotlin/uniffi/playback_gateway_ffi/playback_gateway_ffi.kt" line="1321" column="41" />
+  </issue>
+  <issue id="NewApi" message="Call requires API level 33 (current min is 24): `java.lang.ref.Cleaner#register`">
+    <location file="../vendor/playback-gateway/ffi/generated/kotlin/uniffi/playback_gateway_ffi/playback_gateway_ffi.kt" line="1324" column="38" />
+  </issue>
+  <issue id="NewApi" message="Call requires API level 33 (current min is 24): `java.lang.ref.Cleaner.Cleanable#clean`">
+    <location file="../vendor/playback-gateway/ffi/generated/kotlin/uniffi/playback_gateway_ffi/playback_gateway_ffi.kt" line="1330" column="38" />
   </issue>
 </issues>
