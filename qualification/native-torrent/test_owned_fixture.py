@@ -7,10 +7,22 @@ import tempfile
 import threading
 import unittest
 
-from owned_fixture import OwnedPeer, atomic_json, decode, encode
+from owned_fixture import OwnedPeer, atomic_json, decode, encode, pad_owned_payload
 
 
 class OwnedFixtureTest(unittest.TestCase):
+    def test_padding_preserves_episode_indices_and_exceeds_admitted_budget(self):
+        with tempfile.TemporaryDirectory() as directory:
+            payload = Path(directory)
+            for name in ["00-readme.txt", "01-episode.mp4", "02-episode.mp4"]:
+                (payload / name).write_bytes(b"owned")
+            pad_owned_payload(payload, 1025)
+            files = sorted(payload.iterdir())
+            self.assertEqual([path.name for path in files[:3]],
+                             ["00-readme.txt", "01-episode.mp4", "02-episode.mp4"])
+            self.assertEqual(sum(path.stat().st_size for path in files), 1025)
+            self.assertEqual((payload / "03-owned-padding.bin").read_bytes(), bytes(1010))
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.root = Path(self.directory.name)
