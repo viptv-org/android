@@ -72,8 +72,10 @@ override from response metadata.
 
 ## Validation and builds
 
-[DEVELOPMENT.md](DEVELOPMENT.md) documents Windows-first development, private VPS
-SSH configuration, local native builds, and the local Android TV emulator.
+[DEVELOPMENT.md](DEVELOPMENT.md) documents host selection, local native builds,
+Windows tools and the Linux workspace's serve-avd TV emulator. On the Linux
+workspace, read the workspace root's private `.local-device-testing.md` before
+installing an APK or running TV UI/input checks.
 
 Use JDK 17, SDK Platform 36, Node 22+, Rust, cargo-ndk and an Android NDK. The
 hosted workflow installs NDK 28.2.13676358. With the Android SDK/NDK environment

@@ -4,10 +4,12 @@ Delivery policy: only Android, desktop, Roku and TV-web build workflows run,
 triggered by main pushes and manual dispatch. No PR gates, automatic releases,
 image publishing or deployment. Retain local checks.
 
-This Windows checkout is Windows-first: build/test and run Android TV on this PC.
-Read DEVELOPMENT.md and load scripts/windows-dev.ps1; the git-ignored local .env
-records this PC's tools and the owner's exact VPS SSH target. The VPS hosts the
-dev backend; do not start a remote TV emulator unless explicitly requested.
+Choose the development host from the current checkout, not a remembered host.
+Read DEVELOPMENT.md. In the Linux organization workspace, read the workspace
+root's private `.local-device-testing.md` and use its existing serve-avd emulator
+for routine Android TV UI/input checks. Coordinate disruptive runs with its
+browser user and preserve sign-in. On Windows, load scripts/windows-dev.ps1 and
+use that checkout's private .env and dedicated local emulator.
 
 Read `DESIGN_REF` and `SPEC.md` before changing playback behavior. The pinned design commit defines shared UX; this library owns Media3 adaptation and reports facts rather than deciding product policy.
 
@@ -15,7 +17,7 @@ Keep every public type free of Media3 implementation types. State is level-trigg
 
 Validate with JDK 17 and Android SDK Platform 36. Run Android unit tests for implementation changes; require an emulator or physical Android TV for surface, remote, codec, HDR, PiP, and device-capability claims. Documentation-only and comments-only changes need content/diff checks, not a build or device run.
 
-Shared behavior is owned by ../core (viptv-org/core), pinned in CORE_REF. Edit Rust there, regenerate Kotlin/WASM, commit, then run scripts/core-sync.mjs sync ../core. Never edit vendor/core. Keep the Android and TV-web pins together for a shared rule change. Run the local Gradle flow before pushing implementation changes: `scripts/prepare-core.sh host`, `./gradlew --no-daemon :testDebugUnitTest :app:testDebugUnitTest`, then `scripts/prepare-core.sh android && ./gradlew --no-daemon :app:assembleDebug`. The machine has ample memory; emulators are allowed but start them only when a device-level claim needs proof. Generated Kotlin fields come from Rust; Compose view adapters may translate units/layout types but must not invent provider aliases or repeat source/artwork/resume policy.
+Shared behavior is owned by ../core (viptv-org/core), pinned in CORE_REF. Edit Rust there, regenerate Kotlin/WASM, commit, then run scripts/core-sync.mjs sync ../core. Never edit vendor/core. Keep the Android and TV-web pins together for a shared rule change. Run the local Gradle flow before pushing implementation changes: `scripts/prepare-core.sh host`, `./gradlew --no-daemon :testDebugUnitTest :app:testDebugUnitTest`, then `scripts/prepare-core.sh android && ./gradlew --no-daemon :app:assembleDebug`. Use the host's documented resource limits and run Gradle checks sequentially. Reuse the designated TV emulator for device-level proof; use separate owned QA emulators for destructive fixtures. Generated Kotlin fields come from Rust; Compose view adapters may translate units/layout types but must not invent provider aliases or repeat source/artwork/resume policy.
 
 ## Shared decision logic
 

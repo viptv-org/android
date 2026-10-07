@@ -1,4 +1,4 @@
-# Windows-first Android / Android TV development
+# Android / Android TV development
 
 For dated build, emulator, backend rollout and provider evidence, see the
 [2026-10-01 qualification record](docs/history/2026-10-01-development-qualification.md).
@@ -7,11 +7,17 @@ account status.
 
 ## Where development runs
 
-**This Windows PC is the Android development machine and TV emulator host.**
-Edit and pull this local `android` checkout, build/test locally, and run the TV
-app locally. The owner's VPS hosts the development backend and organization
-workspace; SSH there only for backend work or explicitly requested remote
-checks/builds. Do not start the TV emulator on the VPS by default.
+In the Linux organization workspace, build/test in the local `android` checkout
+and use the existing serve-avd Android TV emulator for routine UI, focus and
+navigation checks. Read the workspace root's ignored `.local-device-testing.md`
+for the designated serial, browser access, service checks and APK installation.
+Coordinate disruptive runs with the owner, preserve app data/sign-in, and use
+separate owned QA emulators for destructive fixture runs. Physical-TV testing
+is separately requested and does not follow from an emulator pass.
+
+The remaining Windows commands apply when working in the owner's Windows
+checkout: build/test on that PC and use its dedicated local TV emulator. Choose
+the host from the current environment before loading tools or targeting ADB.
 
 Machine-specific settings are in this checkout's **git-ignored `.env`**:
 
