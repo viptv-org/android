@@ -3,6 +3,7 @@
 import argparse
 import http.client
 import json
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ssl
 import subprocess
@@ -31,6 +32,21 @@ class Ingress(BaseHTTPRequestHandler):
         if self.path == "/__fixture/control" and self.command == "POST" and self.server.owned_directory:
             self.control()
             return
+        if self.path.startswith("/owned/") and self.command in ("GET", "HEAD") and self.server.owned_directory:
+            self.media()
+            return
+        if self.path == "/api/v2/playback-protocol" and self.server.owned_directory:
+            try:
+                legacy = json.loads((self.server.owned_directory / "legacy-protocol.json").read_text()) is True
+            except (OSError, ValueError):
+                legacy = False
+            if legacy:
+                self.send_response(404)
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+                return
         if not self.path.startswith("/api/") or "\r" in self.path or "\n" in self.path:
             self.send_error(404)
             return
@@ -68,6 +84,49 @@ class Ingress(BaseHTTPRequestHandler):
         finally:
             upstream.close()
 
+    def media(self):
+        if self.path == "/owned/episode.mp4":
+            path = self.server.owned_directory / "owned-episodes/01-episode.mp4"
+            content_type = "video/mp4"
+        elif self.path == "/owned/hls/index.m3u8" or re.fullmatch(r"/owned/hls/segment[0-9]{3}\.ts", self.path):
+            path = self.server.owned_directory / "hls" / self.path.rsplit("/", 1)[1]
+            content_type = "application/vnd.apple.mpegurl" if path.suffix == ".m3u8" else "video/mp2t"
+        else:
+            self.send_error(404)
+            return
+        try:
+            size = path.stat().st_size
+            start, end = 0, size - 1
+            value = self.headers.get("Range")
+            if value:
+                match = re.fullmatch(r"bytes=([0-9]+)-([0-9]*)", value)
+                if not match:
+                    raise ValueError()
+                start = int(match[1])
+                end = min(size - 1, int(match[2])) if match[2] else size - 1
+                if start > end:
+                    raise ValueError()
+            self.send_response(206 if value else 200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(end - start + 1))
+            if value:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.end_headers()
+            if self.command == "HEAD":
+                return
+            with path.open("rb") as stream:
+                stream.seek(start)
+                remaining = end - start + 1
+                while remaining:
+                    data = stream.read(min(65536, remaining))
+                    if not data:
+                        break
+                    self.wfile.write(data)
+                    remaining -= len(data)
+        except (OSError, ValueError):
+            self.close_connection = True
+
     def control(self):
         directory = self.server.owned_directory
         try:
@@ -79,9 +138,9 @@ class Ingress(BaseHTTPRequestHandler):
             if not 0 < length <= 4096 or self.headers.get("Transfer-Encoding"):
                 raise ValueError()
             value = json.loads(self.rfile.read(length))
-            if not isinstance(value, dict) or set(value) - {"held_pieces", "hold_metadata", "disable_source", "revoke"}:
+            if not isinstance(value, dict) or set(value) - {"held_pieces", "hold_metadata", "disable_source", "revoke", "legacy_protocol"}:
                 raise ValueError()
-            for name in ("hold_metadata", "disable_source", "revoke"):
+            for name in ("hold_metadata", "disable_source", "revoke", "legacy_protocol"):
                 if name in value and type(value[name]) is not bool:
                     raise ValueError()
             if "held_pieces" in value:
@@ -91,6 +150,8 @@ class Ingress(BaseHTTPRequestHandler):
                 atomic_json(directory / "hold-pieces.json", pieces)
             if "hold_metadata" in value:
                 atomic_json(directory / "hold-metadata.json", value["hold_metadata"])
+            if "legacy_protocol" in value:
+                atomic_json(directory / "legacy-protocol.json", value["legacy_protocol"])
             if "disable_source" in value or "revoke" in value:
                 atomic_json(directory / "backend-command.json", value)
             self.send_response(200)
@@ -100,7 +161,7 @@ class Ingress(BaseHTTPRequestHandler):
         except (OSError, ValueError, KeyError, TypeError):
             self.send_error(400)
 
-    do_GET = do_POST = do_DELETE = do_PATCH = forward
+    do_GET = do_HEAD = do_POST = do_DELETE = do_PATCH = forward
 
 
 def main():

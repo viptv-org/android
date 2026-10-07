@@ -89,11 +89,18 @@ def generate(directory, seconds):
             b"pieces": b"".join(hashlib.sha1(content[start:start + piece_length]).digest() for start in range(0, len(content), piece_length))}
     raw_info = encode(info)
     (directory / "owned.torrent").write_bytes(encode({b"info": info}))
+    hls = directory / "hls"
+    hls.mkdir(exist_ok=True)
+    subprocess.run(["ffmpeg", "-nostdin", "-y", "-v", "error", "-i", str(payload / "01-episode.mp4"),
+                    "-map", "0:v:0", "-map", "0:a:0", "-c", "copy", "-f", "hls", "-hls_time", "4", "-hls_playlist_type", "vod",
+                    "-hls_segment_filename", str(hls / "segment%03d.ts"), str(hls / "index.m3u8")], check=True)
     manifest = {"info_hash": hashlib.sha1(raw_info).hexdigest(), "piece_length": piece_length,
                 "payload_bytes": len(content), "metainfo_sha256": hashlib.sha256((directory / "owned.torrent").read_bytes()).hexdigest(),
                 "files": [{"index": index, "name": path.name, "bytes": path.stat().st_size,
                            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                           "prefix_sha256": hashlib.sha256(path.read_bytes()[:64]).hexdigest()} for index, path in enumerate(files)]}
+                           "prefix_sha256": hashlib.sha256(path.read_bytes()[:64]).hexdigest(),
+                           "sample_offset": path.stat().st_size // 2,
+                           "sample_sha256": hashlib.sha256(path.read_bytes()[path.stat().st_size // 2:path.stat().st_size // 2 + 64]).hexdigest()} for index, path in enumerate(files)]}
     atomic_json(directory / "manifest.json", manifest)
     atomic_json(directory / "hold-pieces.json", [])
     atomic_json(directory / "hold-metadata.json", False)
@@ -260,7 +267,7 @@ class OwnedPeer:
                     request = struct.unpack("!III", message[1:])
                     if request in pending:
                         pending.remove(request)
-        except (OSError, EOFError, ValueError, KeyError, IndexError):
+        except (OSError, EOFError, ValueError, KeyError, IndexError, TypeError, OverflowError):
             pass
         finally:
             with self.lock:

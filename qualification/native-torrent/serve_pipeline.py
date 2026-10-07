@@ -44,7 +44,7 @@ def main():
         if (directory / name).exists():
             raise SystemExit("use a fresh generated fixture directory")
     manifest = json.loads((directory / "manifest.json").read_text())
-    atomic_json(directory / "backend-config.json", {"info_hash": manifest["info_hash"], "port": 0})
+    atomic_json(directory / "backend-config.json", {"info_hash": manifest["info_hash"], "port": 0, "origin": f"https://127.0.0.1:{args.control_port}"})
     here = Path(__file__).resolve().parent
     processes = []
     logs = []
@@ -66,6 +66,11 @@ def main():
             logs.append(log)
             processes.append(subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT))
         wait_file(directory / "peer.json", processes[1])
+        until_certificate = time.monotonic() + 10
+        while not (directory / "tls/cert.pem").is_file():
+            if processes[2].poll() is not None or time.monotonic() >= until_certificate:
+                raise RuntimeError("owned fixture TLS readiness deadline")
+            time.sleep(0.05)
         # Both device endpoints are literal loopback after the owner's adb reverse.
         configuration = dict(manifest, **ready, origin=f"https://127.0.0.1:{args.control_port}", peer=f"127.0.0.1:{args.peer_port}")
         atomic_json(directory / "pipeline-config.json", configuration)

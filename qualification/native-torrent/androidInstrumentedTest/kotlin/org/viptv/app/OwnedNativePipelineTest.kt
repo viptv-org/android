@@ -187,6 +187,10 @@ class OwnedNativePipelineTest {
             val before = withContext(Dispatchers.IO) { bytes(independent.capability.url, 0, 64) }
             val prefixHash = java.security.MessageDigest.getInstance("SHA-256").digest(before).joinToString("") { "%02x".format(it.toInt() and 255) }
             assertEquals(config.getJSONArray("files").getJSONObject(1).getString("prefix_sha256"), prefixHash, "actual selected bytes differ from owned episode")
+            val selectedFixture = config.getJSONArray("files").getJSONObject(1)
+            val middle = withContext(Dispatchers.IO) { bytes(independent.capability.url, selectedFixture.getLong("sample_offset"), 64) }
+            val middleHash = java.security.MessageDigest.getInstance("SHA-256").digest(middle).joinToString("") { "%02x".format(it.toInt() and 255) }
+            assertEquals(selectedFixture.getString("sample_sha256"), middleHash, "selected episode payload must match exact owned bytes")
             val shutdownAt = SystemClock.elapsedRealtimeNanos()
             val localJoined = withContext(Dispatchers.Main.immediate) {
                 player.stop()
@@ -223,10 +227,14 @@ class OwnedNativePipelineTest {
         val files = config.getJSONArray("files")
         val selectedSize = files.getJSONObject(1).getLong("bytes")
         val offsetInPayload = files.getJSONObject(0).getLong("bytes")
-        val heldPiece = (offsetInPayload + selectedSize - 64) / config.getLong("piece_length")
-        fixtureControl(config, JSONObject().put("held_pieces", JSONArray().put(heldPiece)))
+        val pieceLength = config.getLong("piece_length")
+        val heldPieces = JSONArray()
+        for (piece in (offsetInPayload + selectedSize / 2) / pieceLength..(offsetInPayload + selectedSize - 1) / pieceLength) heldPieces.put(piece)
+        fixtureControl(config, JSONObject().put("held_pieces", heldPieces))
         val parent = java.io.File(context.noBackupFilesDir, "owned-piecewait-${UUID.randomUUID()}").apply { mkdirs() }
         val client = TorrentClient.newNativeOwned(parent.path, config.getLong("payload_bytes").toULong(), listOf(config.getString("peer")))
+        val player = AndroidMedia3BackendFactory(context).createAndroidPlayer()
+        val activity = instrumentation.startActivitySync(Intent(context, OwnedNativeFixtureActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as OwnedNativeFixtureActivity
         var settled = false
         try {
             fun begin() = client.beginSelected("magnet:?xt=urn:btih:${config.getString("info_hash")}", config.getString("info_hash"), 1u, null, 30_000u)
@@ -236,10 +244,16 @@ class OwnedNativePipelineTest {
             val independent = withContext(Dispatchers.IO) { second.waitReady() }
             val url = handle.streamUrl(1u)
             assertEquals(64, withContext(Dispatchers.IO) { bytes(url, 0, 64) }.size)
+            await { activity.texture.isAvailable }
+            withContext(Dispatchers.Main.immediate) { player.attach(activity.texture); player.open(PlaybackSource(url), playWhenReady = true) }
+            await { player.state.value.isPlaying && player.state.value.positionMillis > 500 }
+            withContext(Dispatchers.Main.immediate) { assertTrue(player.seekTo(35_000)) }
+            await { player.state.value.isBuffering }
             val blocked = async(Dispatchers.IO) { runCatching { bytes(url, selectedSize - 64, 64) } }
             delay(750)
             assertFalse(blocked.isCompleted, "held real piece must keep an actual HTTP body pending")
             val start = SystemClock.elapsedRealtimeNanos()
+            withContext(Dispatchers.Main.immediate) { player.stop() }
             handle.stop()
             first.cancel()
             val handleJoin = async(Dispatchers.IO) { handle.stopAndWait() }
@@ -262,6 +276,8 @@ class OwnedNativePipelineTest {
             settled = true
         } finally {
             fixtureControl(config, JSONObject().put("held_pieces", JSONArray()))
+            player.close()
+            instrumentation.runOnMainSync { activity.finish() }
             if (settled) parent.deleteRecursively()
         }
     }
@@ -319,6 +335,53 @@ class OwnedNativePipelineTest {
         }
     }
 
+    @Test fun eActualHttpHlsAndOlderServerKeepOrdinaryLeases() = runBlocking {
+        val config = configuration()
+        val jobs = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val player = AndroidMedia3BackendFactory(context).createAndroidPlayer()
+        val gateway = VipTvHttpGateway(config.getString("origin"), config.getString("access_token"), television = true)
+        val parent = java.io.File(context.noBackupFilesDir, "owned-ordinary-${UUID.randomUUID()}").apply { mkdirs() }
+        val cache = NativeTorrentCache.open(parent, { directory, capacity -> NativeTorrentEngineCacheManager(
+            TorrentClient.newNativeOwned(directory.path, capacity.toULong(), listOf(config.getString("peer")))) }, nowNanos = SystemClock::elapsedRealtimeNanos)
+        val coordinator = NativeTorrentCoordinator(cache, SystemClock::elapsedRealtimeNanos, { true }, { player.stop() })
+        val activity = instrumentation.startActivitySync(Intent(context, OwnedNativeFixtureActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as OwnedNativeFixtureActivity
+        try {
+            await { activity.texture.isAvailable }
+            withContext(Dispatchers.Main.immediate) { player.attach(activity.texture) }
+            for (olderServer in listOf(false, true)) {
+                fixtureControl(config, JSONObject().put("legacy_protocol", olderServer))
+                val sources = config.getJSONArray("ordinary_sources")
+                for (index in 0 until sources.length()) {
+                    val control = gateway.nativePlaybackControl("owned_ordinary", 1, cache, jobs, {}, {})
+                    coordinator.ownControl(control, 1)
+                    val legacy = assertIs<NativePlaybackStart.Legacy>(control.start(request(sources.getJSONObject(index).getString("stream_id")), qualified = olderServer, vod = true, cache = cache))
+                    val launch = legacy.launch
+                    assertEquals("direct", launch.mode)
+                    assertEquals(emptyMap(), launch.headers)
+                    // Local native cleanup must not delete the adopted ordinary lease.
+                    assertTrue(coordinator.retireControl(control))
+                    assertNotNull(gateway.playbackRemainingMillis(launch.sessionId))
+                    withContext(Dispatchers.Main.immediate) { player.open(PlaybackSource(launch.url, headers = launch.headers), playWhenReady = true) }
+                    await { player.state.value.isPlaying && player.state.value.positionMillis > 500 }
+                    withContext(Dispatchers.Main.immediate) { player.pause(); assertTrue(player.seekTo(5000)); player.play() }
+                    await { player.state.value.isPlaying && player.state.value.positionMillis > 5000 }
+                    withContext(Dispatchers.Main.immediate) { player.stop() }
+                    gateway.stopPlayback(launch.sessionId)
+                }
+            }
+            assertTrue(coordinator.closeScope())
+            java.io.File(context.noBackupFilesDir, "owned-ordinary-evidence.json").writeText(JSONObject()
+                .put("http_and_hls_decoded", true).put("old_server_404_legacy", true)
+                .put("unqualified_client_ordinary", true).put("adopted_ordinary_lease_preserved", true).toString())
+        } finally {
+            fixtureControl(config, JSONObject().put("legacy_protocol", false))
+            withContext(NonCancellable) { runCatching { coordinator.closeScope() } }
+            player.close(); jobs.cancel()
+            instrumentation.runOnMainSync { activity.finish() }
+            if (cache.heldPayloadCapacityBytes == 0L) parent.deleteRecursively()
+        }
+    }
+
     @Test fun zActualControllerReturnsSourcePositionAndClosesProfileScope() = runBlocking {
         val config = configuration()
         // The package suffix owns these preferences. No normal app session is read or changed.
@@ -360,13 +423,27 @@ class OwnedNativePipelineTest {
             assertTrue(position >= 8000, "return route must retain the native title position")
             await { candidate.retired }
             assertTrue(withContext(Dispatchers.IO) { denied(candidate.capability.url) })
+            withContext(Dispatchers.Main.immediate) { controller.start(media.copy(positionMillis = position), source, explicitResume = true) }
+            await(30_000) { controller.state.value.route is Route.Player && controller.player.state.value.isPlaying }
+            val revoked = assertNotNull(epoch.coordinator.authorizeActive())
+            withContext(Dispatchers.Main.immediate) { controller.player.pause() }
+            fixtureControl(config, JSONObject().put("disable_source", true))
+            await(27_000) { revoked.control.isLocallyRetired() }
+            assertTrue(withTimeout(5000) { revoked.retirement.await() }, "paused producer revocation must settle local native work")
+            assertTrue(withContext(Dispatchers.IO) { denied(revoked.capability.url) })
+            assertFalse(controller.player.state.value.isPlaying)
+            assertTrue(epoch.coordinator.cache.isAvailable, "per-grant producer refusal must not invent an authorization epoch")
             withContext(Dispatchers.Main.immediate) { controller.chooseProfile(controller.state.value.profiles.first { it.id == "2" }) }
             await { controller.state.value.selectedProfile?.id == "2" }
             await { epoch.coordinator.cache.heldPayloadCapacityBytes == 0L }
             assertFalse(controller.nativePlaybackQualified.invoke() && controller.nativePlaybackEpoch === epoch)
+            controller.signOut().join()
+            await { store.getString("access", null) == null }
+            val refused = runCatching { VipTvHttpGateway(config.getString("origin"), config.getString("access_token"), television = true).foregroundIdentity() }.exceptionOrNull()
+            assertTrue(refused is GatewayError && refused.status == 401, "signed-out fixture session must lose backend authority")
             java.io.File(context.noBackupFilesDir, "owned-controller-evidence.json").writeText(JSONObject()
                 .put("actual_identity", true).put("actual_controller", true).put("returned_position", position)
-                .put("profile_scope_closed", true).put("state_and_auth_preferences_native_secret_free", true).toString())
+                .put("paused_producer_revocation", true).put("profile_scope_closed", true).put("actual_signout_revoked", true).put("state_and_auth_preferences_native_secret_free", true).toString())
         } finally {
             withContext(Dispatchers.Main.immediate) { controller.close() }
             instrumentation.runOnMainSync { activity.finish() }

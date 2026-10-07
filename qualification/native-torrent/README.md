@@ -107,7 +107,11 @@ The tests cover actual decoded surface pixels and cue delivery, real alternate t
 confirmation, exact selected bytes, token/index refusal, pause renewal and foreground
 revalidation, independent overlapping grants, metadata Back cancellation, wrong-index
 and aggregate capacity refusal, a held real HTTP piece body with concurrent joins,
-and actual AppController identity restoration/Media3/return-position/profile cleanup.
+actual scheduled heartbeat and elapsed expiry after a test-only heartbeat worker
+fault, ordinary HTTP/HLS and a 404 negotiation endpoint, and actual AppController
+identity restoration/Media3/return-position/paused producer refusal/profile/sign-out
+cleanup. The expiry test cancels only the heartbeat job through test reflection;
+the real clock, actual grant deadline, expiry job and native owner remain intact.
 Each cancellation measures local native/HTTP joins under one two-second interval;
 remote release follows separately. These owned cooperative waits cannot qualify an
 arbitrary OS filesystem call that is blocked beyond the join deadline.
