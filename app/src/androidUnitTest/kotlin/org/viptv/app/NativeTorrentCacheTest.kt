@@ -138,7 +138,7 @@ class NativeTorrentCacheTest {
             override fun deleteOwned(directory: File) { throw IllegalStateException(directory.path) }
         }
         val cache = NativeTorrentCache.open(parent, { directory, _ -> path = directory; Manager(events) }, storage)
-        cache.reserveControl(321)
+        cache.register(Work("cleanup", events), cache.reserveControl(321))
         assertFalse(cache.closeScope())
         assertFalse(cache.isAvailable)
         assertEquals(321, cache.reservedControlBytes)
@@ -221,6 +221,16 @@ class NativeTorrentCacheTest {
         assertFalse(cache.closeScope())
         assertFalse(cache.isAvailable)
         assertEquals(456, cache.reservedControlBytes)
+    }
+
+    @Test fun scopeCannotFreeAControlBufferWithoutAJoinedWorkReceipt() {
+        val parent = Files.createTempDirectory("native-cache-unjoined-control").toFile()
+        val cache = NativeTorrentCache.open(parent, { _, _ -> Manager(mutableListOf()) })
+        val body = cache.reserveControl(789)
+        assertFalse(cache.closeScope())
+        body.close()
+        assertFalse(cache.isAvailable)
+        assertEquals(789, cache.reservedControlBytes)
     }
 
     @Test fun ownedSymlinkIsRejectedWithoutDeletingItsTarget() {

@@ -138,6 +138,9 @@ internal class NativeTorrentCache private constructor(
             if (snapshot.any { !it.join(deadline) || nowNanos() > deadline } ||
                 manager?.hasFailedSettlement() != false
             ) throw NativeTorrentCacheUnavailable()
+            // Unregistered body buffers have no joined-work receipt. Their
+            // callers must finish/release them before scope cleanup starts.
+            if (synchronized(this) { reservations.size != works.size }) throw NativeTorrentCacheUnavailable()
             snapshot.forEach { it.closeAfterSettlement() }
             manager?.closeAfterSettlement()
             effects.deleteOwned(requireNotNull(directory))
