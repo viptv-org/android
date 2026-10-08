@@ -31,6 +31,8 @@ if (mode === 'sync') {
   for (const path of names) {
     if (path.startsWith('assets/fonts/')) mappings.push([path, path.endsWith('.ttf') ? `app/src/androidMain/res/font/${path.split('/').at(-1)}` : `app/src/androidMain/assets/design/fonts/${path.split('/').at(-1)}`]);
     if (path.startsWith('assets/roku/roku/images/lucide/') && !path.endsWith('.svg')) mappings.push([path, `app/src/androidMain/assets/design/lucide/${path.split('/').at(-1)}`]);
+    // Shared TV hero shaders and catalog ship as app assets; their renderer contract stays with the design docs.
+    if (path.startsWith('assets/hero/')) mappings.push([path, path === 'assets/hero/README.md' ? `design-contract/${path}` : `app/src/androidMain/${path}`]);
   }
   for (const [source, destination] of mappings) {
     const bytes = git('show', `${revision}:${source}`);

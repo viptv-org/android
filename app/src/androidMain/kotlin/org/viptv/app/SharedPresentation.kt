@@ -5,6 +5,7 @@ import org.json.JSONObject
 import org.viptv.core.wire.CoreJson
 import org.viptv.core.wire.DiscoverPolicyProjection
 import org.viptv.core.wire.EpisodeWatching
+import org.viptv.core.wire.HeroEdgePool
 import org.viptv.core.wire.HomeActions
 import org.viptv.core.wire.PhonePresentation
 import org.viptv.core.wire.SourceRanks
@@ -19,6 +20,13 @@ internal object SharedPresentation {
         JSONObject().put("item", JSONObject(media.normalizedJson(includeEpisodes = false))).put("queueShelf", queueShelf))
 
     fun episode(media: Media): EpisodeWatching = project("episodeWatching", JSONObject(media.normalizedJson(includeEpisodes = false)))
+
+    /**
+     * TV hero backdrop category and edge pool for a title, restricted to the edge ids the renderer ships.
+     * Every field is written explicitly: core requires both lists, and the generated input's codec omits empty defaults.
+     */
+    fun heroEdgePool(mediaType: String, genres: List<String>, availableEdges: List<String>): HeroEdgePool = project("heroEdgePool",
+        JSONObject().put("mediaType", mediaType).put("genres", JSONArray(genres)).put("availableEdges", JSONArray(availableEdges)))
 
     fun phone(media: Media? = null, shelf: HomeShelf? = null, contentType: String? = null): PhonePresentation = project("phonePresentation",
         JSONObject().putOpt("contentType", contentType)

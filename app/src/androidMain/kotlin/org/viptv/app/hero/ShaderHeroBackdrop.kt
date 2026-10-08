@@ -35,6 +35,7 @@ import org.viptv.app.CoreModels
 import org.viptv.app.HeroBackdrop
 import org.viptv.app.LocalGround
 import org.viptv.app.Media
+import org.viptv.app.SharedPresentation
 
 /**
  * TV backdrop with shader transitions between images and a category-matched edge
@@ -60,6 +61,8 @@ import org.viptv.app.Media
     val policy = remember(library) { HeroMotionPolicy(library.index) }
     val renderer = remember(library) { HeroGlRenderer(library, ground.toArgb()) { unavailable = true } }
     DisposableEffect(renderer) { onDispose { renderer.release() } }
+    // One core decision per title, never per frame or per episode focus.
+    val edgePool = remember(policy, media.type, media.genres) { SharedPresentation.heroEdgePool(media.type, media.genres, policy.edgeIds) }
     val artW = with(density) { ART_WIDTH.dp.roundToPx() }
     val artH = with(density) { ART_HEIGHT.dp.roundToPx() }
     LaunchedEffect(artW, artH) { renderer.setArt(artW, artH, artW / ART_WIDTH.toFloat()) }
@@ -78,8 +81,7 @@ import org.viptv.app.Media
             else -> base to (loadArt(context, base, artW, artH) ?: return@LaunchedEffect)
         }
         shown = url
-        val category = policy.category(media.type, media.genres)
-        renderer.show(bitmap, policy.nextTransition(renderer.transition), policy.nextEdge(category, renderer.edge))
+        renderer.show(bitmap, policy.nextTransition(renderer.transition), policy.nextEdge(edgePool, renderer.edge))
     }
 
     Box(Modifier.fillMaxWidth().height(BACKDROP_HEIGHT.dp)) {

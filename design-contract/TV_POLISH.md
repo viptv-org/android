@@ -93,10 +93,9 @@ Resume styling. Implementation/browser/device evidence remains separate.
   viewport at the top. Lower shelves scroll naturally. Returning to the first
   row or hero reveals the complete hero. Cards remain 320×180, gap 36, and
   shelf spacing includes captions as in Android TV.
-- Hero blur matches Android TV in the 1920px logical frame: the hero stage is
-  664px high, the sharp art is 1120px wide at the right, and the full-size ambient
-  image uses a 72px blur at 0.6 opacity. Shared left/bottom scrims keep copy legible
-  and adapt to OLED ground. The art scrolls with the hero.
+- The hero stage is 664px high in the 1920px logical frame. Its backdrop is
+  [TV-042](#tv-042--shader-hero-backdrop), shared with Android TV, including its
+  scrims and OLED ground. The backdrop scrolls with the hero.
 - Resume uses the selected accent with dark foreground on Android TV and
   Vizio, including while focused. Retain a white focus ring without changing
   its size. Other action/focus colors keep their established meaning.
@@ -137,10 +136,10 @@ at `b7e36df` is the comparison for Home composition and queue content.
   replacement texture before swapping it; do not recreate visible text nodes.
   Center button labels and icons in the same vertical box, including Manage
   profiles. Use packaged Lucide controls, with a visible source-list icon.
-- Android's hero content stage is 664px; its backdrop extends to 950px, with
-  1120×720 sharp art, 72px ambient blur at 0.6 opacity, and the lower fade from
-  440px to the ground at 950px. Preserve image aspect ratios. Home and detail
-  share the same backdrop compositor and match the actual page ground.
+- Android's hero content stage is 664px. Home and detail use the
+  [TV-042](#tv-042--shader-hero-backdrop) backdrop, which defines its 950px
+  extent, art box, ambient fill, scrims and static fallback and matches the actual
+  page ground. Preserve image aspect ratios.
 - The first Continue Watching shelf remains fully visible without scrolling on
   focus. Subsequent shelf scrolling aligns a complete heading at the top safe
   edge; do not leave clipped heading fragments at either viewport edge. Keep
@@ -248,3 +247,135 @@ changes must not steal focus or leak pending requests. Check idle/live/VOD contr
 under continuous time updates, reset by input, paused/panel/seek exceptions,
 first-key reveal, focused thumb, real disjoint buffered ranges, and 1080p/720p
 bottom geometry. Browser measurements do not qualify physical low-memory TVs.
+
+# TV-042 — Shader hero backdrop
+
+Status: proposed. Implemented on Android TV in `viptv-org/android`
+`683904d63fc86eb0482bfc10892cb93dda2a374d` (Home) and
+`0e96bec39485a25c8aa2c9a6ca0aca41f7709c4d` (Details), branch
+`feat/hero-shader-backdrop`; shared TV-web (Tizen, Vizio, webOS) adopts it
+through a WebGL 1 port of the same sources. Roku keeps its ROK-042 composition.
+Source revision is the design commit that introduces this section. Shader
+sources, catalog and the renderer contract are in
+[assets/hero/](../../assets/hero/README.md). Device and visual evidence is
+recorded separately.
+
+The TV Home hero and TV Details show the title's art in full 16:9 framing with a
+slow drift, change it through a visual transition, and keep the left copy column
+legible. The backdrop is decorative: it never takes focus, has no accessible
+name, and changes no remote, hold, Back or focus-restoration behavior.
+
+Geometry, in the 1920 × 1080 logical frame with the origin at the backdrop's
+top-left:
+
+- Backdrop: 1920 × 950. On Home it starts at the top of the 664px hero stage,
+  extends beneath the first shelves and scrolls with the hero. On Details it is
+  anchored to the top of the screen behind the scrolling page.
+- Ambient fill: the whole backdrop. The current art, including a transition in
+  progress, is cover-fitted to 1920 × 950, heavily blurred and laid at 0.6
+  opacity over the page ground. Android's blur samples the art's mip chain at
+  level 6 (64 art pixels per texel) through a 7-tap ring of radius 3.5% of the
+  art size.
+- Art box: 1280 × 720 at x 640–1920, y 0–720. It is 16:9, so 16:9 backdrops are
+  not cropped; other aspect ratios are cover-fitted about the centre.
+- Edge fade: inside the art box, the art dissolves into the ambient fill along
+  its left and bottom edges; its top and right edges meet the backdrop edge. The
+  mask rises from x 666 to x 1024 (2–30% of the art width) and from y 706 up to
+  y 533 (2–26% of the art height), joined by a rounded corner. The selected edge
+  style shapes this band. The `linear` baseline is a straight ramp over
+  x 640–1075 and y 720–446.
+- Text scrim, full backdrop, left to right: ground at x 0, ground at 0.9 opacity
+  at 22% (x 422), 0.35 at 40% (x 768), transparent at 52% (x 998). It clears
+  before the art's fade band ends and leaves the subject undimmed.
+- Lower fade, full width: transparent at y 440 to ground at y 950.
+- Ground is the actual page ground, including OLED black.
+
+Motion and selection:
+
+- Drift: each art starts at full frame and zooms toward 1.04×, with zoom
+  `1 + 0.04 × (1 − e^(−t / 22 s))` where t counts from that art's appearance. It
+  pans along a direction chosen at random for that art by at most half the zoom
+  margin, so the art's own edge never enters the box. Both arts keep drifting
+  during a transition.
+- Transition: every hero change plays one transition from the catalog for that
+  entry's `duration` (1.8–3.6 s). The `fade` crossfade is the baseline and is
+  never drawn. The first art a backdrop shows appears without a transition;
+  unchanged art never transitions. A hero change on Home is a new hero title; on
+  Details it is a different episode still or the return to the series art.
+- Edge style: every hero change draws an edge style from the title's category
+  pool. A different style replaces the current one through a soft noise wipe
+  over the transition's duration; the same style stays in place.
+- No-repeat selection: transitions use one shuffle bag and edges one bag per
+  category. A bag holds each pool member once in random order and refills only
+  when empty. A draw never returns the style currently shown while another pool
+  member exists.
+- Coalescing: a change that arrives during a transition waits. Only the latest
+  waiting change plays, after the running transition completes; superseded art
+  never appears.
+- Frame rate: transitions and edge wipes render every display frame. At rest,
+  drift and animated edge styles render every second frame to leave headroom for
+  focus motion.
+
+Category: shared Core owns the category rule and the genre pools through
+`hero_edge_pool`. Clients pass the title's type and genres and use the returned
+edge ids; they keep no genre table of their own. The rule:
+
+1. A genre of Animation or Anime (case-insensitive) selects Anime for a series
+   and Animation for any other type.
+2. Otherwise the category is the first genre, in metadata order, that has a pool.
+3. Without a category the pool is every catalog edge except `linear`.
+
+Pool ids missing from the catalog are ignored. On Details the category always
+comes from the series or movie, including while an episode still is shown.
+
+Details episode stills: when focus rests on an episode for 350ms, the backdrop
+loads that episode's still; moving on sooner cancels it, so traversing episodes
+queues no transitions. The still is decoded at no more than the art box size,
+without upscaling, and is shown only if its decoded width is at least 60% of the
+art box (768 logical px). A smaller, missing or failed still shows the series
+backdrop instead. The last focused episode stays the subject while focus is on
+Season or the actions; changing season returns to the series backdrop without the
+settle delay. A movie shows only its own backdrop. If art fails to decode, the
+current art stays.
+
+Static compositor: the GL-free form of the same 1920 × 950 backdrop. The hero art
+is cover-fitted to the whole backdrop with a 72px blur at 0.6 opacity over the
+ground, and the sharp art is 1120 × 720 at x 800–1920, y 0–720, centre-cropped,
+with no edge fade. Its text scrim runs from ground at x 0 through 0.92 opacity at
+x 960 to transparent at x 1920; the lower fade is the same 440–950 ramp. Without
+hero art it is the ground under both scrims. It has no drift, transition or edge
+style. Clients use it:
+
+- when system animations are disabled, evaluated as the screen opens: Android's
+  animator duration scale is 0 or animators are disabled; on the web,
+  `prefers-reduced-motion: reduce`;
+- when OpenGL ES (Android prefers ES 3 and accepts ES 2) or WebGL 1 is
+  unavailable, the context or surface cannot be created, or a frame fails to
+  render; the backdrop stays static for the rest of that screen visit;
+- always on the Sources screen, so the GL renderer does not compete with player
+  startup on weaker TVs.
+
+A transition program that fails to compile plays as the crossfade; an edge style
+that fails to compile uses `linear`. Returning from the background restores the
+latest art without a transition. GLES 2 and WebGL 1 renderers must provide the
+ambient blur as described in the asset README; Android's GLES 2 path samples
+without mipmaps and has not been measured against it. Android's shader path draws
+no frame before its first art, so a title without hero art there is unverified
+against the static ground.
+
+Acceptance TV-042: at 1920 × 1080 and a scaled TV viewport, open Home with a 16:9
+backdrop and measure the uncropped art box, ambient extent, both scrims and the
+edge band. Move through more than 15 hero titles: each change plays a non-crossfade
+transition, no transition repeats before the bag empties, and no consecutive edge
+style repeats where the pool has two or more. Change heroes faster than a
+transition and confirm only the latest plays. Scroll to the shelves and back; the
+backdrop scrolls with the hero and the full hero returns. Compare edge pools for an
+Animation movie, an Animation series, Horror + Drama, a genre without a pool
+followed by a pooled genre, and no genres against Core `hero_edge_pool`. On series
+Details, traverse episodes quickly (no queued transitions), rest on one with a
+1280px still, one below 768px and one without a still, move to Season, then change
+season; check that the edge pool stays the series'. Repeat with animations disabled,
+forced GL context failure, a failing transition and edge program, background and
+return, the Sources screen and OLED ground. Record rest and transition frame times
+during focus movement on the lowest supported device; browser runs do not qualify
+physical TVs.

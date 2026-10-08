@@ -412,8 +412,9 @@ in AND-035; implementations record adoption and measured evidence separately.
 - Phone Home starts at its system top inset without an extra top spacer. Global
   progress indicators stay inside the system safe area, including status bars.
 - The first Continue Watching row can receive and move focus while the complete hero remains visible. Vertical scrolling begins at the next shelf; returning to Continue Watching or hero controls restores the top.
-- TV Home art belongs to the scrolling hero, with the design's blurred ambient
-  fill and readable scrims. It scrolls away with the hero. Returning focus to a
+- TV Home art belongs to the scrolling hero and uses the
+  [TV-042](TV_POLISH.md#tv-042--shader-hero-backdrop) backdrop. It scrolls away
+  with the hero. Returning focus to a
   hero action reveals the complete hero, not just the action row. Shelf focus
   continues to reveal the full selected card and caption without scale changes.
 

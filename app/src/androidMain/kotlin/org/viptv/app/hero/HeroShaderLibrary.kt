@@ -7,8 +7,6 @@ import kotlinx.serialization.json.Json
 @Serializable internal data class HeroShaderIndex(
     val transitions: List<HeroTransitionSpec>,
     val edges: List<HeroEdgeSpec>,
-    /** Category → edge ids suited to it. Ids absent from [edges] are ignored. */
-    val genreEdges: Map<String, List<String>>,
 )
 
 @Serializable internal data class HeroTransitionSpec(val id: String, val name: String, val duration: Double)
