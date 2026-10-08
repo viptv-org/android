@@ -1,3 +1,23 @@
+# TV hero motion and screen entrances — 2026-10-07
+
+Source `83cd81c` pins design `3efe0cad3d398376a62e942d2c665bc32b013cf3` and core
+`30789432121f54348d705460c0fa29495795295c`. The hero catalog is seven
+transitions (0.4–0.9 s, front-loaded) and eleven edge styles; core pools draw only
+from those edges. design-sync now removes artifacts the previous pin imported,
+and 18 hero shaders remain in the APK. 48 library and 306 app unit tests pass,
+including the screen-motion rules; all three core ABIs build and the normal APK
+assembles (SHA-256 `a9ee75547ed1a22a6faaf8bde8554595faa47354f9b92175ff12ef81b22da6ec`).
+
+The APK was installed with `install -r` on the local `viptv-design-tv` emulator
+against the development backend, preserving sign-in. Screen recordings at 30 fps
+show the hero art changing about 70 ms after a key press and settling about
+0.45 s later; three presses 200 ms apart start at once from the frame on screen
+and settle 0.45 s after the last, with no queued transitions. Discover, Details
+and Back enter with their fade, rail travel and scale motion. Edge styles meet
+the shelves without a seam. During one frame of each route change the rail
+appears expanded while focus moves; this was not investigated. Frame times,
+physical TV hardware and the animations-off path were not measured.
+
 # TV shader hero backdrop (TV-042) — 2026-10-07
 
 Branch `feat/hero-shader-backdrop` source `b422a3f` (origin/main
