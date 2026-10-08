@@ -23,11 +23,24 @@ core/native/JNA contents, pinned checksums, notices, trust policy and 16 KiB ZIP
 alignment. The normal APK SHA-256 is
 `e5172cff28e36ebf3c714a0aa06189c79bd8d645677a7cfaf420740185d982c8`.
 
-On-screen verification is not done: the development backend was unreachable,
-so no APK was installed and no emulator, Home, Details or GL frame was observed.
-TV-042 acceptance remains pending, including geometry, transitions, edge pools,
-coalescing, episode stills, static fallbacks and frame times. No shared-emulator
-state or production service changed.
+That APK was installed with `install -r` on the local `viptv-design-tv` API 36
+x86_64 TV emulator (1920x1080) against the development backend; sign-in and app
+data were preserved. Animations were enabled and the backdrop ran on its GLES
+thread. Observed on screen: Home renders the 16:9 art at the right with drift
+between captures, the left text scrim and the lower fade into the shelves. Moving
+Continue Watching focus from American Horror Story to Re:Zero played a shader
+transition and changed the edge from the horror pool (dithered static) to the
+anime pool (cel, ink strokes, speed lines). Details for both series show the
+series backdrop with the series' pool. Rapid traversal of a 19-episode season
+queued no transitions and the app did not crash. Neither series switched to an
+episode still: their stills did not reach 60% of the art width, so the series
+backdrop correctly remained; a still-substitution transition was not observed.
+The narrower text scrim leaves edge strokes behind the hero progress label.
+
+Not verified: frame times, the static fallback with animations disabled, GL
+failure fallback, OLED ground and physical TV hardware. During navigation My
+List was toggled on for one title by a mis-targeted key press and immediately
+toggled off; no other account state changed.
 
 # Native source HTTP errors and public torrent playback — 2026-10-07
 
