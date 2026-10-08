@@ -1,3 +1,32 @@
+# TV shader hero backdrop (TV-042) — 2026-10-07
+
+Branch `feat/hero-shader-backdrop` source `b9a9177` (origin/main
+`685f66c` merged) pins core `6882b6ae3e653e8f738a429d819fca400c9c93ee`, design
+`59a9e57e2ca96a59c4e2febace5325e01c9d012a` and gateway
+`698372df3734f6ec8019f70591b549280f47c28f`. Core, design and torrent artifact
+integrity checks pass. The 65 `assets/hero` shaders and catalog are imported by
+design-sync and pinned in `design-contract/lock.json`; the catalog has no
+`genreEdges`.
+
+Host checks pass 48 library and 301 app unit tests. `HeroMotionPolicyTest` calls
+the real native `heroEdgePool`: series and other Animation titles, a
+case-insensitive first pooled genre, the uncategorised pool, an empty pool
+showing `linear`, bag rounds without repeats, and a style shown from another
+category's bag. A first run failed when a title had no genres: the generated
+`HeroEdgePoolInput` codec omits the empty list and core rejects the input. The
+Android request now writes every field. All three core ABIs build, the normal
+APK assembles, and app lint passes against its baseline after a NewApi guard on
+`Bitmap.Config.HARDWARE`. The real APK probe verifies minSdk 24, three-ABI
+core/native/JNA contents, pinned checksums, notices, trust policy and 16 KiB ZIP
+alignment. The normal APK SHA-256 is
+`1008a902b46c6a6a00b1b3855281ada6681796ef327e1702f8e3f8815ea18c90`.
+
+On-screen verification is not done: the development backend was unreachable,
+so no APK was installed and no emulator, Home, Details or GL frame was observed.
+TV-042 acceptance remains pending, including geometry, transitions, edge pools,
+coalescing, episode stills, static fallbacks and frame times. No shared-emulator
+state or production service changed.
+
 # Native source HTTP errors and public torrent playback — 2026-10-07
 
 The native control HTTP regression reproduces a real backend
