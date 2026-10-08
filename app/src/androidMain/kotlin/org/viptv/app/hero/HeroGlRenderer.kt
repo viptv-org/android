@@ -1,11 +1,8 @@
 package org.viptv.app.hero
 
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
 import android.graphics.SurfaceTexture
-import android.graphics.Typeface
 import android.opengl.EGL14
 import android.opengl.EGLConfig
 import android.opengl.EGLContext
@@ -37,8 +34,8 @@ import kotlin.random.Random
  *  3. the edge pass dissolves the scene into that ambient fill inside the art
  *     rectangle (top-right). While the edge style changes, the incoming style
  *     is blended over the outgoing one through a noise wipe.
- * Requests that arrive mid-transition are coalesced; only the latest plays next,
- * with its edge change, once the running transition completes.
+ * A change that arrives mid-transition starts at once from the frame on screen,
+ * and changes closer together than [BROWSE_MS] use the quick baseline dissolve.
  * Every public method may be called from the main thread.
  */
 internal class HeroGlRenderer(
@@ -65,7 +62,6 @@ internal class HeroGlRenderer(
     private var quad = 0
     private var fbo = 0
     private var scene = 0
-    private var glyphs = 0
     private val programs = HashMap<String, Program?>()
     private val warmQueue = ArrayDeque<String>()
     private var current: Slide? = null
@@ -110,20 +106,21 @@ internal class HeroGlRenderer(
             }
             val slide = upload(bitmap) ?: return@post
             val shown = current
-            when {
+            val now = SystemClock.uptimeMillis()
+            val browsing = now - lastChange < BROWSE_MS
+            lastChange = now
+            if (shown == null) {
                 // The first art appears without a transition or an edge wipe.
-                shown == null -> { current = slide; edgeA = edgeId; edgeB = edgeId; edgeDuration = 0 }
-                anim != null -> {
-                    // Only the latest request waits; a superseded one never plays.
-                    pendingSlide?.let { GLES20.glDeleteTextures(1, intArrayOf(it.slide.tex), 0) }
-                    pendingSlide = Change(slide, spec, edgeId)
-                }
-                else -> start(shown, Change(slide, spec, edgeId))
+                current = slide; edgeA = edgeId; edgeB = edgeId; edgeDuration = 0
+                return@post
             }
+            // Browsing keeps changes calm; the catalog transition plays once focus rests.
+            val chosen = if (browsing) library.index.transitions.firstOrNull { it.id == HeroMotionPolicy.BASELINE_TRANSITION } ?: spec else spec
+            start(anim?.let(::interrupt) ?: shown, Change(slide, chosen, edgeId))
         }
     }
 
-    private var pendingSlide: Change? = null
+    private var lastChange = Long.MIN_VALUE / 2
 
     /** The latest art, re-uploaded when the surface is recreated (e.g. returning from background). */
     @Volatile private var lastBitmap: Bitmap? = null
@@ -211,7 +208,6 @@ internal class HeroGlRenderer(
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, quad)
         GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, 8 * 4, data, GLES20.GL_STATIC_DRAW)
         GLES20.glGenFramebuffers(1, ids, 0); fbo = ids[0]
-        glyphs = glyphTexture()
         if (artW > 0) allocateScene()
     }
 
@@ -249,23 +245,6 @@ internal class HeroGlRenderer(
         Slide(texture(bitmap, mips), bitmap.width, bitmap.height, SystemClock.uptimeMillis(), cos(a).toFloat(), sin(a).toFloat())
     }.onFailure { Log.w(TAG, "Hero art upload failed", it) }.getOrNull()
 
-    /** Glyph strip for the ASCII and glyph-rain edges, drawn upside down to match GL's v axis. */
-    private fun glyphTexture(): Int {
-        val chars = " .`:-=+*%#&@"
-        val cw = 28; val ch = 48
-        val bmp = Bitmap.createBitmap(cw * chars.length, ch, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bmp)
-        canvas.drawColor(Color.BLACK)
-        canvas.scale(1f, -1f, 0f, ch / 2f)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE; textSize = ch * 0.82f; textAlign = Paint.Align.CENTER
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        }
-        val baseline = ch / 2f - (paint.descent() + paint.ascent()) / 2f
-        chars.forEachIndexed { i, c -> canvas.drawText(c.toString(), i * cw + cw / 2f, baseline, paint) }
-        return texture(bmp, false).also { bmp.recycle() }
-    }
-
     private fun setEdgeOnGl(id: String, duration: Long) {
         val now = SystemClock.uptimeMillis()
         // A wipe that is running, or finished but not yet folded by a frame, leaves its incoming style as the base.
@@ -274,6 +253,54 @@ internal class HeroGlRenderer(
         edgeStart = now
         edgeDuration = if (id == edgeA) 0 else duration
     }
+
+    /**
+     * Freezes the frame on screen as a slide so an interrupting change starts from
+     * exactly what is visible; the interrupted transition's art is released.
+     */
+    private fun interrupt(a: Anim): Slide {
+        anim = null
+        val frozen = snapshot()
+        if (frozen == null) {
+            GLES20.glDeleteTextures(1, intArrayOf(a.from.tex), 0)
+            current = a.to
+            return a.to
+        }
+        GLES20.glDeleteTextures(2, intArrayOf(a.from.tex, a.to.tex), 0)
+        current = frozen
+        return frozen
+    }
+
+    /**
+     * Copies the scene through the baseline program at rest, which flips it to the
+     * uploaded-art orientation. Without drift or age, the copy maps 1:1.
+     */
+    private fun snapshot(): Slide? = runCatching {
+        val fx = program("fx:${HeroMotionPolicy.BASELINE_TRANSITION}") ?: return null
+        if (scene == 0 || artW == 0) return null
+        val ids = IntArray(1)
+        GLES20.glGenTextures(1, ids, 0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, ids[0])
+        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, artW, artH, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null)
+        params(false)
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fbo)
+        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0, GLES20.GL_TEXTURE_2D, ids[0], 0)
+        GLES20.glViewport(0, 0, artW, artH)
+        use(fx)
+        bind(0, scene, fx["uFrom"]); bind(1, scene, fx["uTo"])
+        GLES20.glUniform2f(fx["uRes"], artW.toFloat(), artH.toFloat())
+        GLES20.glUniform2f(fx["uFromSize"], artW.toFloat(), artH.toFloat())
+        GLES20.glUniform2f(fx["uToSize"], artW.toFloat(), artH.toFloat())
+        GLES20.glUniform2f(fx["uFromDrift"], 0f, 0f)
+        GLES20.glUniform2f(fx["uToDrift"], 0f, 0f)
+        GLES20.glUniform1f(fx["uFromT"], 0f)
+        GLES20.glUniform1f(fx["uToT"], 0f)
+        GLES20.glUniform1f(fx["uProgress"], 1f)
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0, GLES20.GL_TEXTURE_2D, scene, 0)
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+        Slide(ids[0], artW, artH, SystemClock.uptimeMillis(), 0f, 0f)
+    }.onFailure { Log.w(TAG, "Hero frame snapshot failed", it) }.getOrNull()
 
     private fun start(from: Slide, change: Change) {
         val duration = (change.spec.duration * 1000).toLong()
@@ -349,7 +376,6 @@ internal class HeroGlRenderer(
                 current = a.to
                 anim = null
                 from = a.to; to = a.to; spec = null
-                pendingSlide?.let { next -> pendingSlide = null; start(a.to, next) }
             }
         }
         val t = (now - t0) / 1000f
@@ -359,7 +385,7 @@ internal class HeroGlRenderer(
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fbo)
         GLES20.glViewport(0, 0, artW, artH)
         use(fx)
-        bind(0, from.tex, fx["uFrom"]); bind(1, to.tex, fx["uTo"]); bind(2, glyphs, fx["uGlyphs"])
+        bind(0, from.tex, fx["uFrom"]); bind(1, to.tex, fx["uTo"])
         GLES20.glUniform2f(fx["uRes"], artW.toFloat(), artH.toFloat())
         GLES20.glUniform2f(fx["uFromSize"], from.w.toFloat(), from.h.toFloat())
         GLES20.glUniform2f(fx["uToSize"], to.w.toFloat(), to.h.toFloat())
@@ -403,7 +429,7 @@ internal class HeroGlRenderer(
 
     private fun edgeUniforms(p: Program, t: Float, morph: Float) {
         use(p)
-        bind(0, scene, p["uScene"]); bind(1, glyphs, p["uGlyphs"])
+        bind(0, scene, p["uScene"])
         GLES20.glUniform2f(p["uRes"], artW.toFloat(), artH.toFloat())
         GLES20.glUniform2f(p["uFocus"], FOCUS_X, FOCUS_Y)
         GLES20.glUniform1f(p["uTime"], t)
@@ -433,12 +459,12 @@ internal class HeroGlRenderer(
         if (surface != EGL14.EGL_NO_SURFACE && context != EGL14.EGL_NO_CONTEXT) {
             EGL14.eglMakeCurrent(display, surface, surface, context)
             programs.values.filterNotNull().forEach { GLES20.glDeleteProgram(it.id) }
-            val textures = listOfNotNull(current?.tex, anim?.from?.tex, anim?.to?.tex, pendingSlide?.slide?.tex, scene.takeIf { it != 0 }, glyphs.takeIf { it != 0 })
+            val textures = listOfNotNull(current?.tex, anim?.from?.tex, anim?.to?.tex, scene.takeIf { it != 0 })
             if (textures.isNotEmpty()) GLES20.glDeleteTextures(textures.size, textures.toIntArray(), 0)
             if (fbo != 0) GLES20.glDeleteFramebuffers(1, intArrayOf(fbo), 0)
             if (quad != 0) GLES20.glDeleteBuffers(1, intArrayOf(quad), 0)
         }
-        programs.clear(); current = null; anim = null; pendingSlide = null; scene = 0; glyphs = 0; fbo = 0; quad = 0
+        programs.clear(); current = null; anim = null; scene = 0; fbo = 0; quad = 0
         edgeA = edgeB; edgeDuration = 0
         EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
         if (surface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, surface)
@@ -451,8 +477,10 @@ internal class HeroGlRenderer(
         const val TAG = "HeroGlRenderer"
         const val FOCUS_X = 0.62f
         const val FOCUS_Y = 0.55f
-        val TRANSITION_UNIFORMS = listOf("uFrom", "uTo", "uGlyphs", "uRes", "uFromSize", "uToSize", "uFromDrift", "uToDrift",
+        /** Changes closer together than this are browsing and use the baseline dissolve. */
+        const val BROWSE_MS = 450L
+        val TRANSITION_UNIFORMS = listOf("uFrom", "uTo", "uRes", "uFromSize", "uToSize", "uFromDrift", "uToDrift",
             "uFocus", "uProgress", "uTime", "uFromT", "uToT", "uDpr")
-        val EDGE_UNIFORMS = listOf("uScene", "uGlyphs", "uRes", "uFocus", "uTime", "uDpr", "uMorph", "uGround", "uView", "uOrigin")
+        val EDGE_UNIFORMS = listOf("uScene", "uRes", "uFocus", "uTime", "uDpr", "uMorph", "uGround", "uView", "uOrigin")
     }
 }

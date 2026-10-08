@@ -136,6 +136,7 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
     val rail = remember { FocusRequester() }
     val initial = remember(key) { FocusRequester() }
     val focusMemory = remember(key) { FocusMemory() }
+    val entrance = rememberScreenEntrance(route, key)
     var railOpen by remember { mutableStateOf(false) }
     val keyboardVisible = WindowInsets.isImeVisible
     val modalVisible = state.dialog != null || state.pinPrompt != null
@@ -153,7 +154,7 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
         Box(Modifier.fillMaxSize()) {
             val insets = if (tv || route is Route.Player || route is Route.Details) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
             saved.SaveableStateProvider(key) {
-                Box(Modifier.fillMaxSize().then(insets)) {
+                Box(Modifier.fillMaxSize().then(insets).screenEntrance(entrance, vertical = tv)) {
                     when (route) {
                         Route.Pairing -> Pairing(state, controller, model)
                         Route.Profiles -> ProfileChooser(state, controller)

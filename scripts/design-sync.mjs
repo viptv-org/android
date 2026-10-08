@@ -49,6 +49,10 @@ if (mode === 'sync') {
     const bytes = readFileSync(resolve(temporary, 'android', path));
     write(path, bytes); files[path] = { source: 'generated from pinned tokens', sha256: hash(bytes) };
   } finally { rmSync(temporary, { recursive: true, force: true }); }
+  // Remove artifacts the previous pin imported that this revision no longer provides.
+  const lockPath = resolve(root, 'design-contract/lock.json');
+  const previous = existsSync(lockPath) ? JSON.parse(readFileSync(lockPath, 'utf8')).files ?? {} : {};
+  for (const path of Object.keys(previous)) if (!files[path]) rmSync(resolve(root, path), { force: true });
   write('DESIGN_REF', revision + '\n');
   write('design-contract/lock.json', JSON.stringify({ repository: 'viptv-org/design', revision, files }, null, 2) + '\n');
 } else if (mode === 'check') {

@@ -285,10 +285,12 @@ top-left:
   not cropped; other aspect ratios are cover-fitted about the centre.
 - Edge fade: inside the art box, the art dissolves into the ambient fill along
   its left and bottom edges; its top and right edges meet the backdrop edge. The
-  mask rises from x 666 to x 1024 (2–30% of the art width) and from y 706 up to
-  y 533 (2–26% of the art height), joined by a rounded corner. The selected edge
-  style shapes this band. The `linear` baseline is a straight ramp over
-  x 640–1075 and y 720–446.
+  selected edge style shapes the left band, which rises from x 666 to x 1024
+  (2–30% of the art width) and always reaches the ground softly within x 640–768.
+  The bottom fades plainly for every style, from ground at y 720 to full art at
+  y 418 (42% of the art height), so no style draws a horizontal seam above the
+  shelves. The `linear` baseline is a straight ramp over x 640–1075 and
+  y 720–446.
 - Text scrim, full backdrop, left to right: ground at x 0, ground at 0.9 opacity
   at 22% (x 422), 0.35 at 40% (x 768), transparent at 52% (x 998). It clears
   before the art's fade band ends and leaves the subject undimmed.
@@ -302,9 +304,11 @@ Motion and selection:
   pans along a direction chosen at random for that art by at most half the zoom
   margin, so the art's own edge never enters the box. Both arts keep drifting
   during a transition.
-- Transition: every hero change plays one transition from the catalog for that
-  entry's `duration` (1.8–3.6 s). The `fade` crossfade is the baseline and is
-  never drawn. The first art a backdrop shows appears without a transition;
+- Transition: a hero change plays one transition from the catalog for that
+  entry's `duration` (0.75–0.9 s). Every transition front-loads its motion: the
+  incoming art leads within the first third of the duration and the rest is
+  settling. The `fade` dissolve (0.4 s) is the baseline and is never drawn into
+  the rotation. The first art a backdrop shows appears without a transition;
   unchanged art never transitions. A hero change on Home is a new hero title; on
   Details it is a different episode still or the return to the series art.
 - Edge style: every hero change draws an edge style from the title's category
@@ -314,9 +318,12 @@ Motion and selection:
   category. A bag holds each pool member once in random order and refills only
   when empty. A draw never returns the style currently shown while another pool
   member exists.
-- Coalescing: a change that arrives during a transition waits. Only the latest
-  waiting change plays, after the running transition completes; superseded art
-  never appears.
+- Interruption: a change that arrives during a transition starts at once. The
+  frame on screen becomes the outgoing art, so motion never jumps and nothing
+  waits; superseded art never completes.
+- Browsing: a change that arrives within 450 ms of the previous change plays the
+  `fade` dissolve instead of a catalog transition, keeping fast focus movement
+  calm. The catalog transition plays once focus rests.
 - Frame rate: transitions and edge wipes render every display frame. At rest,
   drift and animated edge styles render every second frame to leave headroom for
   focus motion.
@@ -371,7 +378,8 @@ backdrop and measure the uncropped art box, ambient extent, both scrims and the
 edge band. Move through more than 15 hero titles: each change plays a non-crossfade
 transition, no transition repeats before the bag empties, and no consecutive edge
 style repeats where the pool has two or more. Change heroes faster than a
-transition and confirm only the latest plays. Scroll to the shelves and back; the
+transition and confirm each change starts at once from the frame on screen and
+rapid changes dissolve. Scroll to the shelves and back; the
 backdrop scrolls with the hero and the full hero returns. Compare edge pools for an
 Animation movie, an Animation series, Horror + Drama, a genre without a pool
 followed by a pooled genre, and no genres against Core `hero_edge_pool`. On series

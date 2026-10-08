@@ -2,13 +2,13 @@
 
 GLSL ES 1.00 fragment sources for the TV hero backdrop specified by
 [TV-042](../../docs/platforms/TV_POLISH.md#tv-042--shader-hero-backdrop), consumed
-by Android TV (OpenGL ES 2/3) only. Copied byte-exactly from `viptv-org/android`
-`app/src/androidMain/assets/hero/` at
-`683904d63fc86eb0482bfc10892cb93dda2a374d`, except `index.json`, which carries
-only the `transitions` and `edges` catalogs. The genre-to-edge pools are product
-policy owned by shared Core (`hero_edge_pool`), not by this asset or by clients.
-The sources were written for VIPTV in that commit; no third-party shader source
-is recorded.
+by Android TV (OpenGL ES 2/3) only. The edge styles are a curated subset of
+those first written for VIPTV in `viptv-org/android`
+`683904d63fc86eb0482bfc10892cb93dda2a374d`; the transitions are written here for
+short, front-loaded and interruptible motion. `index.json` carries only the
+`transitions` and `edges` catalogs. The genre-to-edge pools are product policy
+owned by shared Core (`hero_edge_pool`), not by this asset or by clients. No
+third-party shader source is recorded.
 
 ## Catalog
 
@@ -64,7 +64,6 @@ All sizes are in output pixels; coordinates follow GL (origin bottom-left).
 | `uFromT`, `uToT` | transition | Seconds since each art was uploaded (drift clock) |
 | `uProgress` | transition | 0–1 over the transition's `duration`; 1 at rest |
 | `uScene` | edge, ambient | The scene texture from pass 1 |
-| `uGlyphs` | all | Glyph strip, below |
 | `uRes` | all | Art rectangle size (1280×720 logical) |
 | `uView` | edge, ambient | Backdrop size (1920×950 logical) |
 | `uOrigin` | edge, ambient | Art rectangle origin within the backdrop: `(uView.x - uRes.x, uView.y - uRes.y)` |
@@ -73,10 +72,6 @@ All sizes are in output pixels; coordinates follow GL (origin bottom-left).
 | `uDpr` | all | Output pixels per logical pixel (`uRes.x / 1280`) |
 | `uMorph` | edge, ambient | `-1` when the edge is not changing, otherwise 0–1 |
 | `uGround` | edge, ambient | Page ground RGB, 0–1 |
-
-The glyph strip is 12 cells of 28×48 px, characters `` .`:-=+*%#&@`` (the first
-is a space), white bold monospace at 0.82 of the cell height on black, drawn
-upside down to match GL's v axis.
 
 ## Blur and mipmaps
 

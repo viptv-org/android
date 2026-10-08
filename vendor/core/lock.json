@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/core",
-  "revision": "dac4841e618f246f2e83e5bc96a3b210553092d5",
+  "revision": "30789432121f54348d705460c0fa29495795295c",
   "files": {
     "Cargo.lock": "f69654cd47b20d98dce64ecfa3ad995e61a4e355510af0046e7377373b348654",
     "Cargo.toml": "aaadafb7d7043ae4788352e5784c05398c9020647acea903cc0940a158a77845",
@@ -39,7 +39,7 @@
     "crates/viptv-core/src/native_torrent.rs": "dfbf961bbbf92c4be7d3e64e4e990e598141edecd7de8996c9ea1f05cf7786e5",
     "crates/viptv-core/src/native_torrent_policy.rs": "2af4027b6d94fca1f974817289548ac73e971253ceaa50ca92e8d4f2065ce0cb",
     "crates/viptv-core/src/policy/catalog.rs": "15a6644cd569b6322f31f735d9d10ce3f1380b604d720f6b0180f5c9055d00f5",
-    "crates/viptv-core/src/policy/hero.rs": "17de233c2a0d876fd056b3d151b444272e45fc8987056e3f916388272101109f",
+    "crates/viptv-core/src/policy/hero.rs": "412bcceaa45136b36dc9af91e63d436b4fa9189e8b3f6b17cc125ea31a6ae117",
     "crates/viptv-core/src/policy/mod.rs": "c7636e8008bcab69df3f41086505292cf5ccb62befe9e603e9aa03823fc0a628",
     "crates/viptv-core/src/policy/playback_control.rs": "288ce053629384e58cf5001bca9fd147af88d980ec5b2c622f95875c43eeb412",
     "crates/viptv-core/src/policy/presentation.rs": "01508ea3a446ab77e558f04bf2727f08b565e7bdbaaaf914c259eeb57048c942",
@@ -83,7 +83,7 @@
     "generated/kotlin/org/viptv/core/types/Types.kt": "2488dd9087feee5813943cdb25199568e5e4fc83eb839100335263538ac02531",
     "generated/native-kotlin/uniffi/viptv_core/viptv_core.kt": "a33698a2481ec93e9e7160d84ee8244bb45b984441c36e87cfc86c3579d3af3e",
     "tests/bridge-vectors.json": "7ad453fa12aa772fb6eeaf53543a513100891c9b6c74f78723f88088b19fcfa5",
-    "tests/hero-edge-pool-vectors.json": "3f12c883aebbbfd2221b92346c99de1565f399852f065f0cd3f333c29f44dcfe",
+    "tests/hero-edge-pool-vectors.json": "ae2e2390664d943c5407f10261297637e930be9a37c661174d8e4061c0e148ae",
     "tests/native-torrent-vectors.json": "e3bf3278b105e5f9e1393fdc78df580c76f7ce65544b1c193bf099d481600bfa",
     "tests/playback-error-vectors.json": "0e91eb5553dec4a7f27305583e47548ac6210ad6c3081f6ac18a98837be0eb71",
     "tests/playback-protocol-vectors.json": "ef20faa68d81065ddbeece9ec8faeb6a1993ae7f6e60f69a6ef2612f974a2bc7"

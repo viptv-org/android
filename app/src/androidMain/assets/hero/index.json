@@ -2,78 +2,38 @@
  "transitions": [
   {
    "id": "fade",
-   "name": "Crossfade",
-   "duration": 1.6
+   "name": "Dissolve",
+   "duration": 0.4
   },
   {
-   "id": "iris",
-   "name": "Blur iris",
-   "duration": 2.8
+   "id": "focus",
+   "name": "Rack focus",
+   "duration": 0.8
   },
   {
-   "id": "wave",
-   "name": "Tidal wave",
-   "duration": 3
+   "id": "push",
+   "name": "Parallax push",
+   "duration": 0.75
   },
   {
-   "id": "drip",
-   "name": "Melt drip",
-   "duration": 3.2
+   "id": "sweep",
+   "name": "Light sweep",
+   "duration": 0.8
   },
   {
-   "id": "dither",
-   "name": "Ordered dither",
-   "duration": 3
+   "id": "bloom",
+   "name": "Bloom",
+   "duration": 0.85
   },
   {
-   "id": "ascii",
-   "name": "ASCII decode",
-   "duration": 3.6
-  },
-  {
-   "id": "ink",
-   "name": "Ink bloom",
-   "duration": 3
-  },
-  {
-   "id": "halftone",
-   "name": "Halftone bloom",
-   "duration": 2.8
+   "id": "develop",
+   "name": "Develop",
+   "duration": 0.9
   },
   {
    "id": "liquid",
-   "name": "Liquid warp",
-   "duration": 3
-  },
-  {
-   "id": "leak",
-   "name": "Light leak",
-   "duration": 2.8
-  },
-  {
-   "id": "mosaic",
-   "name": "Mosaic",
-   "duration": 2.4
-  },
-  {
-   "id": "glitch",
-   "name": "Signal glitch",
-   "duration": 1.8
-  },
-  {
-   "id": "shutters",
-   "name": "Staggered shutters",
-   "duration": 2.6
-  },
-  {
-   "id": "warp",
-   "name": "Warp zoom",
-   "duration": 2.2
-  },
-  {
-   "id": "pixelsort",
-   "name": "Pixel sort",
-   "duration": 2.8
+   "name": "Liquid",
+   "duration": 0.85
   }
  ],
  "edges": [
@@ -90,56 +50,16 @@
    "name": "Smoke"
   },
   {
-   "id": "dither",
-   "name": "Dither"
-  },
-  {
-   "id": "ascii",
-   "name": "ASCII"
-  },
-  {
-   "id": "halftone",
-   "name": "Halftone"
-  },
-  {
-   "id": "scan",
-   "name": "Scanlines"
-  },
-  {
-   "id": "pixel",
-   "name": "Pixel steps"
-  },
-  {
-   "id": "burn",
-   "name": "Burnt paper"
-  },
-  {
-   "id": "shatter",
-   "name": "Shattered glass"
-  },
-  {
-   "id": "rain",
-   "name": "Glyph rain"
-  },
-  {
-   "id": "prism",
-   "name": "Prism"
+   "id": "fog",
+   "name": "Fog bank"
   },
   {
    "id": "brush",
    "name": "Dry brush"
   },
   {
-   "id": "contour",
-   "name": "Topographic"
-  },
-  {
-   "id": "hex",
-   "name": "Hex tiles"
-  },
-  {
-   "id": "ripple",
-   "name": "Ripple"
+   "id": "watercolor",
+   "name": "Watercolour"
   },
   {
    "id": "streak",
@@ -150,112 +70,16 @@
    "name": "Stipple"
   },
   {
-   "id": "phosphor",
-   "name": "Phosphor"
-  },
-  {
-   "id": "blueprint",
-   "name": "Blueprint grid"
-  },
-  {
-   "id": "noir",
-   "name": "Noir blinds"
-  },
-  {
    "id": "oldfilm",
    "name": "Old film"
-  },
-  {
-   "id": "blood",
-   "name": "Blood drip"
-  },
-  {
-   "id": "static",
-   "name": "TV static"
-  },
-  {
-   "id": "hologram",
-   "name": "Hologram"
-  },
-  {
-   "id": "circuit",
-   "name": "Circuit traces"
-  },
-  {
-   "id": "speedlines",
-   "name": "Speed lines"
-  },
-  {
-   "id": "cel",
-   "name": "Anime cel"
-  },
-  {
-   "id": "watercolor",
-   "name": "Watercolour"
-  },
-  {
-   "id": "bokeh",
-   "name": "Bokeh"
-  },
-  {
-   "id": "confetti",
-   "name": "Confetti"
-  },
-  {
-   "id": "sparkle",
-   "name": "Fairy dust"
-  },
-  {
-   "id": "aurora",
-   "name": "Aurora"
-  },
-  {
-   "id": "fog",
-   "name": "Fog bank"
-  },
-  {
-   "id": "dust",
-   "name": "Dust storm"
-  },
-  {
-   "id": "newsprint",
-   "name": "Newsprint"
-  },
-  {
-   "id": "equalizer",
-   "name": "Equalizer"
   },
   {
    "id": "embers",
    "name": "Rising embers"
   },
   {
-   "id": "redacted",
-   "name": "Redacted"
-  },
-  {
-   "id": "petals",
-   "name": "Sakura petals"
-  },
-  {
-   "id": "frost",
-   "name": "Frost"
-  },
-  {
    "id": "heat",
    "name": "Heat haze"
-  },
-  {
-   "id": "thermal",
-   "name": "Thermal"
-  },
-  {
-   "id": "stained",
-   "name": "Stained glass"
-  },
-  {
-   "id": "crosshatch",
-   "name": "Crosshatch"
   }
  ]
 }

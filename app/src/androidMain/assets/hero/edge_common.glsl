@@ -1,6 +1,6 @@
 precision highp float;
 varying vec2 vUv;
-uniform sampler2D uScene, uGlyphs;
+uniform sampler2D uScene;
 uniform vec2 uRes, uFocus;
 uniform float uTime, uDpr, uMorph;
 uniform vec3 uGround;
@@ -37,37 +37,15 @@ vec3 ambient(vec2 viewUv) {
   }
   return mix(uGround, acc / 7.0, 0.6);
 }
-float eb2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
-float eb4(vec2 a) { return eb2(0.5 * a) * 0.25 + eb2(a); }
-float eb8(vec2 a) { return eb4(0.5 * a) * 0.25 + eb2(a); }
 float edgeMask(vec2 uv) {
   float ax = smoothstep(0.02, 0.30, uv.x), ay = smoothstep(0.02, 0.26, uv.y);
   float m = 1.0 - clamp(length(vec2(1.0 - ax, 1.0 - ay)), 0.0, 1.0);
   return m * m * (3.0 - 2.0 * m);
 }
+// Left fade band only: styles shape the edge beside the copy, while the bottom
+// always fades plainly into the shelves (see edge_main).
+float leftMask(vec2 uv) { float ax = smoothstep(0.02, 0.30, uv.x); return ax * ax * (3.0 - 2.0 * ax); }
 // Hard stop at the canvas border so effects that spill never show a seam.
 float border(vec2 uv) { return smoothstep(0.0, 0.08, uv.x) * smoothstep(0.0, 0.06, uv.y); }
 // Zone weight: strongest in the fade band, zero deep inside and at the border.
 float zone(vec2 uv, float m) { return (1.0 - smoothstep(0.55, 0.95, m)) * border(uv); }
-vec2 hexCenter(vec2 p) {
-  vec2 r = vec2(1.0, 1.7320508), h = r * 0.5;
-  vec2 a = mod(p, r) - h, b = mod(p - h, r) - h;
-  return dot(a, a) < dot(b, b) ? p - a : p - b;
-}
-float hexDist(vec2 q) { q = abs(q); return max(dot(q, vec2(0.5, 0.8660254)), q.x); }
-// Voronoi: returns (seam distance, cell point xy); cid = cell id.
-vec3 voro(vec2 p, out vec2 cid) {
-  vec2 ip = floor(p), fp = fract(p);
-  float md = 8.0, md2 = 8.0; vec2 cpos = vec2(0.0); cid = vec2(0.0);
-  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
-    vec2 g = vec2(float(x), float(y));
-    vec2 o = vec2(hash(ip + g), hash(ip + g + 7.3));
-    vec2 r = g + o - fp;
-    float d = dot(r, r);
-    if (d < md) { md2 = md; md = d; cid = ip + g; cpos = ip + g + o; }
-    else if (d < md2) { md2 = d; }
-  }
-  return vec3(sqrt(md2) - sqrt(md), cpos);
-}
-mat2 rot2(float a) { return mat2(cos(a), -sin(a), sin(a), cos(a)); }
-vec3 pal(float t) { return 0.5 + 0.5 * cos(6.2832 * (t + vec3(0.0, 0.33, 0.67))); }

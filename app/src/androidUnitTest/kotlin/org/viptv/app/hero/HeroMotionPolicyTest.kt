@@ -59,7 +59,7 @@ class HeroMotionPolicyTest {
 
     @Test fun anEdgeShownFromAnotherCategoryIsNotRepeatedByTheLastBagMember() {
         val policy = HeroMotionPolicy(library.index, Random(5))
-        val pair = HeroEdgePool("Pair", listOf("noir", "fog"))
+        val pair = HeroEdgePool("Pair", listOf("smoke", "fog"))
         val first = policy.nextEdge(pair, null)
         val remaining = pair.edges.single { it != first }
         assertEquals(first, policy.nextEdge(pair, remaining))

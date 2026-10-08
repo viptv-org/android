@@ -1,10 +1,8 @@
 package org.viptv.app.hero
 
-import android.animation.ValueAnimator
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.os.Build
-import android.provider.Settings
 import android.view.TextureView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -36,6 +34,7 @@ import org.viptv.app.CoreModels
 import org.viptv.app.HeroBackdrop
 import org.viptv.app.LocalGround
 import org.viptv.app.Media
+import org.viptv.app.systemAnimationsEnabled
 import org.viptv.app.SharedPresentation
 
 /**
@@ -50,10 +49,7 @@ import org.viptv.app.SharedPresentation
 @Composable internal fun ShaderHeroBackdrop(media: Media, focusImage: String? = null) {
     val context = LocalContext.current
     var unavailable by remember { mutableStateOf(false) }
-    val motion = remember(context) {
-        val scale = Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
-        scale > 0f && (Build.VERSION.SDK_INT < 26 || ValueAnimator.areAnimatorsEnabled())
-    }
+    val motion = remember(context) { systemAnimationsEnabled(context) }
     if (!motion || unavailable) {
         HeroBackdrop(media)
         return
