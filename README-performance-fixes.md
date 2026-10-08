@@ -54,13 +54,18 @@ uses an isolated worktree so its owner's existing edits remain untouched.
   from 5.58 seconds to 0.79–0.91 seconds. CI packages this development variant.
 - [x] Install the owner's supplied plain Torrentio addon. It is enabled and
   returns 59 torrent sources; existing Torbox/provider configuration is retained.
-- [ ] Enable the compatible native-torrent server path. A real selected
-  x264/DTS torrent fails at server admission with HTTP 409 before Media3 opens.
-  The running October 4 backend returns 404 for the native protocol endpoint.
-  The compatible candidate d9ca1fc passes 281 backend tests and serves protocol
-  v1 with native version 1 over trusted local HTTPS. The complete candidate image
-  is built, health checked, and verified with copied data. Production replacement
-  requires the explicit approval documented in backend/DEPLOYMENT.md; approval is pending.
+- [x] Enable the compatible native-torrent server path. The October 4 server
+  refused the selected native source before Media3 opened. Following explicit
+  owner approval, candidate d9ca1fc is deployed and healthy. Authenticated public
+  HTTPS now returns protocol v1 with native version 1. All 90 existing tables
+  match the stopped-writer preservation snapshot. Physical public-swarm startup
+  acceptance remains part of the unchecked playback-startup item.
+  On the physical TV, admission takes 961–1,036 ms; two actual app attempts
+  then reach the 30-second peer-metadata deadline before Media3. A separate
+  same-library TV probe obtains exact DTS metadata in 23.05 seconds and joins
+  cancellation successfully; a host probe takes 2.66 seconds. Both pinned DHT
+  bootstrap nodes respond from the actual app in 131–144 ms. Native cold peer
+  discovery is therefore still under investigation, not accepted as fixed.
 - [x] Validate the implemented Android changes: Android unit checks, core native/WASM checks,
   APK assembly/lint/integrity, actual TV playback/focus/frame measurements and
   device behavior. Android passes 49 library/296 app unit tests, source/Home
@@ -75,10 +80,10 @@ artifacts directory. No stream URLs, provider credentials or tokens belong in
 this file. Emulator results do not establish physical TV playback or performance.
 One fast cached provider response does not establish cold-provider latency.
 
-## Production candidate awaiting approval
+## Approved production deployment — 2026-10-08
 
-The live backend is based on `0d5bc32` (October 4), before the native-torrent API.
-The candidate source is `d9ca1fc27b6f4fed5bd75d68ede4143aeef62085`, with the matching
+The previous backend was based on `0d5bc32` (October 4), before the native-torrent API.
+The deployed source is `d9ca1fc27b6f4fed5bd75d68ede4143aeef62085`, with the matching
 TV-web core consumer pin. Image digest:
 `sha256:fb04756e32c6da83bcca5ed75215b6ba61ce10a6312c3b822455263060106350`.
 An isolated image serves health and its packaged dashboard. Authenticated local
@@ -87,9 +92,16 @@ HTTPS returns protocol version 1 and `native_torrent_versions: [1]`.
 The copied database comparison checks 90 existing tables. Account/profile/history,
 source configuration and other protected values remain intact. Four operational
 auth/refresh tables change during isolated startup/authentication; no production
-database was changed by this qualification. Rollout must take a fresh consistent
-backup, preserve the private keyring/configuration and current rollback image,
-and verify the new native endpoint plus actual device playback afterwards.
+database was changed by this qualification. The approved rollout took fresh consistent online and stopped-writer backups,
+retained the exact old image/container and private environment/keyring, and
+reused the existing data volume. The replacement became ready in 1.63 seconds.
+All 90 existing tables match the stopped-writer snapshot afterwards. Public
+health, dashboard `index-CiF8XBO-.js`, `/tv/` and the watch API proxy respond
+successfully; unauthenticated native protocol requests return 401 and
+authenticated ones return v1/native `[1]`. Account, profiles, addons, history
+and Continue Watching are readable with the existing device session. The watch
+bundle and proxy configuration were preserved; its separate bundle was not
+updated by this backend-only rollout.
 
 Diagnostic playback accidentally continued while the server candidate was prepared.
 It is stopped, and the single test-affected Iron Man entry was corrected to its
