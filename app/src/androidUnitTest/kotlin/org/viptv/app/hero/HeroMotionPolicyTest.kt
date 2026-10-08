@@ -1,7 +1,10 @@
 package org.viptv.app.hero
 
 import org.viptv.app.SharedPresentation
+import org.viptv.core.wire.CoreJson
 import org.viptv.core.wire.HeroEdgePool
+import org.viptv.core.wire.HeroEdgePoolInput
+import uniffi.viptv_core.normalize
 import java.io.File
 import kotlin.random.Random
 import kotlin.test.Test
@@ -32,6 +35,17 @@ class HeroMotionPolicyTest {
         val uncategorised = pool("movie", "Unlisted")
         assertEquals(null, uncategorised.category)
         assertEquals(ids - HeroMotionPolicy.BASELINE_EDGE, uncategorised.edges.toSet())
+    }
+
+    @Test fun aTitleWithoutGenresGetsTheUncategorisedPool() {
+        val ids = library.index.edges.map { it.id }
+        val explicit = pool("series")
+        assertEquals(null, explicit.category)
+        assertEquals(ids.toSet() - HeroMotionPolicy.BASELINE_EDGE, explicit.edges.toSet())
+        // The generated codec omits the empty genres list; core treats the absent list as empty.
+        val generated: HeroEdgePool = CoreJson.decode(normalize("heroEdgePool", CoreJson.encode(HeroEdgePoolInput("series", emptyList(), ids)), ""))
+        assertEquals(explicit, generated)
+        assertTrue(HeroMotionPolicy(library.index, Random(2)).nextEdge(explicit, null) in explicit.edges)
     }
 
     @Test fun categoryBagPlaysEveryPoolEdgeBeforeRepeatingAndNeverRepeatsTheCurrentEdge() {

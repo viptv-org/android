@@ -23,7 +23,7 @@ internal object SharedPresentation {
 
     /**
      * TV hero backdrop category and edge pool for a title, restricted to the edge ids the renderer ships.
-     * Every field is written explicitly: core requires both lists, and the generated input's codec omits empty defaults.
+     * Every field is written explicitly rather than relying on core's defaults for lists the generated codec omits when empty.
      */
     fun heroEdgePool(mediaType: String, genres: List<String>, availableEdges: List<String>): HeroEdgePool = project("heroEdgePool",
         JSONObject().put("mediaType", mediaType).put("genres", JSONArray(genres)).put("availableEdges", JSONArray(availableEdges)))

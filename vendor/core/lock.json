@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/core",
-  "revision": "6882b6ae3e653e8f738a429d819fca400c9c93ee",
+  "revision": "dac4841e618f246f2e83e5bc96a3b210553092d5",
   "files": {
     "Cargo.lock": "f69654cd47b20d98dce64ecfa3ad995e61a4e355510af0046e7377373b348654",
     "Cargo.toml": "aaadafb7d7043ae4788352e5784c05398c9020647acea903cc0940a158a77845",
@@ -39,7 +39,7 @@
     "crates/viptv-core/src/native_torrent.rs": "dfbf961bbbf92c4be7d3e64e4e990e598141edecd7de8996c9ea1f05cf7786e5",
     "crates/viptv-core/src/native_torrent_policy.rs": "2af4027b6d94fca1f974817289548ac73e971253ceaa50ca92e8d4f2065ce0cb",
     "crates/viptv-core/src/policy/catalog.rs": "15a6644cd569b6322f31f735d9d10ce3f1380b604d720f6b0180f5c9055d00f5",
-    "crates/viptv-core/src/policy/hero.rs": "66459d36a2b6dcb52c795304cfb64188abe29e7bd351658973a2690dbc4929e6",
+    "crates/viptv-core/src/policy/hero.rs": "17de233c2a0d876fd056b3d151b444272e45fc8987056e3f916388272101109f",
     "crates/viptv-core/src/policy/mod.rs": "c7636e8008bcab69df3f41086505292cf5ccb62befe9e603e9aa03823fc0a628",
     "crates/viptv-core/src/policy/playback_control.rs": "288ce053629384e58cf5001bca9fd147af88d980ec5b2c622f95875c43eeb412",
     "crates/viptv-core/src/policy/presentation.rs": "01508ea3a446ab77e558f04bf2727f08b565e7bdbaaaf914c259eeb57048c942",
@@ -58,7 +58,7 @@
     "crates/viptv-core/tests/common/native_torrent_vectors.rs": "e50f679f5aafaf92eeb945e9366531bb09ca896c096bda436217cc280c582555",
     "crates/viptv-core/tests/contract.rs": "ca4608792373343bc3e511bef7b64b880d677b2acbd0a8e01dcd37e870e88721",
     "crates/viptv-core/tests/detail_enrichment.rs": "e25e769b533f1fd3f7aa0485aa9aee8574e9d953fc6b8c2cc5d79f43654aca6a",
-    "crates/viptv-core/tests/hero_edge_pool.rs": "a102df2970a39793a8257e530d6cb4c4eff18f25612552ca4f93dceff577a735",
+    "crates/viptv-core/tests/hero_edge_pool.rs": "dddc9c3fdc7cf11b678425106ad512c78c4b41b964dfdb648cda2d63d8b4b44a",
     "crates/viptv-core/tests/history_refresh.rs": "96b9042945689ee64eb2c9a7c61822b2fc206e925736dca37745eb5158bff55b",
     "crates/viptv-core/tests/import_progress.rs": "bdb744cc18261392946361d7153e1576f5337f38c595694bc2d3a73f8b87db48",
     "crates/viptv-core/tests/live_v2.rs": "be01f984ded43894aeb4eb87be5b0e2c615d9995d6a8256e299fa1ee2f81bf6c",
@@ -80,10 +80,10 @@
     "crates/viptv-provider/src/normalize.rs": "d697b4f01d26dacf808767dbb23ca706ea582c7260f45f69fff49b5511902a12",
     "generated/kotlin-wire/Wire.kt": "d0f83931e63956f4a2bc99c3edd372681a34ca9f34eba58948039ba2e87f9a29",
     "generated/kotlin/build.gradle.kts": "7ab5aebab2a7f84b1150217762a7ff20bf5d974a9b5d31821ac22a9b10eb32fa",
-    "generated/kotlin/org/viptv/core/types/Types.kt": "d541ecc3ee82960d837df394f71f491997be745ee4bdcd8ddb6d8433a0b50c17",
+    "generated/kotlin/org/viptv/core/types/Types.kt": "2488dd9087feee5813943cdb25199568e5e4fc83eb839100335263538ac02531",
     "generated/native-kotlin/uniffi/viptv_core/viptv_core.kt": "a33698a2481ec93e9e7160d84ee8244bb45b984441c36e87cfc86c3579d3af3e",
     "tests/bridge-vectors.json": "7ad453fa12aa772fb6eeaf53543a513100891c9b6c74f78723f88088b19fcfa5",
-    "tests/hero-edge-pool-vectors.json": "fdf58bb0ed39c47f8125bfda579c8267e4312e0e164a4d1f26fb3f0048c90362",
+    "tests/hero-edge-pool-vectors.json": "3f12c883aebbbfd2221b92346c99de1565f399852f065f0cd3f333c29f44dcfe",
     "tests/native-torrent-vectors.json": "e3bf3278b105e5f9e1393fdc78df580c76f7ce65544b1c193bf099d481600bfa",
     "tests/playback-error-vectors.json": "0e91eb5553dec4a7f27305583e47548ac6210ad6c3081f6ac18a98837be0eb71",
     "tests/playback-protocol-vectors.json": "ef20faa68d81065ddbeece9ec8faeb6a1993ae7f6e60f69a6ef2612f974a2bc7"
