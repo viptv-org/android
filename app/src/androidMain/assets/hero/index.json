@@ -1,0 +1,410 @@
+{
+ "transitions": [
+  {
+   "id": "fade",
+   "name": "Crossfade",
+   "duration": 1.6
+  },
+  {
+   "id": "iris",
+   "name": "Blur iris",
+   "duration": 2.8
+  },
+  {
+   "id": "wave",
+   "name": "Tidal wave",
+   "duration": 3
+  },
+  {
+   "id": "drip",
+   "name": "Melt drip",
+   "duration": 3.2
+  },
+  {
+   "id": "dither",
+   "name": "Ordered dither",
+   "duration": 3
+  },
+  {
+   "id": "ascii",
+   "name": "ASCII decode",
+   "duration": 3.6
+  },
+  {
+   "id": "ink",
+   "name": "Ink bloom",
+   "duration": 3
+  },
+  {
+   "id": "halftone",
+   "name": "Halftone bloom",
+   "duration": 2.8
+  },
+  {
+   "id": "liquid",
+   "name": "Liquid warp",
+   "duration": 3
+  },
+  {
+   "id": "leak",
+   "name": "Light leak",
+   "duration": 2.8
+  },
+  {
+   "id": "mosaic",
+   "name": "Mosaic",
+   "duration": 2.4
+  },
+  {
+   "id": "glitch",
+   "name": "Signal glitch",
+   "duration": 1.8
+  },
+  {
+   "id": "shutters",
+   "name": "Staggered shutters",
+   "duration": 2.6
+  },
+  {
+   "id": "warp",
+   "name": "Warp zoom",
+   "duration": 2.2
+  },
+  {
+   "id": "pixelsort",
+   "name": "Pixel sort",
+   "duration": 2.8
+  }
+ ],
+ "edges": [
+  {
+   "id": "linear",
+   "name": "Linear (current)"
+  },
+  {
+   "id": "cinematic",
+   "name": "Cinematic"
+  },
+  {
+   "id": "smoke",
+   "name": "Smoke"
+  },
+  {
+   "id": "dither",
+   "name": "Dither"
+  },
+  {
+   "id": "ascii",
+   "name": "ASCII"
+  },
+  {
+   "id": "halftone",
+   "name": "Halftone"
+  },
+  {
+   "id": "scan",
+   "name": "Scanlines"
+  },
+  {
+   "id": "pixel",
+   "name": "Pixel steps"
+  },
+  {
+   "id": "burn",
+   "name": "Burnt paper"
+  },
+  {
+   "id": "shatter",
+   "name": "Shattered glass"
+  },
+  {
+   "id": "rain",
+   "name": "Glyph rain"
+  },
+  {
+   "id": "prism",
+   "name": "Prism"
+  },
+  {
+   "id": "brush",
+   "name": "Dry brush"
+  },
+  {
+   "id": "contour",
+   "name": "Topographic"
+  },
+  {
+   "id": "hex",
+   "name": "Hex tiles"
+  },
+  {
+   "id": "ripple",
+   "name": "Ripple"
+  },
+  {
+   "id": "streak",
+   "name": "Light streak"
+  },
+  {
+   "id": "stipple",
+   "name": "Stipple"
+  },
+  {
+   "id": "phosphor",
+   "name": "Phosphor"
+  },
+  {
+   "id": "blueprint",
+   "name": "Blueprint grid"
+  },
+  {
+   "id": "noir",
+   "name": "Noir blinds"
+  },
+  {
+   "id": "oldfilm",
+   "name": "Old film"
+  },
+  {
+   "id": "blood",
+   "name": "Blood drip"
+  },
+  {
+   "id": "static",
+   "name": "TV static"
+  },
+  {
+   "id": "hologram",
+   "name": "Hologram"
+  },
+  {
+   "id": "circuit",
+   "name": "Circuit traces"
+  },
+  {
+   "id": "speedlines",
+   "name": "Speed lines"
+  },
+  {
+   "id": "cel",
+   "name": "Anime cel"
+  },
+  {
+   "id": "watercolor",
+   "name": "Watercolour"
+  },
+  {
+   "id": "bokeh",
+   "name": "Bokeh"
+  },
+  {
+   "id": "confetti",
+   "name": "Confetti"
+  },
+  {
+   "id": "sparkle",
+   "name": "Fairy dust"
+  },
+  {
+   "id": "aurora",
+   "name": "Aurora"
+  },
+  {
+   "id": "fog",
+   "name": "Fog bank"
+  },
+  {
+   "id": "dust",
+   "name": "Dust storm"
+  },
+  {
+   "id": "newsprint",
+   "name": "Newsprint"
+  },
+  {
+   "id": "equalizer",
+   "name": "Equalizer"
+  },
+  {
+   "id": "embers",
+   "name": "Rising embers"
+  },
+  {
+   "id": "redacted",
+   "name": "Redacted"
+  },
+  {
+   "id": "petals",
+   "name": "Sakura petals"
+  },
+  {
+   "id": "frost",
+   "name": "Frost"
+  },
+  {
+   "id": "heat",
+   "name": "Heat haze"
+  },
+  {
+   "id": "thermal",
+   "name": "Thermal"
+  },
+  {
+   "id": "stained",
+   "name": "Stained glass"
+  },
+  {
+   "id": "crosshatch",
+   "name": "Crosshatch"
+  }
+ ],
+ "genreEdges": {
+  "Horror": [
+   "burn",
+   "blood",
+   "static",
+   "fog",
+   "shatter",
+   "oldfilm"
+  ],
+  "Sci-Fi": [
+   "hologram",
+   "circuit",
+   "rain",
+   "phosphor",
+   "prism",
+   "thermal",
+   "blueprint",
+   "pixel"
+  ],
+  "Anime": [
+   "cel",
+   "speedlines",
+   "petals",
+   "halftone",
+   "sparkle",
+   "watercolor"
+  ],
+  "Animation": [
+   "watercolor",
+   "confetti",
+   "halftone",
+   "cel",
+   "sparkle",
+   "hex"
+  ],
+  "Action": [
+   "shatter",
+   "streak",
+   "embers",
+   "speedlines",
+   "heat",
+   "pixel"
+  ],
+  "Crime": [
+   "noir",
+   "redacted",
+   "scan",
+   "static",
+   "thermal"
+  ],
+  "Thriller": [
+   "noir",
+   "redacted",
+   "thermal",
+   "fog",
+   "scan",
+   "ripple"
+  ],
+  "Romance": [
+   "petals",
+   "bokeh",
+   "cinematic",
+   "watercolor",
+   "sparkle"
+  ],
+  "Comedy": [
+   "confetti",
+   "halftone",
+   "speedlines",
+   "hex",
+   "stipple"
+  ],
+  "Fantasy": [
+   "sparkle",
+   "aurora",
+   "stained",
+   "smoke",
+   "frost",
+   "prism"
+  ],
+  "Western": [
+   "dust",
+   "heat",
+   "oldfilm",
+   "burn",
+   "brush"
+  ],
+  "Documentary": [
+   "newsprint",
+   "oldfilm",
+   "crosshatch",
+   "contour",
+   "dither"
+  ],
+  "War": [
+   "embers",
+   "smoke",
+   "dust",
+   "oldfilm",
+   "burn"
+  ],
+  "Music": [
+   "equalizer",
+   "prism",
+   "bokeh",
+   "phosphor",
+   "scan"
+  ],
+  "Mystery": [
+   "fog",
+   "noir",
+   "smoke",
+   "contour",
+   "crosshatch"
+  ],
+  "Drama": [
+   "cinematic",
+   "bokeh",
+   "brush",
+   "oldfilm",
+   "watercolor",
+   "stipple"
+  ],
+  "Adventure": [
+   "contour",
+   "aurora",
+   "dust",
+   "brush",
+   "ripple"
+  ],
+  "Family": [
+   "confetti",
+   "sparkle",
+   "watercolor",
+   "hex"
+  ],
+  "Biography": [
+   "oldfilm",
+   "newsprint",
+   "crosshatch",
+   "stained"
+  ],
+  "History": [
+   "oldfilm",
+   "newsprint",
+   "crosshatch",
+   "stained"
+  ]
+ }
+}
