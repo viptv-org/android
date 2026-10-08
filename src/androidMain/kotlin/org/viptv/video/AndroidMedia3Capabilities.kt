@@ -9,6 +9,8 @@ import android.media.MediaCodecList
 import android.media.MediaDrm
 import android.os.Build
 import androidx.media3.common.C
+import androidx.media3.common.MimeTypes
+import androidx.media3.decoder.ffmpeg.FfmpegLibrary
 
 /**
  * Reads the platform facts once and maps them through [media3Capabilities]. Every claim is either
@@ -27,6 +29,7 @@ internal data class Media3PlatformFacts(
     val decoders: List<Media3DecoderFacts>,
     val widevine: Boolean = false,
     val clearKey: Boolean = false,
+    val softwareAudioMimeTypes: Set<String> = emptySet(),
 )
 
 internal data class Media3DecoderFacts(
@@ -63,6 +66,9 @@ private fun readMedia3PlatformFacts(context: Context): Media3PlatformFacts {
         decoders = decoders,
         widevine = runCatching { MediaDrm.isCryptoSchemeSupported(C.WIDEVINE_UUID) }.getOrDefault(false),
         clearKey = runCatching { MediaDrm.isCryptoSchemeSupported(C.CLEARKEY_UUID) }.getOrDefault(false),
+        softwareAudioMimeTypes = setOf(MimeTypes.AUDIO_DTS, MimeTypes.AUDIO_DTS_HD,
+            MimeTypes.AUDIO_AC3, MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_TRUEHD)
+            .filterTo(mutableSetOf()) { FfmpegLibrary.supportsFormat(it) },
     )
 }
 
@@ -76,6 +82,7 @@ internal val MEDIA3_TEXT_SUBTITLE_FORMATS: Set<String> =
 
 internal fun media3Capabilities(facts: Media3PlatformFacts): PlayerCapabilities {
     val mimeTypes = facts.decoders.flatMapTo(mutableSetOf()) { it.mimeTypes }
+    val audioMimeTypes = mimeTypes + facts.softwareAudioMimeTypes
     val directVideoLimits = media3DirectVideoLimits(facts.decoders.flatMap { it.limits })
     val hardwareKnown = facts.sdkInt >= 29 && facts.decoders.isNotEmpty()
     val hardwareVideoCodecs = if (hardwareKnown) {
@@ -91,13 +98,15 @@ internal fun media3Capabilities(facts: Media3PlatformFacts): PlayerCapabilities 
         containers = setOf("mp4", "m4v", "mov", "mkv", "webm", "mpegts", "ts", "flv", "ogg"),
         videoCodecs = videoCodecs(mimeTypes),
         audioCodecs = buildSet {
-            if ("audio/mp4a-latm" in mimeTypes) add("aac")
-            if ("audio/opus" in mimeTypes) add("opus")
-            if ("audio/vorbis" in mimeTypes) add("vorbis")
-            if ("audio/flac" in mimeTypes) add("flac")
-            if ("audio/ac3" in mimeTypes) add("ac3")
-            if ("audio/eac3" in mimeTypes || "audio/eac3-joc" in mimeTypes) add("eac3")
-            if ("audio/mpeg" in mimeTypes) add("mp3")
+            if ("audio/mp4a-latm" in audioMimeTypes) add("aac")
+            if ("audio/opus" in audioMimeTypes) add("opus")
+            if ("audio/vorbis" in audioMimeTypes) add("vorbis")
+            if ("audio/flac" in audioMimeTypes) add("flac")
+            if ("audio/ac3" in audioMimeTypes) add("ac3")
+            if ("audio/eac3" in audioMimeTypes || "audio/eac3-joc" in audioMimeTypes) add("eac3")
+            if ("audio/mpeg" in audioMimeTypes) add("mp3")
+            if (MimeTypes.AUDIO_DTS in audioMimeTypes || MimeTypes.AUDIO_DTS_HD in audioMimeTypes) add("dts")
+            if (MimeTypes.AUDIO_TRUEHD in audioMimeTypes) add("truehd")
         },
         subtitleFormats = MEDIA3_TEXT_SUBTITLE_FORMATS,
         adaptiveProtocols = setOf("hls", "dash"),

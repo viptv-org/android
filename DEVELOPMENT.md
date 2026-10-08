@@ -77,7 +77,11 @@ Run Gradle commands sequentially in the same checkout. Do not reset, clean,
 stash, overwrite existing edits, or silently change branches to make a pull
 or build work. Do not commit or push without the owner's request.
 
-The normal APK is `app/build/outputs/apk/debug/app-debug.apk`. It contains
+The interactive development APK is built with `:app:assemblePerformance` at
+`app/build/outputs/apk/performance/app-performance.apk`. It is optimized and
+non-debuggable. The debug APK remains available for instrumentation, debugger,
+run-as and isolated fixture work; do not use its timings as optimized performance
+evidence. Both contain
 arm64-v8a, armeabi-v7a, and x86_64 native libraries and uses the committed
 development signing key, so `install -r` updates preserve sign-in. Do not use
 `-PfixtureCa` for normal backend use; no fixture CA should be in the APK.
@@ -101,7 +105,7 @@ Start-Process -FilePath "$env:ANDROID_HOME/emulator/emulator.exe" -ArgumentList 
 
 # Wait until this returns 1 before installing:
 adb -s $env:ANDROID_TV_SERIAL shell getprop sys.boot_completed
-adb -s $env:ANDROID_TV_SERIAL install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s $env:ANDROID_TV_SERIAL install -r app/build/outputs/apk/performance/app-performance.apk
 adb -s $env:ANDROID_TV_SERIAL shell am start -W -n org.viptv.app/.MainActivity
 adb -s $env:ANDROID_TV_SERIAL shell pidof org.viptv.app
 ```

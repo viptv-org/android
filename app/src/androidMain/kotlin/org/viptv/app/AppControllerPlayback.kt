@@ -45,7 +45,9 @@ internal suspend fun AppController.prepareAndStart(
     deliveryOptions: PlaybackDeliveryOptions = if (resetTrackChoices) PlaybackDeliveryOptions() else activePlaybackDelivery,
 ): Boolean = playbackPrepareMutex.withLock {
     if (!PlaybackRequestPolicy.mayPrepareAfterMutexWait(expectedGeneration, playbackGeneration)) return@withLock false
-    prepareAndStartLocked(media, source, explicitResume, playWhenReady, resetTrackChoices, expectedGeneration, deliveryOptions)
+    measurePlaybackStartup(PlaybackStartupStage.Total) {
+        prepareAndStartLocked(media, source, explicitResume, playWhenReady, resetTrackChoices, expectedGeneration, deliveryOptions)
+    }
 }
 
 private suspend fun AppController.prepareAndStartLocked(
@@ -81,7 +83,7 @@ private suspend fun AppController.prepareAndStartLocked(
         suspend fun ordinary(prepared: PlaybackLaunch? = null): OpenedPlayback {
             val (launch, deliveredOptions) = openPlaybackDelivery(
                 initial = deliveryOptions,
-                prepare = { options -> prepared ?: gateway.playback(
+                prepare = { options -> prepared ?: measurePlaybackStartup(PlaybackStartupStage.Control) { gateway.playback(
                     source = source,
                     positionMillis = media.positionMillis,
                     capabilities = PlaybackClientCapabilities.from(player.capabilities.value),
@@ -89,12 +91,12 @@ private suspend fun AppController.prepareAndStartLocked(
                     subtitleTrackIndex = requestedSubtitle,
                     subtitlesOff = requestedSubtitlesOff,
                     delivery = options,
-                ) },
+                ) } },
                 open = { launch ->
                     nativeBoundaryCrossed = true
                     if (nativeEffects?.retireOutgoing() == false) throw NativeTorrentCoordinatorUnavailable()
                     retirePlaybackSession()
-                    player.open(
+                    measurePlaybackStartup(PlaybackStartupStage.Player) { player.open(
                         PlaybackSource(
                             launch.url,
                             mimeType = when (launch.format) { "hls" -> "application/x-mpegURL"; "dash" -> "application/dash+xml"; else -> null },
@@ -108,7 +110,7 @@ private suspend fun AppController.prepareAndStartLocked(
                             kindHint = if (launch.live || media.type == "live") PlaybackKind.Live else PlaybackKind.OnDemand,
                         ),
                         playWhenReady = playWhenReady,
-                    )
+                    ) }
                 },
                 release = gateway::stopPlayback,
                 isCurrent = { PlaybackRequestPolicy.isCurrent(generation, playbackGeneration) },

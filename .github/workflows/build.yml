@@ -34,24 +34,25 @@ jobs:
       - run: scripts/prepare-core.sh host
       - run: ./gradlew --no-daemon :testDebugUnitTest :app:testDebugUnitTest
       - run: scripts/prepare-core.sh android
-      - run: ./gradlew --no-daemon :app:assembleDebug :app:lintDebug
-      - run: python3 scripts/check-native-torrent-apk.py app/build/outputs/apk/debug/app-debug.apk
+      - run: ./gradlew --no-daemon :app:assemblePerformance :app:lintPerformance
+      - run: python3 scripts/check-native-torrent-apk.py app/build/outputs/apk/performance/app-performance.apk
+      - run: python3 scripts/check-ffmpeg-audio.py app/build/outputs/apk/performance/app-performance.apk
       - name: Package universal phone and TV APK
         env:
           BUILD_SHA: ${{ github.sha }}
         run: |
           python3 - <<'PY'
           import hashlib,json,os,pathlib,shutil,zipfile
-          source=pathlib.Path('app/build/outputs/apk/debug/app-debug.apk')
+          source=pathlib.Path('app/build/outputs/apk/performance/app-performance.apk')
           with zipfile.ZipFile(source) as archive:
               names=archive.namelist()
               assert not any('viptv_fixture_ca' in n for n in names), 'Fixture trust must not ship'
               for abi in ['arm64-v8a','armeabi-v7a','x86_64']:
                   assert f'lib/{abi}/libviptv_core.so' in names, f'Missing native core: {abi}'
           output=pathlib.Path('artifacts');output.mkdir(exist_ok=True)
-          apk=output/f'viptv-android-phone-tv-debug-{os.environ["BUILD_SHA"][:8]}.apk';shutil.copy2(source,apk)
+          apk=output/f'viptv-android-phone-tv-development-{os.environ["BUILD_SHA"][:8]}.apk';shutil.copy2(source,apk)
           (output/'SHA256SUMS').write_text(hashlib.sha256(apk.read_bytes()).hexdigest()+'  '+apk.name+'\n')
-          (output/'build.json').write_text(json.dumps({'revision':os.environ['BUILD_SHA'],'design':pathlib.Path('DESIGN_REF').read_text().strip(),'core':pathlib.Path('CORE_REF').read_text().strip(),'torrent':pathlib.Path('TORRENT_REF').read_text().strip(),'native_torrent_qualified':False,'signing':'stable development key','platforms':['phone','android-tv']}))
+          (output/'build.json').write_text(json.dumps({'revision':os.environ['BUILD_SHA'],'design':pathlib.Path('DESIGN_REF').read_text().strip(),'core':pathlib.Path('CORE_REF').read_text().strip(),'torrent':pathlib.Path('TORRENT_REF').read_text().strip(),'native_torrent_qualified':False,'signing':'stable development key','variant':'performance','debuggable':False,'optimized':True,'platforms':['phone','android-tv']}))
           PY
       - uses: actions/upload-artifact@v4
         with:

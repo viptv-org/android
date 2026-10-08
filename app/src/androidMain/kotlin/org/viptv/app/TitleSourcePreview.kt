@@ -52,6 +52,7 @@ internal class TitleSourcePreview(
         active = entry
         fun update(next: SourcePreviewSnapshot) {
             if (active !== entry) return
+            if (entry.state.value == next) return
             if (CoreLifecycle.preview(PreviewAction.UPDATE, key, next, ownerMatches = active === entry) != PreviewDecision.ACCEPT) return
             entry.state.value = next
             publish(next)

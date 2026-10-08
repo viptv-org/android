@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 internal data class FixtureRequest(val method: String, val target: String, val body: String, val headers: Map<String, String> = emptyMap())
 internal data class FixtureResponse(val body: String, val status: Int = 200)
 internal class FixtureServer(
-    private val expectedRequests: Int,
+    private val expectedRequests: Int?,
     private val respond: (FixtureRequest) -> FixtureResponse,
 ) : AutoCloseable {
     private val socket = ServerSocket(0)
@@ -20,7 +20,7 @@ internal class FixtureServer(
     val origin = "http://127.0.0.1:${socket.localPort}"
     private val worker = thread(name = "viptv-gateway-wire", isDaemon = true) {
         try {
-            while (requests.size < expectedRequests) {
+            while (expectedRequests == null || requests.size < expectedRequests) {
                 socket.accept().use(::handle)
             }
         } catch (error: Throwable) {
@@ -69,7 +69,7 @@ internal class FixtureServer(
     }
 
     fun assertHealthy() {
-        assertEquals(expectedRequests, requests.size)
+        if (expectedRequests != null) assertEquals(expectedRequests, requests.size)
         assertTrue(workerFailure.isEmpty(), workerFailure.joinToString("\n") { it.stackTraceToString() })
     }
 

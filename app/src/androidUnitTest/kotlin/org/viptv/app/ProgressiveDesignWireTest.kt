@@ -77,7 +77,7 @@ class ProgressiveDesignWireTest {
             assertEquals(listOf("/api/catalogs/revision", "/api/catalogs/revision"), paths)
         }
     }
-    @Test fun initialHomeMetadataIsBoundedToVisibleCardsAndLookahead() = runBlocking {
+    @Test fun initialHomeKeepsCardsWithoutSpeculativeMetadataRequests() = runBlocking {
         val metadata = AtomicInteger()
         val items = (1..30).joinToString(",") { """{"id":"movie-$it","type":"movie","name":"Movie $it"}""" }
         ParallelFixture { path, _ -> when {
@@ -90,10 +90,10 @@ class ProgressiveDesignWireTest {
         } }.use { server ->
             val rows = VipTvHttpGateway(server.origin).home("1")
             assertEquals(30, rows.first { it.isQueueShelf }.items.size)
-            assertEquals(6, metadata.get())
+            assertEquals(0, metadata.get())
         }
     }
-    @Test fun savedQueueAppearsBeforeCataloguesAndSharedMetadataIsFetchedOnce() = runBlocking {
+    @Test fun savedQueueAppearsBeforeCataloguesAndDemandedMetadataIsCached() = runBlocking {
         val gate = CountDownLatch(1)
         val counts = ConcurrentHashMap<String, AtomicInteger>()
         val server = ParallelFixture { path, _ ->
@@ -119,7 +119,10 @@ class ProgressiveDesignWireTest {
             assertFalse(result.isCompleted)
             gate.countDown()
             val complete = withTimeout(3000) { result.await() }.first { it.isQueueShelf }
-            assertEquals("Hydrated description", complete.items.first().description)
+            assertNull(complete.items.first().description)
+            assertNull(counts["/api/meta/series/tt-series"])
+            assertEquals("Hydrated description", gateway.metadata(complete.items.first()).description)
+            assertEquals("Hydrated description", gateway.metadata(complete.items.last()).description)
             assertEquals(1, counts["/api/meta/series/tt-series"]?.get())
             assertEquals(1, counts["/api/catalogs"]?.get())
         } finally { gate.countDown(); server.close() }

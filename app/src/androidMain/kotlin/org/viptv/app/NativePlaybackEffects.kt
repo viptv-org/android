@@ -51,12 +51,16 @@ internal class NativePlaybackEffects(
         controls.add(control)
         return try {
             coordinator.ownControl(control, generation)
-            when (val start = control.start(request, qualified = true, vod = true, cache = coordinator.cache)) {
+            when (val start = measurePlaybackStartup(PlaybackStartupStage.Control) {
+                control.start(request, qualified = true, vod = true, cache = coordinator.cache)
+            }) {
                 is NativePlaybackStart.Legacy -> {
                     if (!retire(control)) throw NativeTorrentCoordinatorUnavailable()
                     Prepared.Legacy(start.launch)
                 }
-                is NativePlaybackStart.Native -> Prepared.Native(coordinator.prepare(start.control, generation))
+                is NativePlaybackStart.Native -> Prepared.Native(measurePlaybackStartup(PlaybackStartupStage.Acquisition) {
+                    coordinator.prepare(start.control, generation)
+                })
             }
         } catch (error: Exception) {
             recordFailure(control, error)
@@ -80,11 +84,11 @@ internal class NativePlaybackEffects(
                 boundary()
                 val state = candidate.control.state()
                 position = ((state.position ?: 0.0) * 1000).toLong()
-                open(PlaybackSource(capability.url, headers = emptyMap(), title = title,
+                measurePlaybackStartup(PlaybackStartupStage.Player) { open(PlaybackSource(capability.url, headers = emptyMap(), title = title,
                     kindHint = PlaybackKind.OnDemand, startPositionMillis = position,
                     options = PlaybackOptions(preferredAudioLanguage = state.audioLanguage,
                         preferredSubtitleLanguage = state.subtitleLanguage, subtitlesEnabled = state.subtitlesEnabled,
-                        openTimeoutMillis = 60_000, httpReadTimeoutMillis = 35_000)), playWhenReady)
+                        openTimeoutMillis = 60_000, httpReadTimeoutMillis = 35_000)), playWhenReady) }
             }
             failure = null
             position

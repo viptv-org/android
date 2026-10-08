@@ -18,6 +18,7 @@ class AndroidMedia3BackendFactory(
     private val openTimeoutMillis: Long = 20_000,
     private val resilientBufferConfig: AndroidMedia3ResilientBufferConfig =
         AndroidMedia3ResilientBufferConfig(),
+    private val enableTransferDiagnostics: Boolean = false,
 ) : VideoBackendFactory {
     private val applicationContext = context.applicationContext
     @Volatile private var probedCapabilities: PlayerCapabilities? = null
@@ -41,7 +42,7 @@ class AndroidMedia3BackendFactory(
                 openTimeoutMillis,
                 probedCapabilities ?: probeMedia3Capabilities(applicationContext),
                 resilientBufferConfig,
-            ),
+            ).also { if (enableTransferDiagnostics) it.diagnosticTransferListener = AndroidMedia3TransferDiagnostic() },
         )
     }
 }
@@ -52,6 +53,7 @@ class AndroidMedia3VideoPlayer internal constructor(
     fun attach(surfaceView: SurfaceView) = backend.attach(surfaceView)
     fun attach(textureView: TextureView) = backend.attach(textureView)
     fun detachSurface() = backend.detachSurface()
+    fun clearHttpRedirects() = backend.clearHttpRedirects()
 }
 
 private fun <T> onMainThreadBlocking(block: () -> T): T {

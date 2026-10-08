@@ -24,6 +24,7 @@ internal suspend fun AppController.nativePlaybackEffects(): NativePlaybackEffect
 
 /** Profile/principal/device invalidation fences pending controls before cache cleanup queues. */
 internal fun AppController.invalidateNativeAuthorization() {
+    clearPlayerHttpRedirects()
     nativeEffects?.beginScopeClose()
     if (nativeEffects?.hasActive == true) {
         val route = _state.value.route as? Route.Player

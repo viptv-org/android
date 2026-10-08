@@ -1,0 +1,16 @@
+Media3 FFmpeg audio decoder
+
+Java/JNI adapter: AndroidX Media3 1.11.0, commit
+2bc207851df311340767e913931ca7b28cab1794, Apache License 2.0.
+Source: https://github.com/androidx/media/tree/1.11.0/libraries/decoder_ffmpeg
+
+Native audio library: FFmpeg 6.0.1, LGPL 2.1 or later, without GPL/nonfree flags.
+Source: https://ffmpeg.org/releases/ffmpeg-6.0.1.tar.xz
+Source SHA256: 9b16b8731d78e596b4be0d720428ca42df642bb2d78342881ff7f5bc29fc9623
+Enabled decoders: dca, ac3, eac3, truehd. No software video decoder is enabled.
+
+Build/relink script: scripts/build-ffmpeg-audio.py in viptv-org/android.
+The script preserves FFmpeg static archives and the JNI wrapper source for
+relinking under decoder-ffmpeg/build/native. Native libraries use API 24,
+NDK 28.2.13676358 and 16 KB ELF page alignment for all three shipped ABIs.
+Native/source checksums are recorded in native.json and upstream.json.

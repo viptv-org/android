@@ -47,12 +47,11 @@ def main():
     policy = subprocess.check_output([aapt, "dump", "xmltree", str(args.apk), "--file", policy_resource.group(2)], text=True)
     manifest_id = re.search(r"android:networkSecurityConfig[^\n]*=@(0x[0-9a-f]+)", manifest)
     require(manifest_id and policy_resource.group(1) == manifest_id.group(1), "APK must use the checked network security policy")
-    require(re.search(r"android:usesCleartextTraffic[^\n]*=false", manifest), "APK must retain default cleartext refusal")
+    require(re.search(r"android:usesCleartextTraffic[^\n]*=true", manifest), "APK must permit HTTP media")
     require("OwnedNativeFixtureActivity" not in manifest, "Owned fixture Activity must not ship in normal manifest")
-    require(policy.count("E: base-config ") == 1 and policy.count("E: domain-config ") == 1, "Unexpected APK network policy scopes")
-    require(re.findall(r"A: cleartextTrafficPermitted=(true|false)", policy) == ["false", "true"], "APK cleartext must require the exact loopback exception")
+    require(policy.count("E: base-config ") == 1 and policy.count("E: domain-config ") == 0, "Unexpected APK network policy scopes")
+    require(re.findall(r"A: cleartextTrafficPermitted=(true|false)", policy) == ["true"], "APK must support HTTP media sources")
     require(policy.count("E: certificates ") == 1 and re.findall(r'A: src="([^"\n]+)"', policy) == ["system"], "Normal APK must trust only system CAs")
-    require(re.findall(r"A: includeSubdomains=(true|false)", policy) == ["false"] and re.findall(r"T: '([^']+)'", policy) == ["127.0.0.1"], "APK cleartext exception must be literal IPv4 loopback only")
     with args.apk.open("rb") as raw, zipfile.ZipFile(args.apk) as archive:
         names = archive.namelist()
         require(not any("viptv_fixture_ca" in name for name in names), "Fixture CA must not ship")
@@ -77,7 +76,7 @@ def main():
         for path, expected in lock["files"].items():
             if path in ["LICENSE", "PROVENANCE.md"] or path.startswith("THIRD_PARTY/"):
                 require(hashlib.sha256(archive.read("assets/playback-gateway/" + path)).hexdigest() == expected, "Native notice missing or altered in APK")
-    print("Verified real APK minSdk 24, three-ABI native/core/JNA contents, pinned checksums, notices, system-CA/literal-loopback policy and 16 KiB ZIP alignment; ABI/device loading is a separate check.")
+    print("Verified real APK minSdk 24, three-ABI native/core/JNA contents, pinned checksums, notices, system-CA/HTTP-media policy and 16 KiB ZIP alignment; ABI/device loading is a separate check.")
 
 
 if __name__ == "__main__":

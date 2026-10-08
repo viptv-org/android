@@ -52,15 +52,15 @@ Its prebuild integrity check prevents unnoticed snapshot changes. The APK
 contains the gateway license, provenance and full dependency notices under
 `assets/playback-gateway`; the APK check verifies their exact pinned bytes,
 all three gateway/core/JNA libraries and 16 KiB ZIP alignment. It inspects the
-compiled manifest and XML policy to verify system-CA trust and a cleartext
-exception only for literal `127.0.0.1`. Runtime policy and ABI loading remain
+compiled manifest and XML policy to verify system-CA trust and HTTP media
+support, including literal `127.0.0.1`. Runtime policy and ABI loading remain
 separate instrumented checks.
 
 `NativeTorrentArtifacts.isLoaded()` initializes the actual generated facade
 without starting transport. Missing ABI, linkage failure or failed facade
 initialization produces an unavailable platform fact. Normal debug and release
 builds use this fact with the supported process ABI, suspend-aware clock,
-literal-loopback policy and available private cache owner before advertising
+loopback HTTP permission and available private cache owner before advertising
 native capability. No enablement receipt or target-device allowlist is required.
 Loading remains separate from decoded playback and device qualification.
 

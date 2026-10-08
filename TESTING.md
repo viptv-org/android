@@ -1972,3 +1972,50 @@ system trust, loopback policy and 16 KiB ZIP alignment. It contains the timeout
 diagnostic and no temporary probe. Installation preserves app data/sign-in;
 the installed base APK was read back and its hash matches. Private captures
 remain ignored. No physical TV or backend deployment changed.
+# Playback and performance branch — 2026-10-08
+
+The software audio fallback reproduces zero tracks for a six-channel DTS MKV
+before the fix, then reports/selects DTS and advances the real audio-output
+clock. The owner confirms sound on the onn. Google TV. Its actual runtime is
+32-bit armeabi-v7a on SDK 34. Three-ABI Media3/FFmpeg sources and native binaries
+are pinned and checked with 16 KiB ELF/APK alignment and packaged license notices.
+
+The installed optimized development APK passes 49 library and 296 app unit tests,
+assembly/lint against the existing baseline, and native APK integrity checks.
+Twenty source/Home/focus/marquee checks pass on the owned TV emulator; nine final
+accessibility/filter checks include provider viewport reset. DTS output and the
+500/750 ms stalled-source deadlines pass against actual Media3. These results do
+not qualify every hardware codec, HDR, DRM or public torrent swarm.
+
+The real gateway Home request regression fails with 12 full metadata requests
+before focus, then passes with zero for 80 history/saved cards. Actual TV startup
+records one settled hero metadata request. A 1,000-source callback-dispatcher
+stall falls from 233 ms to 8 ms after background conversion. Physical source-page
+navigation median improves from 81 ms to 19 ms and jank from 79.7% to 14.7% in
+the recorded comparison. The first overlapping compilation capture is excluded.
+Cold activity launch falls from 5.58 s to approximately 0.8–1.0 s. Media startup
+is a separate measurement and has not achieved the requested one-second target.
+
+Core `af88a4895773af526661aa78356a655b94ec399a` deduplicates opaque handles and
+exact producer/fingerprint identities with hash sets, preserving first handle,
+order, different providers and unknown identities. Native and actual-WASM vectors
+pass; Android and TV-web adopt the same pin. Nine duplicate identities in a real
+175-row response produce 166 physical TV rows. Installing the owner's plain
+Torrentio addon adds 59 torrent sources without replacing the Torbox addon.
+
+One matched HTTPS Resume falls from 16.8 s to 6.54 s. Other cold captures remain
+slower: an observed redirect chain spends 2.73 s on DNS alone, then waits on
+provider responses before receiving bytes. Seek-index CPU falls from 1.39 s to
+227 ms in a recorded optimized-device capture. HTTP media is enabled while TLS
+uses system CAs; no HTTP-specific test was added, as explicitly waived by the owner.
+The floating TV hero progress bar is removed and its resume time occupies its
+own line; physical movie capture and emulator focus checks pass.
+
+Plain Torrentio's selected x264/DTS source fails before Media3 with HTTP 409 on
+the running October 4 backend. Its native protocol endpoint returns 404. A server
+candidate is built and validated separately; production replacement is pending
+the explicit approval required by backend/DEPLOYMENT.md. The maintained task
+checklist is README-performance-fixes.md. Raw captures/source/session data stay
+private. Diagnostic playback that outlasted its capture was stopped; the affected
+movie's original source and 41:41 position were restored, with `watched=false`
+and Continue Watching membership verified.

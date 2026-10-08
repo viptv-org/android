@@ -29,6 +29,8 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -59,11 +61,17 @@ internal suspend fun requestInitialSourceFocusAfterFrame(
     val tv = LocalTv.current
     val state by controller.state.collectAsState()
     var provider by remember(media.id) { mutableStateOf<String?>(null) }
+    val list = rememberLazyListState()
+    val uiJobs = rememberCoroutineScope()
     val groups = remember(sources) { sources.associateWith { SourceDisplayPolicy.providerKey(it) to SourceDisplayPolicy.providerLabel(it) } }
     val shown = sources.filter { provider == null || groups[it]?.first == provider }
     val first = remember(media.id) { FocusRequester() }
     var claimed by remember(media.id) { mutableStateOf(false) }
-    fun chooseProvider(value: String?) { claimed = true; provider = value }
+    fun chooseProvider(value: String?) {
+        claimed = true
+        provider = value
+        uiJobs.launch { list.scrollToItem(0) }
+    }
     val providerLabels = groups.values.associate { it.first to it.second } +
         state.sourceProducers.associate { it.providerKey to it.label }
     val selectedProducer = state.sourceProducers.firstOrNull { it.providerKey == provider }
@@ -108,7 +116,7 @@ internal suspend fun requestInitialSourceFocusAfterFrame(
             emptyMessage,
             if (state.sourceLoading) "" else "Choose another provider, or check your addons in Settings.", "list",
             retry = if (state.sourceLoading) null else { { val route = state.route as? Route.Sources; controller.chooseSources(media, route?.resume == true, route?.origin ?: SourceReturn.Details, queueEpisodeReturn = route?.queueEpisodeReturn == true) } })
-        else LazyColumn(Modifier.fillMaxWidth().testTag("source-results").then(if (tv) Modifier.weight(1f) else Modifier.heightIn(max = 440.dp)), verticalArrangement = Arrangement.spacedBy(measure(14, 12)), contentPadding = PaddingValues(4.dp)) {
+        else LazyColumn(Modifier.fillMaxWidth().testTag("source-results").then(if (tv) Modifier.weight(1f) else Modifier.heightIn(max = 440.dp)), state = list, verticalArrangement = Arrangement.spacedBy(measure(14, 12)), contentPadding = PaddingValues(4.dp)) {
             itemsIndexed(shown, key = { _, source -> source.id }) { index, source ->
                 var focused by remember(source.id) { mutableStateOf(false) }
                 val hoverSource = remember(source.id) { MutableInteractionSource() }
@@ -187,7 +195,10 @@ internal suspend fun requestInitialSourceFocusAfterFrame(
             }
         }
     }
-    Box(modifier.fillMaxWidth().height(viewport).clipToBounds().semantics { contentDescription = text }.testTag("source-description-window")) {
+    Box(modifier.fillMaxWidth().height(viewport).clipToBounds().clearAndSetSemantics {
+        contentDescription = text
+        testTag = "source-description-window"
+    }) {
         Text(text, Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).graphicsLayer { translationY = -offset.value }, color = color,
             fontSize = size.sp, fontFamily = Onest, fontWeight = FontWeight.Normal,
             lineHeight = lineHeight, softWrap = true, maxLines = Int.MAX_VALUE, overflow = TextOverflow.Clip,

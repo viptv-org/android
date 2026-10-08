@@ -158,6 +158,17 @@ class SourceProviderFiltersTest {
         assertEquals(cardHeight, compose.onNodeWithText("Source row 12").fetchSemanticsNode().boundsInRoot.height)
     }
 
+    @Test fun changingProviderReturnsTheViewportToItsFirstSource() = withPicker(true,
+        initialSources = (1..20).map { alpha.copy(id = "alpha-$it", name = "Alpha row $it") } +
+            (1..20).map { beta.copy(id = "beta-$it", name = "Beta row $it") }) {
+        compose.onNodeWithTag("source-results").performScrollToNode(hasText("Beta row 18"))
+        compose.onNodeWithText("Alpha").performClick()
+        compose.onNodeWithText("Alpha row 1").assertIsDisplayed()
+        compose.onNodeWithText("Beta row 18").assertDoesNotExist()
+        compose.onNodeWithText("Beta").performClick()
+        compose.onNodeWithText("Beta row 1").assertIsDisplayed()
+    }
+
     private fun withPicker(tv: Boolean, initialSources: List<Source> = listOf(alpha, beta), check: (AppController) -> Unit) {
         lateinit var controller: AppController
         compose.runOnUiThread {

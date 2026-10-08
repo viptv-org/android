@@ -14,8 +14,10 @@ import androidx.media3.common.Timeline
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import kotlinx.coroutines.CancellationException
@@ -33,6 +35,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 
 internal class AndroidMedia3Backend(
     private val context: Context,
@@ -40,10 +44,19 @@ internal class AndroidMedia3Backend(
     override val capabilities: PlayerCapabilities,
     private val resilientBufferConfig: AndroidMedia3ResilientBufferConfig,
 ) : VideoBackend {
+    private val redirects = Media3RedirectCache()
+    internal fun clearHttpRedirects() = redirects.clear()
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .build()
     internal lateinit var player: ExoPlayer
     private lateinit var handler: Handler
     internal lateinit var listener: Player.Listener
     internal lateinit var analyticsListener: AnalyticsListener
+    internal var diagnosticTransferListener: TransferListener? = null
     private var bufferMode = Media3BufferMode.NativeDefault
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     internal val eventsFlow = MutableSharedFlow<BackendEvent>(extraBufferCapacity = 64)
@@ -172,12 +185,18 @@ internal class AndroidMedia3Backend(
             }
             openingPlayer.addListener(openListener)
             try {
-                val httpFactory = DefaultHttpDataSource.Factory()
-                    .setAllowCrossProtocolRedirects(false)
-                    .apply { source.options.httpReadTimeoutMillis?.let { setReadTimeoutMs(it) } }
+                val client = httpClient.newBuilder().apply {
+                    source.options.httpReadTimeoutMillis?.let { readTimeout(it.toLong(), TimeUnit.MILLISECONDS) }
+                    if (diagnosticTransferListener != null) eventListenerFactory { AndroidMedia3NetworkDiagnostic() }
+                }.build()
+                val httpFactory = OkHttpDataSource.Factory(client)
+                    .setTransferListener(diagnosticTransferListener)
                     .setDefaultRequestProperties(source.headers)
+                // Cross-host Authorization/Cookie forwarding remains the HTTP client's decision.
+                val mediaHttp = if (source.headers.keys.any { it.equals("Authorization", true) || it.equals("Cookie", true) })
+                    httpFactory else redirects.factory(httpFactory)
                 val mediaSource = DefaultMediaSourceFactory(context)
-                    .setDataSourceFactory(DefaultDataSource.Factory(context, httpFactory))
+                    .setDataSourceFactory(DefaultDataSource.Factory(context, mediaHttp))
                     .createMediaSource(source.toMediaItem(resilientBufferConfig))
                 // A server-managed VOD HLS playlist is dynamic but its title position is
                 // supplied by the launch request. Do not let Media3 choose the playlist's
@@ -268,6 +287,7 @@ internal class AndroidMedia3Backend(
     override fun close() {
         if (released) return
         released = true
+        redirects.clear()
         sessionId = null
         kindHint = null
         scope.cancel()
@@ -446,7 +466,9 @@ internal class AndroidMedia3Backend(
                 resilientBufferConfig,
             )
         }
-        player = ExoPlayer.Builder(context).apply {
+        val renderers = DefaultRenderersFactory(context)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+        player = ExoPlayer.Builder(context, renderers).apply {
             buildMedia3LoadControl(tuning)?.let(::setLoadControl)
         }.build()
         handler = Handler(player.applicationLooper)
