@@ -25,6 +25,7 @@ import org.viptv.app.theme.ViptvColor as C
 import org.viptv.app.theme.ViptvDimen
 import kotlinx.coroutines.flow.first
 import coil.compose.AsyncImage
+import org.viptv.app.hero.ShaderHeroBackdrop
 
 /** The displayed episode number is metadata, not a row position. Preserve backend row order. */
 internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
@@ -176,7 +177,11 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
         else if (tv && episodeFocus.isNotEmpty()) episodeFocus.first().requestFocus()
     }
     Box(Modifier.fillMaxSize()) {
-        if (tv) HeroBackdrop(media)
+        if (tv) {
+            val focusedEpisode = episodes.getOrNull(focusedEpisodeIndex)
+            val episodeStill = remember(focusedEpisode) { focusedEpisode?.let { CoreModels.presentation(it).episodeImage } }
+            ShaderHeroBackdrop(media, episodeStill)
+        }
         LazyColumn(Modifier.fillMaxSize(), state = pageScroll, contentPadding = if (tv) PaddingValues(start = 192.dp, top = 96.dp, bottom = 54.dp) else PaddingValues(bottom = 200.dp)) {
             item {
                 if (!tv) Box(Modifier.fillMaxWidth().height(300.dp)) {
