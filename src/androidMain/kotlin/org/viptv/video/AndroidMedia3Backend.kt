@@ -117,13 +117,16 @@ internal class AndroidMedia3Backend(
         opening = true
         return try {
             withContext(Dispatchers.Main.immediate) {
-                withTimeout(openTimeoutMillis) { openOnMain(source, playWhenReady) }
+                withTimeout(source.options.openTimeoutMillis ?: openTimeoutMillis) { openOnMain(source, playWhenReady) }
             }
         } catch (_: TimeoutCancellationException) {
             this.sessionId = null
             withContext(Dispatchers.Main.immediate) { player.stop() }
+            runCatching { android.util.Log.w("PlaybackDiagnostic", "media3_open_timeout budget_ms=${source.options.openTimeoutMillis ?: openTimeoutMillis}") }
             throw PlaybackFailure(
-                PlaybackError(PlaybackErrorCode.Network, "Media3 timed out while opening media", recoverable = true),
+                PlaybackError(PlaybackErrorCode.Network,
+                    "Media3 did not become ready within ${source.options.openTimeoutMillis ?: openTimeoutMillis} ms.\n\nDiagnostic: media3_open_timeout",
+                    recoverable = true),
             )
         } catch (error: CancellationException) {
             this.sessionId = null
@@ -171,6 +174,7 @@ internal class AndroidMedia3Backend(
             try {
                 val httpFactory = DefaultHttpDataSource.Factory()
                     .setAllowCrossProtocolRedirects(false)
+                    .apply { source.options.httpReadTimeoutMillis?.let { setReadTimeoutMs(it) } }
                     .setDefaultRequestProperties(source.headers)
                 val mediaSource = DefaultMediaSourceFactory(context)
                     .setDataSourceFactory(DefaultDataSource.Factory(context, httpFactory))

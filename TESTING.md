@@ -1,3 +1,44 @@
+# Native source HTTP errors and public torrent playback — 2026-10-07
+
+The native control HTTP regression reproduces a real backend
+`404 source_not_found` incorrectly reported as 502, then passes with the actual
+status and canonical refresh instruction preserved. Recovery discards retained
+source discovery before requesting fresh handles, including recovery from a
+non-player route. Controller recovery has device observations rather than a
+new isolated callback test; no full host controller fixture covers that seam.
+
+Native Media3 reads allow 35 seconds and opening allows 60 seconds, covering
+an engine piece wait of up to 30 seconds. Ordinary-source defaults, acquisition
+bounds, grant fencing and cleanup remain intact. The connected stalled-HTTP
+regression fails when the per-source override is ignored, then passes both the
+500 ms default and 750 ms override against real Media3 connections.
+
+Validation passes 48 library and 294 app unit tests, app lint against its existing
+baseline, all three core/native ABIs, normal APK assembly and the real APK
+integrity probe. The normal system-trust APK was installed with data/sign-in
+preserved. Its SHA-256 is
+`81a9a7315e7db2df60e9a0f6e0834bfd716b1bfc3b18a76c4c544ed378166fe7`.
+Pins: core `df62d8a893bbfbd8c2cd471b07c40efa6a78a4aa`, gateway
+`698372df3734f6ec8019f70591b549280f47c28f` and design
+`d9562790ea69d5e29cb4ec2630b814a7f30f9761`.
+
+The isolated owned native device pipeline case A passes in 11.089 seconds,
+using actual JNI, an isolated backend and a TCP torrent peer. It verifies decoded
+Media3 surfaces, exact file index, subtitles, alternate audio selection, seek,
+renewal, independent grants, authority denial and joined cleanup. The rolling
+cache is 256 MiB. This is one pipeline case, not the entire qualification class
+or physical-TV sound/codec acceptance.
+
+A manually selected public Torrentio H.264 source also decodes actual video in
+the normal app, continues playing through renewals and holds a 256 MiB native
+piece cache. A roughly 30-minute backward seek resumes with decoded video
+and PLAYING state. A separate host read of the same native input took 10.9 seconds,
+exceeding the ordinary 8-second HTTP read default. Other public inputs can still
+fail metadata acquisition when peers do not respond; an HEVC selection reports
+a measured decoder failure on this emulator. This observation does not qualify
+all public swarms, codecs, 4K hardware or production deployment. Raw captures
+and provider/session details remain private and untracked.
+
 # Native rolling piece cache — 2026-10-07
 
 Normal app source `8d9ab835356d4f2e98719d34848c785b0a2e1094` adopts gateway
@@ -1856,3 +1897,78 @@ These observations qualify the named owned emulator effects. Physical sound,
 codec/HDR/PiP and remote behavior, sustained public-peer/resource behavior, and
 arbitrary blocked OS I/O remain separate observations. The fixture does not
 claim every host, emulator and physical condition in NT-01 through NT-08.
+# Actionable native source failure diagnostics — 2026-10-07
+
+The normal app adopts gateway `698372df3734f6ec8019f70591b549280f47c28f`,
+core `ed83a0b9f24c6431f6ccca7c9426cb1da7f53ba5` and design
+`d9562790ea69d5e29cb4ec2630b814a7f30f9761`. A connected peer that supplies no
+metadata reproduced the generic `StartupTimeout` before the fix; the regression
+passes with `MetadataTimeout`. The first measured cache/session/metadata/
+initialization/endpoint failure survives deadline races and joined retirement.
+Typed DNS/TLS/connection/control deadlines survive the actual HTTP callback,
+remain IO failures for heartbeat retries, and enter shared canonical copy.
+The recovery explanation includes its validated diagnostic code. Media3 retains
+its measured numeric code and observed HTTP status, without raw exception text.
+Overall startup expiry reports a failure; actual owner cancellation still cancels.
+
+48 library and 290 app unit tests pass, including the real refused-connection
+callback, request timeout/cleanup, startup expiry versus owner cancellation,
+private exception redaction and every native FFI reason's shared projection.
+33 importer tests and core/design/torrent integrity pass. All three core/native
+ABIs build; normal app assembly, lint and instrumentation APK assembly pass.
+The real APK probe passes minSdk 24, three-ABI core/native/JNA contents, exact
+pins/checksums/notices, system-CA/literal-loopback trust and 16 KiB ZIP alignment.
+A DEX probe confirms the diagnostic codes and log tags are packaged.
+Normal APK SHA256:
+`8c42a63849bceb7a3f562dabb2d164f2af93cfccc4adc1888cbfc9fa666df4f5`.
+
+Gateway's locked owned-network workspace passes 215 tests (56 opt-in tests
+ignored); blocked cache and actual storage initialization remain distinct from
+metadata timeout. Core passes 120 tests, strict all-target Clippy and actual-WASM
+parity including 49 canonical errors and 457 native vectors. TV-web adopts the
+same core and passes typechecking, 285 single-fork tests and production build.
+
+The three reported user attempts have no retained diagnostic log sufficient to
+assign their individual root causes. No absent-seeder/public-swarm claim is made.
+This diagnostic APK has not been installed during this sweep; decoded Android
+source opening and visual dialog inspection await a shared-emulator window.
+The existing shared emulator, account and app data remain untouched by the sweep.
+See [native source diagnostics](docs/NATIVE_TORRENT_DIAGNOSTICS.md) for safe codes
+and device log collection. Private captures and APKs are excluded from git.
+# Large native files and preserved validation failures — 2026-10-07
+
+Core `df62d8a893bbfbd8c2cd471b07c40efa6a78a4aa` removes the residual 2 GiB
+logical-file admission limit. Exact hash/index/expected-size checks remain;
+rolling-cache reservations retain their existing capacity and disk limits.
+The strict adapter reports an exact-file refusal as `native_file_unavailable`.
+Owned work preserves that failure when authority invalidation cancels it during
+validation, and never publishes a capability after cancellation.
+
+The shared serve-avd emulator reproduced `native_playback_failed` after metadata
+arrival. A private probe identified a positive file larger than 2 GiB with valid
+index/count and matching expected-size facts. The 100 GiB real-core bridge and
+owned-work invalidation regressions failed before their fixes. Core's 121 tests,
+473 native/actual-WASM native-torrent vectors and strict Clippy pass. Android
+passes 48 library and 293 app unit tests, 33 importer tests, all three core ABI
+builds, normal APK assembly and baseline-aware lint.
+
+Retesting reaches Media3 for the formerly rejected large source. Its emulator
+HEVC decoder reports `media3_4003`; another source reaches the Media3 opening
+deadline, and a later attempt reports `native_metadata_timeout`. A retry also
+reports an HTTP 502 session response. These observations qualify attribution,
+not successful public-swarm playback, 4K decoding or physical TV acceptance.
+
+The Media3 opening deadline reports its configured budget and
+`media3_open_timeout`. `AndroidMedia3OpenTimeoutTest` uses a real on-device player
+and an owned stalled loopback HTTP stream: it fails against the old timeout
+message, then passes against the fix with a measured 500 ms budget. Instrumentation
+targets SDK 36; the library test package otherwise inherited an obsolete target
+and Android blocked its installation. The ordinary app's target is unchanged.
+
+The final normal APK SHA256 is
+`c10c195a630dc140f05c1263a11f9d5925067119cfd07480bc6eab6a020d8205`.
+Its real APK probe verifies exact pins, three-ABI native/core/JNA content, normal
+system trust, loopback policy and 16 KiB ZIP alignment. It contains the timeout
+diagnostic and no temporary probe. Installation preserves app data/sign-in;
+the installed base APK was read back and its hash matches. Private captures
+remain ignored. No physical TV or backend deployment changed.

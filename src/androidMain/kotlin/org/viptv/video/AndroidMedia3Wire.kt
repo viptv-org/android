@@ -55,8 +55,9 @@ internal fun shouldRecoverMedia3BehindLiveWindow(
 
 internal fun PlaybackException.toAirError(): PlaybackError {
     val http = generateSequence<Throwable>(this) { it.cause }.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()
-    if (http != null) return media3HttpError(http.responseCode)
-    return media3ErrorCodeToAir(errorCode)
+    val error = if (http != null) media3HttpError(http.responseCode) else media3ErrorCodeToAir(errorCode)
+    runCatching { android.util.Log.w("PlaybackDiagnostic", "media3_$errorCode http=${http?.responseCode ?: 0}") }
+    return error.copy(message = "${error.message}\n\nDiagnostic: media3_$errorCode")
 }
 
 internal fun media3HttpError(status: Int): PlaybackError = when (status) {

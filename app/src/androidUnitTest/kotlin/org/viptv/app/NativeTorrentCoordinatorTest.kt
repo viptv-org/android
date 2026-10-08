@@ -45,6 +45,56 @@ class NativeTorrentCoordinatorTest {
         }
     }, nowNanos = nowNanos)
 
+    @Test fun metadataRefusalSurvivesItsOwnAuthorityInvalidation() = runBlocking {
+        lateinit var work: NativeTorrentOwnedWork
+        val handle = object : NativeTorrentHandleEffect {
+            override fun validatedCapability(): NativeTorrentCapability {
+                // Shared metadata refusal invalidates authority; expiry stops local reads.
+                work.cancel()
+                throw NativeTorrentFailure("native_file_unavailable")
+            }
+            override fun stop() = Unit
+            override fun stopAndJoin() = true
+            override fun close() = Unit
+        }
+        val acquisition = object : NativeTorrentAcquisitionEffect {
+            override fun waitReady() = handle
+            override fun cancel() = Unit
+            override fun cancelAndJoin() = true
+            override fun close() = Unit
+        }
+        work = NativeTorrentOwnedWork({ acquisition }, System::nanoTime)
+        work.start()
+        val failure = assertFailsWith<NativeTorrentFailure> { work.ready.await() }
+        assertEquals("native_file_unavailable", failure.reason)
+        assertTrue(work.join(work.settlementDeadlineNanos()))
+        work.closeAfterSettlement()
+    }
+
+    @Test fun cancellationDuringValidationCannotPublishALateCapability() = runBlocking {
+        lateinit var work: NativeTorrentOwnedWork
+        val handle = object : NativeTorrentHandleEffect {
+            override fun validatedCapability(): NativeTorrentCapability {
+                work.cancel()
+                return NativeTorrentCapability.validated(url, 3u)
+            }
+            override fun stop() = Unit
+            override fun stopAndJoin() = true
+            override fun close() = Unit
+        }
+        val acquisition = object : NativeTorrentAcquisitionEffect {
+            override fun waitReady() = handle
+            override fun cancel() = Unit
+            override fun cancelAndJoin() = true
+            override fun close() = Unit
+        }
+        work = NativeTorrentOwnedWork({ acquisition }, System::nanoTime)
+        work.start()
+        assertFailsWith<NativeTorrentCoordinatorUnavailable> { work.ready.await() }
+        assertTrue(work.join(work.settlementDeadlineNanos()))
+        work.closeAfterSettlement()
+    }
+
     @Test fun cancellationIsAddressableBeforeBeginReturnsAndLateHandleCannotPublish() {
         val events = events()
         val beginEntered = CountDownLatch(1)

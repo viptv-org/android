@@ -25,7 +25,7 @@ implementation and its tests; where they disagree, the code is the bug.
 | Type | Contract |
 |---|---|
 | `PlaybackSource` | `uri`, optional `mimeType`, `headers`, `title`, `externalSubtitles`, `kindHint`, `options`, `startPositionMillis`. `headers` and `externalSubtitles` are copied at construction, so later caller mutation cannot change an open session. Not a data class: no `equals`/`copy` that could spread a URI. |
-| `PlaybackOptions` | `livePolicy` (default `Balanced`), `preferredAudioLanguage`, `preferredSubtitleLanguage`, `subtitlesEnabled` (`null` = leave Media3's default). |
+| `PlaybackOptions` | `livePolicy` (default `Balanced`), `preferredAudioLanguage`, `preferredSubtitleLanguage`, `subtitlesEnabled` (`null` = leave Media3's default); optional `openTimeoutMillis` and `httpReadTimeoutMillis` transport budgets (1–120,000 ms). |
 | `ExternalSubtitleSource` | Sideloaded text subtitle: `id`, `uri`, `mimeType`, `language`, `label`, `isDefault`, `isForced`. |
 | `VideoPlayer` | Level-triggered `StateFlow`s: `state`, `capabilities`, `audioTracks`, `subtitleTracks`, `videoTracks`, `statistics`, `subtitleCues`. One-off `events`. Commands: `open` (suspending), `play`, `pause`, `seekTo`, `selectAudioTrack`/`selectSubtitleTrack`/`selectVideoTrack`, `stop`, `close`. |
 | `VideoBackendFactory` | Stable lowercase `id`, `probe()` returning runtime capabilities, `create()`. |
@@ -52,6 +52,10 @@ any non-Released --stop--> Idle        any --close--> Released (terminal)
 - `Idle` is the initial state and the state after `stop()`.
 - `open()` publishes `Opening` (`isBuffering = true`, requested `playWhenReady`, statistics reset),
   then `Ready` with timeline, tracks and selections once Media3 first reaches `STATE_READY`.
+- Opening and HTTP read budgets may be supplied per source. Null retains backend defaults.
+  Native torrent byte endpoints use 60 seconds for opening and 35 seconds for HTTP reads,
+  covering the engine's bounded 30-second piece wait. Cancellation and grant retirement
+  remain authoritative during these waits. Ordinary sources retain their configured defaults.
 - Open failure publishes `Error` with the typed `PlaybackError`, emits `PlaybackEvent.Failed`, and
   rethrows. A `PlaybackFailure` carries its typed error; any other throwable becomes
   `Internal`, non-recoverable.
@@ -236,9 +240,10 @@ delivery. A container extension alone is never a reason to request conversion.
   only the factory ID.
 - Source URIs, headers, cookies, licenses and local paths never enter error messages, events,
   statistics, state or exceptions.
-- The library contains no logging and no telemetry or analytics transport; statistics stay in
-  process for the embedding app. The opt-in instrumented measurement test never logs its fixture
-  URL.
+- Diagnostic logging contains only Media3 numeric error codes, observed HTTP status, or the
+  closed `media3_open_timeout` code and configured deadline in milliseconds. No telemetry or
+  analytics transport is present; statistics stay in process for the embedding app. The opt-in
+  instrumented measurement test never logs its fixture URL.
 
 ## Device validation matrix
 

@@ -26,6 +26,9 @@ The native facade enables a 256 MiB rolling piece cache per large input. Smaller
 torrents reserve their full payload. The generic manager charges these reservations
 against the supplied 2 GiB aggregate limit and measured available disk; a large
 logical torrent or unselected file does not require full-payload device storage.
+Shared grant/metadata validation treats file length as an exact positive JSON
+integer, independently of the cache reservation. Files above 2 GiB remain
+eligible; hash, file index and any supplied expected size must still match.
 At least two pieces must fit. Eviction resets availability before re-download,
 protects current reads/writes/checksums and advertises no evictable peer pieces. Its registry proves payload sharing and retains retiring/unsettled
 reservations. Independent acquisitions/listeners retain separate grant authority.

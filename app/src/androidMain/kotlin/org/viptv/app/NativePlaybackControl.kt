@@ -43,6 +43,7 @@ internal class NativePlaybackControl(
     private val preventReads: () -> Unit,
     private val invalidated: () -> Unit,
     private val released: () -> Unit = {},
+    private val startupBudgetMillis: Long = 45_000,
 ) {
     private val serial = Mutex()
     private val releaseSerial = Mutex()
@@ -103,7 +104,7 @@ internal class NativePlaybackControl(
             bridge = NativeTorrentBridge(JSONObject().put("origin", origin).put("scope", scope)
                 .put("generation", generation).put("qualified", qualified).put("negotiated", true)
                 .put("vod", vod).put("request", request).toString())
-            return withTimeout<NativePlaybackStart>(45_000) {
+            return withTimeout<NativePlaybackStart>(startupBudgetMillis) {
                 var response = request("playbackV2", request = request)
                 while (true) {
                     currentCoroutineContext().ensureActive()
@@ -132,6 +133,11 @@ internal class NativePlaybackControl(
         } catch (error: Exception) {
             retireLocal()
             withContext(NonCancellable) { withTimeoutOrNull(10_000) { runCatching { releaseRemote() } } }
+            if (error is kotlinx.coroutines.TimeoutCancellationException) {
+                // A completed local deadline is a failure; owner cancellation remains cancellation.
+                currentCoroutineContext().ensureActive()
+                throw NativeTorrentFailure("native_acquisition_timeout")
+            }
             throw error
         }
     }
@@ -186,6 +192,19 @@ internal class NativePlaybackControl(
                     .put("receivedAtMillis", received).put("roundTripMillis", rtt)
                     .put("uncertaintyMillis", 0).put("maxUncertaintyMillis", 0)
                     .put("trustedWallUpperUnixMillis", JSONObject.NULL).put("suspendAware", true)
+                if (response.status !in listOf(200, 202)) {
+                    if (response.status in listOf(401, 403)) authorizationRefused = true else selectionRefused = true
+                    // Error envelopes cannot carry grants. Bound parsing and pass only the code
+                    // to Rust; provider copy and transport details never enter the UI.
+                    val error = if (response.bytes.size <= 4_096) runCatching {
+                        JSONObject(Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(response.bytes)).toString())
+                    }.getOrNull() else null
+                    val projection = JSONObject(normalize("apiError", JSONObject()
+                        .put("status", response.status).putOpt("error_code", error?.opt("error_code")).toString(), ""))
+                    retireLocal()
+                    throw GatewayError(response.status, projection.getString("message"),
+                        projection.optString("code").takeUnless { it.isBlank() || it == "null" })
+                }
                 try {
                     holder.acceptMeasuredBytes(response.status.toUShort(), response.bytes, observation.toString())
                 } catch (_: Exception) {

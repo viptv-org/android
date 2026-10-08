@@ -506,14 +506,29 @@ message for the adapter's closed failure fact, using the exact strings in
 [native playback failure copy](../../viptv-design-system/copy.md#native-playback-failure-reasons-src-torrent-native-001).
 This amendment changes only the explanation and retains the existing dialog
 geometry, focus order, actions, timings, accessibility and source/title/queue
-return behavior. No raw diagnostic string enters this projection.
+return behavior. A blank line followed by `Diagnostic: <closed reason code>`
+appears beneath the explanation in the existing dialog; the text wraps and
+remains readable without moving focus or adding actions. No raw diagnostic
+string enters this projection.
+Media3 failures retain their measured numeric code as `Diagnostic: media3_<code>`
+alongside the existing typed explanation and an observed HTTP status, if present.
+Player exception messages and cause text never become presentation inputs.
 
 `native_payload_limit` requires an observed input-cache reservation refusal
 against the 2 GiB aggregate budget or a piece-slot requirement exceeding the
 per-input budget, including unsettled work. A displayed source size alone
 is insufficient. `native_metadata_timeout`
-requires the engine's metadata deadline fact; the total acquisition deadline
-uses `native_acquisition_timeout`. Neither asserts absent peers or seeders.
+requires the startup deadline to expire while the engine is obtaining metadata.
+The engine preserves the measured preparation stage at the first deadline:
+local cache preparation, metadata acquisition, torrent initialization or local
+loopback endpoint publication. These produce `native_cache_preparation_timeout`,
+`native_metadata_timeout`, `native_initialization_timeout` and
+`native_loopback_timeout`; `native_acquisition_timeout` remains for an overall
+deadline whose stage was not established. Neither asserts absent peers or seeders.
+Session creation, initialization, loopback publication and still-retiring work
+have distinct closed failure facts. DNS resolution, TLS, connection refusal and
+control-request timeout require an observed typed transport exception; a generic
+IO exception cannot invent one of these explanations.
 Storage and cache failures remain distinct where the adapter can establish
 them. Invalid/unsupported metadata, exact-file mismatch, authorization expiry,
 transport connectivity and codec support require their respective observed
@@ -528,7 +543,9 @@ automatically retry, choose a source or change delivery after native admission.
 **NT-09 Failure explanation:** show the canonical explanation for each observed
 reason through startup and player failure, preserving its stable reason code
 through asynchronous acquisition. Test a payload reservation refusal separately
-from a metadata timeout and a total acquisition timeout; unknown or malformed
+from a metadata timeout, blocked cache/initialization and a total acquisition
+timeout. The visible diagnostic code and safe local diagnostic log must retain
+the same closed reason; unknown or malformed
 reasons and secret-bearing diagnostic fields cannot become visible copy.
 Native and actual WASM produce the same code/message. Existing Retry waits for
 authority retirement and follows authorization/selection refusal; Choose another
