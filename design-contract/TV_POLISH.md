@@ -305,9 +305,9 @@ Motion and selection:
   margin, so the art's own edge never enters the box. Both arts keep drifting
   during a transition.
 - Transition: a hero change plays one transition from the catalog for that
-  entry's `duration` (0.75–0.9 s). Every transition front-loads its motion: the
+  entry's `duration` (0.28–0.35 s). Every transition front-loads its motion: the
   incoming art leads within the first third of the duration and the rest is
-  settling. The `fade` dissolve (0.4 s) is the baseline and is never drawn into
+  settling. The `fade` dissolve (0.18 s) is the baseline and is never drawn into
   the rotation. The first art a backdrop shows appears without a transition;
   unchanged art never transitions. A hero change on Home is a new hero title; on
   Details it is a different episode still or the return to the series art.
@@ -324,9 +324,18 @@ Motion and selection:
 - Browsing: a change that arrives within 450 ms of the previous change plays the
   `fade` dissolve instead of a catalog transition, keeping fast focus movement
   calm. The catalog transition plays once focus rests.
-- Frame rate: transitions and edge wipes render every display frame. At rest,
-  drift and animated edge styles render every second frame to leave headroom for
-  focus motion.
+- Frame rate: transitions and edge wipes render at up to 60 frames per second.
+  At rest, drift and animated edge styles render at up to 15 frames per second,
+  paced by elapsed time rather than display refresh rate, to leave headroom for
+  focus motion. The sharp art retains its full output resolution. The ambient
+  pass excludes the art rectangle, which the edge pass completely replaces;
+  edge shaders skip work that cannot contribute in the opaque interior.
+  Compile only requested styles, retain their programs for the surface lifetime,
+  and discard superseded artwork requests before upload.
+- Episode focus settles for 120 ms before fetching its still. Continuous remote
+  movement cancels superseded requests; settling never blocks card focus/input.
+- TV screen entrances complete within 180 ms (140 ms for a fade); input and
+  restored focus remain immediate. Phone entrance timing is unchanged.
 
 Category: shared Core owns the category rule and the genre pools through
 `hero_edge_pool`. Android passes the title's type and genres and uses the
@@ -388,5 +397,10 @@ Details, traverse episodes quickly (no queued transitions), rest on one with a
 season; check that the edge pool stays the series'. Repeat with animations disabled,
 forced GL context failure, a failing transition and edge program, background and
 return, the Sources screen and OLED ground. Record rest and transition frame times
+during rapid replacement and verify a transition completes within 350 ms once
+its art is decoded, the browsing dissolve within 180 ms, and episode focus
+settles within 120 ms before decoding. Verify full-frame ambient/edge pixels
+against the unoptimized shaders, including the lower fade and an edge wipe.
+Record frame times
 during focus movement on the lowest supported device; emulator runs do not qualify
 physical TVs.

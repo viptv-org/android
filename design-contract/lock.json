@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/design",
-  "revision": "3efe0cad3d398376a62e942d2c665bc32b013cf3",
+  "revision": "e860bb2dd60463ca7b930e51f9df8f0f94dcb559",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
@@ -16,7 +16,7 @@
     },
     "design-contract/TV_POLISH.md": {
       "source": "docs/platforms/TV_POLISH.md",
-      "sha256": "75fcee4a25def212cc8a293a950e63dc76d2db26869b50757d62cb08efbaacab"
+      "sha256": "67a24ef75205fe79e8863d10305d78b1582f6f0dc405b7b70bcacd9f971d1088"
     },
     "design-contract/specs/behavior/home-addon-refresh.md": {
       "source": "specs/behavior/home-addon-refresh.md",
@@ -96,7 +96,7 @@
     },
     "design-contract/assets/hero/README.md": {
       "source": "assets/hero/README.md",
-      "sha256": "c7f5705f02bea82f0ffb89c528d332320740c0a83e1306a573dab047f0d17baf"
+      "sha256": "4dd8a971f339f460d6ef59abf10eb72bb76a23f27f95ee8c07e1f4e32b2761f5"
     },
     "app/src/androidMain/assets/hero/ambient_main.glsl": {
       "source": "assets/hero/ambient_main.glsl",
@@ -108,47 +108,47 @@
     },
     "app/src/androidMain/assets/hero/edge_main.glsl": {
       "source": "assets/hero/edge_main.glsl",
-      "sha256": "9e796beb02f117a95655962fd44e757106b912c95b69e0aa644836f1172005b0"
+      "sha256": "6bc096a408268b89ec9f5d27ddc8f39bff3a452123a117f3f7682549c455f4ef"
     },
     "app/src/androidMain/assets/hero/edges/brush.glsl": {
       "source": "assets/hero/edges/brush.glsl",
-      "sha256": "98944fb09d4afbc4225835e972945cb2203ca1db36d6507d8c02cccdd34b055f"
+      "sha256": "57f0577b8208cfb1ed113f64dcf31568cc57edc7078fab1d425721084ccf7055"
     },
     "app/src/androidMain/assets/hero/edges/cinematic.glsl": {
       "source": "assets/hero/edges/cinematic.glsl",
-      "sha256": "8bcfc5a4304e914226e51097aca1e4fe745a5c6cb3901b900b431e80e61a801f"
+      "sha256": "d2d6e49c455c1d7ebbaeaab2ebe79fe702f8506e5a9c3e868d5344af14359bac"
     },
     "app/src/androidMain/assets/hero/edges/embers.glsl": {
       "source": "assets/hero/edges/embers.glsl",
-      "sha256": "0c57fae308fdf85e46cf34b9ca2ba1413b43c9f245a33448ec960570a7fe1595"
+      "sha256": "2a12824ac2ea00d83de72464bb337efc9118c55ad7e01aceeebf1a33d2a8aebf"
     },
     "app/src/androidMain/assets/hero/edges/fog.glsl": {
       "source": "assets/hero/edges/fog.glsl",
-      "sha256": "b5bf588f0f6257fd40b3022ad253fd9f508268ac820bda253b965524f0af01f2"
+      "sha256": "5faafb19767f29fe8686c67ca1414d61aa6c700833524b2c823b7b4bbab7d176"
     },
     "app/src/androidMain/assets/hero/edges/heat.glsl": {
       "source": "assets/hero/edges/heat.glsl",
-      "sha256": "4e4b29e2c1a31ede1135f180471dcd2cbe5a74f57a3adaff4b0bc72d55674fdd"
+      "sha256": "403880204f402ed1fab717743e80f5f35c7c81b75319b9e2c09772cae3d84206"
     },
     "app/src/androidMain/assets/hero/edges/linear.glsl": {
       "source": "assets/hero/edges/linear.glsl",
-      "sha256": "24e5e77327816df1857fea097bea3141e7b8c1ae4abd3737932ad39ac2c6c07d"
+      "sha256": "886c82998a047d73bd7eb94343b0354ef462e812a3e4b5ad6276454986d67c95"
     },
     "app/src/androidMain/assets/hero/edges/oldfilm.glsl": {
       "source": "assets/hero/edges/oldfilm.glsl",
-      "sha256": "79ce3f6c30b001026ac1bd9fd5a9afabf37e4c138141e4e1737562a311b7ba6b"
+      "sha256": "da1fed1d92b41d5f4fc4134fbc99542cd1ab0a6d763cb54845208cf863d7e6ac"
     },
     "app/src/androidMain/assets/hero/edges/smoke.glsl": {
       "source": "assets/hero/edges/smoke.glsl",
-      "sha256": "a54a2d5eb5e0d109a505225a36fd7a6ddc7f6fa9225590534796219af1e2211c"
+      "sha256": "7e2804e7ccc91014cbb2d0c0de7c882fc7ac053fa8ef859a910d655acc9ac7ed"
     },
     "app/src/androidMain/assets/hero/edges/stipple.glsl": {
       "source": "assets/hero/edges/stipple.glsl",
-      "sha256": "6fe0373f6be6816488f8a2cff3c28923056f5dbd15c8451e57e45e4428964efa"
+      "sha256": "2e010330808f939147cc3f14d17123d3cfc7a15c9f44d5d4c9ad9c8076fdd211"
     },
     "app/src/androidMain/assets/hero/edges/streak.glsl": {
       "source": "assets/hero/edges/streak.glsl",
-      "sha256": "12adc26aa8266880478e8f04aa7be060e2ba1d192265b6d670c3c9835ff553f5"
+      "sha256": "bf46f075c2be69dad88135c95668c8f512abc4ccc36be29adba91494a70a4906"
     },
     "app/src/androidMain/assets/hero/edges/watercolor.glsl": {
       "source": "assets/hero/edges/watercolor.glsl",
@@ -156,7 +156,7 @@
     },
     "app/src/androidMain/assets/hero/index.json": {
       "source": "assets/hero/index.json",
-      "sha256": "b702f827837882833ab35f18335f2bc3eb39dfdd06b931a3ae4f9eb3bc3268c8"
+      "sha256": "1bc9c6961bbbc119b340fd5e792af51864821a73c108a12eaf7f6866d5fa5077"
     },
     "app/src/androidMain/assets/hero/transition_common.glsl": {
       "source": "assets/hero/transition_common.glsl",

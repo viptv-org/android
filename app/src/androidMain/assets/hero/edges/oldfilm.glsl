@@ -1,4 +1,6 @@
 vec3 edge(vec3 c, vec2 uv, float m, vec2 fc) {
+  // These styles resolve to unchanged artwork outside the fade band.
+  if (m >= 1.0 && uv.y >= 0.42) return c;
   vec3 sep = vec3(luma(c)) * vec3(1.07, 0.92, 0.72);
   float fr = floor(uTime * 18.0);
   float grain = (hash(floor(fc / uDpr) + fract(fr * 0.137) * vec2(91.0, 37.0)) - 0.5) * 0.22;

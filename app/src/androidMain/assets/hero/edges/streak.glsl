@@ -1,4 +1,6 @@
 vec3 edge(vec3 c, vec2 uv, float m, vec2 fc) {
+  // These styles resolve to unchanged artwork outside the fade band.
+  if (m >= 1.0 && uv.y >= 0.42) return c;
   float row = noise(vec2(3.0, fc.y / (2.0 * uDpr) * 0.12));
   float len = (0.06 + 0.12 * row) * (1.0 - m);
   vec3 acc = vec3(0.0), hi = vec3(0.0);

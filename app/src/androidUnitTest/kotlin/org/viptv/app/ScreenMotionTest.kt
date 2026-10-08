@@ -7,6 +7,13 @@ class ScreenMotionTest {
     private val movie = Media("m1", "movie", "Movie")
     private val home = Route.Browse(Destination.Home)
 
+    @Test fun tvEntrancesStayWithinTheNavigationBudget() {
+        ScreenMotion.entries.forEach {
+            assertEquals(if (it == ScreenMotion.Fade) 140 else 180, screenEntranceDuration(it, tv = true))
+            assertEquals(if (it == ScreenMotion.Fade) 220 else 280, screenEntranceDuration(it, tv = false))
+        }
+    }
+
     @Test fun drillingInAndBackScaleInOppositeDirections() {
         assertEquals(ScreenMotion.Forward, screenMotion(home, Route.Details(movie)))
         assertEquals(ScreenMotion.Forward, screenMotion(Route.Details(movie), Route.Sources(movie)))

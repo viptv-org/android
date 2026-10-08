@@ -18,6 +18,13 @@ class HeroMotionPolicyTest {
     private fun pool(type: String, vararg genres: String) =
         SharedPresentation.heroEdgePool(type, genres.toList(), library.index.edges.map { it.id })
 
+    @Test fun everyShippedTransitionCompletesWithinTheTvBrowsingBudget() {
+        library.index.transitions.forEach {
+            assertTrue(it.duration > 0 && it.duration <= 0.35,
+                "${it.id} takes ${it.duration}s; TV hero changes must finish within 350ms")
+        }
+    }
+
     @Test fun everyIndexedShaderAssemblesWithAnEntryPoint() {
         val index = library.index
         assertTrue(index.transitions.isNotEmpty() && index.edges.isNotEmpty())

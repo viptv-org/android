@@ -76,12 +76,17 @@ internal fun systemAnimationsEnabled(context: Context): Boolean {
 /** The entering screen's motion and its 0–1 progress. */
 internal class ScreenEntrance(val motion: ScreenMotion, val progress: Animatable<Float, *>)
 
+internal fun screenEntranceDuration(motion: ScreenMotion, tv: Boolean): Int =
+    if (tv) { if (motion == ScreenMotion.Fade) 140 else 180 }
+    else { if (motion == ScreenMotion.Fade) 220 else 280 }
+
 /**
  * Tracks route changes for the shell. Call it outside the per-screen state holder, whose
  * content restarts for every screen key and would forget the previous route.
  */
 @Composable internal fun rememberScreenEntrance(route: Route, key: Any): ScreenEntrance {
     val context = LocalContext.current
+    val tv = LocalTv.current
     val enabled = remember(context) { systemAnimationsEnabled(context) }
     val last = remember { arrayOfNulls<Route>(1) }
     val entrance = remember(key) {
@@ -90,7 +95,7 @@ internal class ScreenEntrance(val motion: ScreenMotion, val progress: Animatable
     }
     LaunchedEffect(entrance) {
         if (entrance.progress.value < 1f) {
-            entrance.progress.animateTo(1f, tween(if (entrance.motion == ScreenMotion.Fade) 220 else 280, easing = LinearEasing))
+            entrance.progress.animateTo(1f, tween(screenEntranceDuration(entrance.motion, tv), easing = LinearEasing))
         }
     }
     return entrance
@@ -98,7 +103,7 @@ internal class ScreenEntrance(val motion: ScreenMotion, val progress: Animatable
 
 /**
  * Short enough never to delay input: focus moves immediately and the content is fully
- * opaque within the first ~170 ms.
+ * opaque within the first 108 ms on TV (168 ms on phone).
  */
 @Composable internal fun Modifier.screenEntrance(entrance: ScreenEntrance, vertical: Boolean): Modifier {
     val travel = with(LocalDensity.current) { 40.dp.toPx() }

@@ -52,6 +52,13 @@ file defines `vec3 edge(vec3 c, vec2 uv, float m, vec2 fc)`.
    style changes, draw the outgoing style, then the incoming one with
    `uMorph` in 0–1 and `SRC_ALPHA, ONE_MINUS_SRC_ALPHA` blending.
 
+The ambient pass can be scissored to the left and bottom regions outside the
+art rectangle: the outgoing edge pass writes opaque pixels across that entire
+rectangle. Its opaque interior does not need ambient sampling. Styles that
+resolve to unchanged art there return before evaluating noise or extra samples;
+watercolour retains its colour treatment. These shortcuts preserve the output
+instead of reducing the sharp artwork's resolution.
+
 ## Uniforms
 
 All sizes are in output pixels; coordinates follow GL (origin bottom-left).

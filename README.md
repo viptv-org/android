@@ -112,7 +112,7 @@ checkout or deployment:
 
 ## Design and native preview
 
-`DESIGN_REF` pins AND-037 and the current shared visual system. The generated tokens, local Onest/Bricolage fonts, licensed Lucide assets and the TV hero shaders (`app/src/androidMain/assets/hero`, TV-042) are checked by `scripts/design-sync.mjs`; never edit generated files. To adopt a new committed design:
+`DESIGN_REF` pins AND-037 and the current shared visual system. The generated tokens, local Onest/Bricolage fonts, licensed Lucide assets and the TV hero shaders (`app/src/androidMain/assets/hero`, TV-042) are checked by `scripts/design-sync.mjs`; never edit generated files. [TV animation performance](docs/TV_ANIMATION_PERFORMANCE.md) documents rendering budgets, the shader probe and device qualification limits. To adopt a new committed design:
 
 ```sh
 node scripts/design-sync.mjs sync ../design <full-commit-sha>

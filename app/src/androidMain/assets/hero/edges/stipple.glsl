@@ -1,4 +1,6 @@
 vec3 edge(vec3 c, vec2 uv, float m, vec2 fc) {
+  // These styles resolve to unchanged artwork outside the fade band.
+  if (m >= 1.0 && uv.y >= 0.42) return c;
   vec2 cell = floor(fc / (2.0 * uDpr));
   float t = fract(hash(cell) + uTime * 0.04 * hash(cell + 2.0));
   float mc = edgeMask((cell + 0.5) * 2.0 * uDpr / uRes);

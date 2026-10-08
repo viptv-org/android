@@ -1,4 +1,6 @@
 vec3 edge(vec3 c, vec2 uv, float m, vec2 fc) {
+  // These styles resolve to unchanged artwork outside the fade band.
+  if (m >= 1.0 && uv.y >= 0.42) return c;
   float n = fbm(uv * vec2(4.0, 3.0) + vec2(uTime * 0.05, -uTime * 0.035));
   float n2 = fbm(uv * vec2(9.0, 7.0) - vec2(uTime * 0.03, 0.0));
   float k = smoothstep(0.0, 1.0, m * 1.5 - 0.15 + (n - 0.5) * 1.6 * (1.0 - m) + (n2 - 0.5) * 0.5 * (1.0 - m));

@@ -1,4 +1,6 @@
 vec3 edge(vec3 c, vec2 uv, float m, vec2 fc) {
+  // These styles resolve to unchanged artwork outside the fade band.
+  if (m >= 1.0 && uv.y >= 0.42) return c;
   float s = 22.0 * uDpr;
   float column = floor(fc.x / s);
   vec2 g = vec2(fc.x, fc.y - uTime * (20.0 + 30.0 * hash1(column)) * uDpr) / s;

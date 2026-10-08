@@ -2037,3 +2037,26 @@ system trust, loopback policy and 16 KiB ZIP alignment. It contains the timeout
 diagnostic and no temporary probe. Installation preserves app data/sign-in;
 the installed base APK was read back and its hash matches. Private captures
 remain ignored. No physical TV or backend deployment changed.
+# Android TV animation optimization — 2026-10-08
+
+`perf/tv-animation-latency` adopts design
+`e860bb2dd60463ca7b930e51f9df8f0f94dcb559`. The transition-budget regression
+fails against `463b126` and passes against the candidate. All 48 library and
+312 app unit tests pass, including frame pacing at 30/60/120 Hz, immediate
+rest-to-transition response and surface recreation. Three core ABIs, normal
+debug APK assembly and baseline-aware lint pass; pre-existing lint warnings and
+baseline exclusions remain. The real APK probe and all 23 packaged hero asset
+hashes pass. APK SHA256:
+`a59bcb7977ab65749d190eb76176652c9bcf11791c0c8001d75467db58c152f6`.
+
+The desktop GLES probe passes all 11 edge styles at full/scaled TV sizes,
+including edge blends, OLED ground, nonempty output and GLES error checks.
+The 24-sample full-size run measured a median paired 18.3% ambient/edge cost
+reduction; this excludes the scene, mipmaps, Android composition and device
+presentation. Resting updates halve on a 60 Hz display, catalog transition
+duration is 280–350 ms, browsing dissolve 180 ms and episode settle 120 ms.
+See [method, measurements and remaining qualification](docs/TV_ANIMATION_PERFORMANCE.md).
+
+The shared emulator and physical TV were not used for this candidate; emulator
+coordination remained pending. Device frame times, rapid-input focus, visual
+review and background/return remain unverified. No deployment changed.

@@ -19,6 +19,7 @@ import android.view.Choreographer
 import android.view.TextureView
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
@@ -63,7 +64,8 @@ internal class HeroGlRenderer(
     private var fbo = 0
     private var scene = 0
     private val programs = HashMap<String, Program?>()
-    private val warmQueue = ArrayDeque<String>()
+    private val pacer = HeroFramePacer()
+    private val requestedArt = AtomicReference<ArtRequest?>()
     private var current: Slide? = null
     private var anim: Anim? = null
     private var pending: Bitmap? = null
@@ -72,7 +74,6 @@ internal class HeroGlRenderer(
     private var edgeStart = 0L
     private var edgeDuration = 0L
     private var running = false
-    private var frameCount = 0L
     private val t0 = SystemClock.uptimeMillis()
 
     /** Edge style currently targeted; read on the main thread to avoid repeats. */
@@ -84,6 +85,7 @@ internal class HeroGlRenderer(
     private class Slide(val tex: Int, val w: Int, val h: Int, val start: Long, val driftX: Float, val driftY: Float)
     private class Anim(val from: Slide, val to: Slide, val spec: HeroTransitionSpec, val start: Long, val duration: Long)
     private class Change(val slide: Slide, val spec: HeroTransitionSpec, val edge: String)
+    private class ArtRequest(val bitmap: Bitmap, val spec: HeroTransitionSpec, val edge: String)
     private class Program(val id: Int, val aPos: Int, val uniforms: Map<String, Int>) {
         operator fun get(name: String) = uniforms[name] ?: -1
     }
@@ -99,25 +101,41 @@ internal class HeroGlRenderer(
         lastBitmap = bitmap
         edge = edgeId
         transition = spec.id
-        handler.post {
-            if (surface == EGL14.EGL_NO_SURFACE) {
-                pending = bitmap
-                return@post
-            }
-            val slide = upload(bitmap) ?: return@post
-            val shown = current
-            val now = SystemClock.uptimeMillis()
-            val browsing = now - lastChange < BROWSE_MS
-            lastChange = now
-            if (shown == null) {
-                // The first art appears without a transition or an edge wipe.
-                current = slide; edgeA = edgeId; edgeB = edgeId; edgeDuration = 0
-                return@post
-            }
-            // Browsing keeps changes calm; the catalog transition plays once focus rests.
-            val chosen = if (browsing) library.index.transitions.firstOrNull { it.id == HeroMotionPolicy.BASELINE_TRANSITION } ?: spec else spec
-            start(anim?.let(::interrupt) ?: shown, Change(slide, chosen, edgeId))
+        requestedArt.set(ArtRequest(bitmap, spec, edgeId))
+        handler.removeCallbacks(showArt)
+        handler.post(showArt)
+    }
+
+    private val showArt = Runnable {
+        val request = requestedArt.getAndSet(null) ?: return@Runnable
+        val bitmap = request.bitmap
+        val spec = request.spec
+        val edgeId = request.edge
+        if (surface == EGL14.EGL_NO_SURFACE) {
+            pending = bitmap
+            return@Runnable
         }
+        val slide = upload(bitmap) ?: return@Runnable
+        if (requestedArt.get() != null) {
+            GLES20.glDeleteTextures(1, intArrayOf(slide.tex), 0)
+            return@Runnable
+        }
+        val shown = current
+        val now = SystemClock.uptimeMillis()
+        val browsing = now - lastChange < BROWSE_MS
+        lastChange = now
+        if (shown == null) {
+            // The first art appears without a transition or an edge wipe.
+            current = slide; edgeA = edgeId; edgeB = edgeId; edgeDuration = 0
+            return@Runnable
+        }
+        // Browsing keeps changes calm; the catalog transition plays once focus rests.
+        val chosen = if (browsing) library.index.transitions.firstOrNull { it.id == HeroMotionPolicy.BASELINE_TRANSITION } ?: spec else spec
+        // Compile requested styles before starting their clocks; unused catalog
+        // programs must not compete with navigation or resting frames.
+        program("fx:${chosen.id}")
+        program("edge:$edgeId")
+        start(anim?.let(::interrupt) ?: shown, Change(slide, chosen, edgeId))
     }
 
     private var lastChange = Long.MIN_VALUE / 2
@@ -128,6 +146,9 @@ internal class HeroGlRenderer(
     fun release() {
         handler.post {
             running = false
+            requestedArt.set(null)
+            lastBitmap = null
+            pending = null
             teardown()
             thread.quitSafely()
         }
@@ -165,11 +186,9 @@ internal class HeroGlRenderer(
         (pending ?: lastBitmap)?.let { current = upload(it) }
         pending = null
         edgeA = edge; edgeB = edge; edgeDuration = 0
-        // Compile the resting programs now; everything else warms up one per idle frame.
+        // Compile only programs needed for the first frame.
         program("fx:fade"); program("ambient"); program("edge:$edgeA")
-        warmQueue.clear()
-        library.index.transitions.forEach { warmQueue.add("fx:${it.id}") }
-        library.index.edges.forEach { warmQueue.add("edge:${it.id}") }
+        pacer.reset()
         running = true
         Choreographer.getInstance().postFrameCallback(frame)
         true
@@ -308,13 +327,19 @@ internal class HeroGlRenderer(
         anim = Anim(from, change.slide, change.spec, SystemClock.uptimeMillis(), duration)
     }
 
-    private fun program(key: String): Program? = programs.getOrPut(key) {
+    private fun program(key: String): Program? {
+        // Null is a cached compile failure: getOrPut would retry it every frame
+        // and repeatedly stall drivers that cannot compile a catalog effect.
+        if (programs.containsKey(key)) return programs[key]
         val (source, uniforms) = when {
             key == "ambient" -> library.ambientSource() to EDGE_UNIFORMS
             key.startsWith("fx:") -> library.transitionSource(key.removePrefix("fx:")) to TRANSITION_UNIFORMS
             else -> library.edgeSource(key.removePrefix("edge:")) to EDGE_UNIFORMS
         }
-        runCatching { link(source, uniforms) }.onFailure { Log.w(TAG, "Hero shader $key failed: ${it.message}") }.getOrNull()
+        val linked = runCatching { link(source, uniforms) }
+            .onFailure { Log.w(TAG, "Hero shader $key failed: ${it.message}") }.getOrNull()
+        programs[key] = linked
+        return linked
     }
 
     private fun compile(type: Int, source: String): Int {
@@ -348,14 +373,9 @@ internal class HeroGlRenderer(
         override fun doFrame(frameTimeNanos: Long) {
             if (!running) return
             Choreographer.getInstance().postFrameCallback(this)
-            frameCount++
             val now = SystemClock.uptimeMillis()
             val busy = anim != null || (edgeDuration > 0 && now - edgeStart < edgeDuration)
-            // Resting edges still animate, but at half rate to leave headroom for focus motion.
-            if (!busy && frameCount % 2L != 0L) {
-                warmQueue.removeFirstOrNull()?.let(::program)
-                return
-            }
+            if (!pacer.shouldRender(frameTimeNanos, busy)) return
             runCatching { render(now) }.onFailure {
                 Log.w(TAG, "Hero render failed", it)
                 running = false
@@ -405,9 +425,19 @@ internal class HeroGlRenderer(
             GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D)
         }
 
-        // Pass 2: ambient fill over the whole view.
+        // Pass 2: only the ambient pixels outside the opaque art pass survive.
         GLES20.glViewport(0, 0, viewW, viewH)
-        program("ambient")?.let { edgeUniforms(it, t, -1f); GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4) }
+        program("ambient")?.let {
+            edgeUniforms(it, t, -1f)
+            val left = (viewW - artW).coerceAtLeast(0)
+            val bottom = (viewH - artH).coerceAtLeast(0)
+            GLES20.glEnable(GLES20.GL_SCISSOR_TEST)
+            GLES20.glScissor(0, 0, left, viewH)
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+            GLES20.glScissor(left, 0, viewW - left, bottom)
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+            GLES20.glDisable(GLES20.GL_SCISSOR_TEST)
+        }
 
         // Pass 3: edge fade(s) inside the art rectangle (top-right).
         var morph = -1f
@@ -455,6 +485,7 @@ internal class HeroGlRenderer(
     }
 
     private fun teardown() {
+        Choreographer.getInstance().removeFrameCallback(frame)
         if (display == EGL14.EGL_NO_DISPLAY) return
         if (surface != EGL14.EGL_NO_SURFACE && context != EGL14.EGL_NO_CONTEXT) {
             EGL14.eglMakeCurrent(display, surface, surface, context)

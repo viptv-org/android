@@ -97,7 +97,7 @@ import org.viptv.app.SharedPresentation
 
 /** 16:9, matching the backdrops, so cover-fit crops nothing. */
 private const val ART_WIDTH = 1280
-private const val FOCUS_SETTLE_MS = 350L
+private const val FOCUS_SETTLE_MS = 120L
 /** Art narrower than this share of the art width would visibly blur when stretched. */
 private const val MIN_FILL = 0.6f
 private const val ART_HEIGHT = 720
