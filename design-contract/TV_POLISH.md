@@ -93,9 +93,10 @@ Resume styling. Implementation/browser/device evidence remains separate.
   viewport at the top. Lower shelves scroll naturally. Returning to the first
   row or hero reveals the complete hero. Cards remain 320×180, gap 36, and
   shelf spacing includes captions as in Android TV.
-- The hero stage is 664px high in the 1920px logical frame. Its backdrop is
-  [TV-042](#tv-042--shader-hero-backdrop), shared with Android TV, including its
-  scrims and OLED ground. The backdrop scrolls with the hero.
+- Hero blur matches Android TV in the 1920px logical frame: the hero stage is
+  664px high, the sharp art is 1120px wide at the right, and the full-size ambient
+  image uses a 72px blur at 0.6 opacity. Shared left/bottom scrims keep copy legible
+  and adapt to OLED ground. The art scrolls with the hero.
 - Resume uses the selected accent with dark foreground on Android TV and
   Vizio, including while focused. Retain a white focus ring without changing
   its size. Other action/focus colors keep their established meaning.
@@ -136,10 +137,12 @@ at `b7e36df` is the comparison for Home composition and queue content.
   replacement texture before swapping it; do not recreate visible text nodes.
   Center button labels and icons in the same vertical box, including Manage
   profiles. Use packaged Lucide controls, with a visible source-list icon.
-- Android's hero content stage is 664px. Home and detail use the
-  [TV-042](#tv-042--shader-hero-backdrop) backdrop, which defines its 950px
-  extent, art box, ambient fill, scrims and static fallback and matches the actual
-  page ground. Preserve image aspect ratios.
+- Android's hero content stage is 664px; its backdrop extends to 950px, with
+  1120×720 sharp art, 72px ambient blur at 0.6 opacity, and the lower fade from
+  440px to the ground at 950px. Preserve image aspect ratios. Home and detail
+  share the same backdrop compositor and match the actual page ground. Android TV
+  draws this composition only as the static fallback of
+  [TV-042](#tv-042--shader-hero-backdrop); TV-web keeps it as its backdrop.
 - The first Continue Watching shelf remains fully visible without scrolling on
   focus. Subsequent shelf scrolling aligns a complete heading at the top safe
   edge; do not leave clipped heading fragments at either viewport edge. Keep
@@ -253,8 +256,10 @@ bottom geometry. Browser measurements do not qualify physical low-memory TVs.
 Status: proposed. Implemented on Android TV in `viptv-org/android`
 `683904d63fc86eb0482bfc10892cb93dda2a374d` (Home) and
 `0e96bec39485a25c8aa2c9a6ca0aca41f7709c4d` (Details), branch
-`feat/hero-shader-backdrop`; shared TV-web (Tizen, Vizio, webOS) adopts it
-through a WebGL 1 port of the same sources. Roku keeps its ROK-042 composition.
+`feat/hero-shader-backdrop`. TV-042 applies to Android TV only. Shared TV-web
+(Tizen, Vizio, webOS and browsers) and Roku do not adopt it: their GPUs and
+runtimes are too weak for continuous shader rendering, so they keep the static
+backdrops of TV-038/TV-040 and ROK-042.
 Source revision is the design commit that introduces this section. Shader
 sources, catalog and the renderer contract are in
 [assets/hero/](../../assets/hero/README.md). Device and visual evidence is
@@ -317,8 +322,8 @@ Motion and selection:
   focus motion.
 
 Category: shared Core owns the category rule and the genre pools through
-`hero_edge_pool`. Clients pass the title's type and genres and use the returned
-edge ids; they keep no genre table of their own. The rule:
+`hero_edge_pool`. Android passes the title's type and genres and uses the
+returned edge ids; it keeps no genre table of its own. The rule:
 
 1. A genre of Animation or Anime (case-insensitive) selects Anime for a series
    and Animation for any other type.
@@ -344,20 +349,18 @@ ground, and the sharp art is 1120 × 720 at x 800–1920, y 0–720, centre-crop
 with no edge fade. Its text scrim runs from ground at x 0 through 0.92 opacity at
 x 960 to transparent at x 1920; the lower fade is the same 440–950 ramp. Without
 hero art it is the ground under both scrims. It has no drift, transition or edge
-style. Clients use it:
+style. Android TV uses it:
 
 - when system animations are disabled, evaluated as the screen opens: Android's
-  animator duration scale is 0 or animators are disabled; on the web,
-  `prefers-reduced-motion: reduce`;
-- when OpenGL ES (Android prefers ES 3 and accepts ES 2) or WebGL 1 is
-  unavailable, the context or surface cannot be created, or a frame fails to
+  animator duration scale is 0 or animators are disabled;
+- when OpenGL ES (Android prefers ES 3 and accepts ES 2) is unavailable, the context or surface cannot be created, or a frame fails to
   render; the backdrop stays static for the rest of that screen visit;
 - always on the Sources screen, so the GL renderer does not compete with player
   startup on weaker TVs.
 
 A transition program that fails to compile plays as the crossfade; an edge style
 that fails to compile uses `linear`. Returning from the background restores the
-latest art without a transition. GLES 2 and WebGL 1 renderers must provide the
+latest art without a transition. A GLES 2 renderer must provide the
 ambient blur as described in the asset README; Android's GLES 2 path samples
 without mipmaps and has not been measured against it. Android's shader path draws
 no frame before its first art, so a title without hero art there is unverified
@@ -377,5 +380,5 @@ Details, traverse episodes quickly (no queued transitions), rest on one with a
 season; check that the edge pool stays the series'. Repeat with animations disabled,
 forced GL context failure, a failing transition and edge program, background and
 return, the Sources screen and OLED ground. Record rest and transition frame times
-during focus movement on the lowest supported device; browser runs do not qualify
+during focus movement on the lowest supported device; emulator runs do not qualify
 physical TVs.

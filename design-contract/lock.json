@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/design",
-  "revision": "59a9e57e2ca96a59c4e2febace5325e01c9d012a",
+  "revision": "706a2462ea3c64427cdf1fa9f47ab77836c80c4f",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
@@ -16,7 +16,7 @@
     },
     "design-contract/TV_POLISH.md": {
       "source": "docs/platforms/TV_POLISH.md",
-      "sha256": "8204353292343b61c75253520f34c60b36f72c2728e859d7c448f3326c01c58d"
+      "sha256": "d2074b0d03f03c8ce260123d53835453a7a40ffb60bcf9ef63fe0a767c7e93ca"
     },
     "design-contract/specs/behavior/home-addon-refresh.md": {
       "source": "specs/behavior/home-addon-refresh.md",
@@ -96,7 +96,7 @@
     },
     "design-contract/assets/hero/README.md": {
       "source": "assets/hero/README.md",
-      "sha256": "2d3c38b4dd29290a425b501b9f5f28f0d40c97fb0e4fd54892d57f9c9a1a67f8"
+      "sha256": "c45a62e68ec7d76ee396b9690fad423c322ecf89d342fe89f623a71beef84e89"
     },
     "app/src/androidMain/assets/hero/ambient_main.glsl": {
       "source": "assets/hero/ambient_main.glsl",

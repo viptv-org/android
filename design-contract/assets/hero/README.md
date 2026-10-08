@@ -1,9 +1,8 @@
 # TV hero backdrop shaders
 
 GLSL ES 1.00 fragment sources for the TV hero backdrop specified by
-[TV-042](../../docs/platforms/TV_POLISH.md#tv-042--shader-hero-backdrop). The
-same sources are consumed by Android TV (OpenGL ES 2/3) and the TV-web WebGL 1
-renderer. Copied byte-exactly from `viptv-org/android`
+[TV-042](../../docs/platforms/TV_POLISH.md#tv-042--shader-hero-backdrop), consumed
+by Android TV (OpenGL ES 2/3) only. Copied byte-exactly from `viptv-org/android`
 `app/src/androidMain/assets/hero/` at
 `683904d63fc86eb0482bfc10892cb93dda2a374d`, except `index.json`, which carries
 only the `transitions` and `edges` catalogs. The genre-to-edge pools are product
@@ -83,7 +82,7 @@ upside down to match GL's v axis.
 
 `blurred()` and the ambient fill sample the scene with a mip LOD bias (up to
 6.0). That blur exists only when the scene texture has mipmaps. OpenGL ES 3
-allows mipmaps on the non-power-of-two 1280×720 scene; OpenGL ES 2 and WebGL 1
-do not. A GLES 2 or WebGL 1 renderer must use a power-of-two scene texture with
+allows mipmaps on the non-power-of-two 1280×720 scene; OpenGL ES 2 does not. A
+GLES 2 renderer must use a power-of-two scene texture with
 generated mipmaps, or an equivalent blur pass, so the ambient fill matches the
 heavy blur of the specification.

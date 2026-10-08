@@ -2,7 +2,8 @@
 
 Branch `feat/hero-shader-backdrop` source `b422a3f` (origin/main
 `685f66c` merged) pins core `dac4841e618f246f2e83e5bc96a3b210553092d5`, design
-`59a9e57e2ca96a59c4e2febace5325e01c9d012a` and gateway
+`706a2462ea3c64427cdf1fa9f47ab77836c80c4f` (TV-042 scoped to Android TV;
+its shader sources are unchanged from `59a9e57`, the build-tested pin) and gateway
 `698372df3734f6ec8019f70591b549280f47c28f`. Core, design and torrent artifact
 integrity checks pass. The 65 `assets/hero` shaders and catalog are imported by
 design-sync and pinned in `design-contract/lock.json`; the catalog has no
