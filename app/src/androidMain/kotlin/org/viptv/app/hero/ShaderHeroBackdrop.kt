@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,10 +39,12 @@ import org.viptv.app.Media
 import org.viptv.app.SharedPresentation
 
 /**
- * TV backdrop with shader transitions between images and a category-matched edge
- * fade. Shows [media]'s hero image, or [focusImage] (e.g. the focused episode's
+ * TV-042 backdrop with shader transitions between images and a category-matched
+ * edge fade. Shows [media]'s hero image, or [focusImage] (the focused episode's
  * still) when that decodes sharp enough to fill the art; the edge pool always
- * follows [media]. Uses the design compositor ([HeroBackdrop]) when the system
+ * follows [media]. [focusImage] is null when no episode is the subject and blank
+ * when the subject episode has no still; either way an episode subject waits for
+ * focus to settle. Uses the static compositor ([HeroBackdrop]) when the system
  * has animations disabled or GLES is unavailable.
  */
 @Composable internal fun ShaderHeroBackdrop(media: Media, focusImage: String? = null) {
@@ -61,6 +64,7 @@ import org.viptv.app.SharedPresentation
     val policy = remember(library) { HeroMotionPolicy(library.index) }
     val renderer = remember(library) { HeroGlRenderer(library, ground.toArgb()) { unavailable = true } }
     DisposableEffect(renderer) { onDispose { renderer.release() } }
+    SideEffect { renderer.ground = ground.toArgb() }
     // One core decision per title, never per frame or per episode focus.
     val edgePool = remember(policy, media.type, media.genres) { SharedPresentation.heroEdgePool(media.type, media.genres, policy.edgeIds) }
     val artW = with(density) { ART_WIDTH.dp.roundToPx() }
@@ -71,7 +75,7 @@ import org.viptv.app.SharedPresentation
     var shown by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(base, focusImage) {
         // Moving quickly through episode cards should not queue a transition per card.
-        if (!focusImage.isNullOrBlank()) delay(FOCUS_SETTLE_MS)
+        if (focusImage != null) delay(FOCUS_SETTLE_MS)
         val focused = focusImage?.takeIf { it.isNotBlank() && it != shown }?.let { loadArt(context, it, artW, artH) }
             ?.takeIf { it.width >= artW * MIN_FILL }
         val (url, bitmap) = when {
@@ -91,7 +95,7 @@ import org.viptv.app.SharedPresentation
         // art's fade zone ends and leaves the subject undimmed.
         Box(Modifier.matchParentSize().background(Brush.horizontalGradient(
             0f to ground, 0.22f to ground.copy(alpha = .9f), 0.4f to ground.copy(alpha = .35f), 0.52f to Color.Transparent)))
-        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Transparent, ground), startY = 440f)))
+        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Transparent, ground), startY = with(density) { LOWER_FADE_START.dp.toPx() })))
     }
 }
 
@@ -102,6 +106,8 @@ private const val FOCUS_SETTLE_MS = 350L
 private const val MIN_FILL = 0.6f
 private const val ART_HEIGHT = 720
 private const val BACKDROP_HEIGHT = 950
+/** The lower fade runs from transparent here (logical px) to ground at the backdrop's bottom edge. */
+internal const val LOWER_FADE_START = 440
 
 /** Decodes without upscaling, so [Bitmap.getWidth] reflects the art's real resolution. */
 private suspend fun loadArt(context: Context, url: String, width: Int, height: Int): Bitmap? {

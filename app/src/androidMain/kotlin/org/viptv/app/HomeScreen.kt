@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
+import org.viptv.app.hero.LOWER_FADE_START
 import org.viptv.app.hero.ShaderHeroBackdrop
 import org.viptv.app.theme.ViptvColor as C
 
@@ -129,7 +130,7 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
             Image(painter, null, Modifier.align(Alignment.TopEnd).width(1120.dp).height(720.dp), contentScale = ContentScale.Crop)
         }
         Box(Modifier.matchParentSize().background(Brush.horizontalGradient(listOf(ground, ground.copy(alpha = .92f), Color.Transparent))))
-        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Transparent, ground), startY = 440f)))
+        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Transparent, ground), startY = with(LocalDensity.current) { LOWER_FADE_START.dp.toPx() })))
     }
 }
 

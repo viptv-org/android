@@ -37,14 +37,17 @@ import kotlin.random.Random
  *  3. the edge pass dissolves the scene into that ambient fill inside the art
  *     rectangle (top-right). While the edge style changes, the incoming style
  *     is blended over the outgoing one through a noise wipe.
- * Requests that arrive mid-transition are coalesced; only the latest plays next.
+ * Requests that arrive mid-transition are coalesced; only the latest plays next,
+ * with its edge change, once the running transition completes.
  * Every public method may be called from the main thread.
  */
 internal class HeroGlRenderer(
     private val library: HeroShaderLibrary,
-    private val ground: Int,
+    ground: Int,
     private val onUnavailable: () -> Unit,
 ) : TextureView.SurfaceTextureListener {
+    /** Page ground as ARGB; follows the theme (including OLED black). */
+    @Volatile var ground: Int = ground
     private val thread = HandlerThread("hero-gl").apply { start() }
     private val handler = Handler(thread.looper)
 
@@ -67,7 +70,7 @@ internal class HeroGlRenderer(
     private val warmQueue = ArrayDeque<String>()
     private var current: Slide? = null
     private var anim: Anim? = null
-    private var pending: Pair<Bitmap, HeroTransitionSpec>? = null
+    private var pending: Bitmap? = null
     private var edgeA = "cinematic"
     private var edgeB = "cinematic"
     private var edgeStart = 0L
@@ -84,6 +87,7 @@ internal class HeroGlRenderer(
 
     private class Slide(val tex: Int, val w: Int, val h: Int, val start: Long, val driftX: Float, val driftY: Float)
     private class Anim(val from: Slide, val to: Slide, val spec: HeroTransitionSpec, val start: Long, val duration: Long)
+    private class Change(val slide: Slide, val spec: HeroTransitionSpec, val edge: String)
     private class Program(val id: Int, val aPos: Int, val uniforms: Map<String, Int>) {
         operator fun get(name: String) = uniforms[name] ?: -1
     }
@@ -101,26 +105,25 @@ internal class HeroGlRenderer(
         transition = spec.id
         handler.post {
             if (surface == EGL14.EGL_NO_SURFACE) {
-                pending = bitmap to spec
-                edgeA = edgeId; edgeB = edgeId
+                pending = bitmap
                 return@post
             }
-            setEdgeOnGl(edgeId, (spec.duration * 1000).toLong())
             val slide = upload(bitmap) ?: return@post
             val shown = current
             when {
-                shown == null -> current = slide
+                // The first art appears without a transition or an edge wipe.
+                shown == null -> { current = slide; edgeA = edgeId; edgeB = edgeId; edgeDuration = 0 }
                 anim != null -> {
                     // Only the latest request waits; a superseded one never plays.
-                    pendingSlide?.let { GLES20.glDeleteTextures(1, intArrayOf(it.first.tex), 0) }
-                    pendingSlide = slide to spec
+                    pendingSlide?.let { GLES20.glDeleteTextures(1, intArrayOf(it.slide.tex), 0) }
+                    pendingSlide = Change(slide, spec, edgeId)
                 }
-                else -> start(shown, slide, spec)
+                else -> start(shown, Change(slide, spec, edgeId))
             }
         }
     }
 
-    private var pendingSlide: Pair<Slide, HeroTransitionSpec>? = null
+    private var pendingSlide: Change? = null
 
     /** The latest art, re-uploaded when the surface is recreated (e.g. returning from background). */
     @Volatile private var lastBitmap: Bitmap? = null
@@ -161,8 +164,10 @@ internal class HeroGlRenderer(
         check(surface != EGL14.EGL_NO_SURFACE && EGL14.eglMakeCurrent(display, surface, surface, context)) { "eglMakeCurrent" }
         viewW = width; viewH = height
         setupResources()
-        (pending?.first ?: lastBitmap)?.let { current = upload(it) }
+        // The latest art and edge return without a transition or wipe.
+        (pending ?: lastBitmap)?.let { current = upload(it) }
         pending = null
+        edgeA = edge; edgeB = edge; edgeDuration = 0
         // Compile the resting programs now; everything else warms up one per idle frame.
         program("fx:fade"); program("ambient"); program("edge:$edgeA")
         warmQueue.clear()
@@ -263,14 +268,17 @@ internal class HeroGlRenderer(
 
     private fun setEdgeOnGl(id: String, duration: Long) {
         val now = SystemClock.uptimeMillis()
-        if (edgeDuration > 0 && now - edgeStart < edgeDuration) edgeA = edgeB
+        // A wipe that is running, or finished but not yet folded by a frame, leaves its incoming style as the base.
+        if (edgeDuration > 0) edgeA = edgeB
         edgeB = id
         edgeStart = now
         edgeDuration = if (id == edgeA) 0 else duration
     }
 
-    private fun start(from: Slide, to: Slide, spec: HeroTransitionSpec) {
-        anim = Anim(from, to, spec, SystemClock.uptimeMillis(), (spec.duration * 1000).toLong())
+    private fun start(from: Slide, change: Change) {
+        val duration = (change.spec.duration * 1000).toLong()
+        setEdgeOnGl(change.edge, duration)
+        anim = Anim(from, change.slide, change.spec, SystemClock.uptimeMillis(), duration)
     }
 
     private fun program(key: String): Program? = programs.getOrPut(key) {
@@ -341,7 +349,7 @@ internal class HeroGlRenderer(
                 current = a.to
                 anim = null
                 from = a.to; to = a.to; spec = null
-                pendingSlide?.let { (slide, next) -> pendingSlide = null; start(a.to, slide, next) }
+                pendingSlide?.let { next -> pendingSlide = null; start(a.to, next) }
             }
         }
         val t = (now - t0) / 1000f
@@ -383,7 +391,7 @@ internal class HeroGlRenderer(
         }
         GLES20.glViewport(viewW - artW, viewH - artH, artW, artH)
         (program("edge:$edgeA") ?: program("edge:linear"))?.let { edgeUniforms(it, t, -1f); GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4) }
-        if (morph >= 0f) program("edge:$edgeB")?.let {
+        if (morph >= 0f) (program("edge:$edgeB") ?: program("edge:linear"))?.let {
             GLES20.glEnable(GLES20.GL_BLEND)
             GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
             edgeUniforms(it, t, morph)
@@ -401,6 +409,7 @@ internal class HeroGlRenderer(
         GLES20.glUniform1f(p["uTime"], t)
         GLES20.glUniform1f(p["uDpr"], layoutScale)
         GLES20.glUniform1f(p["uMorph"], morph)
+        val ground = ground
         GLES20.glUniform3f(p["uGround"], Color.red(ground) / 255f, Color.green(ground) / 255f, Color.blue(ground) / 255f)
         GLES20.glUniform2f(p["uView"], viewW.toFloat(), viewH.toFloat())
         GLES20.glUniform2f(p["uOrigin"], (viewW - artW).toFloat(), (viewH - artH).toFloat())
@@ -424,7 +433,7 @@ internal class HeroGlRenderer(
         if (surface != EGL14.EGL_NO_SURFACE && context != EGL14.EGL_NO_CONTEXT) {
             EGL14.eglMakeCurrent(display, surface, surface, context)
             programs.values.filterNotNull().forEach { GLES20.glDeleteProgram(it.id) }
-            val textures = listOfNotNull(current?.tex, anim?.from?.tex, anim?.to?.tex, pendingSlide?.first?.tex, scene.takeIf { it != 0 }, glyphs.takeIf { it != 0 })
+            val textures = listOfNotNull(current?.tex, anim?.from?.tex, anim?.to?.tex, pendingSlide?.slide?.tex, scene.takeIf { it != 0 }, glyphs.takeIf { it != 0 })
             if (textures.isNotEmpty()) GLES20.glDeleteTextures(textures.size, textures.toIntArray(), 0)
             if (fbo != 0) GLES20.glDeleteFramebuffers(1, intArrayOf(fbo), 0)
             if (quad != 0) GLES20.glDeleteBuffers(1, intArrayOf(quad), 0)

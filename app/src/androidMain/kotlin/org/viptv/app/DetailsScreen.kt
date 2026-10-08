@@ -179,7 +179,8 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     Box(Modifier.fillMaxSize()) {
         if (tv) {
             val focusedEpisode = episodes.getOrNull(focusedEpisodeIndex)
-            val episodeStill = remember(focusedEpisode) { focusedEpisode?.let { CoreModels.presentation(it).episodeImage } }
+            // Blank, not null, for a focused episode without a still so the backdrop still waits for focus to settle.
+            val episodeStill = remember(focusedEpisode) { focusedEpisode?.let { CoreModels.presentation(it).episodeImage.orEmpty() } }
             ShaderHeroBackdrop(media, episodeStill)
         }
         LazyColumn(Modifier.fillMaxSize(), state = pageScroll, contentPadding = if (tv) PaddingValues(start = 192.dp, top = 96.dp, bottom = 54.dp) else PaddingValues(bottom = 200.dp)) {
