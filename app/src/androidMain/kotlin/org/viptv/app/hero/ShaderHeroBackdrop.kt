@@ -15,6 +15,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -27,6 +28,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import android.content.Context
 import coil.size.Precision
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
@@ -46,7 +49,12 @@ import org.viptv.app.SharedPresentation
  * focus to settle. Uses the static compositor ([HeroBackdrop]) when the system
  * has animations disabled or GLES is unavailable.
  */
-@Composable internal fun ShaderHeroBackdrop(media: Media, focusImage: String? = null) {
+@Composable internal fun ShaderHeroBackdrop(
+    media: Media,
+    focusImage: String? = null,
+    preloadItems: List<Media> = emptyList(),
+    preloadEpisodes: Boolean = false,
+) {
     val context = LocalContext.current
     var unavailable by remember { mutableStateOf(false) }
     val motion = remember(context) { systemAnimationsEnabled(context) }
@@ -65,23 +73,42 @@ import org.viptv.app.SharedPresentation
     val edgePool = remember(policy, media.type, media.genres) { SharedPresentation.heroEdgePool(media.type, media.genres, policy.edgeIds) }
     val artW = with(density) { ART_WIDTH.dp.roundToPx() }
     val artH = with(density) { ART_HEIGHT.dp.roundToPx() }
+    val scope = rememberCoroutineScope()
+    val artwork = remember(context, artW, artH) {
+        HeroArtPreloader(scope, { url: String -> loadArt(context, url, artW, artH) }, { it.allocationByteCount })
+    }
+    DisposableEffect(artwork) { onDispose { artwork.close() } }
     LaunchedEffect(artW, artH) { renderer.setArt(artW, artH, artW / ART_WIDTH.toFloat()) }
 
     val base = remember(media) { CoreModels.presentation(media).heroImage }
-    var shown by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(base, focusImage) {
+    var shown by remember(artwork) { mutableStateOf<String?>(null) }
+    LaunchedEffect(base, focusImage, artwork) {
         // Moving quickly through episode cards should not queue a transition per card.
         if (focusImage != null) delay(FOCUS_SETTLE_MS)
-        val focused = focusImage?.takeIf { it.isNotBlank() && it != shown }?.let { loadArt(context, it, artW, artH) }
+        val focused = focusImage?.takeIf { it.isNotBlank() && it != shown }?.let { artwork.load(it) }
             ?.takeIf { it.width >= artW * MIN_FILL }
         val (url, bitmap) = when {
             focused != null -> focusImage to focused
             focusImage == shown && !focusImage.isNullOrBlank() -> return@LaunchedEffect
             base.isNullOrBlank() || base == shown -> return@LaunchedEffect
-            else -> base to (loadArt(context, base, artW, artH) ?: return@LaunchedEffect)
+            else -> base to (artwork.load(base) ?: return@LaunchedEffect)
         }
         shown = url
         renderer.show(bitmap, policy.nextTransition(renderer.transition), policy.nextEdge(edgePool, renderer.edge))
+    }
+
+    LaunchedEffect(base, focusImage, preloadItems, preloadEpisodes, artwork) {
+        val current = focusImage?.takeIf { it.isNotBlank() } ?: base
+        artwork.setWindow(current, emptyList())
+        // Keep native projections off the remote-input thread; resolve only the
+        // two adjacent items already present in this screen's row.
+        val urls = withContext(Dispatchers.Default) {
+            preloadItems.take(2).mapNotNull { item ->
+                val presentation = CoreModels.presentation(item)
+                if (preloadEpisodes) presentation.episodeImage else presentation.heroImage
+            }
+        }
+        artwork.setWindow(current, urls)
     }
 
     Box(Modifier.fillMaxWidth().height(BACKDROP_HEIGHT.dp)) {

@@ -1,5 +1,42 @@
 # Android TV animation performance — 2026-10-08
 
+## Neighbour artwork preloading
+
+The animated Home/Details backdrop adopts design
+`581289b695f6802e77da4efeedad9bf64bab9b04`. Home passes the two nearest existing
+hero-row items; Details passes the two nearest existing selected-season episodes
+(the first two before episode focus). Core resolves their artwork roles on a
+background dispatcher. There are no speculative metadata requests.
+
+`HeroArtPreloader` retains at most three decoded images and 12 MiB of bitmap
+references, keyed within one backdrop size/lifetime. One speculative request runs
+at a time. Foreground selection cancels unrelated speculation and shares a warm
+bitmap or pending decode for the same URL. Focus-window changes cancel stale
+work; backdrop disposal/resize cancels requests and drops retained references.
+Coil-owned bitmaps are never recycled by this cache.
+
+Both display and preload use the same software-bitmap request builder, output
+dimensions and inexact precision. Inexact precision preserves the existing
+no-upscaling/low-resolution rejection behavior; see Coil 2.7's
+[decoder implementation](https://github.com/coil-kt/coil/blob/2.7.0/coil-base/src/main/java/coil/decode/BitmapFactoryDecoder.kt).
+The 12 MiB limit is this cache's retained references, not total process memory;
+Coil's existing shared cache, in-progress decoding and renderer textures are
+additional allocations. An oversize decoded image is displayed but not retained
+by this preloader. GPU upload, mipmaps and cold shader compilation still occur
+when showing a new bitmap.
+
+Twelve coroutine tests cover ready/in-flight reuse, foreground priority, serial
+speculation, rapid window changes, duplicate/blank URLs, byte/entry limits,
+oversize images, disposal, failure/retry and immediately completed requests.
+The controlled 250 ms loader fixture yields zero additional fetch/decode time
+when its warmed neighbour is focused, with one loader call. This is deterministic
+scheduling evidence, not a measured TV latency improvement. All 48 library and
+324 app tests, three core ABIs, debug APK assembly and baseline-aware lint pass.
+Shared-emulator and physical TV navigation/frame-time qualification remain pending.
+
+The shader timing measurements below describe the earlier rendering optimization;
+they do not measure this artwork-preloading change.
+
 Branch `perf/tv-animation-latency` starts at the fetched shader branch
 `463b126`. It adopts design `e860bb2dd60463ca7b930e51f9df8f0f94dcb559`.
 Home/Details retain the shader catalog, genre edge pools, full-resolution art,

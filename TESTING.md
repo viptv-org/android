@@ -2060,3 +2060,27 @@ See [method, measurements and remaining qualification](docs/TV_ANIMATION_PERFORM
 The shared emulator and physical TV were not used for this candidate; emulator
 coordination remained pending. Device frame times, rapid-input focus, visual
 review and background/return remain unverified. No deployment changed.
+
+# Neighbouring TV hero artwork preloading — 2026-10-08
+
+The animated Home/Details backdrop adopts design
+`581289b695f6802e77da4efeedad9bf64bab9b04`. It preloads at most two adjacent
+artworks with one speculative loader, shares ready/pending software-bitmap
+decodes with foreground selection, and retains at most three images/12 MiB.
+Core artwork projections run off the input thread; no metadata fetches are added.
+
+All 48 library and 324 app unit tests pass. The twelve preloader tests establish
+warm/in-flight reuse, serial speculation, cancellation, foreground priority,
+duplicate filtering, memory limits, disposal and retry. A warmed controlled
+250 ms loader fixture requires zero additional fetch/decode time and no duplicate
+request. Three core ABIs, debug APK assembly and baseline-aware lint pass.
+The real APK and packaged design checks are recorded with the candidate artifact.
+
+No shared emulator or physical TV was installed/navigated for this candidate.
+Actual Coil/network latency, focus navigation, visual review and frame-time
+improvement remain unverified on device. GPU uploads/mipmaps still run on image
+changes. See [scope and method](docs/TV_ANIMATION_PERFORMANCE.md).
+
+Preloading candidate APK SHA256: `9157f524eeda3a0294669240894398928e85f8ccf6418dd9544a2b08ce7d44f5`.
+Real APK minSdk, three-ABI contents, pins/notices/trust/alignment and all 23
+packaged hero hashes pass.

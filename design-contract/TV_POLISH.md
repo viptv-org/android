@@ -334,6 +334,17 @@ Motion and selection:
   and discard superseded artwork requests before upload.
 - Episode focus settles for 120 ms before fetching its still. Continuous remote
   movement cancels superseded requests; settling never blocks card focus/input.
+- Artwork readiness: Home preloads at most two adjacent hero images from its
+  existing hero row; Details preloads at most two adjacent episode stills from
+  the selected season. Resolve artwork roles through Core, without speculative
+  metadata requests. Decode at the same output size and software-bitmap settings
+  as the displayed hero, so a warm image or its pending decode can be reused.
+  Run only one speculative request at a time; foreground artwork takes priority.
+  Keep at most three decoded images and 12 MiB of screen-owned bitmap references.
+  Cancel stale speculative work when the focus window changes, and release
+  requests/references when the backdrop leaves the screen or changes size.
+  Preloading does not choose the next title, consume an effect bag or change
+  focus, low-resolution rejection, missing-image fallback or transition timing.
 - TV screen entrances complete within 180 ms (140 ms for a fade); input and
   restored focus remain immediate. Phone entrance timing is unchanged.
 

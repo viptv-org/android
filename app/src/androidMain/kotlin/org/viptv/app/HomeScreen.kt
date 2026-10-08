@@ -28,6 +28,7 @@ import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import org.viptv.app.hero.LOWER_FADE_START
 import org.viptv.app.hero.ShaderHeroBackdrop
+import org.viptv.app.hero.neighbouringHeroItems
 import org.viptv.app.theme.ViptvColor as C
 
 internal fun AppController.activateHero(media: Media, queue: Boolean) {
@@ -85,7 +86,7 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
             item(key = "featured") {
                 if (tv) {
                     if (hero != null) Box(Modifier.fillMaxWidth().height(664.dp)) {
-                        ShaderHeroBackdrop(hero)
+                        ShaderHeroBackdrop(hero, preloadItems = neighbouringHeroItems(firstShelf?.items.orEmpty(), firstShelf?.items?.indexOf(hero) ?: -1))
                         Box(Modifier.padding(start = 192.dp, end = 96.dp, top = 54.dp)) { TelevisionHero(hero, heroShelf?.isQueueShelf == true, heroShelf?.let(shelves::indexOf)?.coerceAtLeast(0) ?: 0, heroShelf?.id.orEmpty(), state, controller, initial, rail) }
                     }
                     else EmptyState(if (state.homeLoading) "Starting VIPTV…" else "Your library is ready", "Browse Discover to find something to watch.", "home", Modifier.height(540.dp))

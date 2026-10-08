@@ -181,7 +181,9 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
             val focusedEpisode = episodes.getOrNull(focusedEpisodeIndex)
             // Blank, not null, for a focused episode without a still so the backdrop still waits for focus to settle.
             val episodeStill = remember(focusedEpisode) { focusedEpisode?.let { CoreModels.presentation(it).episodeImage.orEmpty() } }
-            ShaderHeroBackdrop(media, episodeStill)
+            ShaderHeroBackdrop(media, episodeStill,
+                preloadItems = org.viptv.app.hero.neighbouringHeroItems(episodes, focusedEpisodeIndex),
+                preloadEpisodes = true)
         }
         LazyColumn(Modifier.fillMaxSize(), state = pageScroll, contentPadding = if (tv) PaddingValues(start = 192.dp, top = 96.dp, bottom = 54.dp) else PaddingValues(bottom = 200.dp)) {
             item {
