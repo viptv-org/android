@@ -113,5 +113,5 @@ internal const val LOWER_FADE_START = 440
 private suspend fun loadArt(context: Context, url: String, width: Int, height: Int): Bitmap? {
     val request = ImageRequest.Builder(context).data(url).size(width, height).precision(Precision.INEXACT).allowHardware(false).build()
     return ((context.imageLoader.execute(request) as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap
-        ?.takeIf { it.config != Bitmap.Config.HARDWARE }
+        ?.takeIf { Build.VERSION.SDK_INT < 26 || it.config != Bitmap.Config.HARDWARE }
 }
