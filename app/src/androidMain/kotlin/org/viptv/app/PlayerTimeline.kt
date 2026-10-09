@@ -17,10 +17,11 @@ import org.viptv.app.theme.ViptvColor as C
 
 /** One track coordinate system owns rendering, touch and accessibility seeking. */
 @Composable internal fun PlayerTimeline(position: Long, duration: Long, buffered: Long?, modifier: Modifier = Modifier,
-    enabled: Boolean = true, onSeek: ((Long) -> Unit)? = null, onCommit: () -> Unit = {}, onCancel: () -> Unit = {}) {
+    enabled: Boolean = true, onSeek: ((Long) -> Unit)? = null, onCommit: () -> Unit = {}, onCancel: () -> Unit = {}, previewPosition: Long? = null) {
     val tv = LocalTv.current
     val accent = LocalAccent.current
     val progress = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+    val thumb = if (duration > 0) ((previewPosition ?: position).toFloat() / duration).coerceIn(0f, 1f) else 0f
     val buffer = if (duration > 0) ((buffered ?: 0).toFloat() / duration).coerceIn(progress, 1f) else progress
     val seek by rememberUpdatedState(onSeek)
     val commit by rememberUpdatedState(onCommit)
@@ -30,7 +31,8 @@ import org.viptv.app.theme.ViptvColor as C
         Canvas(Modifier.fillMaxWidth().height(measure(36, 44)).then(if (interactive) Modifier.systemGestureExclusion() else Modifier)
             .semantics {
                 contentDescription = "Playback position"
-                progressBarRangeInfo = ProgressBarRangeInfo(progress, 0f..1f)
+                progressBarRangeInfo = ProgressBarRangeInfo(thumb, 0f..1f)
+                if (buffered != null) stateDescription = "Buffered to ${formatTime(buffered)}"
                 if (interactive) setProgress { value -> seek?.invoke((duration * value.coerceIn(0f, 1f)).toLong()); commit(); true }
             }.pointerInput(duration, interactive) {
                 if (interactive) awaitEachGesture {
@@ -59,10 +61,11 @@ import org.viptv.app.theme.ViptvColor as C
             segment(buffer, C.textSecondary.copy(alpha = .6f))
             segment(progress, accent)
             val knob = (if (tv) 9.dp else 7.dp).toPx()
-            if (duration > 0) drawCircle(C.textPrimary, knob, Offset((size.width * progress).coerceIn(knob, (size.width - knob).coerceAtLeast(knob)), size.height / 2))
+            if (duration > 0) drawCircle(C.textPrimary, knob, Offset((size.width * thumb).coerceIn(knob, (size.width - knob).coerceAtLeast(knob)), size.height / 2))
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            VText(formatTime(position), if (tv) 22 else 13, color = C.textSecondary)
+            VText(formatTime(previewPosition ?: position), if (tv) 22 else 13, color = C.textSecondary)
+            if (buffered != null && buffered > position) VText("${formatTime(buffered - position)} buffered", if (tv) 18 else 12, color = C.textSecondary)
             VText(formatTime(duration), if (tv) 22 else 13, color = C.textSecondary)
         }
     }
