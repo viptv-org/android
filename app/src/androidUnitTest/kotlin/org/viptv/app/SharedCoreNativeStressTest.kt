@@ -36,6 +36,23 @@ class SharedCoreNativeStressTest {
 
     private fun phase(core: CoreBridge) = JSONObject(core.view()).getString("phase")
 
+    @Test(timeout = 60_000) fun loopbackFixtureShutdownJoinsWaitingReplyWorkers() {
+        repeat(100) {
+            StalledReads(3).use { server ->
+                val port = java.net.URI(server.origin).port
+                val clients = List(3) { Socket("127.0.0.1", port) }
+                try {
+                    clients.forEach { socket ->
+                        socket.getOutputStream().write("GET /api/auth/me HTTP/1.1\r\nHost: localhost\r\n\r\n".toByteArray())
+                    }
+                    assertTrue(server.entered.await(5, TimeUnit.SECONDS))
+                } finally {
+                    clients.forEach { it.close() }
+                }
+            }
+        }
+    }
+
     @Test(timeout = 60_000) fun repeatedNativeHandlesAndStringBufferSuccessErrorPathsRemainUsable() {
         // Returned strings and typed errors exercise generated RustBuffer lifting/freeing.
         // This observes bounded functionality, not allocator/sanitizer leak freedom.
@@ -225,8 +242,15 @@ class SharedCoreNativeStressTest {
             listener.close()
             sockets.forEach { it.close() }
             acceptor.join(5000)
-            workers.shutdownNow()
-            assertTrue(workers.awaitTermination(5, TimeUnit.SECONDS))
+            // Release and close IO before joining. Interrupting a released
+            // latch can still throw until its waiter has resumed.
+            workers.shutdown()
+            val settled = workers.awaitTermination(5, TimeUnit.SECONDS)
+            if (!settled) {
+                workers.shutdownNow()
+                workers.awaitTermination(5, TimeUnit.SECONDS)
+            }
+            assertTrue(settled, "Loopback reply workers not reclaimed")
             assertTrue(!acceptor.isAlive && sockets.isEmpty(), "Loopback fixture resources not reclaimed")
             failure.get()?.let { throw AssertionError("Loopback fixture failed", it) }
         }
