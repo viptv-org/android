@@ -6,6 +6,8 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.Tracks
+import androidx.media3.common.C
+import androidx.media3.decoder.ffmpeg.FfmpegLibrary
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
@@ -56,6 +58,15 @@ internal fun AndroidMedia3Backend.createListener(callbackPlayer: ExoPlayer): Pla
         override fun onTracksChanged(tracks: Tracks) {
             if (callbackPlayer !== player || released) return
             val active = sessionId ?: return
+            if (diagnosticTransferListener != null) {
+                val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+                android.util.Log.i("PlaybackAudioDiagnostic", "groups=${audioGroups.size} ffmpeg_available=${FfmpegLibrary.isAvailable()} dts_decoder=${FfmpegLibrary.supportsFormat("audio/vnd.dts")}")
+                audioGroups.forEach { group -> repeat(group.length) { index ->
+                    val format = group.getTrackFormat(index)
+                    val codec = format.sampleMimeType?.takeIf { it in setOf("audio/vnd.dts", "audio/vnd.dts.hd", "audio/ac3", "audio/eac3", "audio/true-hd", "audio/mp4a-latm") } ?: "other"
+                    android.util.Log.i("PlaybackAudioDiagnostic", "codec=$codec channels=${format.channelCount} rate=${format.sampleRate} support=${group.getTrackSupport(index)} selected=${group.isTrackSelected(index)}")
+                } }
+            }
             val snapshot = snapshotTracks(tracks)
             eventsFlow.tryEmit(
                 BackendEvent.TracksChanged(

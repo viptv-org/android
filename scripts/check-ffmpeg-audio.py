@@ -31,6 +31,8 @@ for abi, machine in [("armeabi-v7a", 40), ("arm64-v8a", 183), ("x86_64", 62)]:
     assert b"libc++_shared.so\0" not in data, f"Unexpected shared C++ runtime: {abi}"
 if len(sys.argv) == 2:
     with zipfile.ZipFile(sys.argv[1]) as apk:
+        dex = b"".join(apk.read(name) for name in apk.namelist() if name.endswith(".dex"))
+        assert b"growOutputBuffer" in dex, "FFmpeg JNI callback was removed from the packaged APK"
         for abi, expected in native["sha256"].items():
             assert hashlib.sha256(apk.read(f"lib/{abi}/libffmpegJNI.so")).hexdigest() == expected, abi
         for name in ["MEDIA3-LICENSE", "FFMPEG-LGPL-2.1", "NOTICE.txt"]:
