@@ -31,6 +31,8 @@ if (mode === 'sync') {
   for (const path of names) {
     if (path.startsWith('assets/fonts/')) mappings.push([path, path.endsWith('.ttf') ? `app/src/androidMain/res/font/${path.split('/').at(-1)}` : `app/src/androidMain/assets/design/fonts/${path.split('/').at(-1)}`]);
     if (path.startsWith('assets/roku/roku/images/lucide/') && !path.endsWith('.svg')) mappings.push([path, `app/src/androidMain/assets/design/lucide/${path.split('/').at(-1)}`]);
+    // Shared TV hero shaders and catalog ship as app assets; their renderer contract stays with the design docs.
+    if (path.startsWith('assets/hero/')) mappings.push([path, path === 'assets/hero/README.md' ? `design-contract/${path}` : `app/src/androidMain/${path}`]);
   }
   for (const [source, destination] of mappings) {
     const bytes = git('show', `${revision}:${source}`);
@@ -47,6 +49,10 @@ if (mode === 'sync') {
     const bytes = readFileSync(resolve(temporary, 'android', path));
     write(path, bytes); files[path] = { source: 'generated from pinned tokens', sha256: hash(bytes) };
   } finally { rmSync(temporary, { recursive: true, force: true }); }
+  // Remove artifacts the previous pin imported that this revision no longer provides.
+  const lockPath = resolve(root, 'design-contract/lock.json');
+  const previous = existsSync(lockPath) ? JSON.parse(readFileSync(lockPath, 'utf8')).files ?? {} : {};
+  for (const path of Object.keys(previous)) if (!files[path]) rmSync(resolve(root, path), { force: true });
   write('DESIGN_REF', revision + '\n');
   write('design-contract/lock.json', JSON.stringify({ repository: 'viptv-org/design', revision, files }, null, 2) + '\n');
 } else if (mode === 'check') {

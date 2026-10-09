@@ -1,5 +1,7 @@
 package org.viptv.app
 
+import org.viptv.app.hero.TvHeroBackdrop
+
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -98,7 +100,7 @@ internal suspend fun requestInitialSourceFocusAfterFrame(
     }
     Box(Modifier.fillMaxSize()) {
         if (tv) {
-            HeroBackdrop(media)
+            TvHeroBackdrop(media)
             Column(Modifier.padding(start = 192.dp, top = 96.dp).width(760.dp), verticalArrangement = Arrangement.spacedBy(28.dp)) {
                 VText(media.name, 56, display = true, lines = 2)
                 VText(mediaFacts(media), 22, color = C.textSecondary)

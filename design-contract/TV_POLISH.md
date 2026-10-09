@@ -1,3 +1,50 @@
+# Android TV static hero and immediate navigation — TV-042-STATIC
+
+Status: owner-approved Android TV presentation. Implementation source:
+`viptv-org/android@26e83785fc7719800db24c81d610e15d3186f1a5`.
+This Android-only contract supersedes the animated TV-042 experiment. Other TV
+platforms keep their existing presentation; phone entrance timing is unchanged.
+
+- Home, Details and Sources use static artwork in the 1920px logical frame:
+  a 950px backdrop, 1280×720 sharp art aligned top-right, and a cached ambient
+  image at 0.6 opacity. Ambient blur is prepared off the input thread. The sharp
+  image fades from transparent at its left edge to opaque at 30% width, and from
+  opaque at 58% height to transparent at its bottom. The text scrim is ground at
+  x 0, 0.9 opacity at 22%, 0.35 at 40%, and transparent at 65%; the lower scrim
+  fades from transparent at y 440 to the actual page ground at y 950, including
+  OLED black. Home's content stage stays 664px high and scrolls with its art.
+- Artwork changes have no drift, shader transition, animated edge or entrance
+  motion. Keep displayed art while its replacement is pending or fails. Without
+  any artwork, retain the page ground and scrims. Cancel superseded loads so
+  stale results cannot replace the current subject.
+- Shared Core supplies landscape hero and episode artwork roles. Preload at
+  most two adjacent images already in the Home row or Details season, using one
+  speculative request at a time with foreground priority. Retain at most three
+  decoded images and 12 MiB of screen-owned bitmap references. Release them on
+  screen exit or size change; preloading adds no speculative metadata requests.
+- Details waits 120ms after episode focus before decoding its still, without
+  delaying focus. Reject a still narrower than 60% of the art box; use the series
+  backdrop for missing, failed or undersized stills. Season changes return to
+  series art. A movie uses its own backdrop.
+- TV routes appear immediately. Home reveals the first lower shelf directly,
+  with no queued scroll animation; returning to the hero or first row reveals
+  the full hero. Repeated directional input supersedes pending restoration.
+  Request initial hero focus after layout and window readiness in remote input
+  mode. A dialog/window handoff preserves the selected hero control.
+- Home enriches composed shelf items and phone hero pages without a focus-only
+  300ms delay. Preserve scoped request deduplication, cancellation and caching.
+  Remote press/release/repeat/hold actions, source selection, Back destinations,
+  accessible labels and queue actions keep their established meanings.
+
+Acceptance: at full and scaled TV viewports, traverse Home horizontally and
+vertically, open Details and return, change seasons, and dismiss a dialog from
+the Details hero control. Check immediate route/viewport placement, restored
+focus, cached neighbour reuse, missing/failed/undersized artwork, stale load
+cancellation and OLED ground. Verify metadata enrichment without the focus
+delay and no duplicate in-flight requests. Record startup and navigation
+measurements separately; the source experiment establishes emulator evidence,
+not physical-TV performance or faster startup.
+
 # TV navigation and performance corrections — TV-034
 
 Status: owner-requested corrections, 2026-09-25. Applies to the shared Tizen,

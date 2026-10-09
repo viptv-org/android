@@ -1,3 +1,36 @@
+# Static TV hero integration — 2026-10-09
+
+The integration combines main `9f58755` with `perf/static-tv-hero` at `26e8378`.
+HomeScreen and HomeScrollMotionTest are taken unchanged from the static branch,
+including composed-item metadata enrichment without the focus-only 300ms delay.
+The static artwork, bounded neighbour preloader, immediate TV entrance/scroll
+behavior and focus restoration are retained. Main's source recovery, ranking,
+native torrent and DTS/FFmpeg changes remain. Core stays at `aae69de`, matching
+TV-web; design `e0bdc14` specifies TV-042-STATIC. The unused shader edge bridge
+and shader assets are omitted from the current build; the animated implementation
+at `9bcce38` and its preceding commits remain ancestors of the merge.
+
+Host core preparation and the complete unit suite pass with JDK 17 and one
+Gradle worker: 52 library and 329 app tests, with no skipped tests. The first
+full run failed the unchanged native explicit-retry test's cleanup count
+(two DELETE requests instead of one). Its full test class passed in isolation,
+then all 381 tests passed on a full rerun without implementation changes.
+Core and design integrity and design repository validation pass.
+
+All three native core ABIs, debug APK, instrumentation test APK and optimized
+performance APK assembly pass. Debug and performance lint pass with the existing
+81 warnings and six baseline-filtered errors. Both ordinary APKs pass minSdk 24,
+three-ABI native/core/JNA contents, pinned checksums, notices, system trust,
+HTTP-media policy, 16 KiB ZIP alignment and FFmpeg library/notice checks.
+Debug APK SHA-256:
+`661167252473c547334546ecd66fb01568e2515f661c0308e73e6bd3fff74e4e`.
+Performance APK SHA-256:
+`c66c0cd9e2309a53527bfcb0c1966a4ab8f27f0540c2d2f83987065f137f26d4`.
+
+No APK installation or device run was performed for this integration. Earlier
+static-hero emulator measurements below describe their original candidate;
+they do not qualify the merged build on a physical TV or establish faster startup.
+
 # Torrent source recovery fixes — 2026-10-09
 
 The normal APK was rebuilt from Android `685f66c` plus the local source-recovery
@@ -123,6 +156,98 @@ sweep. No APK replacement, provider configuration, production deployment or
 physical-device run occurred. Audible output and long-duration soak stability
 were not qualified. Native playback works for the tested H.264 source, but the
 source-selection and recovery findings prevent a general stability claim.
+# Static TV hero and direct navigation — 2026-10-09
+
+Branch `perf/static-tv-hero` in `.scratch/android-tv-performance` builds on the
+tested hero branch at `9bcce382`; those hero changes were not merged into main
+when this work began. The final APK is
+`fe7d074ad2453ef7453bbe2a3c417245327e2f6bfc3db8d186d2ede58bdacb23`.
+The hero uses static artwork with a cached ambient blur; TV entrances and the
+280 ms first-shelf boundary scroll animation are removed. Shelf inputs are
+narrower, and initial TV focus explicitly enters remote mode after placement and
+window readiness. Phone entrance timing retains its existing behavior.
+
+Host/native preparation, 48 library and 314 app unit tests, APK assembly, app lint
+against its baseline, and the APK integrity probe pass. All 13 selected device
+tests pass, including real Home focus/scroll and artwork replacement/cancellation;
+the six Home cases also pass on repetition. Testing uses the owner-authorized
+hero emulator with sign-in preserved and global animation scale 1.
+
+Three repeats per journey compare the animated hero, an intermediate static hero
+and the final implementation: 45 measurement windows. Median idle frames fall
+from 118 to zero; horizontal janky frames from 46 to 19; vertical from 68 to 14;
+Details/Back from 49 to 11. Details p99 falls from 1,300 to 550 ms. First display
+is slower (1,456 to 1,730 ms), with startup outliers; loading remains unresolved.
+Frame populations differ, so these counts/percentiles are not button latency.
+Physical-TV performance and fully drawn Home were not qualified.
+
+See [the dated report](docs/history/2026-10-09-static-hero-performance.md) for
+artifact provenance, complete tables, fixture corrections and measurement limits.
+
+# TV hero motion and screen entrances — 2026-10-07
+
+Source `83cd81c` pins design `3efe0cad3d398376a62e942d2c665bc32b013cf3` and core
+`30789432121f54348d705460c0fa29495795295c`. The hero catalog is seven
+transitions (0.4–0.9 s, front-loaded) and eleven edge styles; core pools draw only
+from those edges. design-sync now removes artifacts the previous pin imported,
+and 18 hero shaders remain in the APK. 48 library and 306 app unit tests pass,
+including the screen-motion rules; all three core ABIs build and the normal APK
+assembles (SHA-256 `a9ee75547ed1a22a6faaf8bde8554595faa47354f9b92175ff12ef81b22da6ec`).
+
+The APK was installed with `install -r` on the local `viptv-design-tv` emulator
+against the development backend, preserving sign-in. Screen recordings at 30 fps
+show the hero art changing about 70 ms after a key press and settling about
+0.45 s later; three presses 200 ms apart start at once from the frame on screen
+and settle 0.45 s after the last, with no queued transitions. Discover, Details
+and Back enter with their fade, rail travel and scale motion. Edge styles meet
+the shelves without a seam. During one frame of each route change the rail
+appears expanded while focus moves; this was not investigated. Frame times,
+physical TV hardware and the animations-off path were not measured.
+
+# TV shader hero backdrop (TV-042) — 2026-10-07
+
+Branch `feat/hero-shader-backdrop` source `b422a3f` (origin/main
+`685f66c` merged) pins core `dac4841e618f246f2e83e5bc96a3b210553092d5`, design
+`706a2462ea3c64427cdf1fa9f47ab77836c80c4f` (TV-042 scoped to Android TV;
+its shader sources are unchanged from `59a9e57`, the build-tested pin) and gateway
+`698372df3734f6ec8019f70591b549280f47c28f`. Core, design and torrent artifact
+integrity checks pass. The 65 `assets/hero` shaders and catalog are imported by
+design-sync and pinned in `design-contract/lock.json`; the catalog has no
+`genreEdges`.
+
+Host checks pass 48 library and 302 app unit tests. `HeroMotionPolicyTest` calls
+the real native `heroEdgePool`: series and other Animation titles, a
+case-insensitive first pooled genre, the uncategorised pool, a title without
+genres, an empty pool showing `linear`, bag rounds without repeats, and a style
+shown from another category's bag. Against core `6882b6a` a title without genres
+failed: the generated `HeroEdgePoolInput` codec omits the empty list, which that
+core rejected. Core `dac4841` defaults absent lists to empty, and the test passes
+through both the generated codec and Android's request, which writes every
+field. All three core ABIs build, the normal
+APK assembles, and app lint passes against its baseline after a NewApi guard on
+`Bitmap.Config.HARDWARE`. The real APK probe verifies minSdk 24, three-ABI
+core/native/JNA contents, pinned checksums, notices, trust policy and 16 KiB ZIP
+alignment. The normal APK SHA-256 is
+`e5172cff28e36ebf3c714a0aa06189c79bd8d645677a7cfaf420740185d982c8`.
+
+That APK was installed with `install -r` on the local `viptv-design-tv` API 36
+x86_64 TV emulator (1920x1080) against the development backend; sign-in and app
+data were preserved. Animations were enabled and the backdrop ran on its GLES
+thread. Observed on screen: Home renders the 16:9 art at the right with drift
+between captures, the left text scrim and the lower fade into the shelves. Moving
+Continue Watching focus from American Horror Story to Re:Zero played a shader
+transition and changed the edge from the horror pool (dithered static) to the
+anime pool (cel, ink strokes, speed lines). Details for both series show the
+series backdrop with the series' pool. Rapid traversal of a 19-episode season
+queued no transitions and the app did not crash. Neither series switched to an
+episode still: their stills did not reach 60% of the art width, so the series
+backdrop correctly remained; a still-substitution transition was not observed.
+The narrower text scrim leaves edge strokes behind the hero progress label.
+
+Not verified: frame times, the static fallback with animations disabled, GL
+failure fallback, OLED ground and physical TV hardware. During navigation My
+List was toggled on for one title by a mis-targeted key press and immediately
+toggled off; no other account state changed.
 
 # Native source HTTP errors and public torrent playback — 2026-10-07
 
@@ -2368,3 +2493,50 @@ APK SHA-256:
 No emulator installation or physical-device playback was performed for this
 merge. The APK is a checked build, not evidence of decoder, remote or public-peer
 acceptance on a device. TV-web's separate browser limitation is recorded there.
+# Android TV animation optimization — 2026-10-08
+
+`perf/tv-animation-latency` adopts design
+`e860bb2dd60463ca7b930e51f9df8f0f94dcb559`. The transition-budget regression
+fails against `463b126` and passes against the candidate. All 48 library and
+312 app unit tests pass, including frame pacing at 30/60/120 Hz, immediate
+rest-to-transition response and surface recreation. Three core ABIs, normal
+debug APK assembly and baseline-aware lint pass; pre-existing lint warnings and
+baseline exclusions remain. The real APK probe and all 23 packaged hero asset
+hashes pass. APK SHA256:
+`a59bcb7977ab65749d190eb76176652c9bcf11791c0c8001d75467db58c152f6`.
+
+The desktop GLES probe passes all 11 edge styles at full/scaled TV sizes,
+including edge blends, OLED ground, nonempty output and GLES error checks.
+The 24-sample full-size run measured a median paired 18.3% ambient/edge cost
+reduction; this excludes the scene, mipmaps, Android composition and device
+presentation. Resting updates halve on a 60 Hz display, catalog transition
+duration is 280–350 ms, browsing dissolve 180 ms and episode settle 120 ms.
+See [method, measurements and remaining qualification](docs/TV_ANIMATION_PERFORMANCE.md).
+
+The shared emulator and physical TV were not used for this candidate; emulator
+coordination remained pending. Device frame times, rapid-input focus, visual
+review and background/return remain unverified. No deployment changed.
+
+# Neighbouring TV hero artwork preloading — 2026-10-08
+
+The animated Home/Details backdrop adopts design
+`581289b695f6802e77da4efeedad9bf64bab9b04`. It preloads at most two adjacent
+artworks with one speculative loader, shares ready/pending software-bitmap
+decodes with foreground selection, and retains at most three images/12 MiB.
+Core artwork projections run off the input thread; no metadata fetches are added.
+
+All 48 library and 324 app unit tests pass. The twelve preloader tests establish
+warm/in-flight reuse, serial speculation, cancellation, foreground priority,
+duplicate filtering, memory limits, disposal and retry. A warmed controlled
+250 ms loader fixture requires zero additional fetch/decode time and no duplicate
+request. Three core ABIs, debug APK assembly and baseline-aware lint pass.
+The real APK and packaged design checks are recorded with the candidate artifact.
+
+No shared emulator or physical TV was installed/navigated for this candidate.
+Actual Coil/network latency, focus navigation, visual review and frame-time
+improvement remain unverified on device. GPU uploads/mipmaps still run on image
+changes. See [scope and method](docs/TV_ANIMATION_PERFORMANCE.md).
+
+Preloading candidate APK SHA256: `9157f524eeda3a0294669240894398928e85f8ccf6418dd9544a2b08ce7d44f5`.
+Real APK minSdk, three-ABI contents, pins/notices/trust/alignment and all 23
+packaged hero hashes pass.
