@@ -16,6 +16,20 @@ import kotlin.test.assertTrue
 
 class DefaultVideoPlayerTest {
     @Test
+    fun readyKeepsObservedResumePositionAndBufferBeforeAnotherBackendTick() = runTest {
+        val backend = FakeBackend(OpenedMedia(
+            PlaybackTimeline(PlaybackKind.OnDemand, 300_000), positionMillis = 120_000,
+            bufferedPositionMillis = 125_000, playWhenReady = true, isPlaying = true,
+        ))
+        val player = DefaultVideoPlayer(backend, StandardTestDispatcher(testScheduler))
+        player.open(PlaybackSource("https://example.invalid/movie.mkv", startPositionMillis = 120_000))
+        assertEquals(120_000L, player.state.value.positionMillis)
+        assertEquals(125_000L, player.state.value.bufferedPositionMillis)
+        assertTrue(player.state.value.isPlaying)
+        player.close()
+    }
+
+    @Test
     fun livePlaybackRejectsSeekAtTheCommonBoundary() = runTest {
         val backend = FakeBackend(OpenedMedia(PlaybackTimeline(PlaybackKind.Live)))
         val player = DefaultVideoPlayer(backend, StandardTestDispatcher(testScheduler))

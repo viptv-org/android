@@ -347,6 +347,11 @@ internal class AndroidMedia3Backend(
             selectedSubtitleTrackId = tracks.selectedSubtitle,
             selectedVideoTrackId = tracks.selectedVideo,
             statistics = snapshotStatistics(),
+            positionMillis = sessionPositionMillis(player.currentPosition),
+            bufferedPositionMillis = player.bufferedPosition.takeIf { it >= 0 }?.let(::sessionPositionMillis),
+            playWhenReady = player.playWhenReady,
+            isPlaying = player.isPlaying,
+            isBuffering = player.playbackState == Player.STATE_BUFFERING,
         )
     }
 
