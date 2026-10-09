@@ -1,5 +1,6 @@
 package org.viptv.app
 
+import org.viptv.app.hero.TvHeroBackdrop
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
@@ -36,12 +37,12 @@ class HeroArtworkRequestTest {
 
     @Test fun ambientAndSharpHeroShareOneBoundedRequest() = withBackdrop { probe, _ ->
         assertEquals("Ambient blur and sharp art must reuse one request", 1, probe.starts.get())
-        assertEquals(listOf(Size(1120, 720)), probe.sizes.toList())
+        assertEquals(listOf(Size(1280, 720)), probe.sizes.toList())
     }
 
     @Test fun decodeSizeTracksActualScreenDensity() = withBackdrop(density = 2f / 3) { probe, _ ->
         assertEquals(1, probe.starts.get())
-        assertEquals(listOf(Size(747, 480)), probe.sizes.toList())
+        assertEquals(listOf(Size(853, 480)), probe.sizes.toList())
     }
 
     @Test fun changingBackdropStartsOnlyOneReplacementRequest() = withBackdrop { probe, update ->
@@ -91,7 +92,7 @@ class HeroArtworkRequestTest {
             compose.setContent {
                 CompositionLocalProvider(LocalTv provides true, LocalDensity provides Density(density, 1f)) {
                     ViptvTheme(false, Color.White) { Box(Modifier.fillMaxSize()) {
-                        HeroBackdrop(media)
+                        TvHeroBackdrop(media)
                     } }
                 }
             }

@@ -7,9 +7,9 @@ class ScreenMotionTest {
     private val movie = Media("m1", "movie", "Movie")
     private val home = Route.Browse(Destination.Home)
 
-    @Test fun tvEntrancesStayWithinTheNavigationBudget() {
+    @Test fun tvRoutesAppearImmediatelyAndPhoneDurationsStayBounded() {
         ScreenMotion.entries.forEach {
-            assertEquals(if (it == ScreenMotion.Fade) 140 else 180, screenEntranceDuration(it, tv = true))
+            assertEquals(0, screenEntranceDuration(it, tv = true))
             assertEquals(if (it == ScreenMotion.Fade) 220 else 280, screenEntranceDuration(it, tv = false))
         }
     }

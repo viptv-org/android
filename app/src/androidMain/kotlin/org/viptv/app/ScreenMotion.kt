@@ -77,7 +77,7 @@ internal fun systemAnimationsEnabled(context: Context): Boolean {
 internal class ScreenEntrance(val motion: ScreenMotion, val progress: Animatable<Float, *>)
 
 internal fun screenEntranceDuration(motion: ScreenMotion, tv: Boolean): Int =
-    if (tv) { if (motion == ScreenMotion.Fade) 140 else 180 }
+    if (tv) 0
     else { if (motion == ScreenMotion.Fade) 220 else 280 }
 
 /**
@@ -87,9 +87,9 @@ internal fun screenEntranceDuration(motion: ScreenMotion, tv: Boolean): Int =
 @Composable internal fun rememberScreenEntrance(route: Route, key: Any): ScreenEntrance {
     val context = LocalContext.current
     val tv = LocalTv.current
-    val enabled = remember(context) { systemAnimationsEnabled(context) }
+    val enabled = !tv && remember(context) { systemAnimationsEnabled(context) }
     val last = remember { arrayOfNulls<Route>(1) }
-    val entrance = remember(key) {
+    val entrance = remember(key, tv, enabled) {
         val motion = screenMotion(last[0], route).also { last[0] = route }
         ScreenEntrance(motion, Animatable(if (enabled && motion != ScreenMotion.None) 0f else 1f))
     }
@@ -102,8 +102,7 @@ internal fun screenEntranceDuration(motion: ScreenMotion, tv: Boolean): Int =
 }
 
 /**
- * Short enough never to delay input: focus moves immediately and the content is fully
- * opaque within the first 108 ms on TV (168 ms on phone).
+ * Phone entrance decoration; TV presents the route immediately without this layer.
  */
 @Composable internal fun Modifier.screenEntrance(entrance: ScreenEntrance, vertical: Boolean): Modifier {
     val travel = with(LocalDensity.current) { 40.dp.toPx() }

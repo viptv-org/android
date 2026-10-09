@@ -1,3 +1,31 @@
+# Static TV hero and direct navigation — 2026-10-09
+
+Branch `perf/static-tv-hero` in `.scratch/android-tv-performance` builds on the
+tested hero branch at `9bcce382`; those hero changes were not merged into main
+when this work began. The final APK is
+`fe7d074ad2453ef7453bbe2a3c417245327e2f6bfc3db8d186d2ede58bdacb23`.
+The hero uses static artwork with a cached ambient blur; TV entrances and the
+280 ms first-shelf boundary scroll animation are removed. Shelf inputs are
+narrower, and initial TV focus explicitly enters remote mode after placement and
+window readiness. Phone entrance timing retains its existing behavior.
+
+Host/native preparation, 48 library and 314 app unit tests, APK assembly, app lint
+against its baseline, and the APK integrity probe pass. All 13 selected device
+tests pass, including real Home focus/scroll and artwork replacement/cancellation;
+the six Home cases also pass on repetition. Testing uses the owner-authorized
+hero emulator with sign-in preserved and global animation scale 1.
+
+Three repeats per journey compare the animated hero, an intermediate static hero
+and the final implementation: 45 measurement windows. Median idle frames fall
+from 118 to zero; horizontal janky frames from 46 to 19; vertical from 68 to 14;
+Details/Back from 49 to 11. Details p99 falls from 1,300 to 550 ms. First display
+is slower (1,456 to 1,730 ms), with startup outliers; loading remains unresolved.
+Frame populations differ, so these counts/percentiles are not button latency.
+Physical-TV performance and fully drawn Home were not qualified.
+
+See [the dated report](docs/history/2026-10-09-static-hero-performance.md) for
+artifact provenance, complete tables, fixture corrections and measurement limits.
+
 # TV hero motion and screen entrances — 2026-10-07
 
 Source `83cd81c` pins design `3efe0cad3d398376a62e942d2c665bc32b013cf3` and core

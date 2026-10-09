@@ -25,7 +25,7 @@ import org.viptv.app.theme.ViptvColor as C
 import org.viptv.app.theme.ViptvDimen
 import kotlinx.coroutines.flow.first
 import coil.compose.AsyncImage
-import org.viptv.app.hero.ShaderHeroBackdrop
+import org.viptv.app.hero.TvHeroBackdrop
 
 /** The displayed episode number is metadata, not a row position. Preserve backend row order. */
 internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
@@ -181,7 +181,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
             val focusedEpisode = episodes.getOrNull(focusedEpisodeIndex)
             // Blank, not null, for a focused episode without a still so the backdrop still waits for focus to settle.
             val episodeStill = remember(focusedEpisode) { focusedEpisode?.let { CoreModels.presentation(it).episodeImage.orEmpty() } }
-            ShaderHeroBackdrop(media, episodeStill,
+            TvHeroBackdrop(media, episodeStill,
                 preloadItems = org.viptv.app.hero.neighbouringHeroItems(episodes, focusedEpisodeIndex),
                 preloadEpisodes = true)
         }

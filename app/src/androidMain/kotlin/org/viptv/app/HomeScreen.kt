@@ -2,10 +2,8 @@
 package org.viptv.app
 
 import android.view.KeyEvent
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.pager.*
@@ -15,19 +13,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.unit.dp
-import coil.compose.rememberAsyncImagePainter
-import coil.request.ImageRequest
-import org.viptv.app.hero.LOWER_FADE_START
-import org.viptv.app.hero.ShaderHeroBackdrop
+import org.viptv.app.hero.TvHeroBackdrop
 import org.viptv.app.hero.neighbouringHeroItems
 import org.viptv.app.theme.ViptvColor as C
 
@@ -46,7 +41,7 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
 
 @Composable internal fun HomeScreen(state: AppState, controller: AppController, list: LazyListState = rememberLazyListState()) {
     val tv = LocalTv.current
-    val shelves = state.shelves.filter { it.items.isNotEmpty() }
+    val shelves = remember(state.shelves) { state.shelves.filter { it.items.isNotEmpty() } }
     val queue = shelves.firstOrNull { it.isQueueShelf }
     val firstShelf = shelves.firstOrNull()
     val phoneHeroShelf = shelves.firstOrNull { !it.isQueueShelf && it.items.firstOrNull()?.type != "live" } ?: queue
@@ -55,20 +50,24 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
     val heroKey = state.homeFocus.heroMediaKey ?: state.homeFocus.mediaKey.takeIf { state.homeFocus.shelfTitle == firstShelf?.id }
     val hero = if (tv) firstShelf?.items?.firstOrNull { HomeFocusPolicy.mediaKey(it) == heroKey }
         ?: featured.firstOrNull() else featured.firstOrNull()
+    val heroNeighbours = remember(firstShelf?.items, hero) {
+        neighbouringHeroItems(firstShelf?.items.orEmpty(), firstShelf?.items?.indexOf(hero) ?: -1)
+    }
     val initial = LocalContentFocus.current
     val rail = LocalRailFocus.current
+    val restoreFocus = remember(state.homeFocus.restoreRequest) {
+        state.homeFocus.takeIf { it.restoreRequest > 0 && it.surface == HomeFocusSurface.Card }
+    }
     val showHero = tv && (state.homeFocus.surface == HomeFocusSurface.Hero || state.homeFocus.shelfIndex == 0)
     LaunchedEffect(showHero, state.homeFocus.shelfIndex) {
-        // Enter the top region smoothly; moving between its cards must not restart the scroll.
-        val motion = tween<Float>(280, easing = FastOutSlowInEasing)
+        // Reveal the current focus immediately; directional repeats never queue motion.
         if (showHero) {
-            if (list.firstVisibleItemIndex == 0) list.animateScrollBy(-list.firstVisibleItemScrollOffset.toFloat(), motion)
-            else list.animateScrollToItem(0)
+            list.scrollToItem(0)
         } else if (tv && state.homeFocus.surface == HomeFocusSurface.Card && state.homeFocus.shelfIndex == 1) {
-            // Ease the first downward boundary too, revealing only the clipped row/caption.
+            // Reveal the full selected row and caption at the first downward boundary.
             val target = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == state.homeFocus.shelfTitle }
             val remaining = target?.let { it.offset + it.size - list.layoutInfo.viewportEndOffset } ?: 0
-            if (remaining > 0) list.animateScrollBy(remaining.toFloat(), motion)
+            if (remaining > 0) list.scrollBy(remaining.toFloat())
         }
     }
     LaunchedEffect(state.homeFocus.restoreRequest, tv) {
@@ -86,7 +85,7 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
             item(key = "featured") {
                 if (tv) {
                     if (hero != null) Box(Modifier.fillMaxWidth().height(664.dp)) {
-                        ShaderHeroBackdrop(hero, preloadItems = neighbouringHeroItems(firstShelf?.items.orEmpty(), firstShelf?.items?.indexOf(hero) ?: -1))
+                        TvHeroBackdrop(hero, preloadItems = heroNeighbours)
                         Box(Modifier.padding(start = 192.dp, end = 96.dp, top = 54.dp)) { TelevisionHero(hero, heroShelf?.isQueueShelf == true, heroShelf?.let(shelves::indexOf)?.coerceAtLeast(0) ?: 0, heroShelf?.id.orEmpty(), state, controller, initial, rail) }
                     }
                     else EmptyState(if (state.homeLoading) "Starting VIPTV…" else "Your library is ready", "Browse Discover to find something to watch.", "home", Modifier.height(540.dp))
@@ -107,31 +106,11 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
                 }
             }
             itemsIndexed(shelves, key = { _, shelf -> shelf.id }) { row, shelf ->
-                Box(Modifier.padding(start = measure(192, 0))) { ShelfRow(shelf, row, state, controller) }
+                Box(Modifier.padding(start = measure(192, 0))) {
+                    ShelfRow(shelf, row, state.homeLoading, restoreFocus?.takeIf { it.shelfTitle == shelf.id }, controller)
+                }
             }
         }
-    }
-}
-
-@Composable internal fun HeroBackdrop(media: Media) {
-    val presentation = remember(media) { CoreModels.presentation(media) }
-    val ground = LocalGround.current
-    Box(Modifier.fillMaxWidth().height(950.dp)) {
-        if (!presentation.heroImage.isNullOrBlank()) {
-            val context = LocalContext.current
-            val density = LocalDensity.current
-            val width = with(density) { 1120.dp.roundToPx() }
-            val height = with(density) { 720.dp.roundToPx() }
-            val request = remember(presentation.heroImage, context, width, height) {
-                ImageRequest.Builder(context).data(presentation.heroImage).size(width, height).crossfade(false).build()
-            }
-            // The sharp layer defines decode size; the ambient layer reuses it under the blur.
-            val painter = rememberAsyncImagePainter(request, contentScale = ContentScale.Crop)
-            Image(painter, null, Modifier.fillMaxSize().blur(72.dp).alpha(.6f), contentScale = ContentScale.Crop)
-            Image(painter, null, Modifier.align(Alignment.TopEnd).width(1120.dp).height(720.dp), contentScale = ContentScale.Crop)
-        }
-        Box(Modifier.matchParentSize().background(Brush.horizontalGradient(listOf(ground, ground.copy(alpha = .92f), Color.Transparent))))
-        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Transparent, ground), startY = with(LocalDensity.current) { LOWER_FADE_START.dp.toPx() })))
     }
 }
 
@@ -139,15 +118,32 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
     val hero = remember(media) { CoreModels.presentation(media) }
     val actions = remember(media, queue) { SharedPresentation.home(media, queue) }
     val saved = state.favorites.any { it.id == media.id && it.type == media.type }
-    LaunchedEffect(media.id) { if (state.homeFocus.mediaKey == null || (state.homeFocus.surface == HomeFocusSurface.Hero && controller.homeContentFocused)) { withFrameNanos {}; runCatching { initial.requestFocus() } } }
-    LaunchedEffect(media.id, state.homeFocus.restoreRequest) {
-        val requested = state.homeFocus
+    var actionsPlaced by remember { mutableStateOf(false) }
+    var subjectFocusHandled by remember(media.id) { mutableStateOf(false) }
+    val heroRestore = remember(state.homeFocus.restoreRequest) { state.homeFocus }
+    var handledRestore by remember { mutableStateOf<HomeFocusSnapshot?>(null) }
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    val inputMode = LocalInputModeManager.current
+    LaunchedEffect(media.id, actionsPlaced, windowFocused) {
+        if (!actionsPlaced || !windowFocused || subjectFocusHandled) return@LaunchedEffect
+        subjectFocusHandled = true
+        val current = controller.state.value.homeFocus
+        if (current.mediaKey == null || (current.surface == HomeFocusSurface.Hero && controller.homeContentFocused)) {
+            inputMode.requestInputMode(InputMode.Keyboard)
+            runCatching { initial.requestFocus() }
+        }
+    }
+    LaunchedEffect(media.id, heroRestore, actionsPlaced, windowFocused) {
+        if (!actionsPlaced || !windowFocused) return@LaunchedEffect
+        val requested = heroRestore
+        if (requested.restoreRequest == 0L || handledRestore === requested) return@LaunchedEffect
+        handledRestore = requested
         if (requested.restoreRequest > 0 && requested.surface == HomeFocusSurface.Hero &&
             requested.mediaKey == HomeFocusPolicy.mediaKey(media)) {
-            withFrameNanos {}
             val current = controller.state.value.homeFocus
             if (current.restoreRequest == requested.restoreRequest && current.surface == requested.surface &&
                 current.mediaKey == requested.mediaKey && HomeFocusPolicy.mayRestore(current, requested.inputEpoch)) {
+                inputMode.requestInputMode(InputMode.Keyboard)
                 runCatching { initial.requestFocus() }
             }
         }
@@ -163,7 +159,8 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
         }
         VText(mediaFacts(media), 22, Modifier.offset(y = 336.dp).width(950.dp), C.textSecondary, lines = 1)
         VText(media.description.orEmpty(), 26, Modifier.offset(y = 394.dp).width(760.dp), C.textBody, lines = 2)
-        Row(Modifier.offset(y = 496.dp).onFocusChanged { if (it.hasFocus) controller.recordHomeFocus(shelfIndex, shelfId, media, HomeFocusSurface.Hero) }.focusGroup(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+        Row(Modifier.offset(y = 496.dp).onGloballyPositioned { actionsPlaced = true }
+            .onFocusChanged { if (it.hasFocus) controller.recordHomeFocus(shelfIndex, shelfId, media, HomeFocusSurface.Hero) }.focusGroup(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             AppButton(actions.heroPrimaryActionLabel, { controller.activateHero(media, queue) }, Modifier.width(228.dp).focusRequester(initial).focusProperties { left = rail },
                 "play", tvAccent = actions.heroPrimaryAction == "resume", onHold = { controller.chooseHeroSources(media, queue) },
                 onFocused = { controller.recordHomeFocus(shelfIndex, shelfId, media, HomeFocusSurface.Hero) })
@@ -196,15 +193,26 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
     }
 }
 
-@Composable private fun ShelfRow(shelf: HomeShelf, index: Int, state: AppState, controller: AppController) {
+@Composable private fun ShelfRow(shelf: HomeShelf, index: Int, homeLoading: Boolean, restoreFocus: HomeFocusSnapshot?, controller: AppController) {
     val tv = LocalTv.current
     val rail = LocalRailFocus.current
     val horizontal = rememberLazyListState()
     val focuses = remember(shelf.items.map { it.id }) { shelf.items.map { FocusRequester() } }
-    LaunchedEffect(state.homeFocus.restoreRequest) {
-        if (tv && state.homeFocus.surface == HomeFocusSurface.Card && state.homeFocus.shelfTitle == shelf.id) {
-            val target = shelf.items.indexOfFirst { HomeFocusPolicy.mediaKey(it) == state.homeFocus.mediaKey }
-            if (target >= 0) { horizontal.scrollToItem(target); withFrameNanos {}; runCatching { focuses[target].requestFocus() } }
+    LaunchedEffect(restoreFocus?.restoreRequest) {
+        if (tv && restoreFocus != null) {
+            fun stillRequested(): Boolean {
+                val current = controller.state.value.homeFocus
+                return current.restoreRequest == restoreFocus.restoreRequest &&
+                    current.surface == restoreFocus.surface && current.mediaKey == restoreFocus.mediaKey &&
+                    current.shelfTitle == restoreFocus.shelfTitle && HomeFocusPolicy.mayRestore(current, restoreFocus.inputEpoch)
+            }
+            if (!stillRequested()) return@LaunchedEffect
+            val target = shelf.items.indexOfFirst { HomeFocusPolicy.mediaKey(it) == restoreFocus.mediaKey }
+            if (target >= 0) {
+                horizontal.scrollToItem(target)
+                withFrameNanos {}
+                if (stillRequested()) runCatching { focuses[target].requestFocus() }
+            }
         }
     }
     Column {
@@ -217,7 +225,7 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
             itemsIndexed(shelf.items, key = { _, item -> HomeFocusPolicy.mediaKey(item) }) { column, media ->
                 val action = { controller.activateCard(media, shelf.isQueueShelf, SourceReturn.Home) }
                 val hold = { if (shelf.isQueueShelf) controller.requestQueueManage(media) else controller.requestDialog(DialogKind.MyListManage, media.name, media) }
-                LaunchedEffect(media.id, state.homeLoading) { controller.enrichVisibleHomeItem(media) }
+                LaunchedEffect(media.id, homeLoading) { controller.enrichVisibleHomeItem(media) }
                 if (!tv && shelf.isQueueShelf) QueueCard(media, action, hold)
                 else if (!tv && media.type == "live") LiveLogoTile(media, action, hold)
                 else MediaCard(media, Modifier.focusRequester(focuses[column]).then(if (column == 0 && tv) Modifier.focusProperties { left = rail } else Modifier),

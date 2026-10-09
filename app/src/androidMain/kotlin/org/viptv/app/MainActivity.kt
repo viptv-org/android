@@ -154,7 +154,7 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
         Box(Modifier.fillMaxSize()) {
             val insets = if (tv || route is Route.Player || route is Route.Details) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
             saved.SaveableStateProvider(key) {
-                Box(Modifier.fillMaxSize().then(insets).screenEntrance(entrance, vertical = tv)) {
+                Box(Modifier.fillMaxSize().then(insets).then(if (tv) Modifier else Modifier.screenEntrance(entrance, vertical = false))) {
                     when (route) {
                         Route.Pairing -> Pairing(state, controller, model)
                         Route.Profiles -> ProfileChooser(state, controller)
