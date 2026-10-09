@@ -13,12 +13,12 @@ import kotlin.test.*
 
 /** Real HTTP/native projection measurements; injected delay is not a device benchmark. */
 class HomeLoadingMeasurementTest {
-    @Test fun measureColdWarmAndDelayedHomeDependencies() = runBlocking {
+    @Test fun measureFirstRepeatedAndDelayedHomeDependencies() = runBlocking {
         for (scenario in listOf("baseline", "slow_catalogs", "slow_metadata", "slow_providers")) {
             repeat(3) { iteration ->
                 Fixture(scenario).use { fixture ->
                     val gateway = VipTvHttpGateway(fixture.origin)
-                    for (temperature in listOf("cold", "warm")) {
+                    for (pass in listOf("first", "repeat")) {
                         fixture.metadataCalls.set(0)
                         fixture.maxRequests.set(0)
                         val start = System.nanoTime()
@@ -34,15 +34,15 @@ class HomeLoadingMeasurementTest {
                         val complete = (System.nanoTime() - start) / 1_000_000
                         assertEquals(12, rows.first { it.isQueueShelf }.items.size)
                         assertEquals(6, rows.count { it.contentType == "movie" })
-                        assertEquals(if (temperature == "cold") 6 else 0, fixture.metadataCalls.get())
-                        println("HOME_MEASURE scenario=$scenario iteration=$iteration cache=$temperature queueMs=${firstQueue.get()} catalogMs=${firstCatalog.get()} completeMs=$complete updates=${updates.get()} metadataCalls=${fixture.metadataCalls.get()} maxHttp=${fixture.maxRequests.get()}")
+                        assertEquals(0, fixture.metadataCalls.get(), "Home loading must not hydrate unfocused cards")
+                        println("HOME_MEASURE scenario=$scenario iteration=$iteration pass=$pass queueMs=${firstQueue.get()} catalogMs=${firstCatalog.get()} completeMs=$complete updates=${updates.get()} metadataCalls=${fixture.metadataCalls.get()} maxHttp=${fixture.maxRequests.get()}")
                     }
                 }
             }
         }
     }
 
-    @Test fun savedQueueRemainsAvailableWhileCatalogsAndHeroMetadataAreBlocked() = runBlocking {
+    @Test fun savedQueueRemainsAvailableWhileCatalogsAreBlockedWithoutFetchingMetadata() = runBlocking {
         Fixture("blocked").use { fixture ->
             val firstQueue = CompletableDeferred<List<HomeShelf>>()
             val result = async { VipTvHttpGateway(fixture.origin).home("fixture") { rows ->
@@ -54,6 +54,21 @@ class HomeLoadingMeasurementTest {
                 assertFalse(result.isCompleted, "Optional work must still be blocked after the queue appears")
             } finally { fixture.gate.countDown() }
             assertEquals(6, withTimeout(5_000) { result.await() }.count { it.contentType == "movie" })
+            assertEquals(0, fixture.metadataCalls.get())
+        }
+    }
+
+    @Test fun requestedMetadataIsFetchedOnceAndCachedWithoutHydratingOtherCards() = runBlocking {
+        Fixture("baseline").use { fixture ->
+            val gateway = VipTvHttpGateway(fixture.origin)
+            val rows = gateway.home("fixture") {}
+            val selected = rows.first { it.isQueueShelf }.items.first()
+            assertEquals(0, fixture.metadataCalls.get())
+            val metadata = gateway.metadata(selected)
+            assertEquals(selected.id, metadata.id)
+            assertEquals(1, fixture.metadataCalls.get())
+            assertEquals(metadata, gateway.metadata(selected))
+            assertEquals(1, fixture.metadataCalls.get(), "Repeated metadata access must reuse the cached response")
         }
     }
 

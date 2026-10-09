@@ -77,6 +77,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        buildConfigField("boolean", "PLAYBACK_DIAGNOSTICS", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     compileOptions {
@@ -96,6 +97,16 @@ android {
     buildTypes {
         getByName("debug") {
             signingConfig = signingConfigs.getByName("viptvDevelopment")
+            buildConfigField("boolean", "PLAYBACK_DIAGNOSTICS", "true")
+        }
+        create("performance") {
+            initWith(getByName("debug"))
+            isDebuggable = false
+            isJniDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-performance.pro")
+            matchingFallbacks += listOf("release")
         }
     }
 }
@@ -143,8 +154,7 @@ if (fixtureCa.isPresent) {
             certificate.copyTo(output.resolve("raw/viptv_fixture_ca.pem"), overwrite = true)
             output.resolve("xml/network_security_config.xml").writeText("""
                 <network-security-config>
-                  <base-config cleartextTrafficPermitted="false"><trust-anchors><certificates src="system" /></trust-anchors></base-config>
-                  <domain-config cleartextTrafficPermitted="true"><domain includeSubdomains="false">127.0.0.1</domain></domain-config>
+                  <base-config cleartextTrafficPermitted="true"><trust-anchors><certificates src="system" /></trust-anchors></base-config>
                   <debug-overrides><trust-anchors><certificates src="@raw/viptv_fixture_ca" /></trust-anchors></debug-overrides>
                 </network-security-config>
             """.trimIndent())

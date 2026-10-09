@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.Dp
 import org.viptv.app.theme.ViptvColor as C
 import org.viptv.app.theme.ViptvDimen
 import kotlinx.coroutines.flow.first
-import coil.compose.AsyncImage
 
 /** The displayed episode number is metadata, not a row position. Preserve backend row order. */
 internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
@@ -310,7 +309,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
         if (tv) Column {
             Box(Modifier.size(360.dp, 200.dp).testTag("episode-artwork").clip(RoundedCornerShape(16.dp)).background(C.surfaceN2).border(if (focused) 4.dp else 0.dp, if (focused) C.fillWhite else Color.Transparent, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
                 if (image.isNullOrBlank()) VText(card.title, 24, Modifier.padding(12.dp), C.textSecondary, bold = true, lines = 2, align = TextAlign.Center)
-                else AsyncImage(image, card.title, Modifier.fillMaxSize(), contentScale = if (card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
+                else SizedArtwork(image, card.title, Modifier.fillMaxSize(), fit = if (card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
                     onError = { failed = failed + image })
                 if (watching) ProgressLine(progress, Modifier.align(Alignment.BottomCenter).padding(14.dp).testTag("episode-progress"))
                 if (watching) Box(Modifier.align(Alignment.TopStart).padding(14.dp)
@@ -328,7 +327,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
         } else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(124.dp, 76.dp).testTag("episode-artwork").clip(RoundedCornerShape(12.dp)).background(C.surfaceN2), contentAlignment = Alignment.Center) {
                 if (image.isNullOrBlank()) VText(card.title, 13, Modifier.padding(8.dp), C.textSecondary, bold = true, lines = 2, align = TextAlign.Center)
-                else AsyncImage(image, card.title, Modifier.fillMaxSize(), contentScale = if (card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
+                else SizedArtwork(image, card.title, Modifier.fillMaxSize(), fit = if (card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
                     onError = { failed = failed + image })
                 if (watching) ProgressLine(progress, Modifier.align(Alignment.BottomCenter).padding(8.dp).testTag("episode-progress"))
             }

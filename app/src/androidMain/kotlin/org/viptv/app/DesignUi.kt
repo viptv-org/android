@@ -41,7 +41,6 @@ import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import kotlinx.coroutines.delay
 import org.viptv.app.theme.ViptvColor as C
 
@@ -198,15 +197,14 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
 }
 
 @Composable internal fun Artwork(url: String?, description: String?, modifier: Modifier, fit: ContentScale = ContentScale.Crop, alignment: Alignment = Alignment.Center) {
-    if (!url.isNullOrBlank()) AsyncImage(
-        ImageRequest.Builder(LocalContext.current).data(url).crossfade(false).build(), description, modifier, contentScale = fit, alignment = alignment)
+    if (!url.isNullOrBlank()) SizedArtwork(url, description, modifier, fit, alignment)
 }
 
 @Composable internal fun Avatar(name: String, url: String?, modifier: Modifier) {
     var ready by remember(url) { mutableStateOf(false) }
     Box(modifier.semantics { contentDescription = "$name profile" }.clip(RoundedCornerShape(20)).background(if (ready) C.surfaceAvatar else C.fillProfileLetter), contentAlignment = Alignment.Center) {
         if (!ready) VText(name.take(1).uppercase(), if (LocalTv.current) 64 else 34, bold = true, display = true)
-        if (!url.isNullOrBlank()) AsyncImage(url, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit, onSuccess = { ready = true }, onError = { ready = false })
+        if (!url.isNullOrBlank()) SizedArtwork(url, null, Modifier.fillMaxSize(), ContentScale.Fit, onSuccess = { ready = true }, onError = { ready = false })
     }
 }
 
@@ -233,7 +231,7 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
             .clip(RoundedCornerShape(measure(16, 16))).background(C.surfaceN2)
             .border(if (tv && focused) 4.dp else 0.dp, if (tv && focused) C.fillWhite else Color.Transparent, RoundedCornerShape(measure(16, 16))), contentAlignment = Alignment.Center) {
             if (image.isNullOrBlank()) VText(card.title, if (tv) 24 else if (portrait) 13 else 18, Modifier.padding(12.dp), color = C.textSecondary, bold = true, lines = 2, align = TextAlign.Center)
-            else AsyncImage(image, card.title, Modifier.fillMaxSize(), contentScale = if (!portrait && card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
+            else SizedArtwork(image, card.title, Modifier.fillMaxSize(), fit = if (!portrait && card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
                 onError = { image.let { failed = failed + it } })
             val progress = card.progress?.toFloat() ?: 0f
             // AND-042: phones use a 6dp bar lifted 10dp off the art's sides and bottom.

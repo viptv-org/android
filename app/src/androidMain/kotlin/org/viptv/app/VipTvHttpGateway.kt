@@ -5,6 +5,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -31,6 +33,7 @@ class VipTvHttpGateway(
     /** Coalesced session refresh for an authenticated 401; returns a fresh access token or null. */
     private val onUnauthorized: (suspend (String?) -> String?)? = null,
     private val television: Boolean = false,
+    dns: okhttp3.Dns = okhttp3.Dns.SYSTEM,
 ) : BackendGateway {
     private val playbackV2 = V2PlaybackControl(origin, ::json)
     private val nativeControls = java.util.concurrent.ConcurrentHashMap.newKeySet<NativePlaybackControl>()
@@ -63,8 +66,11 @@ class VipTvHttpGateway(
     fun setAccessToken(value: String?) { if (value == null) invalidateNativeScope(); accessToken = value }
     private val titleArtwork = java.util.concurrent.ConcurrentHashMap<String, Media>()
     private var metadataEpoch = 0L
+    private val metadataRequests = java.util.concurrent.atomic.AtomicLong()
+    internal val metadataRequestCount: Long get() = metadataRequests.get()
     fun clearProfileCache() = synchronized(titleArtwork) { metadataEpoch++; titleArtwork.clear() }
     private val client = OkHttpClient.Builder()
+        .dns(dns)
         .followRedirects(false).followSslRedirects(false)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
@@ -121,28 +127,13 @@ class VipTvHttpGateway(
             catch (error: GatewayError) { if (previous != null || error.status in listOf(401, 403)) throw error else emptyList() }
             catch (error: IOException) { if (previous != null) throw error else emptyList() }
         }
-        val metadata = mutableMapOf<String, kotlinx.coroutines.Deferred<Media>>()
-        val metadataLock = kotlinx.coroutines.sync.Mutex()
-        val hydration = Semaphore(3)
-        suspend fun hydrate(items: List<Media>, order: Int, title: String, queue: Boolean) {
-            val enriched = items.toMutableList()
-            publish(order, HomeShelf(title, items, queue))
-            // Prime one visible row plus lookahead; remaining cards enrich on demand.
-            items.take(6).mapIndexed { index, item -> async {
-                if (item.type != "live") {
-                    val lookup = item.copy(id = item.seriesId ?: item.id, type = if (item.type == "episode") "series" else item.type)
-                    val key = lookup.type + ":" + lookup.id
-                    val pending = metadataLock.withLock { metadata.getOrPut(key) { async { hydration.withPermit { metadataOr(item, lookup) } } } }
-                    enriched[index] = CoreModels.enrich(item, pending.await())
-                    publish(order, HomeShelf(title, enriched.toList(), queue))
-                }
-            } }.awaitAll()
-        }
-        val queue = async { hydrate(optional(prior("Continue watching")) { json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray() }, 0, "Continue watching", true) }
+        val queue = async { publish(0, HomeShelf("Continue watching", optional(prior("Continue watching")) {
+            json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray()
+        }, true)) }
         val recent = async {
             publish(1, HomeShelf("Recently watched live TV", optional(prior("Recently watched live TV")) { liveV2(LiveCatalogQuery(collection = "recent", limit = 24)).items.map { CoreModels.mediaNormalized(it) } }))
         }
-        val saved = async { hydrate(optional(prior("My List")) { favorites(profileId) }, 1000, "My List", false) }
+        val saved = async { publish(1000, HomeShelf("My List", optional(prior("My List")) { favorites(profileId) })) }
         val live = async { publish(1001, HomeShelf("Live now", optional(prior("Live now")) { this@VipTvHttpGateway.live().map(LiveChannel::asMedia) })) }
         val catalogs = catalogList.await().filter { catalog ->
             catalog.key.type != "live" && catalog.filters.none { it.required && DiscoverPolicy.defaults(catalog)[it.name].isNullOrBlank() }
@@ -225,7 +216,12 @@ class VipTvHttpGateway(
         val id = if (type == "series") media.seriesId ?: media.id else media.id
         val key = type + "\u0000" + id
         val epoch = synchronized(titleArtwork) { titleArtwork[key]?.let { return it }; metadataEpoch }
-        val result = json("GET", "/meta/${enc(type)}/${enc(id)}").optJSONObject("meta")?.media() ?: media
+        if (BuildConfig.PLAYBACK_DIAGNOSTICS) runCatching {
+            android.util.Log.i("MetadataRequestDiagnostic", "request_count=${metadataRequests.incrementAndGet()}")
+        }
+        val result = withContext(Dispatchers.Default) {
+            json("GET", "/meta/${enc(type)}/${enc(id)}").optJSONObject("meta")?.media() ?: media
+        }
         synchronized(titleArtwork) { if (epoch == metadataEpoch) {
             if (titleArtwork.size >= 256) titleArtwork.keys.firstOrNull()?.let { titleArtwork.remove(it) }
             titleArtwork[key] = result
@@ -253,11 +249,14 @@ class VipTvHttpGateway(
         )
         val id = json(request.method, request.path.removePrefix("/api"), request.body?.let { JSONObject(org.viptv.core.wire.CoreJson.encode(it)) }).getString("id")
         var state = jsonStepState()
+        val sourceViews = mutableMapOf<String, Pair<String, Source>>()
         while (true) {
             val poll = json("GET", pollPath(id, state))
-            val output = step(state, poll)
-            onProducerUpdate(SharedPresentation.producers(output))
-            val accumulated = output.sources()
+            val (output, accumulated, producers) = withContext(Dispatchers.Default) {
+                val output = step(state, poll)
+                Triple(output, output.sources(sourceViews), SharedPresentation.producers(output))
+            }
+            onProducerUpdate(producers)
             onUpdate(accumulated)
             if (output.optBoolean("done")) {
                 val failure = output.optJSONObject("state")?.optJSONArray("errors")?.optJSONObject(0)
@@ -288,18 +287,24 @@ class VipTvHttpGateway(
         )
         return output.put("sources", output.optJSONArray("sources") ?: JSONArray())
     }
-    private fun JSONObject.sources(): List<Source> {
+    private fun JSONObject.sources(cache: MutableMap<String, Pair<String, Source>>): List<Source> {
         val array = optJSONArray("sources") ?: return emptyList()
         // The reducer's sources are already Rust-normalized: decode the wire
         // type directly, with the display projection as the only second pass.
         val result = ArrayList<Source>(array.length())
         for (index in 0 until array.length()) {
-            array.optJSONObject(index) ?: continue
-            val normalized = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.MediaSource>(array.getJSONObject(index).toString())
+            val row = array.optJSONObject(index) ?: continue
+            val encoded = row.toString()
+            val id = row.getString("id")
+            val cached = cache[id]?.takeIf { it.first == encoded }
+            if (cached != null) { result.add(cached.second); continue }
+            val normalized = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.MediaSource>(encoded)
             val display = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.SourcePresentation>(
                 uniffi.viptv_core.normalize("sourceDisplay", org.viptv.core.wire.CoreJson.encode(normalized), "")
             )
-            result.add(Source(normalized.id, normalized.provider.orEmpty(), display.title, display.body, normalized.sourceAddonId, normalized.sourceFingerprint, normalized.quality, normalized.audio, displayResolved = true, providerKey = display.providerKey, providerLabel = display.providerLabel))
+            val source = Source(normalized.id, normalized.provider.orEmpty(), display.title, display.body, normalized.sourceAddonId, normalized.sourceFingerprint, normalized.quality, normalized.audio, displayResolved = true, providerKey = display.providerKey, providerLabel = display.providerLabel)
+            cache[id] = encoded to source
+            result.add(source)
         }
         return result
     }
@@ -461,9 +466,11 @@ class VipTvHttpGateway(
         val request = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.ApiRequest>(uniffi.viptv_core.normalize("request", values.toString(), origin))
         return json(request.method, request.path.removePrefix("/api"), request.body?.let { JSONObject(org.viptv.core.wire.CoreJson.encode(it)) })
     }
-    private suspend fun json(method: String, path: String, body: JSONObject? = null): JSONObject = JSONObject(responseText(method, path, body))
+    private suspend fun json(method: String, path: String, body: JSONObject? = null): JSONObject =
+        withContext(Dispatchers.Default) { JSONObject(responseText(method, path, body)) }
     /** `/addons` is deliberately a raw JSON array in the Rust API. */
-    private suspend fun jsonArray(method: String, path: String, body: JSONObject? = null): JSONArray = JSONArray(responseText(method, path, body))
+    private suspend fun jsonArray(method: String, path: String, body: JSONObject? = null): JSONArray =
+        withContext(Dispatchers.Default) { JSONArray(responseText(method, path, body)) }
     private sealed interface CallResult
     private class CallText(val text: String) : CallResult
     private class CallFailure(val status: Int, val message: String, val code: String?) : CallResult
@@ -599,9 +606,9 @@ private fun LiveChannel.asMedia() = Media(id, "live", name, poster = logo)
 
 private fun JSONObject.media(): Media = CoreModels.media(this)
 /** Core owns the page-key order (`metas`, then `items`, then `rows`); callers do not choose keys. */
-private fun JSONObject.mediaArray(): List<Media> {
-    val page = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.DiscoverPage>(uniffi.viptv_core.normalize("discover", toString(), ""))
-    return page.items.map { CoreModels.mediaNormalized(it) }
+private suspend fun JSONObject.mediaArray(): List<Media> = withContext(Dispatchers.Default) {
+    val page = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.DiscoverPage>(uniffi.viptv_core.normalize("discover", this@mediaArray.toString(), ""))
+    page.items.map { CoreModels.mediaNormalized(it) }
 }
 private fun JSONObject.source(eventProvider: String? = null): Source = CoreModels.source(JSONObject(toString()).also {
     if (!it.has("provider") && eventProvider != null) it.put("provider", eventProvider)

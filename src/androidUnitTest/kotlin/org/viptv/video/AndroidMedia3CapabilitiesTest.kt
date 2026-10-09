@@ -7,6 +7,16 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AndroidMedia3CapabilitiesTest {
+    @Test fun loadedSoftwareAudioDecodersExtendOnlyAudioCapabilities() {
+        val facts = Media3PlatformFacts(34, false, listOf(hardwareAvc, aac))
+        assertEquals(setOf("aac"), media3Capabilities(facts).audioCodecs)
+        val withFallback = media3Capabilities(facts.copy(softwareAudioMimeTypes =
+            setOf("audio/vnd.dts", "audio/vnd.dts.hd", "audio/true-hd", "audio/ac3", "audio/eac3")))
+        assertEquals(setOf("aac", "dts", "truehd", "ac3", "eac3"), withFallback.audioCodecs)
+        assertEquals(setOf("h264"), withFallback.videoCodecs)
+        assertFalse(withFallback.supportsAudioPassthrough)
+    }
+
     private val hardwareAvc = Media3DecoderFacts(
         mimeTypes = setOf("video/avc"),
         hardwareAccelerated = true,

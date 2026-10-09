@@ -25,6 +25,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
@@ -57,7 +58,7 @@ private enum class TrackMenu { Audio, Subtitles }
     var row by remember(media.id) { mutableIntStateOf(1) }
     var button by remember(media.id) { mutableIntStateOf(if (live) 3 else 1) }
     var seekKey by remember { mutableIntStateOf(0) }
-    var repeat by remember { mutableIntStateOf(0) }
+    val seekCadence = remember(media.id) { TvSeekCadence() }
     var activateOnRelease by remember { mutableStateOf(false) }
     var seekJob by remember { mutableStateOf<Job?>(null) }
     var menu by remember { mutableStateOf<TrackMenu?>(null) }
@@ -65,21 +66,23 @@ private enum class TrackMenu { Audio, Subtitles }
     val focus = remember { FocusRequester() }
     val buffering = playback.status == PlaybackStatus.Opening || playback.isBuffering
     val shown = chromeVisible || buffering
-    fun cancelSeek() { seekJob?.cancel(); controller.cancelSeek(); seekKey = 0; repeat = 0 }
-    fun seek(delta: Long, key: Int) {
+    fun cancelSeek() { seekJob?.cancel(); controller.cancelSeek(); seekKey = 0; seekCadence.end() }
+    fun seek(delta: Long, key: Int, repeatCount: Int = 0, eventMillis: Long = android.os.SystemClock.uptimeMillis(), moveToTimeline: Boolean = true) {
         if (live || duration <= 0) return
+        val step = seekCadence.step(delta, key, repeatCount, eventMillis) ?: return
         seekJob?.cancel()
-        repeat = if (seekKey == key) repeat + 1 else 0; seekKey = key
-        val multiplier = when { repeat >= 15 -> 60; repeat >= 9 -> 15; repeat >= 5 -> 6; repeat >= 2 -> 3; else -> 1 }
-        controller.previewSeek(delta * multiplier); row = 0
+        seekKey = key
+        controller.previewSeek(step)
+        if (moveToTimeline) row = 0
     }
-    fun releaseSeek() { seekKey = 0; repeat = 0; seekJob?.cancel(); seekJob = scope.launch { delay(800); if (controller.state.value.seekPreview != null) controller.commitSeek() } }
+    fun releaseSeek() { seekKey = 0; seekCadence.end(); seekJob?.cancel(); seekJob = scope.launch { delay(800); if (controller.state.value.seekPreview != null) controller.commitSeek() } }
     fun toggle() { cancelSeek(); if (!live) { if (playback.isPlaying) controller.pausePlayback() else controller.resumePlayback() } }
     fun activate(index: Int) {
+        if (tv) { row = 1; button = index }
         when (index) {
-            0 -> { seek(-10_000, KeyEvent.KEYCODE_DPAD_CENTER); releaseSeek() }
+            0 -> { seek(-10_000, KeyEvent.KEYCODE_DPAD_CENTER, moveToTimeline = false); releaseSeek() }
             1 -> toggle()
-            2 -> { seek(30_000, KeyEvent.KEYCODE_DPAD_CENTER); releaseSeek() }
+            2 -> { seek(30_000, KeyEvent.KEYCODE_DPAD_CENTER, moveToTimeline = false); releaseSeek() }
             3 -> { cancelSeek(); menu = TrackMenu.Audio }
             4 -> { cancelSeek(); menu = TrackMenu.Subtitles }
             5 -> controller.exitPlayback()
@@ -128,10 +131,10 @@ private enum class TrackMenu { Audio, Subtitles }
                 if (row == 1 || live) {
                     val index = order.indexOf(button).coerceAtLeast(0)
                     button = order[(index + if (left) order.size - 1 else 1) % order.size]
-                } else seek(if (left) -10_000 else 10_000, code)
+                } else seek(if (left) -10_000 else 10_000, code, key.repeatCount, key.eventTime)
             }
-            KeyEvent.KEYCODE_MEDIA_REWIND -> seek(-60_000, code)
-            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> seek(60_000, code)
+            KeyEvent.KEYCODE_MEDIA_REWIND -> seek(-10_000, code, key.repeatCount, key.eventTime, moveToTimeline = false)
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> seek(30_000, code, key.repeatCount, key.eventTime, moveToTimeline = false)
             KeyEvent.KEYCODE_MEDIA_NEXT -> if (hasNext && key.repeatCount == 0) controller.nextEpisode(media)
             KeyEvent.KEYCODE_INFO, KeyEvent.KEYCODE_MENU -> { cancelSeek(); row = 1; button = 3 }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> if (key.repeatCount == 0) activateOnRelease = true
@@ -177,11 +180,10 @@ private enum class TrackMenu { Audio, Subtitles }
                     VText(media.name, 56, Modifier.padding(top = 18.dp, bottom = 32.dp), display = true, lines = 1)
                 }
                 if (!live) {
-                    val displayPosition = seekPreview?.targetMillis ?: position
                     val bufferedPosition = playback.bufferedPositionMillis?.let { PlaybackTimelinePolicy.absolutePositionMillis(it, controller.playbackTitleOffsetMillis) }
-                    PlayerTimeline(displayPosition, duration, bufferedPosition, Modifier.padding(bottom = measure(32, 12)),
+                    PlayerTimeline(position, duration, bufferedPosition, Modifier.padding(bottom = measure(32, 12)), previewPosition = seekPreview?.targetMillis,
                         enabled = playback.timeline?.canSeek == true,
-                        onSeek = if (tv) null else { target -> controller.previewSeek(target - (controller.state.value.seekPreview?.targetMillis ?: controller.absolutePositionMillis())) },
+                        onSeek = { target -> if (tv) row = 0; controller.previewSeek(target - (controller.state.value.seekPreview?.targetMillis ?: controller.absolutePositionMillis())) },
                         onCommit = { controller.commitSeek() }, onCancel = { controller.cancelSeek() })
                 }
                 if (tv) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
@@ -222,7 +224,7 @@ private enum class TrackMenu { Audio, Subtitles }
     val tv = LocalTv.current
     Box(Modifier.size(measure(72, if (primary) 54 else 44)).clip(CircleShape)
         .background(if (focused) C.textPrimary else if (primary) LocalAccent.current else if (tv) C.surfaceN3 else Color.Transparent)
-        .clickable(onClick = onClick).semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
+        .clickable(onClick = onClick).semantics { contentDescription = label; if (tv) selected = focused }, contentAlignment = Alignment.Center) {
         VIcon(icon, modifier = Modifier.size(measure(32, 24)), color = if (focused || primary) C.onLight else C.textPrimary)
         if (icon == "back10" || icon == "forward30") VText(if (icon == "back10") "10" else "30", if (tv) 12 else 9, color = if (focused || primary) C.onLight else C.textPrimary, bold = true)
     }

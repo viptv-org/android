@@ -29,7 +29,7 @@ import kotlinx.coroutines.sync.withPermit
 class AppController(context: Context, private val origin: String) {
     private val television = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
     private val store = context.getSharedPreferences("viptv.auth", Context.MODE_PRIVATE)
-    internal val gateway = VipTvHttpGateway(origin, store.getString("access", null), ::refreshAccessToken, television)
+    internal val gateway = VipTvHttpGateway(origin, store.getString("access", null), ::refreshAccessToken, television, org.viptv.video.AndroidMediaDns(context))
     internal val scope = CoroutineScope(Job() + Dispatchers.Main.immediate)
     private val coreSession = CoreSession(origin, store, scope, gateway::setAccessToken, ::renderSession)
     private val sessionRefreshMutex = Mutex()
@@ -46,13 +46,14 @@ class AppController(context: Context, private val origin: String) {
     internal val _state = MutableStateFlow(AppState(loading = true))
     val state: StateFlow<AppState> = _state.asStateFlow()
     private val foregroundValidation = ForegroundValidation(scope, gateway::foregroundIdentity)
-    internal val backendFactory = AndroidMedia3BackendFactory(context)
+    internal val backendFactory = AndroidMedia3BackendFactory(context, enableTransferDiagnostics = BuildConfig.PLAYBACK_DIAGNOSTICS)
     private val playerDelegate = lazy {
         backendFactory.createAndroidPlayer().also { instance ->
             scope.launch { instance.events.collect(::onPlayerEvent) }
         }
     }
     val player: AndroidMedia3VideoPlayer get() = playerDelegate.value
+    internal fun clearPlayerHttpRedirects() { if (playerDelegate.isInitialized()) player.clearHttpRedirects() }
     internal var homeJob: Job? = null
     internal var homeContentFocused = false
     private var homeRevisionJob: Job? = null
@@ -446,25 +447,29 @@ class AppController(context: Context, private val origin: String) {
         return accepted && !partial.get()
     }
     internal fun refreshProfileIdentity() { keepProfilesOnIdentityRefresh = true; coreSession.retry() }
-    internal fun enrichVisibleHomeItem(media: Media) {
+    internal suspend fun enrichVisibleHomeItem(media: Media) {
         val current = _state.value
         if (media.type == "live" || current.homeLoading || current.route != Route.Browse(Destination.Home)) return
         val profile = current.selectedProfile?.id ?: return
         val generation = homeRefreshGeneration
         val key = media.type + ":" + media.id
         if (!homeMetadataRequested.add(key)) return
-        scope.launch {
+        var completed = false
+        try {
             homeMetadataGate.withPermit {
-                if (generation != homeRefreshGeneration || _state.value.selectedProfile?.id != profile) return@withPermit
+                if (generation != homeRefreshGeneration || _state.value.selectedProfile?.id != profile ||
+                    _state.value.route != Route.Browse(Destination.Home)) return@withPermit
                 val rich = try { gateway.metadata(media) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { return@withPermit }
-                if (generation != homeRefreshGeneration || _state.value.selectedProfile?.id != profile) return@withPermit
+                if (generation != homeRefreshGeneration || _state.value.selectedProfile?.id != profile ||
+                    _state.value.route != Route.Browse(Destination.Home)) return@withPermit
                 val state = _state.value
                 val shelves = state.shelves.map { shelf -> shelf.copy(items = shelf.items.map { item ->
                     if (item.type == media.type && item.id == media.id) CoreModels.enrich(item, rich) else item
                 }) }
                 _state.value = state.copy(shelves = shelves, queue = shelves.firstOrNull { it.isQueueShelf }?.items.orEmpty())
+                completed = true
             }
-        }
+        } finally { if (!completed && generation == homeRefreshGeneration) homeMetadataRequested.remove(key) }
     }
     fun chooseProfile(profile: Profile) {
         homeRevisionJob?.cancel(); homeRevisionJob = null

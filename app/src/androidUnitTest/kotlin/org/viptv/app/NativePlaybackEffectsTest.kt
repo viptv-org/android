@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
 import org.json.JSONObject
 import org.viptv.video.PlaybackError
 import org.viptv.video.PlaybackErrorCode
@@ -231,6 +232,31 @@ class NativePlaybackEffectsTest {
                 assertEquals(0, server.requests.count { it.method == "DELETE" })
             }
         }
+    }
+
+    @Test fun concurrentRetirementWaitsForTheSameRemoteCleanupReceipt() = runBlocking {
+        val deletion = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        FixtureServer(3) { incoming -> when {
+            incoming.target.endsWith("playback-protocol") -> FixtureResponse(protocol)
+            incoming.method == "DELETE" -> {
+                deletion.countDown()
+                check(release.await(3, java.util.concurrent.TimeUnit.SECONDS))
+                FixtureResponse("""{"ok":true}""")
+            }
+            else -> FixtureResponse(ready())
+        } }.use { server -> Harness().use { h ->
+            val prepared = h.effects.prepare(h.control(server), request(), 7) as NativePlaybackEffects.Prepared.Native
+            h.effects.accept(prepared, "Exact episode", false, {}) { _, _ -> }
+            val first = async(Dispatchers.Default) { h.coordinator.retire(prepared.candidate) }
+            var second: kotlinx.coroutines.Deferred<Boolean>? = null
+            try {
+                assertTrue(kotlinx.coroutines.withContext(Dispatchers.IO) { deletion.await(3, java.util.concurrent.TimeUnit.SECONDS) })
+                second = async(Dispatchers.Default) { h.coordinator.retire(prepared.candidate) }
+                kotlinx.coroutines.delay(100)
+                assertFalse(second.isCompleted, "Concurrent cleanup must not report completion before the existing release attempt")
+            } finally { release.countDown(); first.await(); second?.await() }
+        } }
     }
 
     @Test fun renewalAuthorizationRefusalRetiresReadsAndDoesNotAuthorizeGatewayBypass() = runBlocking {

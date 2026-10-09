@@ -57,5 +57,10 @@ private class StrictHandle(
     override fun stop() = handle.stop()
     override fun stopAndJoin() = handle.stopAndWait() == TorrentSettlement.SETTLED
     override fun close() = handle.close()
+    override fun diagnostic(): String? {
+        if (!BuildConfig.PLAYBACK_DIAGNOSTICS) return null
+        val facts = handle.transportDiagnostics()
+        return "active=${facts.active} failed=${facts.failed} fetched_bytes=${facts.fetchedBytes} checked_bytes=${facts.checkedBytes} live_peers=${facts.livePeers} connecting_peers=${facts.connectingPeers} queued_peers=${facts.queuedPeers} dead_peers=${facts.deadPeers} not_needed_peers=${facts.notNeededPeers}"
+    }
     override fun toString() = "NativeTorrentHandleEffect(<redacted>)"
 }

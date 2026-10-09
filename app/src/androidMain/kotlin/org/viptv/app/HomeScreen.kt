@@ -25,7 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
-import coil.request.ImageRequest
+import kotlinx.coroutines.delay
 import org.viptv.app.theme.ViptvColor as C
 
 internal fun AppController.activateHero(media: Media, queue: Boolean) {
@@ -55,6 +55,12 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
     val initial = LocalContentFocus.current
     val rail = LocalRailFocus.current
     val showHero = tv && (state.homeFocus.surface == HomeFocusSurface.Hero || state.homeFocus.shelfIndex == 0)
+    LaunchedEffect(tv, hero?.id, showHero, state.homeLoading) {
+        if (tv && showHero && hero != null && !state.homeLoading) {
+            delay(300)
+            controller.enrichVisibleHomeItem(hero)
+        }
+    }
     LaunchedEffect(showHero, state.homeFocus.shelfIndex) {
         // Enter the top region smoothly; moving between its cards must not restart the scroll.
         val motion = tween<Float>(280, easing = FastOutSlowInEasing)
@@ -94,7 +100,12 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
                     else {
                         val pager = rememberPagerState(pageCount = { featured.size })
                         HorizontalPager(pager, pageSpacing = 16.dp, key = { featured[it].id }) { index ->
-                            LaunchedEffect(featured[index].id, state.homeLoading) { controller.enrichVisibleHomeItem(featured[index]) }
+                            LaunchedEffect(featured[index].id, state.homeLoading, pager.currentPage) {
+                                if (index == pager.currentPage && !state.homeLoading) {
+                                    delay(300)
+                                    controller.enrichVisibleHomeItem(featured[index])
+                                }
+                            }
                             PhoneHero(featured[index], phoneHeroShelf?.isQueueShelf == true, state, controller)
                         }
                         if (featured.size > 1) Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.Center) {
@@ -120,7 +131,7 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
             val width = with(density) { 1120.dp.roundToPx() }
             val height = with(density) { 720.dp.roundToPx() }
             val request = remember(presentation.heroImage, context, width, height) {
-                ImageRequest.Builder(context).data(presentation.heroImage).size(width, height).crossfade(false).build()
+                ArtworkImages.request(context, presentation.heroImage!!, width, height, crop = true)
             }
             // The sharp layer defines decode size; the ambient layer reuses it under the blur.
             val painter = rememberAsyncImagePainter(request, contentScale = ContentScale.Crop)
@@ -135,6 +146,7 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
 @Composable private fun TelevisionHero(media: Media, queue: Boolean, shelfIndex: Int, shelfId: String, state: AppState, controller: AppController, initial: FocusRequester, rail: FocusRequester) {
     val hero = remember(media) { CoreModels.presentation(media) }
     val actions = remember(media, queue) { SharedPresentation.home(media, queue) }
+    val progressOffset = if (actions.showHeroProgress && hero.episodeLabel.isNotBlank()) 40.dp else 0.dp
     val saved = state.favorites.any { it.id == media.id && it.type == media.type }
     LaunchedEffect(media.id) { if (state.homeFocus.mediaKey == null || (state.homeFocus.surface == HomeFocusSurface.Hero && controller.homeContentFocused)) { withFrameNanos {}; runCatching { initial.requestFocus() } } }
     LaunchedEffect(media.id, state.homeFocus.restoreRequest) {
@@ -155,12 +167,12 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
         else Artwork(hero.titleLogo, media.name, Modifier.offset(y = 142.dp).size(410.dp, 118.dp), ContentScale.Fit)
         VText(hero.episodeLabel, 24, Modifier.offset(y = 286.dp).width(420.dp), bold = true, lines = 1)
         if (actions.showHeroProgress) {
-            ProgressLine(hero.progress.toFloat(), Modifier.offset(444.dp, 298.dp).width(180.dp))
-            VText(formatTime(media.positionMillis) + " of " + ((media.durationMillis ?: 0) / 60000) + " min", 24, Modifier.offset(644.dp, 286.dp), C.textSecondary)
+            VText(formatTime(media.positionMillis) + " of " + ((media.durationMillis ?: 0) / 60000) + " min", 24,
+                Modifier.offset(y = 286.dp + progressOffset).width(760.dp), C.textSecondary)
         }
-        VText(mediaFacts(media), 22, Modifier.offset(y = 336.dp).width(950.dp), C.textSecondary, lines = 1)
-        VText(media.description.orEmpty(), 26, Modifier.offset(y = 394.dp).width(760.dp), C.textBody, lines = 2)
-        Row(Modifier.offset(y = 496.dp).onFocusChanged { if (it.hasFocus) controller.recordHomeFocus(shelfIndex, shelfId, media, HomeFocusSurface.Hero) }.focusGroup(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+        VText(mediaFacts(media), 22, Modifier.offset(y = 336.dp + progressOffset).width(950.dp), C.textSecondary, lines = 1)
+        VText(media.description.orEmpty(), 26, Modifier.offset(y = 394.dp + progressOffset).width(760.dp), C.textBody, lines = 2)
+        Row(Modifier.offset(y = 496.dp + progressOffset).onFocusChanged { if (it.hasFocus) controller.recordHomeFocus(shelfIndex, shelfId, media, HomeFocusSurface.Hero) }.focusGroup(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             AppButton(actions.heroPrimaryActionLabel, { controller.activateHero(media, queue) }, Modifier.width(228.dp).focusRequester(initial).focusProperties { left = rail },
                 "play", tvAccent = actions.heroPrimaryAction == "resume", onHold = { controller.chooseHeroSources(media, queue) },
                 onFocused = { controller.recordHomeFocus(shelfIndex, shelfId, media, HomeFocusSurface.Hero) })
@@ -214,7 +226,12 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
             itemsIndexed(shelf.items, key = { _, item -> HomeFocusPolicy.mediaKey(item) }) { column, media ->
                 val action = { controller.activateCard(media, shelf.isQueueShelf, SourceReturn.Home) }
                 val hold = { if (shelf.isQueueShelf) controller.requestQueueManage(media) else controller.requestDialog(DialogKind.MyListManage, media.name, media) }
-                LaunchedEffect(media.id, state.homeLoading) { controller.enrichVisibleHomeItem(media) }
+                if (tv && shelf.isQueueShelf) LaunchedEffect(media.id, state.homeLoading, state.homeFocus.mediaKey) {
+                    if (!state.homeLoading && state.homeFocus.mediaKey == HomeFocusPolicy.mediaKey(media)) {
+                        delay(300)
+                        controller.enrichVisibleHomeItem(media)
+                    }
+                }
                 if (!tv && shelf.isQueueShelf) QueueCard(media, action, hold)
                 else if (!tv && media.type == "live") LiveLogoTile(media, action, hold)
                 else MediaCard(media, Modifier.focusRequester(focuses[column]).then(if (column == 0 && tv) Modifier.focusProperties { left = rail } else Modifier),

@@ -1,0 +1,17 @@
+{
+  "project": "https://github.com/androidx/media",
+  "revision": "2bc207851df311340767e913931ca7b28cab1794",
+  "tag": "1.11.0",
+  "files": {
+    "src/main/AndroidManifest.xml": "e50e6ccfb2b184082f341377a6c3f07f5d93b71623476674549de7dab4e894ad",
+    "src/main/java/androidx/media3/decoder/ffmpeg/ExperimentalFfmpegVideoRenderer.java": "a1c90e367beaf5f72b58103e066f7ed6cfa5015f2b2975079dcf27d4db8711ab",
+    "src/main/java/androidx/media3/decoder/ffmpeg/FfmpegAudioDecoder.java": "64b5ff45fd9f60b6775d542bda141698e5d32cacdd04ddd96141e86f2c0a51f8",
+    "src/main/java/androidx/media3/decoder/ffmpeg/FfmpegAudioRenderer.java": "230bcaef26ddd233f7f2ac0cdd7a5896d98e7d8dd8d4c9b2ea1942c483b05c48",
+    "src/main/java/androidx/media3/decoder/ffmpeg/FfmpegDecoderException.java": "9e73968d0802b2d7f8add911ec4dc5a6e621777e997eca74332e173c5463ad7a",
+    "src/main/java/androidx/media3/decoder/ffmpeg/FfmpegLibrary.java": "a0843232be53210aefe97d8bc0a0268ac781cc7ce72e2d47bf42cd07f8048880",
+    "src/main/java/androidx/media3/decoder/ffmpeg/package-info.java": "1d75d02151fcec7a1c0036ee4a216e885ae91e1f85e8c9ddfbd72b4def6709be",
+    "src/main/jni/CMakeLists.txt": "77e01a29be12319805bf950796dac08f24ca373f923b379fda717ccbb108bd95",
+    "src/main/jni/build_ffmpeg.sh": "337c88b9240b67e290c361a59c39cb2812c5bfeb5c04833b5f63b227d07c9dc2",
+    "src/main/jni/ffmpeg_jni.cc": "cebafb59c70cd7082d40a94d33680f8627547994758fbd8551ab4b3434d4088c"
+  }
+}

@@ -9,3 +9,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "viptv-android"
 include(":app")
+include(":decoder-ffmpeg")

@@ -23,6 +23,7 @@ internal interface NativeTorrentHandleEffect {
     fun stop()
     fun stopAndJoin(): Boolean
     fun close()
+    fun diagnostic(): String? = null
 }
 
 /** Only the strict adapter constructs this capability after shared metadata validation. */
@@ -56,6 +57,8 @@ internal class NativeTorrentOwnedWork(
     private var cancellationAtNanos: Long? = null
     private var started = false
     private var closed = false
+
+    @Synchronized internal fun diagnostic(): String? = handle?.diagnostic()
 
     private var cancellationFailed = false
     private val joins = mutableListOf<JoinReceipt>()
@@ -274,13 +277,15 @@ internal class NativeTorrentCoordinator(
             if (!native || !http || nowNanos() > deadline) cache.retainFailedSettlement()
             native && http && cache.isAvailable
         }
-        candidate.retirement.complete(settled)
         // Remote tombstone/release is best effort after joined local byte shutdown.
         if (settled) {
             owned.remove(candidate.control)
             runCatching { candidate.control.stop() }
             controls.remove(candidate.control)
         }
+        // Every concurrent caller observes the same bounded cleanup attempt,
+        // including its remote release, rather than racing a premature receipt.
+        candidate.retirement.complete(settled)
         settled
     }
 

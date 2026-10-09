@@ -9,6 +9,10 @@ The initial import was derived from `air-tv/video` at `57551ec48d63c81d407e09821
 - Android API 24+ phones and Android TV. Native TV mode selects the remote layout; phones retain touch, system text entry and rotation.
 - `:app` phone username/password sign-in, TV device pairing/refresh, profiles, Home/Discover/source picker, exact-source Resume, and Media3 direct playback.
 - Media3 playback, headers, external subtitles, track selection, live/DVR semantics, and runtime capability reporting.
+- The pinned Media3 FFmpeg audio extension decodes DTS, AC-3, E-AC-3 and TrueHD
+  locally when the platform decoder cannot. Video retains the platform decoder.
+  `python3 scripts/check-ffmpeg-audio.py` checks the source/native pins; Linux
+  rebuilds use `python3 scripts/build-ffmpeg-audio.py` with the Android NDK.
 - No desktop, Apple, browser, JavaScript, WebAssembly, MPV, AVFoundation, or package publishing.
 
 ## Shared application core
@@ -88,18 +92,27 @@ scripts/prepare-core.sh host
 ./gradlew --no-daemon :testDebugUnitTest :app:testDebugUnitTest
 scripts/prepare-core.sh android
 ./gradlew --no-daemon :app:assembleDebug :app:lintDebug
+./gradlew --no-daemon :app:assemblePerformance :app:lintPerformance
 ```
 
 Hosted `.github/workflows/build.yml` builds the pinned native core for host tests
 and all three Android ABIs, runs library/app unit tests and lint, and packages a
-universal phone/TV debug APK with revision/pin metadata and SHA256SUMS. Main
+universal phone/TV optimized development APK with revision/pin metadata and SHA256SUMS. Main
 pushes and manual dispatch produce sideloading artifacts only. There are no PR
 gates, automatic releases, package/image publishing or deployments; retain local
 checks. Production delivery requires separate authorization.
 
 A passing build does not qualify physical playback hardware. Emulator and
 physical evidence and outstanding qualification limits are recorded in
-[TESTING.md](TESTING.md).
+[TESTING.md](TESTING.md). Playback/performance work and remaining startup
+acceptance are tracked in [README-performance-fixes.md](README-performance-fixes.md).
+
+Use `app/build/outputs/apk/performance/app-performance.apk` for interactive
+phone/TV use. It applies R8 optimization, resource shrinking and non-debuggable
+execution, with the existing development signing key and application ID so an
+update preserves sign-in. It is a development artifact, not a store release.
+Use the debug variant for instrumentation, debugger/run-as access and fixtures;
+its timings do not represent the optimized APK.
 
 ### Dated evidence
 

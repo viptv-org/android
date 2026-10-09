@@ -1,0 +1,18 @@
+{
+  "ffmpeg": "6.0.1",
+  "sourceSha256": "9b16b8731d78e596b4be0d720428ca42df642bb2d78342881ff7f5bc29fc9623",
+  "decoders": [
+    "dca",
+    "ac3",
+    "eac3",
+    "truehd"
+  ],
+  "ndk": "28.2.13676358",
+  "api": 24,
+  "pageSize": 16384,
+  "sha256": {
+    "armeabi-v7a": "5fb19d42aea29938eab30604ffb4286c53f9573d4413a6459871fc5cb14ba17a",
+    "arm64-v8a": "f8314173807fda4e27f22003255d2aaedbb3e1a41ccb3220c4823762b0777fd6",
+    "x86_64": "49f3cef9e0d46b41d9f654f2514ecdb3d31f5e033395f4ec49023357293d7b6b"
+  }
+}

@@ -36,6 +36,8 @@ data class OpenedMedia(
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
     val statistics: PlaybackStatistics = PlaybackStatistics(),
+    val positionMillis: Long = 0,
+    val bufferedPositionMillis: Long? = null,
 )
 
 @JvmInline
@@ -177,6 +179,8 @@ class DefaultVideoPlayer(
                     playWhenReady = opened.playWhenReady ?: playWhenReady,
                     isPlaying = opened.isPlaying,
                     isBuffering = opened.isBuffering,
+                    positionMillis = opened.positionMillis.coerceAtLeast(0),
+                    bufferedPositionMillis = opened.bufferedPositionMillis,
                     timeline = opened.timeline,
                     selectedAudioTrackId = opened.selectedAudioTrackId,
                     selectedSubtitleTrackId = opened.selectedSubtitleTrackId,

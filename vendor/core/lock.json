@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/core",
-  "revision": "d737c43d4d35e22c6dac8a98691d6ea84a4e6b07",
+  "revision": "aae69de27d69f87f79ce513e47a78985cede4a39",
   "files": {
     "Cargo.lock": "f69654cd47b20d98dce64ecfa3ad995e61a4e355510af0046e7377373b348654",
     "Cargo.toml": "aaadafb7d7043ae4788352e5784c05398c9020647acea903cc0940a158a77845",
@@ -32,7 +32,7 @@
     "crates/viptv-core/src/domain/mod.rs": "3f86e2ea2e04b64019f34442703eaad8021da18d6118408b6d7a239b4a869b67",
     "crates/viptv-core/src/domain/playback.rs": "22a3981acc0f25fb1e2cbd07d15082d70755156f600f1d4090e4dc5cce42593f",
     "crates/viptv-core/src/domain/playback_protocol.rs": "c6b7498e9180fd7dd383dae83dbee0019505dd0741d55bde55ea740d03b5feea",
-    "crates/viptv-core/src/domain/streams.rs": "248942e528bef26e56c58cd5d670cf431249dd776b2420e9e0d2d8898d7d8f53",
+    "crates/viptv-core/src/domain/streams.rs": "b7bb31e81cae7064b0e7bbc7c41fad5fe613f469df4fefac8dd08f0401c16006",
     "crates/viptv-core/src/dto.rs": "a1af07ae177bb48d4ff78cdc793a82f833452a75cb86377a8a34d1ef2c056ed6",
     "crates/viptv-core/src/lib.rs": "90f33bc019f009b0fc05d9ff9a8b9541c01e42d66c182764ccb04335feb49168",
     "crates/viptv-core/src/native_metainfo.rs": "29836b67d37fbbe9c7da0156024679dd754d222a2e2db8f1338638c85e69943e",
@@ -68,7 +68,7 @@
     "crates/viptv-core/tests/presentation.rs": "fd4635b1c5a4dd326112177e615e2f157d7ac375b8766e777931597d3e202712",
     "crates/viptv-core/tests/shared_presentation_rules.rs": "20269562b98d1721212cc973c8737818355e55856d9c85d357682740b29efec0",
     "crates/viptv-core/tests/shell_lifecycle.rs": "3e440d0102e906c0e26de956287b559a2066679c0dbd3490a075dea6e7e8ad65",
-    "crates/viptv-core/tests/v2_discovery.rs": "7c4e12681bfb22f43253d199742fab0bd52b0e1b221bab74bced5b714b4dbabc",
+    "crates/viptv-core/tests/v2_discovery.rs": "2343cc15e0aa2775ae789b0b6a3461fa2b0cfb890def3d3a9f2dc5a4059155e6",
     "crates/viptv-core/tests/v2_playback.rs": "888422cad9ecc7edb461e15649d3170b99dad7a0b6fc8b8844b06a0756450a63",
     "crates/viptv-provider/Cargo.toml": "9948397f580c7b5e17c31ab2a93d1fb18efde52838374ff0d0ad55b36bc70786",
     "crates/viptv-provider/src/candidate.rs": "44c308ed1f54f08dcfe3f8c23c2c92e0e1d1c97d8d42ad5480dc2bc434566d9a",
@@ -83,6 +83,7 @@
     "tests/bridge-vectors.json": "7ad453fa12aa772fb6eeaf53543a513100891c9b6c74f78723f88088b19fcfa5",
     "tests/native-torrent-vectors.json": "2f3c74b88664fe6e7c1bf0a75c887e4672b1f94a3d6bbf6bb68b1983a3ad2ee2",
     "tests/playback-error-vectors.json": "f41c0ced0459a9123f266c8d5bef64ddef7db395266e1b585259b766e37f34ff",
-    "tests/playback-protocol-vectors.json": "ef20faa68d81065ddbeece9ec8faeb6a1993ae7f6e60f69a6ef2612f974a2bc7"
+    "tests/playback-protocol-vectors.json": "ef20faa68d81065ddbeece9ec8faeb6a1993ae7f6e60f69a6ef2612f974a2bc7",
+    "tests/source-discovery-vectors.json": "f73ea7589ffd515c6747124a153609677d4c5286083ba872e7e4460ac910674c"
   }
 }

@@ -106,6 +106,7 @@ internal class NativePlaybackControl(
                 .put("vod", vod).put("request", request).toString())
             return withTimeout<NativePlaybackStart>(startupBudgetMillis) {
                 var response = request("playbackV2", request = request)
+                var pollDelayMillis = 0L
                 while (true) {
                     currentCoroutineContext().ensureActive()
                     val state = state()
@@ -122,8 +123,12 @@ internal class NativePlaybackControl(
                         "ready" -> return@withTimeout NativePlaybackStart.Native(this@NativePlaybackControl)
                         "starting" -> {
                             startEffects()
-                            delay(500)
+                            // A magnet grant is often ready before the POST reaches
+                            // the device. Poll it immediately, then back off bounded
+                            // preparation without busy-looping on a slow network.
+                            if (pollDelayMillis > 0) delay(pollDelayMillis)
                             response = request("playbackV2Status")
+                            pollDelayMillis = if (pollDelayMillis == 0L) 100L else (pollDelayMillis * 2).coerceAtMost(500L)
                         }
                         else -> throw expired()
                     }

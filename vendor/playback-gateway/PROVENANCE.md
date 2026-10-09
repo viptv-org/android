@@ -74,3 +74,86 @@ archive license findings.
 
 The generic native network/metadata boundary and versioned bootstrap inventory
 are documented in [native network policy](docs/NATIVE_NETWORK_POLICY.md).
+
+## Native cold DHT peer lookup
+
+Native lookups seed the selected hash directly from the existing policy-vetted
+pinned bootstrap resolutions. Routing-table bootstrapping around the client's
+random node ID continues separately. The roots are transient, are used once per
+lookup, and retain the existing owned query/datagram cancellation path. No
+tracker, source peer hint, new bootstrap inventory or persistent DHT state is
+introduced. A deterministic cold-table regression verifies the targeted roots
+are queued before routing nodes exist and are not repeatedly queried.
+
+## Native metadata and payload continuity
+
+DHT recursive lookup processes the first response rather than issuing a duplicate
+request and discarding the first result. A queued-datagram regression proves one
+valid peer response completes lookup without a second packet. Native metadata
+preparation also retains its actual metadata-serving peer first, plus a bounded
+set of already-discovered peers, within the same session and exact info hash.
+Payload admission consumes this transient discovery continuity before starting
+a fresh lookup. No source/operator peer hints, trackers, persistent DHT state or
+new network destinations are admitted. A real owned-seeder regression resolves
+metadata then reads payload without DHT, trackers or a second bootstrap list; it
+fails before peer continuity and passes afterwards.
+
+Native acquisition now traverses up to sixteen DHT hops instead of stopping
+after four. Lost native datagrams time out in three seconds and native root
+queries recur within three seconds, inside the existing thirty-second acquisition
+deadline; the long-running gateway timers are unchanged. Deterministic tests
+cover a seeded peer six hops away and packet loss. Closed numeric transport
+diagnostics distinguish live/connecting/dead peers, fetched/verified bytes and
+terminal failure without exposing peer addresses or torrent identity.
+
+Native decoder-blocking pieces may be reassigned after two seconds even before
+the new peer has a completed-piece speed sample. Only a peer advertising the
+exact piece can take it; current reader pieces lead lookahead work. Existing
+per-piece disk locks, cancellation and hash verification remain authoritative.
+Non-current and ordinary gateway pieces retain measured-speed thresholds.
+This addresses emulator captures where over 100 MiB of lookahead downloaded
+while the decoder's current range timed out on its original slow peer.
+
+Trusted bootstrap DNS completion now wakes native hash lookup immediately,
+rather than waiting for the one-second empty-routing-table polling interval.
+Each newly resolved pinned root is admitted once per query, including a second
+root resolving after the first. Destination validation precedes publication,
+and the existing query/datagram ownership still fences cancellation.
+
+Native sessions use a two-second TCP-connect budget and five-second per-message
+read/write budget instead of the long-running client's ten-second defaults.
+Closed diagnostics showed more than 120 connecting peers occupying the 128-peer
+window while only a few transferred data. These native-only budgets let
+unresponsive candidates release slots promptly. They do not change the
+three-second DHT query budget, thirty-second acquisition deadline, ordinary
+gateway defaults, read authority or source selection.
+
+
+## Continuous loopback readers
+
+The token-protected HTTP Range body retains one torrent reader from the requested
+byte offset through response completion. Each 64 KiB frame advances that same
+reader instead of dropping its download priority and briefly registering another
+reader at byte zero. Standalone range reads also register their actual offset
+before waking peer workers. Existing selected-file authority, verified-piece IO,
+read accounting and owned connection cancellation remain in force. A real-storage
+HTTP-body regression fails when the reader disappears between frames; it also
+checks retired bodies cannot publish another chunk and release their read charge.
+
+
+Native idle requesters retry once per second so the existing two-second
+current-piece takeover runs before the five-second native socket read deadline.
+A stalled owned seeder reserves the full fixture; an additional fast seeder must
+then serve the decoder's verified first bytes within 3.8 seconds. The previous
+five-second idle wait fails that regression, while the one-second retry passes
+and joins consumer/seeder shutdown. Ordinary gateway retry timing is unchanged.
+
+
+Native piece takeovers request only chunks still missing from the selected
+piece. Previously received chunks stay private until complete-piece hashing;
+owned wire fixtures verify the receiver does not expose a partial prefix and
+the successor requests only the remaining offsets. Native peer retirement
+also checks current piece ownership before clearing received state. Cancelled
+requests from a former owner cannot reset a successor's prefix or checksum work.
+A forced old-peer disconnect fails that regression before the ownership fence
+and passes afterwards, with joined consumer/seeder retirement.

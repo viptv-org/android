@@ -16,9 +16,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies { api(libs.kotlinx.coroutines.core) }
         androidMain.dependencies {
+            implementation(project(":decoder-ffmpeg"))
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.media3.common)
             implementation(libs.media3.exoplayer)
+            implementation(libs.media3.datasource.okhttp)
             implementation(libs.media3.exoplayer.dash)
             implementation(libs.media3.exoplayer.hls)
         }
