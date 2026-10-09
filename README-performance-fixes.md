@@ -14,20 +14,19 @@ uses an isolated worktree so its owner's existing edits remain untouched.
   the packaged-DEX check fails on the broken APK and passes on the corrected one.
   The TV now reports FFmpeg available, DTS support handled, and selected six-channel
   48 kHz audio; the owner reports audio appears restored.
-- [ ] Fix slow HTTPS playback and native torrent startup, including Resume.
-  The captured app launch took 16.8 seconds. Direct player probes identify serial
-  header/index/resume requests and expensive seek-index parsing. In one TV
-  measurement, 1.39 of 1.42 seconds spent reading the index was CPU work.
-  HTTP/2 pooling and bounded in-memory redirect reuse are implemented. A physical
-  exact-source Resume improved from 16.8 to 6.54 seconds in one matched capture;
-  other cold captures remain slower. One redirect chain spent 2.73 seconds in
-  DNS and additional time waiting for provider responses before any media bytes.
-  The requested target is approximately one second, and is not yet achieved.
-  A later emulator HTTPS probe removes DNS/redirect delay on repeats but still
-  takes 5.66–5.74 seconds, reading about 32 MiB of preroll before exact Resume.
-  ffprobe confirms the indexed keyframe is at 41:32.991 for a requested 41:41.
-  Byte reuse for repeated Resume is now being investigated; exact media time
-  must remain intact.
+- [ ] Verify reliable HTTPS/native torrent playback and forward/backward seeks,
+  including the remaining metadata failure. The owner waived the
+  one-second startup target. A matched physical HTTPS Resume improved from
+  16.8 to 6.54 seconds. Native SurfaceView probes render video and DTS audio
+  from the beginning, 41:41 and 73:26 and after forward/backward seeks.
+  A lost-bootstrap-query retry fix passes all 25 DHT checks; its final APK
+  passes fresh original-source playback and seeking from zero and 41:41.
+  A distinct torrent advertising 1,202 seeders still times out on emulator
+  and host after its discovered TCP peers fail to connect. Native v1 uses
+  DHT/TCP and disables trackers. Broader discovery remains under investigation.
+  The verified optimized candidate is installed on the onn. TV; its installed
+  APK hash matches and the actual 32-bit process loads the native capability.
+  Detailed timing history is in [TESTING.md](TESTING.md).
 - [x] Support HTTP as well as HTTPS media. Cleartext media and cross-protocol
   redirects are enabled in the installed APK. The owner
   explicitly waived adding an HTTP-specific test.
@@ -73,8 +72,8 @@ uses an isolated worktree so its owner's existing edits remain untouched.
   ruling out the proposed AAAA-only fix. Artwork/control/player HTTP clients now
   share a bounded 30-second system-DNS cache, invalidated by network identity.
   Family preservation, expiry, network change and failure-retry checks pass.
-  The underlying resolver can still delay a genuinely cold lookup; the one-second
-  cold playback item remains unchecked.
+  The underlying resolver can still delay a genuinely cold lookup; cold playback
+  still depends on network responses.
 - [x] Deliver an optimized development APK for the TV. Its observed Android
   runtime is 32-bit, and the installed debug APK runs without optimized compiled
   code. A non-debuggable, optimized development variant with the same signing
@@ -88,51 +87,12 @@ uses an isolated worktree so its owner's existing edits remain untouched.
   HTTPS now returns protocol v1 with native version 1. All 90 existing tables
   match the stopped-writer preservation snapshot. Physical public-swarm startup
   acceptance remains part of the unchecked playback-startup item.
-  On the physical TV, admission takes 961–1,036 ms; two actual app attempts
-  then reach the 30-second peer-metadata deadline before Media3. A separate
-  same-library TV probe obtains exact DTS metadata in 23.05 seconds and joins
-  cancellation successfully; a host probe takes 2.66 seconds. Both pinned DHT
-  bootstrap nodes respond from the actual app in 131–144 ms. Native cold peer
-  discovery is therefore still under investigation, not accepted as fixed.
-  Gateway native pin 31fea67 fixes two deterministic transport bugs: DHT lookup
-  discarded the first response and issued a second request; payload startup
-  discarded peers found during metadata acquisition. Both regressions fail
-  before and pass after the fixes. Fresh host Unabomber metadata takes 2.49 s
-  and first bytes another 1.33 s; the fixed three-ABI native APK is installed
-  for physical acceptance. Public-swarm timing and the one-second target remain
-  unaccepted until measured on the TV.
-  Gateway pin be05c96 also fixes the four-hop discovery ceiling and sixty-second
-  per-packet waits that exceeded native acquisition's thirty-second budget.
-  Lost native UDP replies now retry within three seconds and lookup can reach
-  sixteen hops; deterministic hop/loss regressions pass. Fresh emulator runs
-  obtain DTS metadata in 1.5–2.3 seconds and decode both beginning/Resume with
-  selected audio. Unabomber metadata and first bytes pass separately; its tested
-  4K HEVC source exceeds this emulator's decoder support. Cold peer transfer
-  still varies and the requested one-second cold target is not yet achieved.
-  A later cold Resume probe reproduced Media3 opening timeout despite over
-  100 MiB downloaded: the current piece could not be reassigned without a
-  completed-piece speed sample. Native current-piece takeover now needs only
-  two seconds and verifies the receiving peer advertises that piece. The same
-  cold Resume case and beginning/other-resume cases now pass on the emulator,
-  with metadata 1.47–1.79 s and Media3 preparation 1.19–14.0 s across those runs.
-  The optimized three-ABI APK with these changes is installed on the onn. TV.
-  Further cold probes still reproduce a twenty-second emulator opening timeout.
-  Closed diagnostics identify slow peers occupying over 120 connection slots.
-  Native TCP/message waits are now two/five seconds to release those slots;
-  be05c96 resolves metadata in 0.90–1.24 s in three sequential probes, but exact
-  Resume still takes 18.86 s. Gateway cd3e43e retains one reader throughout each
-  HTTP body; its range/cancellation regression passes, but exact 41:41 Resume
-  still reproduces the 20-second opening timeout. Gateway c790792 fixes an idle
-  retry/socket-timeout race with a failing owned-seeder regression, passing
-  three times at 2.36–2.38 s. Fresh exact Resume/start-from-zero now open with
-  selected DTS audio (12.99/3.91 s Media3, 1.68/1.86 s metadata). The requested
-  one-second startup remains unchecked; excess lookahead is under investigation.
 - [x] Validate the implemented Android changes: Android unit checks, core native/WASM checks,
   APK assembly/lint/integrity, actual TV playback/focus/frame measurements and
   device behavior. Android passes 52 library/302 app unit tests, source/Home
   emulator checks, DTS audio-output and stalled-stream deadline regressions,
   assembly/lint and three-ABI/native/notice/alignment checks. Native public-swarm
-  and one-second cold-start acceptance remain pending the server/network work.
+  playback/seek repeat qualification remains pending for the final native pin.
 
 ## Evidence and privacy
 

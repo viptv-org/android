@@ -36,7 +36,9 @@ class NativeTorrentArtifactLoadTest {
         assertTrue(NativeTorrentRuntime.isAvailable())
     }
 
-    @Test fun cleartextIsRestrictedToLiteralIpv4Loopback() {
+    @Test fun ownedFixtureCleartextIsRestrictedToLiteralIpv4Loopback() {
+        assumeTrue("Loopback-only policy belongs to the isolated native fixture APK",
+            InstrumentationRegistry.getInstrumentation().targetContext.packageName.endsWith(".nativefixture"))
         val policy = NetworkSecurityPolicy.getInstance()
         assertFalse(policy.isCleartextTrafficPermitted)
         assertTrue(policy.isCleartextTrafficPermitted("127.0.0.1"))

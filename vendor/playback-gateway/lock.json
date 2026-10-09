@@ -1,22 +1,22 @@
 {
   "files": {
     "LICENSE": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
-    "PROVENANCE.md": "d22d0317dc1ea53d7bbfda9109557e45f55da5eb81043df660db201e1dcc8ee8",
+    "PROVENANCE.md": "21b5a84b6808750eb8df91bb39d2d2932f8b22bdd6e0480fad47b0394ae7121e",
     "THIRD_PARTY/native-Cargo.lock": "8bf461df7dcd7e0f3d3e5387b5c04deae3b5c59da2228fc0af63851da8299dcc",
     "THIRD_PARTY/native-NOTICES.txt": "992af3e4cef4f8412c6127dc8a514b5915dc21c5e8dc774c8fc3eaee074720c7",
-    "THIRD_PARTY/native-SHA256SUMS.txt": "8f195448fc83701ce8b7a7a828517ca552315113f069d4b2950b4341c2d5e35d",
+    "THIRD_PARTY/native-SHA256SUMS.txt": "74a67adb6ecd0fe015ff00335624ebb54f917d9de4d68352ce87e96507dd819c",
     "THIRD_PARTY/native-arm64-v8a-dependencies.txt": "628c7e4b4b134459ba9ebee44f5f7dc984dbff5c66d18e186c8300c2edb67d8c",
     "THIRD_PARTY/native-armeabi-v7a-dependencies.txt": "48250bc9bb15fa71217897de51144715770ccb5625ba560e073c37d997c53d72",
-    "THIRD_PARTY/native-dependencies.json": "8db242bf5a8fb17cc627cb4c5ad0ce4b12ac4410b76776d3f0e6f233f04c0264",
+    "THIRD_PARTY/native-dependencies.json": "4810adc4234c4419c9dc8f5d91cdfa606d4a3033bcb5e8612b5d8faec5ac2d6a",
     "THIRD_PARTY/native-toolchain-NOTICES.txt": "c094af39f5bc49fb3a374a028fddbef55b62af035294e8fe0524578a9ae46c0e",
     "THIRD_PARTY/native-x86_64-dependencies.txt": "f88fcd8e958ac4faeda1f967fe9a024be412ac7eeb4dde897cd261ac07fc6010",
     "THIRD_PARTY/rqbit-UPSTREAM.json": "0b92996f0c689bda791fa44a39cf1fa78c26d248a406c28f9cd37e443e37c149",
-    "ffi/generated/android/jniLibs/arm64-v8a/libplayback_gateway_ffi.so": "83d95d2f15d0eaaf2fc4bc7f7508a8dca9815ece357ffd266ee0b71fa1d4fc88",
-    "ffi/generated/android/jniLibs/armeabi-v7a/libplayback_gateway_ffi.so": "e948b8d518fc134c4550456c75b48a1c0617a46f5b858c82d4c1999cb007daf5",
-    "ffi/generated/android/jniLibs/x86_64/libplayback_gateway_ffi.so": "688267bfcbdecb9e17a10a29c2e9bcf1fa6698932018ec67c83b8c08bcaf3983",
-    "ffi/generated/kotlin/uniffi/playback_gateway_ffi/playback_gateway_ffi.kt": "6328151aaa22e2015a92f0952154f9315a3ddba5692ce43fecab2a6110aa7568"
+    "ffi/generated/android/jniLibs/arm64-v8a/libplayback_gateway_ffi.so": "4e0d93b382f4423d6a16243e84dba0caa071783d876029f6afbe9ffa750bd64e",
+    "ffi/generated/android/jniLibs/armeabi-v7a/libplayback_gateway_ffi.so": "8b2459d87b4c36a12ffaa799e45027ca915b6c89a974911c63dddf1bf72fdebe",
+    "ffi/generated/android/jniLibs/x86_64/libplayback_gateway_ffi.so": "500d264eb50fd7a67384c9b4284de84d11317930ee717d7531d37b43b4aee502",
+    "ffi/generated/kotlin/uniffi/playback_gateway_ffi/playback_gateway_ffi.kt": "582a08d0390986ff07cb62d98c0ddef295f39e96aed5a98ee3fe5b719726f5a9"
   },
   "repository": "viptv-org/playback-gateway",
-  "revision": "c79079298aa92501aa30f619df7d8ddefc80571e",
+  "revision": "af353424375c0fed1fa3a1a4604f9a001bd0ee08",
   "version": 1
 }

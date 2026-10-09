@@ -2128,3 +2128,89 @@ metadata, and start-from-zero in 3.909 s after 1.864 s metadata. Both retain the
 requested clock and settle teardown; these measurements still miss the one-second
 target. The Resume trace fetches approximately 172 MiB while the player consumes
 52 MiB, motivating a separately measured native lookahead cap.
+
+
+Native follow-up checkpoints: gateway 40a1da1 bounds native lookahead to 16 MiB
+while preserving its cache reservation. Its fresh 41:41 emulator probe still
+hits the 20-second opening deadline after 1.524 s metadata, consuming 9.83 MiB
+from the desired range. Gateway b6a9f7a adds missing-chunk requests on takeover
+and rejects old-owner disconnect cleanup. Both actual two-peer regressions fail
+before the fixes and pass afterwards; three consecutive serial runs pass all
+three recovery cases with joined retirement. Fixture peers explicitly select
+rqbit's healthy test identity, avoiding its test-only randomized disconnect/
+corrupt-data injection. No partial prefix reaches a reader before full hashing.
+Required gateway workspace checks remain 192 passed / 56 ignored.
+
+The b6a9f7a three-ABI APK builds and is installed on the owned emulator. Its
+fresh exact 41:41 probe still reaches the 20-second deadline: metadata 1.239 s,
+head 5.595 s, then no tail bytes for 14.273 s. Native startup and the one-second
+target remain unaccepted; the physical TV has not received this candidate.
+
+
+Gateway 8a64c47 numeric wait diagnostics reproduce the same exact Resume timeout:
+metadata 1.422 s, head 10.020 s, tail 0.332 s, then no bytes at the requested
+Resume range for 9.402 s. Current-piece chunks grow while ownership repeatedly
+changes; aggregate takeovers reach 17 during the twenty-second opening budget.
+The selected file spans two metadata files and current pieces contain 256 chunks.
+Gateway dc11338 tracks the last newly accepted chunk when considering native
+current-piece takeover, retaining a progressing owner while recovering idle ones.
+An owned two-peer regression with one new chunk every 900 ms fails before the
+fix (one unwanted takeover) and passes after it (zero). All four recovery/prefix/
+retirement regressions pass; required workspace checks remain 192 passed / 56
+ignored. Original public-stream qualification remains pending for this candidate.
+
+
+The dc11338 public emulator replay still fails the same twenty-second budget:
+head 2.420 s, tail 3.819 s, and 18,219,008 bytes from Resume before timeout.
+A current owner continues sending small chunks for over ten seconds while
+faster peers complete other pieces. The follow-up retains the last-progress
+idle trigger and permits the existing measured faster-peer comparison; its
+threshold regression fails before the change and passes afterwards. Six
+owned live/startup regressions pass. Public acceptance is still pending.
+
+
+The 2726c52 public replay also reaches the twenty-second deadline: metadata
+1.827 s, head 2.630 s, Resume 26,607,616 bytes before timeout. The 16 MiB
+lookahead experiment has not qualified startup, so its cap is being reverted
+without changing the cache reservation or the retained-chunk/recovery fixes.
+
+
+Gateway 08d3eac restores the cache-bounded window; 192 workspace tests and six
+owned recovery/startup cases pass. A fresh exact 41:41 preparation completes in
+10.178 s. Actual SurfaceView probes then render both video frames and DTS audio
+output buffers from 0, 41:41 and 73:26, advancing the actual clock after forward
+120-second and backward 60-second seeks. All these playback/seek runs settle
+their acquisitions without account/history writes. One fresh beginning probe
+still hits the 30-second metadata deadline; its retry succeeds. A lost-bootstrap
+regression reproduces a missing retry and fails before the transport fix; all
+25 DHT tests pass afterwards. Public repeat qualification of that fix is pending.
+The owner waived the one-second target; reliability of playback and seeking is
+the remaining startup acceptance criterion.
+
+
+Final af35342 candidate: all three ABIs build/export/import with pinned checksum
+and 16 KiB alignment proof. Optimized APK native/core/JNA/notices/media-policy
+and FFmpeg JNI callback checks pass. Android checks pass 302 app / 52 library
+unit tests and all 24 actual Home/source/seek emulator cases. Fresh native DTS
+SurfaceView runs from zero and exact 41:41 render video and audio and complete
+forward/backward seeks with joined retirement. A distinct 1080p AVC torrent
+with an advertised 1,202 seeders still fails metadata on both emulator and host.
+Private host diagnostics find 55 failed peer attempts (including refused and
+timed-out connections), with no checksum/metadata validation failure. That
+source remains unaccepted. Its provider count does not prove reachable DHT/TCP
+peers; native v1 currently disables trackers and uses DHT/TCP only. Further
+discovery work is required before claiming reliable playback across sources.
+The isolated fixture's loopback-only security check is scoped to its own APK;
+it does not assert the ordinary HTTP-media app has fixture-only policy.
+
+
+The optimized af35342 APK is installed on the onn. TV with matching SHA-256
+`a2a93d01e1f86f8e1012450410ce18b6ef07657b541af4294d30223a50329426` and a
+non-debuggable armeabi-v7a process. A separately signed Java-only instrumentation
+probe loads the real kept NativeTorrentRuntime from the installed APK and reports
+native_available=true/process_64bit=false. This avoids using a debug Kotlin
+instrumentation APK against an optimized app: that runner crashes because its
+original Kotlin Intrinsics class is not in the shrunk target. The probe does not
+open media or modify sign-in/history. Both temporary TV probe packages are
+removed after validation. LintDebug passes with 81 warnings and six existing
+baseline-filtered errors. The alternative-source metadata failure remains open.

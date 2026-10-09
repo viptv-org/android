@@ -147,3 +147,13 @@ A stalled owned seeder reserves the full fixture; an additional fast seeder must
 then serve the decoder's verified first bytes within 3.8 seconds. The previous
 five-second idle wait fails that regression, while the one-second retry passes
 and joins consumer/seeder shutdown. Ordinary gateway retry timing is unchanged.
+
+
+Native piece takeovers request only chunks still missing from the selected
+piece. Previously received chunks stay private until complete-piece hashing;
+owned wire fixtures verify the receiver does not expose a partial prefix and
+the successor requests only the remaining offsets. Native peer retirement
+also checks current piece ownership before clearing received state. Cancelled
+requests from a former owner cannot reset a successor's prefix or checksum work.
+A forced old-peer disconnect fails that regression before the ownership fence
+and passes afterwards, with joined consumer/seeder retirement.
