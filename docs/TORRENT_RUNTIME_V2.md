@@ -118,3 +118,11 @@ private. One interrupted instrumentation run is excluded from evidence.
 The shared runtime also retains resolved torrent/archive selection in budgeted,
 checksummed cache records. Restart revalidates it against content metadata;
 retained records never grant playback authority.
+
+[Hosted run 38004862330](https://github.com/viptv-org/android/actions/runs/38004862330)
+passed at `54323de`: native host/library/app tests, all three Android ABIs,
+optimized phone/TV APK, performance lint and packaged API24/checksum/notice/
+16-KiB checks. Normal debug/performance builds exclude the v1 comparison JNI
+library and assets. The first hosted attempt exposed a loopback fixture shutdown
+race; a smaller regression reproduced it and graceful fixture joining fixed it
+without changing the native cancellation or stale-response assertions.
