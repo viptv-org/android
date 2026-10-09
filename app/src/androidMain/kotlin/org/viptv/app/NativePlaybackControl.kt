@@ -18,7 +18,7 @@ import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 import org.viptv.core.wire.CoreJson
 import org.viptv.core.wire.NativeTorrentState
-import uniffi.viptv_core.NativeTorrentBridge
+import uniffi.viptv_core.TorrentRuntimeBridge
 import uniffi.viptv_core.normalize
 
 /** Suspend-aware Android facts; device wall-clock time never establishes native authority. */
@@ -43,13 +43,17 @@ internal class NativePlaybackControl(
     private val preventReads: () -> Unit,
     private val invalidated: () -> Unit,
     private val released: () -> Unit = {},
-    private val startupBudgetMillis: Long = 45_000,
+    private val startupBudgetMillis: Long = 120_000,
+    private val startupStartedAtMillis: Long? = null,
 ) {
     private val serial = Mutex()
     private val releaseSerial = Mutex()
     private var remoteReleased = false
-    private var bridge: NativeTorrentBridge? = null
+    private var bridge: TorrentRuntimeBridge? = null
     private var sequence = 0L
+    private var startupStarted: Long? = null
+    @Volatile private var runtimeFailure: String? = null
+    internal var onProgress: (String) -> Unit = {}
     private var requestId: String? = null
     private var ownedPlaybackId: String? = null
     @Volatile private var retired = false
@@ -70,10 +74,11 @@ internal class NativePlaybackControl(
     /** Negotiation is repeated for every qualified start; stale origin/auth results never admit. */
     suspend fun start(input: JSONObject, qualified: Boolean, vod: Boolean, cache: NativeTorrentCache): NativePlaybackStart {
         requireCurrent()
+        startupStarted = startupStartedAtMillis ?: elapsed()
         val request = JSONObject(input.toString())
-        request.getJSONObject("client").remove("nativeTorrent")
+        request.getJSONObject("client").put("nativeTorrent", JSONObject().put("version", 2).put("networkPolicy", "public_discovery_verified_v2"))
         if (!qualified) { retireLocal(notify = false); return NativePlaybackStart.Legacy(legacy.start(request)) }
-        val negotiation = JSONObject(normalize("request", JSONObject().put("operation", "playbackProtocolV2").toString(), origin))
+        val negotiation = JSONObject(normalize("request", JSONObject().put("operation", "torrentRuntimeProtocol").toString(), origin))
         val protocol = try { transport.request(negotiation.getString("method"), negotiation.getString("path").removePrefix("/api"), negotiation = true) }
         catch (error: CancellationException) { throw error }
         catch (error: Exception) {
@@ -83,7 +88,7 @@ internal class NativePlaybackControl(
         val decision = protocol?.use {
             // Negotiation contains no private grant. UTF-8 decoding remains strict.
             val text = try { Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(it.bytes)).toString() } catch (_: Exception) { "" }
-            normalize("nativeTorrent", JSONObject().put("operation", "negotiation")
+            normalize("torrentRuntime", JSONObject().put("operation", "negotiation")
                 .put("platform", request.getJSONObject("client").getString("platform"))
                 .put("qualified", qualified).put("scopeMatches", currentScope())
                 .put("status", it.status).put("authorizationRefused", it.status in listOf(401, 403))
@@ -96,15 +101,15 @@ internal class NativePlaybackControl(
             "advertise" -> Unit
             else -> { retireLocal(notify = false); return NativePlaybackStart.Legacy(legacy.start(request)) }
         }
-        request.getJSONObject("client").put("nativeTorrent", JSONObject().put("version", 1).put("networkPolicy", "public_dht_tcp_v1"))
+        request.getJSONObject("client").put("nativeTorrent", JSONObject().put("version", 2).put("networkPolicy", "public_discovery_verified_v2"))
         requestId = request.getString("requestId")
         // Retained input stays accounted independently of transient response/Okio buffers.
         retainedInput = cache.reserveControl(6_291_456)
         try {
-            bridge = NativeTorrentBridge(JSONObject().put("origin", origin).put("scope", scope)
+            bridge = TorrentRuntimeBridge(JSONObject().put("origin", origin).put("scope", scope)
                 .put("generation", generation).put("qualified", qualified).put("negotiated", true)
                 .put("vod", vod).put("request", request).toString())
-            return withTimeout<NativePlaybackStart>(startupBudgetMillis) {
+            return withTimeout<NativePlaybackStart>(startupRemainingMillis()) {
                 var response = request("playbackV2", request = request)
                 var pollDelayMillis = 0L
                 while (true) {
@@ -289,15 +294,22 @@ internal class NativePlaybackControl(
     }
 
     /** Clock sampling and private getters share the expiry/renewal read guard. */
-    @Synchronized internal fun <T> withAuthorizedGrant(effect: (NativeTorrentBridge, String) -> T): T =
+    @Synchronized internal fun <T> withAuthorizedGrant(effect: (TorrentRuntimeBridge, String) -> T): T =
         effect(requireNotNull(bridge), authorize())
+    fun startupRemainingMillis(): Long = (startupStarted?.let { Math.addExact(it, startupBudgetMillis) - elapsed() } ?: 0L).coerceAtLeast(0)
+    fun progress(stage: String) {
+        val text = normalize("torrentRuntime", JSONObject().put("operation", "stage").put("stage", stage).toString(), "").let { org.json.JSONTokener(it).nextValue() as String }
+        onProgress(text)
+    }
+    fun failRuntime(reason: String) { runtimeFailure = reason; retireLocal() }
+    fun runtimeFailureMessage(): String? = runtimeFailure?.let(::nativeTorrentFailureMessage)
     fun firstGrantAcceptedAtMillis(): Long? = firstGrantReceipt
     fun hasNativeAdmission(): Boolean = firstGrantReceipt != null
     fun isLocallyRetired(): Boolean = retired
     fun authorizationWasRefused(): Boolean = authorizationRefused
     fun selectionWasRefused(): Boolean = selectionRefused
     fun playbackId(): String? = ownedPlaybackId
-    fun remainingMillis(): Long? = try { authorize(); state().deadlineMillis?.minus(elapsed()) } catch (_: Exception) { null }
+    fun remainingMillis(requireForeground: Boolean = true): Long? = try { authorize(requireForeground); state().deadlineMillis?.minus(elapsed()) } catch (_: Exception) { null }
     fun retireLocal(notify: Boolean = true) {
         synchronized(this) {
             if (retired) {

@@ -351,7 +351,7 @@ class AppController(context: Context, private val origin: String) {
                 quietSessionAdoption = false
                 val principalChanged = verifiedIdentity?.account?.id != view.identity?.account?.id
                 verifiedIdentity = view.identity
-                if (principalChanged) invalidateNativeAuthorization()
+                if (principalChanged) invalidateNativeAuthorization(clearTorrentCache = true)
                 if (keepProfilesOnIdentityRefresh) {
                     keepProfilesOnIdentityRefresh = false
                     _state.value = _state.value.copy(route = Route.Profiles, profiles = profiles, selectedProfile = chosen, loading = false)
@@ -506,7 +506,7 @@ class AppController(context: Context, private val origin: String) {
     fun openProfileManagement() { _state.value = _state.value.copy(managingProfiles = true); navigate(Destination.Profile) }
     fun toggleProfileManagement() { _state.value = _state.value.copy(managingProfiles = !_state.value.managingProfiles) }
 
-    fun signOut() = scope.launch { cancelForegroundValidation(); guarded("Enter parent PIN to sign out") { homeRevisionJob?.cancel(); homeRevisionJob = null; renderedCatalogRevision = null; revisionOwner = null; quietSessionAdoption = false; authenticationGeneration++; invalidateNativeAuthorization(); stopPlayback((_state.value.route as? Route.Player)?.media); pendingCoreAction = coreSession::signOut; coreSession.signOut() } }
+    fun signOut() = scope.launch { cancelForegroundValidation(); guarded("Enter parent PIN to sign out") { homeRevisionJob?.cancel(); homeRevisionJob = null; renderedCatalogRevision = null; revisionOwner = null; quietSessionAdoption = false; authenticationGeneration++; invalidateNativeAuthorization(clearTorrentCache = true); stopPlayback((_state.value.route as? Route.Player)?.media); pendingCoreAction = coreSession::signOut; coreSession.signOut() } }
     fun close() {
         invalidateNativeAuthorization()
         sourcePreview.cancel(); capabilityProbe?.cancel()

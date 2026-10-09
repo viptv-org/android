@@ -24,10 +24,10 @@ import kotlin.test.assertTrue
 /** Actual controller effect seam and Rust private bridge; transport acquisition is a controlled effect. */
 class NativePlaybackEffectsTest {
     private fun corpus() = JSONObject(File(requireNotNull(System.getProperty("viptv.core.nativeVectors"))).readText())
-    private fun ready() = corpus().getJSONArray("cases").getJSONObject(0).getJSONArray("steps").getJSONObject(0).getString("body")
+    private fun ready() = corpus().getJSONArray("cases").getJSONObject(0).getJSONArray("steps").getJSONObject(0).getString("body").runtimeV2Fixture()
     private fun request() = corpus().getJSONObject("context").getJSONObject("request")
     private val url = "http://127.0.0.1:1234/${"a".repeat(64)}/3/stream.mp4"
-    private val protocol = """{"version":1,"native_torrent_versions":[1]}"""
+    private val protocol = """{"version":2,"native_torrent_versions":[2]}"""
 
     private class Harness(val startsFailAfter: Int = Int.MAX_VALUE, val settlement: Boolean = true,
         val startFailure: Exception = NativeTorrentCoordinatorUnavailable()) : AutoCloseable {
@@ -72,7 +72,7 @@ class NativePlaybackEffectsTest {
 
     @Test fun exactLocalCapabilityOpensWithEmptyHeadersAndAuthoritativeMediaTimeAndPreferences() = runBlocking {
         FixtureServer(3) { incoming -> FixtureResponse(when {
-            incoming.target.endsWith("playback-protocol") -> protocol
+            incoming.target.endsWith("torrent-runtime-protocol") -> protocol
             incoming.method == "DELETE" -> """{"ok":true}"""
             else -> ready()
         }) }.use { server -> Harness().use { h ->
@@ -100,7 +100,7 @@ class NativePlaybackEffectsTest {
 
     @Test fun preBoundaryCandidateFailureLeavesOutgoingPlayerAndNativeGrantUsable() = runBlocking {
         FixtureServer(6) { incoming -> FixtureResponse(when {
-            incoming.target.endsWith("playback-protocol") -> protocol
+            incoming.target.endsWith("torrent-runtime-protocol") -> protocol
             incoming.method == "DELETE" -> """{"ok":true}"""
             else -> ready()
         }) }.use { server -> Harness(startsFailAfter = 1).use { h ->
@@ -117,7 +117,7 @@ class NativePlaybackEffectsTest {
 
     @Test fun admittedDecoderFailureReleasesNativeAndBackendBeforeExplicitGatewayRetry() = runBlocking {
         FixtureServer(3) { incoming -> FixtureResponse(when {
-            incoming.target.endsWith("playback-protocol") -> protocol
+            incoming.target.endsWith("torrent-runtime-protocol") -> protocol
             incoming.method == "DELETE" -> """{"ok":true}"""
             else -> ready()
         }) }.use { server -> Harness().use { h ->
@@ -127,7 +127,7 @@ class NativePlaybackEffectsTest {
                 h.effects.accept(prepared, "Exact episode", false, {}) { _, _ -> h.events.add("player.open"); throw failure }
             }
             assertFalse(h.effects.hasActive)
-            assertEquals("forceGatewayRetry", h.effects.recoveryDecision())
+            assertEquals("ordinaryRetry", h.effects.recoveryDecision())
             h.effects.resetRecovery()
             assertEquals("ordinaryRetry", h.effects.recoveryDecision())
             assertEquals(1, server.requests.count { it.method == "POST" })
@@ -140,11 +140,11 @@ class NativePlaybackEffectsTest {
 
     @Test fun nativeCapacityAndInvalidSelectionKeepDistinctRecoveryAfterJoinedRetirement() = runBlocking {
         for ((failure, expected) in listOf(
-            uniffi.playback_gateway_ffi.TorrentException.PayloadLimit() to "forceGatewayRetry",
-            uniffi.playback_gateway_ffi.TorrentException.MetadataInvalid() to "chooseSource",
+            NativeTorrentFailure("native_payload_limit") to "ordinaryRetry",
+            NativeTorrentFailure("native_metadata_invalid") to "chooseSource",
         )) {
             FixtureServer(3) { incoming -> FixtureResponse(when {
-                incoming.target.endsWith("playback-protocol") -> protocol
+                incoming.target.endsWith("torrent-runtime-protocol") -> protocol
                 incoming.method == "DELETE" -> """{"ok":true}"""
                 else -> ready()
             }) }.use { server -> Harness(startsFailAfter = 0, startFailure = failure).use { h ->
@@ -158,7 +158,7 @@ class NativePlaybackEffectsTest {
     }
 
     @Test fun failedNativeSettlementCannotAuthorizeRetryOrDiscardItsReservations() = runBlocking {
-        FixtureServer(2) { incoming -> FixtureResponse(if (incoming.target.endsWith("playback-protocol")) protocol else ready()) }.use { server ->
+        FixtureServer(2) { incoming -> FixtureResponse(if (incoming.target.endsWith("torrent-runtime-protocol")) protocol else ready()) }.use { server ->
             Harness(settlement = false).use { h ->
                 val prepared = h.effects.prepare(h.control(server), request(), 7) as NativePlaybackEffects.Prepared.Native
                 assertFailsWith<PlaybackFailure> {
@@ -185,7 +185,7 @@ class NativePlaybackEffectsTest {
 
     @Test fun negotiatedOrdinaryDeliveryTransfersLeaseInsteadOfDeletingItDuringNativeCleanup() = runBlocking {
         val body = """{"id":"ordinary","status":"ready","delivery":{"kind":"direct","url":"https://fixture.invalid/file.mp4","headers":{"X-Fixture":"upstream"},"format":"original","position":120,"live":false},"error_code":null,"error":null,"expires_at":2000000000,"renew_after_seconds":20}"""
-        FixtureServer(2) { incoming -> FixtureResponse(if (incoming.target.endsWith("playback-protocol")) protocol else body) }.use { server ->
+        FixtureServer(2) { incoming -> FixtureResponse(if (incoming.target.endsWith("torrent-runtime-protocol")) protocol else body) }.use { server ->
             Harness().use { h ->
                 val legacy = V2PlaybackControl("https://fixture.invalid") { _, _, _ -> throw AssertionError("Duplicate start or premature release") }
                 val prepared = h.effects.prepare(h.control(server, legacy), request().also { it.getJSONObject("client").put("canPlayDirect", true) }, 7) as NativePlaybackEffects.Prepared.Legacy
@@ -204,7 +204,7 @@ class NativePlaybackEffectsTest {
         val deletion = java.util.concurrent.CountDownLatch(1)
         val release = java.util.concurrent.CountDownLatch(1)
         FixtureServer(3) { incoming -> when {
-            incoming.target.endsWith("playback-protocol") -> FixtureResponse(protocol)
+            incoming.target.endsWith("torrent-runtime-protocol") -> FixtureResponse(protocol)
             incoming.method == "DELETE" -> {
                 deletion.countDown()
                 check(release.await(3, java.util.concurrent.TimeUnit.SECONDS))
@@ -227,7 +227,7 @@ class NativePlaybackEffectsTest {
 
     @Test fun renewalAuthorizationRefusalRetiresReadsAndDoesNotAuthorizeGatewayBypass() = runBlocking {
         FixtureServer(4) { incoming -> when {
-            incoming.target.endsWith("playback-protocol") -> FixtureResponse(protocol)
+            incoming.target.endsWith("torrent-runtime-protocol") -> FixtureResponse(protocol)
             incoming.target.endsWith("heartbeat") -> FixtureResponse("{}", 403)
             incoming.method == "DELETE" -> FixtureResponse("""{"ok":true}""")
             else -> FixtureResponse(ready())
@@ -246,7 +246,7 @@ class NativePlaybackEffectsTest {
 
     @Test fun scopeChangeReleasesOnlyWithCapturedOutgoingCredentialAndCannotRenewOldAuthority() = runBlocking {
         FixtureServer(3) { incoming -> FixtureResponse(when {
-            incoming.target.endsWith("playback-protocol") -> protocol
+            incoming.target.endsWith("torrent-runtime-protocol") -> protocol
             incoming.method == "DELETE" -> """{"ok":true}"""
             else -> ready()
         }) }.use { server -> Harness().use { h ->
@@ -282,6 +282,6 @@ class NativePlaybackEffectsTest {
         assertTrue(retry.getBoolean("forceGateway"))
         assertEquals("fr", native.getString("preferredAudioLanguage"))
         assertEquals("es", native.getString("preferredSubtitleLanguage"))
-        assertFalse(retry.getJSONObject("client").has("nativeTorrent"))
+        assertEquals(2, retry.getJSONObject("client").getJSONObject("nativeTorrent").getInt("version"))
     }
 }

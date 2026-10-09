@@ -26,6 +26,7 @@ def main():
     args = parser.parse_args()
     project = Path(__file__).resolve().parent.parent
     lock = json.loads((project / "vendor/playback-gateway/lock.json").read_text())
+    runtime_lock = json.loads((project / "vendor/torrent-runtime/lock.json").read_text())
     aapt = args.aapt or shutil.which("aapt2")
     if not aapt:
         sdk = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
@@ -37,6 +38,8 @@ def main():
     badging = subprocess.check_output([aapt, "dump", "badging", str(args.apk)], text=True)
     require(re.search(r"^(?:minSdkVersion|sdkVersion):'24'$", badging, re.MULTILINE), "Native APK must retain minSdk 24")
     manifest = subprocess.check_output([aapt, "dump", "xmltree", str(args.apk), "--file", "AndroidManifest.xml"], text=True)
+    require("TorrentRuntimeQaActivity" not in manifest, "Media QA Activity must not ship in normal APK")
+    require(":torrent_runtime" in manifest and "TorrentRuntimeService" in manifest, "Shared runtime requires its app-private worker")
     resources = subprocess.check_output([aapt, "dump", "resources", str(args.apk)], text=True)
     policy_resource = re.search(
         r"resource (0x[0-9a-f]+) xml/network_security_config\b\s+\(\) \(file\) (res/[^\s]+\.xml) type=XML",
@@ -60,8 +63,11 @@ def main():
         dex = b"".join(archive.read(name) for name in names if re.fullmatch(r"classes[0-9]*\.dex", name))
         require(b"newNativeOwned" not in dex and b"OwnedNativeFixtureActivity" not in dex, "Owned fixture code must not ship")
         require(b"Lorg/viptv/app/NativeTorrentRuntime;" in dex and b"Lorg/viptv/app/NativeTorrentQualification;" not in dex, "Normal native capability must use runtime prerequisites")
+        libraries = ["libviptv_core.so", "libjnidispatch.so", "libtorrent_runtime.so", "libtorrent_runtime_jni.so"]
+        if any(name.endswith("/libplayback_gateway_ffi.so") for name in names):
+            libraries.append("libplayback_gateway_ffi.so")
         for abi in ABIS:
-            for library in ["libviptv_core.so", "libjnidispatch.so", "libplayback_gateway_ffi.so"]:
+            for library in libraries:
                 name = f"lib/{abi}/{library}"
                 entry = archive.getinfo(name)
                 require(entry.compress_type == zipfile.ZIP_STORED, "JNI libraries must be uncompressed")
@@ -70,12 +76,17 @@ def main():
                 filename, extra = struct.unpack_from("<HH", header, 26)
                 offset = entry.header_offset + 30 + filename + extra
                 require(offset % 16384 == 0, f"Native APK ZIP alignment is below 16 KiB: {abi}/{library}")
+                if library in ["libtorrent_runtime.so", "libtorrent_runtime_jni.so"]:
+                    require(hashlib.sha256(archive.read(name)).hexdigest() == runtime_lock["files"][f"jni/{abi}/{library}"], "Shared runtime bytes mismatch the artifact pin")
                 if library == "libplayback_gateway_ffi.so":
                     path = f"ffi/generated/android/jniLibs/{abi}/{library}"
                     require(hashlib.sha256(archive.read(name)).hexdigest() == lock["files"][path], "Native APK bytes mismatch the artifact pin")
         for path, expected in lock["files"].items():
             if path in ["LICENSE", "PROVENANCE.md"] or path.startswith("THIRD_PARTY/"):
                 require(hashlib.sha256(archive.read("assets/playback-gateway/" + path)).hexdigest() == expected, "Native notice missing or altered in APK")
+        for path, expected in runtime_lock["files"].items():
+            if path in ["LICENSE", "PROVENANCE.md", "NDK-TOOLCHAIN-NOTICE.txt", "build.json"] or path.startswith("licenses/"):
+                require(hashlib.sha256(archive.read("assets/torrent-runtime/" + path)).hexdigest() == expected, "Shared runtime notice missing or altered in APK")
     print("Verified real APK minSdk 24, three-ABI native/core/JNA contents, pinned checksums, notices, system-CA/HTTP-media policy and 16 KiB ZIP alignment; ABI/device loading is a separate check.")
 
 

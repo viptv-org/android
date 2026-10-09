@@ -19,7 +19,7 @@ internal fun AppController.start(media: Media, source: Source, explicitResume: B
     if (_state.value.route is Route.Guide) cancelGuideWork()
     playbackStartJob?.cancel()
     val requestGeneration = ++playbackGeneration
-    _state.value = _state.value.copy(preparingSourceId = source.id, loading = true, message = null)
+    _state.value = _state.value.copy(preparingSourceId = source.id, playbackPreparationStage = null, loading = true, message = null)
     playbackStartJob = scope.launch {
         managedRecoveryKey = null
         managedRecoveryInFlightKey = null
@@ -59,6 +59,7 @@ private suspend fun AppController.prepareAndStartLocked(
     generation: Long,
     deliveryOptions: PlaybackDeliveryOptions,
 ): Boolean {
+    val startupStartedAtMillis = android.os.SystemClock.elapsedRealtime()
     cancelUpNext()
     val current = _state.value.route
     val sourceRoute = when (current) { is Route.Sources -> current; is Route.Player -> current.sourceRoute; else -> null }
@@ -73,12 +74,12 @@ private suspend fun AppController.prepareAndStartLocked(
         is Route.Player -> current.returnDestination
         else -> PlaybackReturn.Details
     }
-    val requestedAudio = if (resetTrackChoices) null else selectedAudioTrackIndex
-    val requestedSubtitle = if (resetTrackChoices) null else selectedSubtitleTrackIndex
-    val requestedSubtitlesOff = if (resetTrackChoices) false else subtitlesOff
-    _state.value = _state.value.copy(preparingSourceId = source.id, loading = true, message = null)
+    val retryIntent = nativeRetryIntent
+    val requestedAudio = if (resetTrackChoices || retryIntent != null) null else selectedAudioTrackIndex
+    val requestedSubtitle = if (resetTrackChoices || retryIntent != null) null else selectedSubtitleTrackIndex
+    val requestedSubtitlesOff = if (resetTrackChoices || retryIntent != null) false else subtitlesOff
+    _state.value = _state.value.copy(preparingSourceId = source.id, playbackPreparationStage = null, loading = true, message = null)
     var nativeBoundaryCrossed = false
-    val retryIntent = if (deliveryOptions.forceGateway) nativeRetryIntent else null
     return try {
         suspend fun ordinary(prepared: PlaybackLaunch? = null): OpenedPlayback {
             val (launch, deliveredOptions) = openPlaybackDelivery(
@@ -127,11 +128,14 @@ private suspend fun AppController.prepareAndStartLocked(
             val preferences = _state.value.preferences
             val request = gateway.playbackRequest(source, media.positionMillis, PlaybackClientCapabilities.from(player.capabilities.value),
                 requestedAudio, requestedSubtitle, requestedSubtitlesOff, deliveryOptions,
-                preferences.audioLanguage.takeIf { it.isNotBlank() }, preferences.subtitleLanguage.takeIf { it.isNotBlank() },
-                preferences.subtitlesEnabled)
+                retryIntent?.audioLanguage ?: preferences.audioLanguage.takeIf { it.isNotBlank() }, retryIntent?.subtitleLanguage ?: preferences.subtitleLanguage.takeIf { it.isNotBlank() },
+                retryIntent?.subtitlesEnabled ?: preferences.subtitlesEnabled)
             lateinit var control: NativePlaybackControl
             control = gateway.nativePlaybackControl(epoch.scope, generation, epoch.coordinator.cache, scope,
-                preventReads = { effects.preventReads(control) }, invalidated = { effects.invalidated(control) })
+                preventReads = { effects.preventReads(control) }, invalidated = { effects.invalidated(control) }, startupStartedAtMillis = startupStartedAtMillis)
+            control.onProgress = { text -> scope.launch {
+                if (generation == playbackGeneration && _state.value.preparingSourceId == source.id) _state.value = _state.value.copy(playbackPreparationStage = text)
+            } }
             when (val prepared = effects.prepare(control, request, generation)) {
                 is NativePlaybackEffects.Prepared.Legacy -> ordinary(prepared.launch)
                 is NativePlaybackEffects.Prepared.Native -> {
@@ -197,6 +201,7 @@ private suspend fun AppController.prepareAndStartLocked(
     }
 }
 internal fun AppController.onPlayerEvent(event: PlaybackEvent) {
+    if (event is PlaybackEvent.FirstFrame) { nativeEffects?.firstFrame(); return }
     if (event !is PlaybackEvent.Failed || _state.value.dialog?.kind == DialogKind.PlaybackRecovery || _state.value.preparingSourceId != null) return
     val active = _state.value.route as? Route.Player ?: return
     cancelUpNext()
@@ -287,7 +292,7 @@ internal fun AppController.retryPlaybackRecovery() {
         }
         _state.value = _state.value.copy(dialog = null, message = null)
         start(media, source, explicitResume = false, deliveryOptions = PlaybackDeliveryOptions(forceGateway = decision == "forceGatewayRetry"),
-            retryIntent = nativeRetryIntent.takeIf { decision == "forceGatewayRetry" })
+            retryIntent = nativeRetryIntent)
     }
 }
 

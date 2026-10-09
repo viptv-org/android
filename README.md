@@ -28,12 +28,11 @@ node scripts/core-sync.mjs check
 
 The same core revision must be adopted by TV-web for shared behavior changes. Installed apps still need rebuilding and delivery.
 
-`TORRENT_REF` pins a separate archive-free gateway Kotlin/Android native snapshot.
-Gradle verifies its checksums and packages its dependency notices alongside the
-three supported ABI libraries without replacing core or JNA. See
-[native artifact adoption](docs/NATIVE_TORRENT_ARTIFACTS.md) for source generation,
-import, APK alignment and actual ABI loading checks. Artifact presence or loading
-does not establish native playback qualification or distribution clearance.
+`TORRENT_RUNTIME_REF` pins the shared Go/JNI transport in an app-private worker.
+Android/TV acquire torrents on-device, retain verified cache content and preserve
+Media3 playback. V2 grants remain separate from ordinary application state.
+See [runtime integration and qualification](docs/TORRENT_RUNTIME_V2.md).
+`TORRENT_REF` retains development-only v1 comparison artifacts during qualification.
 
 ## Backend compatibility and live guide
 

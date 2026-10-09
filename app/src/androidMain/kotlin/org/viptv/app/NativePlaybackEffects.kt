@@ -20,7 +20,7 @@ internal class NativePlaybackEffects(
     internal val coordinator: NativeTorrentCoordinator,
     private val jobs: CoroutineScope,
     private val stopPlayer: () -> Unit,
-    private val invalidatedPlayer: () -> Unit,
+    private val invalidatedPlayer: (String?) -> Unit,
 ) {
     internal sealed interface Prepared {
         class Native(val candidate: NativeTorrentCoordinator.Candidate) : Prepared
@@ -48,7 +48,7 @@ internal class NativePlaybackEffects(
         failure = receipt
         active = null
         jobs.launch { receipt.retired = retire(control) }
-        invalidatedPlayer()
+        invalidatedPlayer(control.runtimeFailureMessage())
     }
 
     suspend fun prepare(control: NativePlaybackControl, request: JSONObject, generation: Long): Prepared {
@@ -103,7 +103,7 @@ internal class NativePlaybackEffects(
                                 kindHint = PlaybackKind.OnDemand, startPositionMillis = position,
                                 options = PlaybackOptions(preferredAudioLanguage = state.audioLanguage,
                                     preferredSubtitleLanguage = state.subtitleLanguage, subtitlesEnabled = state.subtitlesEnabled,
-                                    openTimeoutMillis = 60_000, httpReadTimeoutMillis = 35_000)), playWhenReady)
+                                    openTimeoutMillis = candidate.control.startupRemainingMillis().takeIf { it > 0 } ?: throw NativeTorrentFailure("native_acquisition_timeout"), httpReadTimeoutMillis = 60_000)), playWhenReady)
                         }
                     } finally { diagnostic?.cancelAndJoin() }
                 }
@@ -124,6 +124,17 @@ internal class NativePlaybackEffects(
         val settled = retire(candidate.control)
         if (settled) failure = null
         return settled
+    }
+
+    fun firstFrame() {
+        val candidate = active ?: return
+        jobs.launch(Dispatchers.IO) {
+            try {
+                if (candidate.control.startupRemainingMillis() <= 0) throw NativeTorrentFailure("native_acquisition_timeout")
+                candidate.control.authorize(requireForeground = false); candidate.work.firstFrame()
+            }
+            catch (_: Exception) { candidate.control.failRuntime("native_playback_failed") }
+        }
     }
 
     fun beginScopeClose() { closingScope = true }
@@ -183,7 +194,7 @@ internal class NativePlaybackEffects(
     }
 
     private fun decision(admitted: Boolean, retired: Boolean, authorization: Boolean, selection: Boolean): String =
-        normalize("nativeTorrent", JSONObject().put("operation", "recovery").put("facts", JSONObject()
+        normalize("torrentRuntime", JSONObject().put("operation", "recovery").put("facts", JSONObject()
             .put("admitted", admitted).put("authorityRetired", retired).put("authorizationRefused", authorization)
             .put("selectionRefused", selection).put("action", "retry")).toString(), "").trim('"')
 

@@ -46,6 +46,8 @@ value class PlaybackSessionId(val value: Long)
 sealed interface BackendEvent {
     val sessionId: PlaybackSessionId
 
+    data class FirstFrame(override val sessionId: PlaybackSessionId) : BackendEvent
+
     data class PlaybackChanged(
         override val sessionId: PlaybackSessionId,
         val isPlaying: Boolean,
@@ -308,6 +310,7 @@ class DefaultVideoPlayer(
     private fun applyBackendEvent(event: BackendEvent) {
         if (released || event.sessionId != activeSessionId) return
         when (event) {
+            is BackendEvent.FirstFrame -> _events.tryEmit(PlaybackEvent.FirstFrame)
             is BackendEvent.PlaybackChanged -> _state.update {
                 it.copy(isPlaying = event.isPlaying, playWhenReady = event.playWhenReady)
             }

@@ -263,6 +263,7 @@ data class PlaybackError(
 )
 
 sealed interface PlaybackEvent {
+    data object FirstFrame : PlaybackEvent
     data object Ended : PlaybackEvent
     data class SeekCompleted(val positionMillis: Long) : PlaybackEvent
     data class Failed(val error: PlaybackError) : PlaybackEvent

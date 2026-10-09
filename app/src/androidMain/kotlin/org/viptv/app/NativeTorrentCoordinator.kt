@@ -24,12 +24,18 @@ internal interface NativeTorrentHandleEffect {
     fun stopAndJoin(): Boolean
     fun close()
     fun diagnostic(): String? = null
+    fun firstFrame() {}
 }
 
 /** Only the strict adapter constructs this capability after shared metadata validation. */
 internal class NativeTorrentCapability private constructor(internal val url: String) {
     override fun toString() = "NativeTorrentCapability(<redacted>)"
     companion object {
+        fun runtimeValidated(url: String): NativeTorrentCapability {
+            val uri = try { URI(url) } catch (_: Exception) { throw NativeTorrentCoordinatorUnavailable() }
+            if (uri.scheme != "http" || uri.host != "127.0.0.1" || uri.port !in 1..65535 || uri.userInfo != null || uri.rawQuery != null || uri.rawFragment != null || !Regex("/media/[0-9a-f]{64}").matches(uri.rawPath ?: "")) throw NativeTorrentCoordinatorUnavailable()
+            return NativeTorrentCapability(url)
+        }
         fun validated(url: String, selectedIndex: UInt): NativeTorrentCapability {
             val uri = try { URI(url) } catch (_: Exception) { throw NativeTorrentCoordinatorUnavailable() }
             val path = Regex("/[0-9a-f]{64}/${selectedIndex}/stream\\.[A-Za-z0-9]{1,8}")
@@ -59,6 +65,7 @@ internal class NativeTorrentOwnedWork(
     private var closed = false
 
     @Synchronized internal fun diagnostic(): String? = handle?.diagnostic()
+    @Synchronized internal fun firstFrame() { if (!cancelled) handle?.firstFrame() }
 
     private var cancellationFailed = false
     private val joins = mutableListOf<JoinReceipt>()
@@ -237,9 +244,7 @@ internal class NativeTorrentCoordinator(
     }
 
     private fun remainingStartupMillis(control: NativePlaybackControl): Long {
-        val accepted = control.firstGrantAcceptedAtMillis() ?: throw NativeTorrentCoordinatorUnavailable()
-        return Math.subtractExact(Math.addExact(accepted, 30_000), nowNanos() / 1_000_000)
-            .coerceAtMost(control.remainingMillis() ?: throw NativeTorrentCoordinatorUnavailable())
+        return control.startupRemainingMillis()
     }
 
     /** Called only at the accepted player-open boundary, while the old player still exists. */
@@ -338,7 +343,7 @@ internal class NativeTorrentCoordinator(
     }
 
     /** Sign-out/profile/server/revocation/close effects; failed ownership remains quarantined. */
-    suspend fun closeScope(): Boolean = withContext(NonCancellable + main) {
+    suspend fun closeScope(clearContent: Boolean = false): Boolean = withContext(NonCancellable + main) {
         preventPlayerReads()
         closed = true
         val deadline = minOf(nowNanos() + NativeTorrentCacheLimits.SETTLEMENT_NANOS,
@@ -357,7 +362,7 @@ internal class NativeTorrentCoordinator(
         }
         // The manager remains owned until these registered control bodies settle.
         if (locallySettled) snapshot.forEach { runCatching { it.stop() } }
-        val settled = withContext(io) { locallySettled && cache.closeScope() }
+        val settled = withContext(io) { locallySettled && cache.closeScope(clearContent) }
         current?.retired = true
         current?.retirement?.complete(settled)
         if (settled) { controls.clear(); owned.clear() }

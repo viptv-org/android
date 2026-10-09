@@ -13,6 +13,11 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 
 internal fun AndroidMedia3Backend.createListener(callbackPlayer: ExoPlayer): Player.Listener = object : Player.Listener {
+        override fun onRenderedFirstFrame() {
+            if (callbackPlayer !== player || released) return
+            sessionId?.let { eventsFlow.tryEmit(BackendEvent.FirstFrame(it)) }
+        }
+
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (callbackPlayer !== player || released) return
             emitPlaybackChanged()

@@ -1,5 +1,9 @@
 package org.viptv.app
 
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -25,10 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.semantics.selected
@@ -148,7 +149,7 @@ internal suspend fun requestInitialSourceFocusAfterFrame(
                 }
             }
         }
-        if (state.preparingSourceId != null) VText("Opening your selected source. Back cancels.", if (tv) 20 else 13, Modifier.padding(top = 12.dp), C.textSecondary)
+        if (state.preparingSourceId != null) VText(state.playbackPreparationStage ?: "Opening your selected source. Back cancels.", if (tv) 20 else 13, Modifier.padding(top = 12.dp).semantics { liveRegion = LiveRegionMode.Polite }, C.textSecondary)
         LaunchedEffect(shown.isNotEmpty()) {
             if (tv && shown.isNotEmpty()) requestInitialSourceFocusAfterFrame(
                 isClaimed = { claimed },

@@ -52,7 +52,7 @@ jobs:
           output=pathlib.Path('artifacts');output.mkdir(exist_ok=True)
           apk=output/f'viptv-android-phone-tv-development-{os.environ["BUILD_SHA"][:8]}.apk';shutil.copy2(source,apk)
           (output/'SHA256SUMS').write_text(hashlib.sha256(apk.read_bytes()).hexdigest()+'  '+apk.name+'\n')
-          (output/'build.json').write_text(json.dumps({'revision':os.environ['BUILD_SHA'],'design':pathlib.Path('DESIGN_REF').read_text().strip(),'core':pathlib.Path('CORE_REF').read_text().strip(),'torrent':pathlib.Path('TORRENT_REF').read_text().strip(),'native_torrent_qualified':False,'signing':'stable development key','variant':'performance','debuggable':False,'optimized':True,'platforms':['phone','android-tv']}))
+          (output/'build.json').write_text(json.dumps({'revision':os.environ['BUILD_SHA'],'design':pathlib.Path('DESIGN_REF').read_text().strip(),'core':pathlib.Path('CORE_REF').read_text().strip(),'torrent_runtime':pathlib.Path('TORRENT_RUNTIME_REF').read_text().strip(),'torrent_comparison':pathlib.Path('TORRENT_REF').read_text().strip(),'native_torrent_qualified':False,'signing':'stable development key','variant':'performance','debuggable':False,'optimized':True,'platforms':['phone','android-tv']}))
           PY
       - uses: actions/upload-artifact@v4
         with:

@@ -19,7 +19,7 @@ class NativePlaybackControlTest {
         val calls = mutableListOf<JSONObject>()
         NativeControlHttpFixture { request ->
             when {
-                request.target.endsWith("playback-protocol") -> NativeHttpReply("""{"version":1,"native_torrent_versions":[1]}""".toByteArray())
+                request.target.endsWith("torrent-runtime-protocol") -> NativeHttpReply("""{"version":2,"native_torrent_versions":[2]}""".toByteArray())
                 request.method == "DELETE" -> NativeHttpReply("""{"ok":true}""".toByteArray())
                 else -> NativeHttpReply("""{"error_code":"source_not_found","error":"private provider details"}""".toByteArray(), 404)
             }
@@ -40,7 +40,7 @@ class NativePlaybackControlTest {
         val owner = cache()
         NativeControlHttpFixture { request ->
             NativeHttpReply((when {
-                request.target.endsWith("playback-protocol") -> """{"version":1,"native_torrent_versions":[1]}"""
+                request.target.endsWith("torrent-runtime-protocol") -> """{"version":2,"native_torrent_versions":[2]}"""
                 request.method == "DELETE" -> """{"ok":true}"""
                 request.method == "POST" -> """{"id":"playback_fixture","status":"starting","delivery":null,"error_code":null,"error":null,"expires_at":1700000060,"renew_after_seconds":20}"""
                 else -> ready()
@@ -59,7 +59,7 @@ class NativePlaybackControlTest {
             val owner = cache()
             val jobs = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             NativeControlHttpFixture { request ->
-                NativeHttpReply((if (request.target.endsWith("playback-protocol")) """{"version":1,"native_torrent_versions":[1]}"""
+                NativeHttpReply((if (request.target.endsWith("torrent-runtime-protocol")) """{"version":2,"native_torrent_versions":[2]}"""
                     else if (request.method == "DELETE") """{"ok":true}"""
                     else """{"id":"playback_fixture","status":"starting","delivery":null,"error_code":null,"error":null,"expires_at":1700000060,"renew_after_seconds":20}""").toByteArray())
             }.use { server ->
@@ -86,7 +86,7 @@ class NativePlaybackControlTest {
         try {
             val transport = NativePlaybackTransport("http://127.0.0.1:$port", { "private_bearer" }, { true }, owner)
             val failure = assertFailsWith<NativePlaybackNetworkFailure> {
-                transport.request("GET", "/v2/playback-protocol", negotiation = true)
+                transport.request("GET", "/v2/torrent-runtime-protocol", negotiation = true)
             }
             assertEquals("native_connection_failed", failure.reason)
             assertEquals("Diagnostic: native_connection_failed", playbackFailureMessage(failure).lineSequence().last())
@@ -102,7 +102,7 @@ class NativePlaybackControlTest {
     })
     private fun corpus() = JSONObject(File(requireNotNull(System.getProperty("viptv.core.nativeVectors"))).readText())
     private fun input() = corpus().getJSONObject("context").getJSONObject("request").also { it.getJSONObject("client").put("canPlayDirect", true) }
-    private fun ready() = corpus().getJSONArray("cases").getJSONObject(0).getJSONArray("steps").getJSONObject(0).getString("body")
+    private fun ready() = corpus().getJSONArray("cases").getJSONObject(0).getJSONArray("steps").getJSONObject(0).getString("body").runtimeV2Fixture()
     private fun legacy(calls: MutableList<JSONObject> = mutableListOf()) = V2PlaybackControl("https://fixture.invalid") { method, _, body ->
         if (method == "DELETE") JSONObject() else {
             body?.let { calls += JSONObject(it.toString()) }
@@ -120,7 +120,7 @@ class NativePlaybackControlTest {
         val now = java.util.concurrent.atomic.AtomicLong(100_000)
         val jobs = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         NativeControlHttpFixture { request ->
-            NativeHttpReply((if (request.target.endsWith("playback-protocol")) """{"version":1,"native_torrent_versions":[1]}"""
+            NativeHttpReply((if (request.target.endsWith("torrent-runtime-protocol")) """{"version":2,"native_torrent_versions":[2]}"""
                 else if (request.method == "DELETE") """{"ok":true}""" else ready()).toByteArray())
         }.use { server ->
             val control = control(server, owner, jobs, clock = NativePlaybackClock { now.get() })
@@ -152,17 +152,17 @@ class NativePlaybackControlTest {
         assertTrue(owner.closeScope())
     }
 
-    @Test fun negotiationFailuresKeepLegacyShapeAndNeverAdvertise() = runBlocking {
-        for ((status, body) in listOf(404 to "{}", 405 to "{}", 200 to """{"version":1,"native_torrent_versions":[]}""",
-            200 to """{"version":1,"native_torrent_versions":[1],"other":true}""", 200 to """{"version":1,"version":1,"native_torrent_versions":[1]}""", 200 to "malformed")) {
+    @Test fun negotiationFailuresKeepHttpPlaybackAndRefuseTorrentGatewayFallback() = runBlocking {
+        for ((status, body) in listOf(404 to "{}", 405 to "{}", 200 to """{"version":2,"native_torrent_versions":[]}""",
+            200 to """{"version":2,"native_torrent_versions":[2],"other":true}""", 200 to """{"version":1,"version":2,"native_torrent_versions":[2]}""", 200 to "malformed")) {
             val owner = cache()
             val calls = mutableListOf<JSONObject>()
             NativeControlHttpFixture { NativeHttpReply(body.toByteArray(), status) }.use { server ->
                 val control = control(server, owner, this, legacy = legacy(calls))
                 assertIs<NativePlaybackStart.Legacy>(control.start(input(), true, true, owner))
-                assertFalse(calls.single().getJSONObject("client").has("native_torrent"))
+                assertEquals(2, calls.single().getJSONObject("client").getJSONObject("native_torrent").getInt("version"))
                 assertEquals("identity", server.requests.single().headers["accept-encoding"])
-                assertEquals("/api/v2/playback-protocol", server.requests.single().target)
+                assertEquals("/api/v2/torrent-runtime-protocol", server.requests.single().target)
             }
             assertEquals(0, owner.reservedControlBytes)
             assertTrue(owner.closeScope())
@@ -182,7 +182,7 @@ class NativePlaybackControlTest {
         }
         val owner = cache()
         var current = true
-        NativeControlHttpFixture { current = false; NativeHttpReply("""{"version":1,"native_torrent_versions":[1]}""".toByteArray()) }.use { server ->
+        NativeControlHttpFixture { current = false; NativeHttpReply("""{"version":2,"native_torrent_versions":[2]}""".toByteArray()) }.use { server ->
             val calls = mutableListOf<JSONObject>()
             assertFailsWith<GatewayError> { control(server, owner, this, { current }, legacy = legacy(calls)).start(input(), true, true, owner) }
             assertTrue(calls.isEmpty())
@@ -196,7 +196,7 @@ class NativePlaybackControlTest {
             NativeHttpReply("{}".toByteArray(), headers = mapOf("Content-Encoding" to "gzip")))) {
             NativeControlHttpFixture { reply }.use { server ->
                 val transport = NativePlaybackTransport(server.origin, { "fixture" }, { true }, owner)
-                assertFailsWith<GatewayError> { transport.request("GET", "/v2/playback-protocol", negotiation = true) }
+                assertFailsWith<GatewayError> { transport.request("GET", "/v2/torrent-runtime-protocol", negotiation = true) }
                 assertEquals(1, server.requests.size)
             }
             assertEquals(0, owner.reservedControlBytes)
@@ -209,7 +209,7 @@ class NativePlaybackControlTest {
         }
         val malformedOrigin = "http://fixture.invalid:invalidport"
         val failure = assertFailsWith<GatewayError> {
-            NativePlaybackTransport(malformedOrigin, { "fixture" }, { true }, owner).request("GET", "/v2/playback-protocol", negotiation = true)
+            NativePlaybackTransport(malformedOrigin, { "fixture" }, { true }, owner).request("GET", "/v2/torrent-runtime-protocol", negotiation = true)
         }
         assertFalse(failure.message.contains(malformedOrigin))
         assertTrue(owner.isAvailable)
@@ -223,7 +223,7 @@ class NativePlaybackControlTest {
             NativeControlHttpFixture { NativeHttpReply("{}".toByteArray(), delayMillis = if (negotiation) 5_500 else 10_500) }.use { server ->
                 val transport = NativePlaybackTransport(server.origin, { "fixture" }, { true }, owner)
                 val before = System.nanoTime()
-                val failure = assertFailsWith<NativePlaybackNetworkFailure> { transport.request("GET", "/v2/playback-protocol", negotiation = negotiation) }
+                val failure = assertFailsWith<NativePlaybackNetworkFailure> { transport.request("GET", "/v2/torrent-runtime-protocol", negotiation = negotiation) }
                 assertEquals("native_control_timeout", failure.reason)
                 assertTrue((System.nanoTime() - before) / 1_000_000 < if (negotiation) 7_000 else 12_000)
                 assertEquals(0, owner.reservedControlBytes)
@@ -238,7 +238,7 @@ class NativePlaybackControlTest {
             var now: Long? = 100_000
             var invalidations = 0
             NativeControlHttpFixture { request ->
-                NativeHttpReply((if (request.target.endsWith("playback-protocol")) """{"version":1,"native_torrent_versions":[1]}""" else if (request.method == "DELETE") """{"ok":true}""" else ready()).toByteArray())
+                NativeHttpReply((if (request.target.endsWith("torrent-runtime-protocol")) """{"version":2,"native_torrent_versions":[2]}""" else if (request.method == "DELETE") """{"ok":true}""" else ready()).toByteArray())
             }.use { server ->
                 val control = control(server, owner, this, clock = NativePlaybackClock { now }, invalidated = { invalidations++ })
                 assertIs<NativePlaybackStart.Native>(control.start(input(), true, true, owner))
@@ -259,7 +259,7 @@ class NativePlaybackControlTest {
         var heartbeat = 0
         NativeControlHttpFixture { request ->
             val value = when {
-                request.target.endsWith("playback-protocol") -> """{"version":1,"native_torrent_versions":[1]}"""
+                request.target.endsWith("torrent-runtime-protocol") -> """{"version":2,"native_torrent_versions":[2]}"""
                 request.method == "DELETE" -> """{"ok":true}"""
                 request.target.endsWith("heartbeat") -> { heartbeat++; ready() }
                 else -> ready()
@@ -284,7 +284,7 @@ class NativePlaybackControlTest {
         var now = 100_000L
         NativeControlHttpFixture { request ->
             when {
-                request.target.endsWith("playback-protocol") -> NativeHttpReply("""{"version":1,"native_torrent_versions":[1]}""".toByteArray())
+                request.target.endsWith("torrent-runtime-protocol") -> NativeHttpReply("""{"version":2,"native_torrent_versions":[2]}""".toByteArray())
                 request.method == "DELETE" -> NativeHttpReply("""{"ok":true}""".toByteArray())
                 request.target.endsWith("heartbeat") -> if (request.body.isEmpty()) {
                     NativeHttpReply(ready().replace("1700000000", "1700000001").replace("1700000060", "1700000061").toByteArray())
@@ -320,7 +320,7 @@ class NativePlaybackControlTest {
         val entered = CountDownLatch(1)
         NativeControlHttpFixture { request ->
             when {
-                request.target.endsWith("playback-protocol") -> NativeHttpReply("""{"version":1,"native_torrent_versions":[1]}""".toByteArray())
+                request.target.endsWith("torrent-runtime-protocol") -> NativeHttpReply("""{"version":2,"native_torrent_versions":[2]}""".toByteArray())
                 request.method == "DELETE" -> NativeHttpReply("""{"ok":true}""".toByteArray())
                 else -> { entered.countDown(); NativeHttpReply(ready().toByteArray(), delayMillis = 400) }
             }
@@ -342,7 +342,7 @@ class NativePlaybackControlTest {
         val twice = CountDownLatch(2)
         NativeControlHttpFixture { request ->
             val value = when {
-                request.target.endsWith("playback-protocol") -> """{"version":1,"native_torrent_versions":[1]}"""
+                request.target.endsWith("torrent-runtime-protocol") -> """{"version":2,"native_torrent_versions":[2]}"""
                 request.method == "DELETE" -> """{"ok":true}"""
                 request.target.endsWith("heartbeat") -> {
                     heartbeats.incrementAndGet(); twice.countDown(); ready()
@@ -374,12 +374,12 @@ class NativePlaybackControlTest {
         }.use { server ->
             val transport = NativePlaybackTransport(server.origin, { "expired_fixture" }, { true }, owner,
                 { token -> assertEquals("expired_fixture", token); refreshes++; "fresh_fixture" })
-            transport.request("GET", "/v2/playback-protocol", negotiation = true).use { assertEquals(200, it.status) }
+            transport.request("GET", "/v2/torrent-runtime-protocol", negotiation = true).use { assertEquals(200, it.status) }
             assertEquals(1, refreshes)
             assertEquals(listOf("Bearer expired_fixture", "Bearer fresh_fixture"), server.requests.map { it.headers["authorization"] })
             val failedRefresh = NativePlaybackTransport(server.origin, { "expired_fixture" }, { true }, owner,
                 { throw java.io.IOException("Synthetic refresh failure") })
-            assertEquals(401, assertFailsWith<GatewayError> { failedRefresh.request("GET", "/v2/playback-protocol", negotiation = true) }.status)
+            assertEquals(401, assertFailsWith<GatewayError> { failedRefresh.request("GET", "/v2/torrent-runtime-protocol", negotiation = true) }.status)
         }
         assertTrue(owner.closeScope())
     }
@@ -390,7 +390,7 @@ class NativePlaybackControlTest {
         val renewalEntered = CountDownLatch(1)
         NativeControlHttpFixture { request ->
             when {
-                request.target.endsWith("playback-protocol") -> NativeHttpReply("""{"version":1,"native_torrent_versions":[1]}""".toByteArray())
+                request.target.endsWith("torrent-runtime-protocol") -> NativeHttpReply("""{"version":2,"native_torrent_versions":[2]}""".toByteArray())
                 request.method == "DELETE" -> NativeHttpReply("""{"ok":true}""".toByteArray())
                 request.target.endsWith("heartbeat") -> {
                     heartbeatCalls++
@@ -424,7 +424,7 @@ class NativePlaybackControlTest {
         val releaseEntered = CountDownLatch(1)
         NativeControlHttpFixture { request ->
             when {
-                request.target.endsWith("playback-protocol") -> NativeHttpReply("""{"version":1,"native_torrent_versions":[1]}""".toByteArray())
+                request.target.endsWith("torrent-runtime-protocol") -> NativeHttpReply("""{"version":2,"native_torrent_versions":[2]}""".toByteArray())
                 request.method == "DELETE" -> { releaseEntered.countDown(); NativeHttpReply("""{"ok":true}""".toByteArray(), delayMillis = 5_000) }
                 else -> NativeHttpReply(ready().toByteArray())
             }
@@ -455,7 +455,7 @@ class NativePlaybackControlTest {
         val dispatcher = executor.asCoroutineDispatcher()
         try { NativeControlHttpFixture { request ->
             val value = when {
-                request.target.endsWith("playback-protocol") -> """{"version":1,"native_torrent_versions":[1]}"""
+                request.target.endsWith("torrent-runtime-protocol") -> """{"version":2,"native_torrent_versions":[2]}"""
                 request.method == "DELETE" -> """{"ok":true}"""
                 else -> { if (request.target.endsWith("heartbeat")) pauseReceipt.set(true); ready() }
             }
@@ -486,7 +486,7 @@ class NativePlaybackControlTest {
         var invalidations = 0
         NativeControlHttpFixture { request ->
             val value = when {
-                request.target.endsWith("playback-protocol") -> """{"version":1,"native_torrent_versions":[1]}"""
+                request.target.endsWith("torrent-runtime-protocol") -> """{"version":2,"native_torrent_versions":[2]}"""
                 request.method == "DELETE" -> """{"ok":true}"""
                 request.target.endsWith("heartbeat") -> JSONObject(ready()).put("status", "failed").put("delivery", JSONObject.NULL)
                     .put("error_code", "producer_unavailable").put("error", "Synthetic producer refusal").toString()

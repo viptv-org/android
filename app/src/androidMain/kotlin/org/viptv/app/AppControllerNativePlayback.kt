@@ -13,8 +13,9 @@ internal suspend fun AppController.nativePlaybackEffects(): NativePlaybackEffect
     if (!epoch.coordinator.cache.isAvailable || !nativePlaybackAvailable()) return null
     if (nativePlaybackEpoch !== epoch) {
         nativePlaybackEpoch = epoch
-        nativeEffects = NativePlaybackEffects(epoch.coordinator, scope, ::stopNativePlayer, {
+        nativeEffects = NativePlaybackEffects(epoch.coordinator, scope, ::stopNativePlayer, { notice ->
             val route = (_state.value.route as? Route.Player)?.let { it.copy(media = nativeStoppedMedia ?: snapshotPlaybackMedia(it)) }
+            notice?.let { _state.value = _state.value.copy(message = it) }
             retirePlaybackSession()
             route?.let(::showPlaybackRecovery)
         })
@@ -23,7 +24,7 @@ internal suspend fun AppController.nativePlaybackEffects(): NativePlaybackEffect
 }
 
 /** Profile/principal/device invalidation fences pending controls before cache cleanup queues. */
-internal fun AppController.invalidateNativeAuthorization() {
+internal fun AppController.invalidateNativeAuthorization(clearTorrentCache: Boolean = false) {
     clearPlayerHttpRedirects()
     nativeEffects?.beginScopeClose()
     if (nativeEffects?.hasActive == true) {
@@ -35,9 +36,9 @@ internal fun AppController.invalidateNativeAuthorization() {
     rotateNativeAuthorizationEpoch()
     nativePlaybackEpoch = null
     nativeEffects = null
-    if (hasNativeScopeOwner()) {
+    if (hasNativeScopeOwner() || clearTorrentCache) {
         val owner = nativeScopeOwnerOverride ?: nativeScopeOwner
-        scope.launch { runCatching { owner.adopt(null, revoked = true) } }
+        scope.launch { runCatching { owner.adopt(null, revoked = true, clearContent = clearTorrentCache) } }
     }
 }
 

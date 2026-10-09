@@ -30,7 +30,7 @@ internal class NativeTorrentScopeOwner(
     private var unavailable = false
 
     /** Facts: serverOrigin/accountId/profileId/deviceAuthorizationEpoch, never access tokens or generation. */
-    suspend fun adopt(current: JSONObject?, revoked: Boolean = false): NativeTorrentScopeEpoch? = serial.withLock {
+    suspend fun adopt(current: JSONObject?, revoked: Boolean = false, clearContent: Boolean = false): NativeTorrentScopeEpoch? = serial.withLock {
         if (unavailable) throw NativeTorrentCoordinatorUnavailable()
         val supplied = current?.let { JSONObject(it.toString()) }
         val decision = try { decide(previous, supplied, revoked) } catch (_: Exception) { "reject" }
@@ -41,8 +41,12 @@ internal class NativeTorrentScopeOwner(
         }
         val prior = epoch
         if (prior != null) {
-            val settled = withContext(NonCancellable) { prior.coordinator.closeScope() }
+            val settled = withContext(NonCancellable) { prior.coordinator.closeScope(clearContent) }
             if (!settled) { unavailable = true; throw NativeTorrentCoordinatorUnavailable() }
+        }
+        if (clearContent && prior == null) withContext(NonCancellable + io) {
+            val cache = openCache()
+            if (!cache.closeScope(clearContent = true)) { unavailable = true; throw NativeTorrentCoordinatorUnavailable() }
         }
         previous = null
         epoch = null

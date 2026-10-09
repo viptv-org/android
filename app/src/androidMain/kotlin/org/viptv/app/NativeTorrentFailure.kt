@@ -1,7 +1,6 @@
 package org.viptv.app
 
 import org.json.JSONObject
-import uniffi.playback_gateway_ffi.TorrentException
 import uniffi.viptv_core.normalize
 
 /** Closed measured facts cross the shared projection; dependency diagnostics stay private. */
@@ -16,22 +15,6 @@ internal fun nativePlaybackNetworkFailure(error: java.io.IOException): NativePla
 
 internal fun nativeTorrentFailure(error: Exception): Exception = when (error) {
     is NativePlaybackNetworkFailure -> NativeTorrentFailure(error.reason)
-    is TorrentException.StartupTimeout -> NativeTorrentFailure("native_acquisition_timeout")
-    is TorrentException.SessionTimeout -> NativeTorrentFailure("native_session_timeout")
-    is TorrentException.MetadataTimeout -> NativeTorrentFailure("native_metadata_timeout")
-    is TorrentException.CachePreparationTimeout -> NativeTorrentFailure("native_cache_preparation_timeout")
-    is TorrentException.InitializationTimeout -> NativeTorrentFailure("native_initialization_timeout")
-    is TorrentException.LoopbackTimeout -> NativeTorrentFailure("native_loopback_timeout")
-    is TorrentException.SessionUnavailable -> NativeTorrentFailure("native_session_unavailable")
-    is TorrentException.InitializationFailed -> NativeTorrentFailure("native_initialization_failed")
-    is TorrentException.LoopbackUnavailable -> NativeTorrentFailure("native_loopback_unavailable")
-    is TorrentException.RetirementPending -> NativeTorrentFailure("native_retirement_pending")
-    is TorrentException.PayloadLimit -> NativeTorrentFailure("native_payload_limit")
-    is TorrentException.StorageUnavailable -> NativeTorrentFailure("native_storage_unavailable")
-    is TorrentException.CacheUnavailable -> NativeTorrentFailure("native_cache_unavailable")
-    is TorrentException.MetadataInvalid -> NativeTorrentFailure("native_metadata_invalid")
-    is TorrentException.FileUnavailable -> NativeTorrentFailure("native_file_unavailable")
-    is TorrentException -> NativeTorrentFailure("native_playback_failed")
     is java.net.UnknownHostException -> NativeTorrentFailure("native_dns_unavailable")
     is javax.net.ssl.SSLException -> NativeTorrentFailure("native_tls_failed")
     is java.net.ConnectException -> NativeTorrentFailure("native_connection_failed")

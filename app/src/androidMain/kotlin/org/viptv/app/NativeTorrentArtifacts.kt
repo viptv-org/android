@@ -1,10 +1,9 @@
 package org.viptv.app
 
-import uniffi.playback_gateway_ffi.defaultTorrentOptions
 
 /** ABI loading is a required platform fact for native playback capability. */
 internal object NativeTorrentArtifacts {
-    private val availability = NativeTorrentArtifactAvailability { defaultTorrentOptions() }
+    private val availability = NativeTorrentArtifactAvailability { /* Immutable ABI presence is enforced by preBuild and APK checks. Loading belongs to the worker. */ }
 
     fun isLoaded(): Boolean = availability.isLoaded()
 }

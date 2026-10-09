@@ -37,6 +37,7 @@ internal class NativeTorrentCache private constructor(
     private val lock: FileLock,
     private val effects: NativeTorrentCacheStorage,
     private val nowNanos: () -> Long,
+    private val retainContent: Boolean,
 ) {
     private enum class State { Opening, Available, Closing, Closed, Unavailable }
     private var state = State.Opening
@@ -132,7 +133,7 @@ internal class NativeTorrentCache private constructor(
 
     /** Scope changes execute stop -> join -> manager close -> owned deletion -> unlock. */
     @Synchronized
-    fun closeScope(): Boolean {
+    fun closeScope(clearContent: Boolean = false): Boolean {
         val snapshot = synchronized(this) {
             if (state == State.Closed) return true
             if (state != State.Available) return false
@@ -151,7 +152,7 @@ internal class NativeTorrentCache private constructor(
             if (synchronized(this) { reservations.size != works.size }) throw NativeTorrentCacheUnavailable()
             snapshot.forEach { it.closeAfterSettlement() }
             manager?.closeAfterSettlement()
-            effects.deleteOwned(requireNotNull(directory))
+            if (!retainContent || clearContent) effects.deleteOwned(requireNotNull(directory))
             synchronized(this) {
                 // Deletion failure keeps all accounting and the exclusive lock.
                 works.clear()
@@ -212,14 +213,15 @@ internal class NativeTorrentCache private constructor(
             createManager: (File, Long) -> NativeTorrentCacheManager,
             effects: NativeTorrentCacheStorage = NativeTorrentCacheStorage(),
             nowNanos: () -> Long = System::nanoTime,
+            retainContent: Boolean = false,
         ): NativeTorrentCache {
             val root = safely { effects.createRoot(noBackupDirectory) }
             val ownerLock = safely { effects.lockRoot(root) }
-            val owner = NativeTorrentCache(root, ownerLock.first, ownerLock.second, effects, nowNanos)
+            val owner = NativeTorrentCache(root, ownerLock.first, ownerLock.second, effects, nowNanos, retainContent)
             try {
                 // Root lock proves no previous native manager is active in this private tree.
                 effects.removeInactiveOwned(root)
-                owner.directory = effects.createOwned(root)
+                owner.directory = if (retainContent) effects.createReusable(root) else effects.createOwned(root)
                 owner.manager = createManager(requireNotNull(owner.directory), NativeTorrentCacheLimits.PAYLOAD_BYTES)
                 owner.state = State.Available
             } catch (_: Exception) {
@@ -274,6 +276,23 @@ internal open class NativeTorrentCacheStorage {
         }
     }
 
+    open fun createReusable(root: File): File {
+        val directory = File(root, "content-v2")
+        check(directory.canonicalFile == directory.absoluteFile)
+        if (!directory.exists()) {
+            File(root, ".owned-content-v2").writeText(MARKER_VALUE)
+            check(directory.mkdir())
+            privateDirectory(directory)
+            File(directory, MARKER).writeText(MARKER_VALUE)
+        }
+        val marker = File(directory, MARKER)
+        val receipt = File(root, ".owned-content-v2")
+        check(receipt.canonicalFile == receipt.absoluteFile && receipt.isFile && receipt.length() == MARKER_VALUE.length.toLong() && receipt.readText() == MARKER_VALUE)
+        if (!marker.exists()) marker.writeText(MARKER_VALUE)
+        check(marker.canonicalFile == marker.absoluteFile && marker.isFile && marker.length() == MARKER_VALUE.length.toLong() && marker.readText() == MARKER_VALUE)
+        return directory
+    }
+
     open fun createOwned(root: File): File {
         val directory = File(root, "epoch-${UUID.randomUUID().toString().replace("-", "")}")
         File(root, ".owned-${directory.name}").writeText(MARKER_VALUE)
@@ -307,7 +326,7 @@ internal open class NativeTorrentCacheStorage {
     }
 
     open fun deleteOwned(directory: File) {
-        check(OWNED_NAME.matches(directory.name))
+        check(OWNED_NAME.matches(directory.name) || directory.name == "content-v2")
         val marker = File(directory, MARKER)
         val receipt = File(directory.parentFile, ".owned-${directory.name}")
         check(directory.canonicalFile == directory.absoluteFile && marker.canonicalFile == marker.absoluteFile)

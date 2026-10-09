@@ -1,66 +1,115 @@
 package org.viptv.app
 
-import android.util.Base64
-import uniffi.playback_gateway_ffi.TorrentHandle
-import uniffi.playback_gateway_ffi.TorrentSettlement
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import org.json.JSONArray
+import org.json.JSONObject
+import uniffi.viptv_core.normalize
 
-/** All input validation/selection decisions are Rust-owned; Kotlin performs retained IO effects. */
+/** Core owns grant/selection rules; this adapter executes the shared worker protocol. */
 internal fun beginNativeTorrentAcquisition(cache: NativeTorrentCache, control: NativePlaybackControl, remainingBudgetMillis: () -> Long): NativeTorrentAcquisitionEffect {
-    val manager = cache.managerForAdmission() as? NativeTorrentEngineCacheManager
-        ?: throw NativeTorrentCoordinatorUnavailable()
-    return control.withAuthorizedGrant { bridge, facts ->
-        val hash = bridge.privateInfoHash(facts)
-        val index = bridge.privateFileIndex(facts)
-        val size = bridge.privateExpectedFileSize(facts)
+    val manager = cache.managerForAdmission() as? NativeTorrentEngineCacheManager ?: throw NativeTorrentCoordinatorUnavailable()
+    val source = control.withAuthorizedGrant { bridge, facts ->
         val input = bridge.privateInputValue(facts)
-        fun remaining(): UInt {
-            val millis = remainingBudgetMillis()
-            if (millis <= 0) throw NativeTorrentFailure("native_acquisition_timeout")
-            return millis.takeIf { it <= 30_000 }?.toUInt() ?: throw NativeTorrentCoordinatorUnavailable()
-        }
-        val acquisition = when (bridge.privateInputKind(facts)) {
-            "magnet" -> manager.client.beginSelected(input, hash, index, size, remaining())
-            "metainfo" -> {
-                val decoded = Base64.decode(input, Base64.NO_WRAP)
-                manager.client.beginSelectedMetainfo(decoded, hash, index, size, remaining())
+        JSONObject().apply {
+            when (bridge.privateInputKind(facts)) {
+                "magnet" -> put("magnet", input)
+                "metainfo" -> put("metainfo", input)
+                else -> throw NativeTorrentCoordinatorUnavailable()
             }
-            else -> throw NativeTorrentCoordinatorUnavailable()
+            putOpt("file_index", bridge.privateFileIndex(facts)?.toInt())
+            putOpt("archive_index", bridge.privateArchiveIndex(facts)?.toInt())
+            putOpt("expected_file_size", bridge.privateExpectedFileSize(facts)?.toLong())
+            put("trackers", JSONArray(bridge.privateTrackers(facts)))
         }
-        object : NativeTorrentAcquisitionEffect {
-            override fun waitReady(): NativeTorrentHandleEffect = StrictHandle(acquisition.waitReady(), control, hash, index)
-            override fun cancel() = acquisition.cancel()
-            override fun cancelAndJoin() = acquisition.cancelAndWait() == TorrentSettlement.SETTLED
-            override fun close() = acquisition.close()
-            override fun toString() = "NativeTorrentAcquisitionEffect(<redacted>)"
-        }
+    }
+    if (remainingBudgetMillis() <= 0) throw NativeTorrentFailure("native_acquisition_timeout")
+    val (epoch, handle) = manager.prepare(source, control.remainingMillis()?.coerceAtMost(60_000) ?: throw NativeTorrentCoordinatorUnavailable())
+    val effect = RuntimeHandle(manager, epoch, handle, control, remainingBudgetMillis)
+    return object : NativeTorrentAcquisitionEffect {
+        override fun waitReady(): NativeTorrentHandleEffect = effect.awaitReady()
+        override fun cancel() = effect.stop()
+        override fun cancelAndJoin() = effect.stopAndJoin()
+        override fun close() = effect.close()
+        override fun toString() = "NativeTorrentAcquisitionEffect(<redacted>)"
     }
 }
 
-private class StrictHandle(
-    private val handle: TorrentHandle,
+private class RuntimeHandle(
+    private val manager: NativeTorrentEngineCacheManager,
+    private val epoch: Long,
+    private val handle: String,
     private val control: NativePlaybackControl,
-    private val hash: String,
-    private val index: UInt,
+    private val startupRemaining: () -> Long,
 ) : NativeTorrentHandleEffect {
-    override fun validatedCapability(): NativeTorrentCapability {
-        val files = handle.files()
-        val selected = files.singleOrNull { it.index == index } ?: throw NativeTorrentFailure("native_file_unavailable")
-        val fileCount = handle.metadataFileCount()
-        val matches = control.withAuthorizedGrant { bridge, facts ->
-            bridge.metadataMatchesNative(hash, index, fileCount, selected.size, true, facts)
+    private val stopped = AtomicBoolean()
+    private val stopStarted = AtomicBoolean()
+    private val stopFinished = java.util.concurrent.CountDownLatch(1)
+    @Volatile private var settled = false
+    @Volatile private var firstFrame = false
+    @Volatile private var capability: NativeTorrentCapability? = null
+    private var lastAuthority = 0L
+    private var monitor: java.util.concurrent.Future<*>? = null
+    private var lastStage: String? = null
+    fun awaitReady(): NativeTorrentHandleEffect {
+        while (!stopped.get()) {
+            val reply = observe()
+            val progress = reply.getJSONObject("progress")
+            if (progress.getBoolean("ready")) {
+                control.withAuthorizedGrant { bridge, facts ->
+                    bridge.bindResolution(progress.getInt("file_index").toUInt(),
+                        progress.opt("archive_index").let { if (it == null || it == JSONObject.NULL) null else (it as Number).toInt().toUInt() },
+                        progress.getLong("length").toULong(), facts)
+                }
+                capability = NativeTorrentCapability.runtimeValidated(reply.getString("media_url"))
+                monitor = effects.submit {
+                    try { while (!stopped.get()) { observe(); Thread.sleep(200) } }
+                    catch (error: Exception) {
+                        if (!stopped.get()) control.failRuntime((error as? NativeTorrentFailure)?.reason ?: "native_playback_failed")
+                    }
+                }
+                return this
+            }
+            Thread.sleep(100)
         }
-        if (!matches) {
-            throw NativeTorrentFailure("native_file_unavailable")
+        throw NativeTorrentCoordinatorUnavailable()
+    }
+    private fun observe(): JSONObject {
+        if (!firstFrame && startupRemaining() <= 0) throw NativeTorrentFailure("native_acquisition_timeout")
+        val remaining = control.remainingMillis(requireForeground = false)?.coerceAtMost(60_000)?.takeIf { it > 0 } ?: throw NativeTorrentFailure("native_authorization_expired")
+        val deadline = android.os.SystemClock.elapsedRealtime() + remaining
+        if (deadline > lastAuthority + 1_000) {
+            manager.command(epoch, handle, "renew", remaining)
+            lastAuthority = deadline
         }
-        return NativeTorrentCapability.validated(handle.streamUrl(index), index)
+        val reply = manager.command(epoch, handle, "observe")
+        val progress = reply.getJSONObject("progress")
+        val stage = progress.getString("stage")
+        if (stage != lastStage) { control.progress(stage); lastStage = stage }
+        val error = progress.optString("error")
+        if (error.isNotEmpty()) {
+            val projection = try { JSONObject(normalize("torrentRuntime", JSONObject().put("operation", "failure").put("stage", stage).put("reason", error).toString(), "")) }
+                catch (_: Exception) { throw NativeTorrentFailure("native_playback_failed") }
+            throw NativeTorrentFailure(projection.getString("code"))
+        }
+        return reply
     }
-    override fun stop() = handle.stop()
-    override fun stopAndJoin() = handle.stopAndWait() == TorrentSettlement.SETTLED
-    override fun close() = handle.close()
-    override fun diagnostic(): String? {
-        if (!BuildConfig.PLAYBACK_DIAGNOSTICS) return null
-        val facts = handle.transportDiagnostics()
-        return "active=${facts.active} failed=${facts.failed} fetched_bytes=${facts.fetchedBytes} checked_bytes=${facts.checkedBytes} live_peers=${facts.livePeers} connecting_peers=${facts.connectingPeers} queued_peers=${facts.queuedPeers} dead_peers=${facts.deadPeers} not_needed_peers=${facts.notNeededPeers}"
+    override fun validatedCapability(): NativeTorrentCapability = capability ?: throw NativeTorrentCoordinatorUnavailable()
+    override fun firstFrame() {
+        if (stopped.get() || firstFrame) return
+        if (startupRemaining() <= 0) throw NativeTorrentFailure("native_acquisition_timeout")
+        manager.command(epoch, handle, "first_frame")
+        firstFrame = true
     }
+    override fun stop() {
+        stopped.set(true)
+        if (stopStarted.compareAndSet(false, true)) effects.execute {
+            try { settled = manager.stop(epoch, handle) } finally { stopFinished.countDown() }
+        }
+    }
+    override fun stopAndJoin(): Boolean { stop(); return stopFinished.await(2_000, TimeUnit.MILLISECONDS) && settled }
+    override fun close() { stop(); monitor?.cancel(true) }
     override fun toString() = "NativeTorrentHandleEffect(<redacted>)"
+    companion object { private val effects = Executors.newCachedThreadPool { Thread(it, "torrent-runtime-handle").apply { isDaemon = true } } }
 }

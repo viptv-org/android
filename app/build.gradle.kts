@@ -15,10 +15,10 @@ kotlin {
             kotlin.srcDir("../vendor/core/generated/kotlin")
             kotlin.srcDir("../vendor/core/generated/kotlin-wire")
             kotlin.srcDir("../vendor/core/adapters/android/src/main/kotlin")
-            kotlin.srcDir("../vendor/playback-gateway/ffi/generated/kotlin")
         }
         androidMain.dependencies {
             implementation(project(":"))
+            implementation(files("../vendor/torrent-runtime/classes.jar"))
             implementation("net.java.dev.jna:jna:5.17.0@aar")
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.androidx.activity.compose)
@@ -44,6 +44,7 @@ kotlin {
             implementation("org.json:json:20240303")
             implementation("com.squareup.okhttp3:okhttp:4.12.0")
         }
+        androidInstrumentedTest { kotlin.srcDir("../vendor/playback-gateway/ffi/generated/kotlin") }
         androidInstrumentedTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.androidx.test.runner)
@@ -59,11 +60,12 @@ android {
     lint { baseline = file("lint-baseline.xml") }
     buildFeatures { buildConfig = true }
     sourceSets.getByName("main").jniLibs.srcDir("src/androidMain/jniLibs")
-    sourceSets.getByName("main").jniLibs.srcDir("../vendor/playback-gateway/ffi/generated/android/jniLibs")
+    sourceSets.getByName("main").jniLibs.srcDir("../vendor/torrent-runtime/jni")
+    sourceSets.getByName("debug").jniLibs.srcDir("../vendor/playback-gateway/ffi/generated/android/jniLibs")
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/nativeTorrentAssets"))
     packaging.jniLibs.useLegacyPackaging = false
     // The immutable gateway release artifacts are already stripped at source.
-    packaging.jniLibs.keepDebugSymbols += "**/libplayback_gateway_ffi.so"
+    packaging.jniLibs.keepDebugSymbols += setOf("**/libplayback_gateway_ffi.so", "**/libtorrent_runtime.so", "**/libtorrent_runtime_jni.so")
     testOptions.unitTests.all {
         it.systemProperty("jna.library.path", rootProject.file("vendor/core/target/debug").absolutePath)
         it.systemProperty("viptv.core.nativeVectors", rootProject.file("vendor/core/tests/native-torrent-vectors.json").absolutePath)
@@ -119,6 +121,20 @@ val verifyDesign by tasks.registering(Exec::class) {
     commandLine("node", "scripts/design-sync.mjs", "check")
 }
 tasks.named("preBuild") { dependsOn(verifyDesign) }
+
+val verifyTorrentRuntime by tasks.registering(Exec::class) {
+    workingDir(rootProject.projectDir)
+    commandLine("python3", "scripts/torrent-runtime-sync.py", "check")
+}
+val prepareTorrentRuntimeNotices by tasks.registering(Copy::class) {
+    dependsOn(verifyTorrentRuntime)
+    from("../vendor/torrent-runtime") {
+        include("LICENSE", "PROVENANCE.md", "licenses/**", "NDK-TOOLCHAIN-NOTICE.txt", "build.json")
+        into("torrent-runtime")
+    }
+    into(layout.buildDirectory.dir("generated/nativeTorrentAssets"))
+}
+tasks.named("preBuild") { dependsOn(verifyTorrentRuntime, prepareTorrentRuntimeNotices) }
 
 val verifyNativeTorrent by tasks.registering(Exec::class) {
     workingDir(rootProject.projectDir)
@@ -208,4 +224,13 @@ if (fixtureArtifacts.isPresent) {
         into(fixtureAssets.map { it.dir("native-fixture") })
     }
     tasks.named("preBuild") { dependsOn(verifyOwnedFixture, prepareOwnedFixtureConfiguration) }
+}
+
+// Explicit owned-emulator qualification; no test Activity or source input ships normally.
+if (providers.gradleProperty("torrentRuntimeMediaQa").isPresent) {
+    require(gradle.startParameter.taskNames.none { it.contains("release", true) || it.contains("performance", true) })
+    kotlin.sourceSets.getByName("androidMain").kotlin.srcDir("../qualification/torrent-runtime/androidMain/kotlin")
+    kotlin.sourceSets.getByName("androidInstrumentedTest").kotlin.srcDir("../qualification/torrent-runtime/androidInstrumentedTest/kotlin")
+    android.buildTypes.getByName("debug").applicationIdSuffix = ".runtimefixture"
+    android.sourceSets.getByName("debug").manifest.srcFile("../qualification/torrent-runtime/androidMain/AndroidManifest.xml")
 }

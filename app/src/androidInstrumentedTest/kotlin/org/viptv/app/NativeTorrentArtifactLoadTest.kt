@@ -18,7 +18,7 @@ class NativeTorrentArtifactLoadTest {
         assertTrue(NativeTorrentRuntime.isAvailable())
     }
 
-    @Test fun actualGeneratedFacadesLoadWithoutReplacingCoreOrJna() {
+    @Test fun legacyComparisonFacadeAndCoreStillLoadAlongsideWorkerArtifacts() {
         val expectedAbi = InstrumentationRegistry.getArguments().getString("nativeTorrentExpectedAbi")
         assumeTrue("Explicit process ABI required for native loading evidence", expectedAbi != null)
         assertTrue(expectedAbi in setOf("armeabi-v7a", "arm64-v8a", "x86_64"))

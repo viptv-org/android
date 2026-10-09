@@ -52,13 +52,14 @@ class VipTvHttpGateway(
         preventReads: () -> Unit,
         invalidated: () -> Unit,
         clock: NativePlaybackClock = androidNativePlaybackClock,
+        startupStartedAtMillis: Long? = null,
     ): NativePlaybackControl {
         val epoch = nativeAuthGeneration.get()
         val current = { epoch == nativeAuthGeneration.get() }
         lateinit var control: NativePlaybackControl
         control = NativePlaybackControl(origin, scope, generation, current,
             NativePlaybackTransport(origin, { accessToken }, current, cache, onUnauthorized, client),
-            playbackV2, jobs, clock, preventReads, invalidated, { nativeControls.remove(control) })
+            playbackV2, jobs, clock, preventReads, invalidated, { nativeControls.remove(control) }, startupStartedAtMillis = startupStartedAtMillis)
         return control.also(nativeControls::add)
     }
     fun playbackRemainingMillis(id: String): Long? = playbackV2.remainingMillis(id)
@@ -346,7 +347,9 @@ class VipTvHttpGateway(
             intent.put("preferences", JSONObject().putOpt("audioLanguage", preferredAudioLanguage)
                 .putOpt("subtitleLanguage", preferredSubtitleLanguage).putOpt("subtitlesEnabled", preferredSubtitlesEnabled))
         }
-        return try { JSONObject(uniffi.viptv_core.normalize("playbackV2Intent", intent.toString(), origin)) }
+        return try { JSONObject(uniffi.viptv_core.normalize("playbackV2Intent", intent.toString(), origin)).apply {
+            if (source.channelId == null) getJSONObject("client").put("nativeTorrent", JSONObject().put("version", 2).put("networkPolicy", "public_discovery_verified_v2"))
+        } }
         catch (_: Exception) { throw GatewayError(400, "This device could not report a supported playback configuration.", "invalid_playback_request") }
     }
     override suspend fun heartbeat(playbackId: String) {

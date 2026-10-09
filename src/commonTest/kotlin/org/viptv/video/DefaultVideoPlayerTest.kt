@@ -15,6 +15,26 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class DefaultVideoPlayerTest {
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test fun renderedFrameIsSessionFencedAndSeparateFromReady() = runTest {
+        val backend = FakeBackend(OpenedMedia(PlaybackTimeline(PlaybackKind.OnDemand, 300_000)))
+        val player = DefaultVideoPlayer(backend, StandardTestDispatcher(testScheduler))
+        val frames = mutableListOf<PlaybackEvent>()
+        val collector = backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { player.events.collect { frames.add(it) } }
+        player.open(PlaybackSource("https://fixture.invalid/media.mp4"))
+        testScheduler.runCurrent()
+        assertTrue(frames.isEmpty())
+        val original = requireNotNull(backend.lastSessionId)
+        backend.eventsFlow.emit(BackendEvent.FirstFrame(original))
+        testScheduler.runCurrent()
+        assertEquals(listOf<PlaybackEvent>(PlaybackEvent.FirstFrame), frames)
+        player.open(PlaybackSource("https://fixture.invalid/other.mp4"))
+        backend.eventsFlow.emit(BackendEvent.FirstFrame(original))
+        testScheduler.runCurrent()
+        assertEquals(1, frames.size)
+        collector.cancel(); player.close()
+    }
+
     @Test
     fun readyKeepsObservedResumePositionAndBufferBeforeAnotherBackendTick() = runTest {
         val backend = FakeBackend(OpenedMedia(

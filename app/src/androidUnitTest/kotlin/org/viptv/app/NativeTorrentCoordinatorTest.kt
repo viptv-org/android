@@ -199,7 +199,7 @@ class NativeTorrentCoordinatorTest {
         val owner = cache(events, now::get)
         val jobs = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val corpus = JSONObject(File(requireNotNull(System.getProperty("viptv.core.nativeVectors"))).readText())
-        val ready = corpus.getJSONArray("cases").getJSONObject(0).getJSONArray("steps").getJSONObject(0).getString("body")
+        val ready = corpus.getJSONArray("cases").getJSONObject(0).getJSONArray("steps").getJSONObject(0).getString("body").runtimeV2Fixture()
         val request = corpus.getJSONObject("context").getJSONObject("request")
         val budgets = mutableListOf<Long>()
         var starts = 0
@@ -211,7 +211,7 @@ class NativeTorrentCoordinatorTest {
                 Acquisition(Handle(events), events)
             })
         FixtureServer(6) { incoming -> FixtureResponse(when {
-            incoming.target.endsWith("playback-protocol") -> """{"version":1,"native_torrent_versions":[1]}"""
+            incoming.target.endsWith("torrent-runtime-protocol") -> """{"version":2,"native_torrent_versions":[2]}"""
             incoming.method == "DELETE" -> """{"ok":true}"""
             else -> ready
         }) }.use { server ->
@@ -229,7 +229,7 @@ class NativeTorrentCoordinatorTest {
                 candidateControl.start(request, true, true, owner)
                 now.set(129_000_000_000)
                 assertFailsWith<NativeTorrentCoordinatorUnavailable> { coordinator.prepare(candidateControl, 7) }
-                assertEquals(listOf(30_000L, 1_000L), budgets)
+                assertEquals(listOf(120_000L, 91_000L), budgets)
                 assertEquals(1, events.count { it == "player.reads.off" })
                 assertFalse(events.contains("handle.stop"))
                 assertTrue(coordinator.authorizeActive() === outgoing)
@@ -248,9 +248,9 @@ class NativeTorrentCoordinatorTest {
             val owner = cache(events, now::get)
             val jobs = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val corpus = JSONObject(File(requireNotNull(System.getProperty("viptv.core.nativeVectors"))).readText())
-            val body = corpus.getJSONArray("cases").getJSONObject(0).getJSONArray("steps").getJSONObject(0).getString("body")
+            val body = corpus.getJSONArray("cases").getJSONObject(0).getJSONArray("steps").getJSONObject(0).getString("body").runtimeV2Fixture()
             FixtureServer(3) { incoming -> FixtureResponse(when {
-                incoming.target.endsWith("playback-protocol") -> """{"version":1,"native_torrent_versions":[1]}"""
+                incoming.target.endsWith("torrent-runtime-protocol") -> """{"version":2,"native_torrent_versions":[2]}"""
                 incoming.method == "DELETE" -> """{"ok":true}"""
                 else -> body
             }) }.use { server ->
@@ -260,8 +260,8 @@ class NativeTorrentCoordinatorTest {
                     jobs, NativePlaybackClock { now.get() / 1_000_000 }, {}, {})
                 val coordinator = NativeTorrentCoordinator(owner, now::get, { it == generation.get() }, { events.add("player.reads.off") },
                     main = Dispatchers.Unconfined, io = Dispatchers.IO, beginAcquisition = { _, _, budget ->
-                        assertEquals(30_000L, budget())
-                        if (lateGeneration) generation.set(8) else now.set(131_000_000_000)
+                        assertEquals(120_000L, budget())
+                        if (lateGeneration) generation.set(8) else now.set(221_000_000_000)
                         Acquisition(Handle(events), events)
                     })
                 try {
@@ -283,11 +283,11 @@ class NativeTorrentCoordinatorTest {
         val owner = cache(events, now::get)
         val jobs = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val corpus = JSONObject(File(requireNotNull(System.getProperty("viptv.core.nativeVectors"))).readText())
-        val body = corpus.getJSONArray("cases").getJSONObject(0).getJSONArray("steps").getJSONObject(0).getString("body")
+        val body = corpus.getJSONArray("cases").getJSONObject(0).getJSONArray("steps").getJSONObject(0).getString("body").runtimeV2Fixture()
         val coordinator = NativeTorrentCoordinator(owner, now::get, { it == 7L }, { events.add("player.reads.off") },
             main = Dispatchers.Unconfined, io = Dispatchers.IO, beginAcquisition = { _, _, _ -> throw AssertionError("Unexpected native IO") })
         FixtureServer(3) { incoming -> FixtureResponse(when {
-            incoming.target.endsWith("playback-protocol") -> """{"version":1,"native_torrent_versions":[1]}"""
+            incoming.target.endsWith("torrent-runtime-protocol") -> """{"version":2,"native_torrent_versions":[2]}"""
             incoming.method == "DELETE" -> """{"ok":true}"""
             else -> body
         }) }.use { server ->

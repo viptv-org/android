@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/design",
-  "revision": "d9562790ea69d5e29cb4ec2630b814a7f30f9761",
+  "revision": "16277caf2c7bf16296e25da40f143666465f0d2b",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
@@ -33,6 +33,10 @@
     "design-contract/specs/behavior/torrent-gateway-sources.md": {
       "source": "specs/behavior/torrent-gateway-sources.md",
       "sha256": "2a35f7b9237809a181e26b89b9e3528691f1b2f703976299378677d33eb281bb"
+    },
+    "design-contract/specs/behavior/torrent-runtime-v2.md": {
+      "source": "specs/behavior/torrent-runtime-v2.md",
+      "sha256": "8ff0158c7fd56eba72be4e3d206cda788565bf0d169d96135bbd98a749b15a85"
     },
     "design-contract/viptv-design-system/README.md": {
       "source": "viptv-design-system/README.md",

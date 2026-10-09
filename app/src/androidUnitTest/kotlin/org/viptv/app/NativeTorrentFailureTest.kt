@@ -5,27 +5,26 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertSame
-import uniffi.playback_gateway_ffi.TorrentException
 
 class NativeTorrentFailureTest {
-    @Test fun nativeExceptionsPreserveClosedMeasuredReasons() {
+    @Test fun runtimeObservationsPreserveClosedMeasuredReasons() {
         for ((exception, reason) in listOf(
-            TorrentException.StartupTimeout() to "native_acquisition_timeout",
-            TorrentException.SessionTimeout() to "native_session_timeout",
-            TorrentException.MetadataTimeout() to "native_metadata_timeout",
-            TorrentException.CachePreparationTimeout() to "native_cache_preparation_timeout",
-            TorrentException.InitializationTimeout() to "native_initialization_timeout",
-            TorrentException.LoopbackTimeout() to "native_loopback_timeout",
-            TorrentException.SessionUnavailable() to "native_session_unavailable",
-            TorrentException.InitializationFailed() to "native_initialization_failed",
-            TorrentException.LoopbackUnavailable() to "native_loopback_unavailable",
-            TorrentException.RetirementPending() to "native_retirement_pending",
-            TorrentException.PayloadLimit() to "native_payload_limit",
-            TorrentException.StorageUnavailable() to "native_storage_unavailable",
-            TorrentException.CacheUnavailable() to "native_cache_unavailable",
-            TorrentException.MetadataInvalid() to "native_metadata_invalid",
-            TorrentException.FileUnavailable() to "native_file_unavailable",
-            TorrentException.OperationFailed() to "native_playback_failed",
+            NativeTorrentFailure("native_acquisition_timeout") to "native_acquisition_timeout",
+            NativeTorrentFailure("native_session_timeout") to "native_session_timeout",
+            NativeTorrentFailure("native_metadata_timeout") to "native_metadata_timeout",
+            NativeTorrentFailure("native_cache_preparation_timeout") to "native_cache_preparation_timeout",
+            NativeTorrentFailure("native_initialization_timeout") to "native_initialization_timeout",
+            NativeTorrentFailure("native_loopback_timeout") to "native_loopback_timeout",
+            NativeTorrentFailure("native_session_unavailable") to "native_session_unavailable",
+            NativeTorrentFailure("native_initialization_failed") to "native_initialization_failed",
+            NativeTorrentFailure("native_loopback_unavailable") to "native_loopback_unavailable",
+            NativeTorrentFailure("native_retirement_pending") to "native_retirement_pending",
+            NativeTorrentFailure("native_payload_limit") to "native_payload_limit",
+            NativeTorrentFailure("native_storage_unavailable") to "native_storage_unavailable",
+            NativeTorrentFailure("native_cache_unavailable") to "native_cache_unavailable",
+            NativeTorrentFailure("native_metadata_invalid") to "native_metadata_invalid",
+            NativeTorrentFailure("native_file_unavailable") to "native_file_unavailable",
+            NativeTorrentFailure("native_playback_failed") to "native_playback_failed",
         )) {
             val failure = assertIs<NativeTorrentFailure>(nativeTorrentFailure(exception))
             assertEquals(reason, failure.reason)

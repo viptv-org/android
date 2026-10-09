@@ -187,6 +187,7 @@ data class AppState(
     val homeLoading: Boolean = false,
     val sourceLoading: Boolean = false,
     val preparingSourceId: String? = null,
+    val playbackPreparationStage: String? = null,
     val pairingRequested: Boolean = false,
     val message: String? = null,
 )
