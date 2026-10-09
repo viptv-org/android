@@ -23,9 +23,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("apk", type=Path)
     parser.add_argument("--aapt", help="Configured aapt2 executable for actual APK minSdk inspection")
+    parser.add_argument("--allow-legacy-comparison", action="store_true", help="Check an explicit debug comparison APK; normal APKs must omit rqbit")
     args = parser.parse_args()
     project = Path(__file__).resolve().parent.parent
-    lock = json.loads((project / "vendor/playback-gateway/lock.json").read_text())
+    lock = json.loads((project / "vendor/playback-gateway/lock.json").read_text()) if args.allow_legacy_comparison else None
     runtime_lock = json.loads((project / "vendor/torrent-runtime/lock.json").read_text())
     aapt = args.aapt or shutil.which("aapt2")
     if not aapt:
@@ -64,7 +65,10 @@ def main():
         require(b"newNativeOwned" not in dex and b"OwnedNativeFixtureActivity" not in dex, "Owned fixture code must not ship")
         require(b"Lorg/viptv/app/NativeTorrentRuntime;" in dex and b"Lorg/viptv/app/NativeTorrentQualification;" not in dex, "Normal native capability must use runtime prerequisites")
         libraries = ["libviptv_core.so", "libjnidispatch.so", "libtorrent_runtime.so", "libtorrent_runtime_jni.so"]
-        if any(name.endswith("/libplayback_gateway_ffi.so") for name in names):
+        has_legacy = any(name.endswith("/libplayback_gateway_ffi.so") for name in names)
+        require(args.allow_legacy_comparison or not has_legacy, "Legacy torrent transport must not ship in normal APKs")
+        require(args.allow_legacy_comparison or not any(name.startswith("assets/playback-gateway/") for name in names), "Legacy comparison assets must be opt-in")
+        if has_legacy:
             libraries.append("libplayback_gateway_ffi.so")
         for abi in ABIS:
             for library in libraries:
@@ -81,7 +85,7 @@ def main():
                 if library == "libplayback_gateway_ffi.so":
                     path = f"ffi/generated/android/jniLibs/{abi}/{library}"
                     require(hashlib.sha256(archive.read(name)).hexdigest() == lock["files"][path], "Native APK bytes mismatch the artifact pin")
-        for path, expected in lock["files"].items():
+        for path, expected in (lock["files"].items() if has_legacy and lock else []):
             if path in ["LICENSE", "PROVENANCE.md"] or path.startswith("THIRD_PARTY/"):
                 require(hashlib.sha256(archive.read("assets/playback-gateway/" + path)).hexdigest() == expected, "Native notice missing or altered in APK")
         for path, expected in runtime_lock["files"].items():

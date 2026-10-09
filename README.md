@@ -33,6 +33,8 @@ Android/TV acquire torrents on-device, retain verified cache content and preserv
 Media3 playback. V2 grants remain separate from ordinary application state.
 See [runtime integration and qualification](docs/TORRENT_RUNTIME_V2.md).
 `TORRENT_REF` retains development-only v1 comparison artifacts during qualification.
+Normal APKs exclude them; `-PlegacyTorrentComparison` packages them for an
+explicit debug comparison.
 
 ## Backend compatibility and live guide
 

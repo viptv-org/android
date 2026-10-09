@@ -19,6 +19,8 @@ class NativeTorrentArtifactLoadTest {
     }
 
     @Test fun legacyComparisonFacadeAndCoreStillLoadAlongsideWorkerArtifacts() {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        assumeTrue("Legacy transport is an explicit debug comparison only",java.io.File(context.applicationInfo.nativeLibraryDir,"libplayback_gateway_ffi.so").isFile)
         val expectedAbi = InstrumentationRegistry.getArguments().getString("nativeTorrentExpectedAbi")
         assumeTrue("Explicit process ABI required for native loading evidence", expectedAbi != null)
         assertTrue(expectedAbi in setOf("armeabi-v7a", "arm64-v8a", "x86_64"))

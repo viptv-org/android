@@ -7,6 +7,11 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val legacyTorrentComparison = providers.gradleProperty("legacyTorrentComparison").isPresent || providers.gradleProperty("nativeTorrentFixtureArtifacts").isPresent
+if (legacyTorrentComparison) {
+    require(gradle.startParameter.taskNames.none { it.contains("release", true) || it.contains("performance", true) }) { "Legacy torrent comparison is debug-only" }
+}
+
 kotlin {
     androidTarget { compilerOptions.jvmTarget.set(JvmTarget.JVM_17) }
     sourceSets {
@@ -61,8 +66,9 @@ android {
     buildFeatures { buildConfig = true }
     sourceSets.getByName("main").jniLibs.srcDir("src/androidMain/jniLibs")
     sourceSets.getByName("main").jniLibs.srcDir("../vendor/torrent-runtime/jni")
-    sourceSets.getByName("debug").jniLibs.srcDir("../vendor/playback-gateway/ffi/generated/android/jniLibs")
-    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/nativeTorrentAssets"))
+    if (legacyTorrentComparison) sourceSets.getByName("debug").jniLibs.srcDir("../vendor/playback-gateway/ffi/generated/android/jniLibs")
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/torrentRuntimeAssets"))
+    if (legacyTorrentComparison) sourceSets.getByName("debug").assets.srcDir(layout.buildDirectory.dir("generated/legacyTorrentComparisonAssets"))
     packaging.jniLibs.useLegacyPackaging = false
     // The immutable gateway release artifacts are already stripped at source.
     packaging.jniLibs.keepDebugSymbols += setOf("**/libplayback_gateway_ffi.so", "**/libtorrent_runtime.so", "**/libtorrent_runtime_jni.so")
@@ -132,7 +138,7 @@ val prepareTorrentRuntimeNotices by tasks.registering(Copy::class) {
         include("LICENSE", "PROVENANCE.md", "licenses/**", "NDK-TOOLCHAIN-NOTICE.txt", "build.json")
         into("torrent-runtime")
     }
-    into(layout.buildDirectory.dir("generated/nativeTorrentAssets"))
+    into(layout.buildDirectory.dir("generated/torrentRuntimeAssets"))
 }
 tasks.named("preBuild") { dependsOn(verifyTorrentRuntime, prepareTorrentRuntimeNotices) }
 
@@ -146,9 +152,9 @@ val prepareNativeTorrentNotices by tasks.registering(Copy::class) {
         include("LICENSE", "PROVENANCE.md", "THIRD_PARTY/**")
         into("playback-gateway")
     }
-    into(layout.buildDirectory.dir("generated/nativeTorrentAssets"))
+    into(layout.buildDirectory.dir("generated/legacyTorrentComparisonAssets"))
 }
-tasks.named("preBuild") { dependsOn(verifyNativeTorrent, prepareNativeTorrentNotices) }
+if (legacyTorrentComparison) tasks.named("preBuild") { dependsOn(verifyNativeTorrent, prepareNativeTorrentNotices) }
 
 // An opt-in, debug-only trust anchor for the loopback emulator fixture server.
 // Public CA material is generated under build/; production resources never use it.

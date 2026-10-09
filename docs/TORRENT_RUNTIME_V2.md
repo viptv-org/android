@@ -29,10 +29,17 @@ endpoint readiness and player Ready do not acknowledge it. Factual stage labels
 and specific archive/storage/authority failures come from core.
 
 `TORRENT_REF` and `vendor/playback-gateway` retain v1 artifacts for development
-comparison during qualification. The comparison library is packaged in debug
-builds, and its generated facade is available to instrumentation. Production
-source does not call that facade; performance builds package only the shared Go
-transport. Gateway benchmarks retain the existing engine comparison separately.
+comparison during qualification. Normal debug and performance APKs package only
+the shared Go transport. The generated v1 facade remains available to
+instrumentation; package its library and notices with the explicit debug-only
+`-PlegacyTorrentComparison` option. Owned v1 fixture builds enable it through
+`-PnativeTorrentFixtureArtifacts`. Gateway benchmarks retain the existing engine
+comparison separately.
+
+```sh
+./gradlew --no-daemon :app:assembleDebug -PlegacyTorrentComparison
+python3 scripts/check-native-torrent-apk.py app/build/outputs/apk/debug/app-debug.apk --allow-legacy-comparison
+```
 
 ## Artifact adoption
 
