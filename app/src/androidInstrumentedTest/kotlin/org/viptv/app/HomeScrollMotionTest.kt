@@ -114,16 +114,40 @@ class HomeScrollMotionTest {
         compose.onNodeWithText("Resume").assertExists()
     }
 
+    @Test fun lowerShelfFocusDoesNotRequestMetadataOrReplaceArtwork() = withHome {
+        compose.onNodeWithText("Resume").performKeyInput { pressKey(Key.DirectionDown) }
+        card("Queue fixture").performKeyInput { pressKey(Key.DirectionDown) }
+        card("Shelf fixture").assertIsFocused()
+        val controller = activeController!!
+        val before = controller.gateway.metadataRequestCount
+        repeat(2) {
+            card("Shelf fixture").performKeyInput { pressKey(Key.DirectionDown) }
+            card("Lower fixture").assertIsFocused()
+            Thread.sleep(400)
+            card("Lower fixture").performKeyInput { pressKey(Key.DirectionUp) }
+            card("Shelf fixture").assertIsFocused()
+            Thread.sleep(400)
+        }
+        compose.runOnIdle {
+            assertEquals(before, controller.gateway.metadataRequestCount)
+            assertEquals("Shelf fixture", controller.state.value.shelves[1].items.single().name)
+            assertEquals("Lower fixture", controller.state.value.shelves[2].items.single().name)
+        }
+    }
+
+    private var activeController: AppController? = null
+
     private fun card(title: String) = compose.onNode(hasText(title) and hasClickAction())
 
     private fun withHome(action: (LazyListState) -> Unit) {
         val controller = AppController(InstrumentationRegistry.getInstrumentation().targetContext, "https://example.invalid")
+        activeController = controller
         val list = LazyListState()
         val initial = FocusRequester()
         val memory = FocusMemory()
         try {
             controller._state.value = AppState(route = Route.Browse(Destination.Home), sessionRestoring = false,
-                homeLoading = false, shelves = listOf(
+                homeLoading = false, selectedProfile = Profile("owned-home-focus", "Owned home focus"), shelves = listOf(
                     HomeShelf("Continue Watching", listOf(
                         Media("queue", "movie", name = "Queue fixture", positionMillis = 60_000, durationMillis = 120_000),
                         Media("queue-next", "movie", name = "Queue next fixture", positionMillis = 30_000, durationMillis = 120_000)), isQueueShelf = true),
@@ -141,6 +165,7 @@ class HomeScrollMotionTest {
         } finally {
             compose.mainClock.autoAdvance = true
             controller.scope.cancel()
+            activeController = null
         }
     }
 }

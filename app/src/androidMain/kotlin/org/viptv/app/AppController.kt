@@ -28,7 +28,7 @@ import kotlinx.coroutines.sync.withPermit
 class AppController(context: Context, private val origin: String) {
     private val television = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
     private val store = context.getSharedPreferences("viptv.auth", Context.MODE_PRIVATE)
-    internal val gateway = VipTvHttpGateway(origin, store.getString("access", null), ::refreshAccessToken, television)
+    internal val gateway = VipTvHttpGateway(origin, store.getString("access", null), ::refreshAccessToken, television, org.viptv.video.AndroidMediaDns(context))
     internal val scope = CoroutineScope(Job() + Dispatchers.Main.immediate)
     private val coreSession = CoreSession(origin, store, scope, gateway::setAccessToken, ::renderSession)
     private val sessionRefreshMutex = Mutex()

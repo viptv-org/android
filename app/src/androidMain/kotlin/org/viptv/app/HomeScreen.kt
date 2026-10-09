@@ -25,7 +25,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
-import coil.request.ImageRequest
 import kotlinx.coroutines.delay
 import org.viptv.app.theme.ViptvColor as C
 
@@ -132,7 +131,7 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
             val width = with(density) { 1120.dp.roundToPx() }
             val height = with(density) { 720.dp.roundToPx() }
             val request = remember(presentation.heroImage, context, width, height) {
-                ImageRequest.Builder(context).data(presentation.heroImage).size(width, height).crossfade(false).build()
+                ArtworkImages.request(context, presentation.heroImage!!, width, height, crop = true)
             }
             // The sharp layer defines decode size; the ambient layer reuses it under the blur.
             val painter = rememberAsyncImagePainter(request, contentScale = ContentScale.Crop)
@@ -227,8 +226,8 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
             itemsIndexed(shelf.items, key = { _, item -> HomeFocusPolicy.mediaKey(item) }) { column, media ->
                 val action = { controller.activateCard(media, shelf.isQueueShelf, SourceReturn.Home) }
                 val hold = { if (shelf.isQueueShelf) controller.requestQueueManage(media) else controller.requestDialog(DialogKind.MyListManage, media.name, media) }
-                LaunchedEffect(media.id, state.homeLoading, state.homeFocus.mediaKey) {
-                    if (tv && !state.homeLoading && state.homeFocus.mediaKey == HomeFocusPolicy.mediaKey(media)) {
+                if (tv && shelf.isQueueShelf) LaunchedEffect(media.id, state.homeLoading, state.homeFocus.mediaKey) {
+                    if (!state.homeLoading && state.homeFocus.mediaKey == HomeFocusPolicy.mediaKey(media)) {
                         delay(300)
                         controller.enrichVisibleHomeItem(media)
                     }

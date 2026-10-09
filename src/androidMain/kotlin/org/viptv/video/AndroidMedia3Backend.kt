@@ -47,6 +47,7 @@ internal class AndroidMedia3Backend(
     private val redirects = Media3RedirectCache()
     internal fun clearHttpRedirects() = redirects.clear()
     private val httpClient = OkHttpClient.Builder()
+        .dns(AndroidMediaDns(context))
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(8, TimeUnit.SECONDS)
         .followRedirects(true)

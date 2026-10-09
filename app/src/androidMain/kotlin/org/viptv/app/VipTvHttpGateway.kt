@@ -33,6 +33,7 @@ class VipTvHttpGateway(
     /** Coalesced session refresh for an authenticated 401; returns a fresh access token or null. */
     private val onUnauthorized: (suspend (String?) -> String?)? = null,
     private val television: Boolean = false,
+    dns: okhttp3.Dns = okhttp3.Dns.SYSTEM,
 ) : BackendGateway {
     private val playbackV2 = V2PlaybackControl(origin, ::json)
     private val nativeControls = java.util.concurrent.ConcurrentHashMap.newKeySet<NativePlaybackControl>()
@@ -66,8 +67,10 @@ class VipTvHttpGateway(
     private val titleArtwork = java.util.concurrent.ConcurrentHashMap<String, Media>()
     private var metadataEpoch = 0L
     private val metadataRequests = java.util.concurrent.atomic.AtomicLong()
+    internal val metadataRequestCount: Long get() = metadataRequests.get()
     fun clearProfileCache() = synchronized(titleArtwork) { metadataEpoch++; titleArtwork.clear() }
     private val client = OkHttpClient.Builder()
+        .dns(dns)
         .followRedirects(false).followSslRedirects(false)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
