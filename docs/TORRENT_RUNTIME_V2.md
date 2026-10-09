@@ -53,7 +53,7 @@ establish physical-device or production qualification.
 ## Local qualification, 2026-10-09
 
 Core: `d1787f3910306822d68192a5d3c45f980a665234`.
-Runtime: `b636742efe1c89c658eaf5ac9277478fe72b2828`.
+Runtime: `11872567b94e5c3df763fef0742a91a3d030e629`.
 The core passes native/actual-WASM parity and the runtime passes its complete
 Go race suite and gateway Rust suite. Android's full library/application unit
 suite passes before the final packaging cleanup; final checks are recorded below.
@@ -82,3 +82,8 @@ performance lint under the existing baseline, APK byte hashes/notices/alignment
 and FFmpeg audio artifact checks. Lint reports existing warnings and three
 baseline-filtered errors; no baseline was expanded. The performance APK excludes
 the v1 comparison transport and every QA Activity.
+
+The latest artifact update preserves repeated tracker hints from magnets/metainfo
+and add-ons by validating and deduplicating destinations before admission. All
+three API-24/16-KiB libraries and the normal debug APK were rebuilt and checked
+from the same immutable revision used by desktop and gateway.

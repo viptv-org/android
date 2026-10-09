@@ -1,20 +1,20 @@
 {
-  "revision": "b636742efe1c89c658eaf5ac9277478fe72b2828",
+  "revision": "11872567b94e5c3df763fef0742a91a3d030e629",
   "dirty": false,
   "platform": "android",
   "qualification": "candidate-only",
   "files": {
     "NDK-TOOLCHAIN-NOTICE.txt": "f96f763beb66a7ba7a667647fc64c0226ace875e590c831fdd9579ec1c1d91e1",
     "classes/org/playbackgateway/runtime/NativeRuntime.class": "9b72af7b1ef055bc1cd7cc06a78cb293cd1aa90515a51335736e6577e148755a",
-    "classes.jar": "e6be365768225a9819f6670184ee0fed5b6463cf546e984b0853ba4c722b09e8",
+    "classes.jar": "8dc1d693a7b33bc4c7ab44219e6092a6f74d8915907e34cb5b84b194617df269",
     "jni/arm64-v8a/libtorrent_runtime.h": "203c08d9112a892eaa06bc1b3243bc6b88ccd5faa182b9b5e8c984a2ecce5833",
-    "jni/arm64-v8a/libtorrent_runtime.so": "06b5cff99b956e2426432761d5afeecfc20f2ceedd1de3402f6c74acae92f8aa",
+    "jni/arm64-v8a/libtorrent_runtime.so": "b5804048702d5b88620480b2eb6b0b3d7934f377c6125204875983bd6e58df12",
     "jni/arm64-v8a/libtorrent_runtime_jni.so": "958076ca34b06fe4ace7e56a5259b6df6e56bd71eb2c0a8dcbc69bb1d9917898",
     "jni/armeabi-v7a/libtorrent_runtime.h": "22d3910043f0a6b0fe88824647cd0333f17141f64960dba8eb6d8df707df2811",
-    "jni/armeabi-v7a/libtorrent_runtime.so": "2faebb7cd3307b70813e65e1a9e3cbe125d7b98b34126642c7f9db0c1b4397ec",
+    "jni/armeabi-v7a/libtorrent_runtime.so": "d104ad7357a78ba018ad3bd9754e0c3794626402d6ecb7e3819afb1b08e28516",
     "jni/armeabi-v7a/libtorrent_runtime_jni.so": "293675eb571aee1517a946acbccbe7f62add0a1762a5af3208991649d8278094",
     "jni/x86_64/libtorrent_runtime.h": "203c08d9112a892eaa06bc1b3243bc6b88ccd5faa182b9b5e8c984a2ecce5833",
-    "jni/x86_64/libtorrent_runtime.so": "3da1269fc34cadc544535bf5024ef97db84c392aaa29c3cb89656785d302c1e9",
+    "jni/x86_64/libtorrent_runtime.so": "97e5742c5bf40005244a8a37bd2958f5d5e105c3716e95073afea02eaca2e825",
     "jni/x86_64/libtorrent_runtime_jni.so": "86a580dc5c7ae43bc54f051e14c0906418ef32fbf459031e01a821c36e212d1c"
   }
 }
