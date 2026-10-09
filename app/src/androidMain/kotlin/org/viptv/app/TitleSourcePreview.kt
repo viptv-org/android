@@ -28,14 +28,17 @@ internal class TitleSourcePreview(
     private val publish: (SourcePreviewSnapshot?) -> Unit,
     private val settleMillis: Long = 400,
     private val timeoutMillis: Long = 180_000,
+    private val reuseBudgetMillis: Long = 300_000,
+    private val elapsedRealtime: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
-    private class Entry(val state: MutableStateFlow<SourcePreviewSnapshot>) { var job: Job? = null }
+    private class Entry(val state: MutableStateFlow<SourcePreviewSnapshot>, val startedMillis: Long) { var job: Job? = null }
     private var active: Entry? = null
     val key: String? get() = active?.state?.value?.key
     fun refresh() { active?.state?.value?.let(publish) }
 
     fun start(key: String, media: Media) {
-        if (CoreLifecycle.preview(PreviewAction.START, key, active?.state?.value) == PreviewDecision.RETAIN) return
+        if (CoreLifecycle.preview(PreviewAction.START, key, active?.state?.value,
+                elapsedMillis = active?.let { elapsedRealtime() - it.startedMillis }, reuseBudgetMillis = reuseBudgetMillis) == PreviewDecision.RETAIN) return
         begin(key, media, settleMillis)
     }
 
@@ -48,7 +51,7 @@ internal class TitleSourcePreview(
 
     private fun begin(key: String, media: Media, settle: Long): Entry {
         cancel()
-        val entry = Entry(MutableStateFlow(SourcePreviewSnapshot(key)))
+        val entry = Entry(MutableStateFlow(SourcePreviewSnapshot(key)), elapsedRealtime())
         active = entry
         fun update(next: SourcePreviewSnapshot) {
             if (active !== entry) return
@@ -81,7 +84,8 @@ internal class TitleSourcePreview(
 
     suspend fun adopt(key: String, media: Media, onProducers: (List<SourceProducerOutcome>) -> Unit, onSources: (List<Source>) -> Unit): List<Source> {
         val retained = active?.takeIf {
-            CoreLifecycle.preview(PreviewAction.ADOPT, key, it.state.value, running = it.job?.isActive == true) == PreviewDecision.RETAIN
+            CoreLifecycle.preview(PreviewAction.ADOPT, key, it.state.value, running = it.job?.isActive == true,
+                elapsedMillis = elapsedRealtime() - it.startedMillis, reuseBudgetMillis = reuseBudgetMillis) == PreviewDecision.RETAIN
         }
         val entry = retained ?: begin(key, media, 0)
         coroutineScope {
@@ -118,6 +122,7 @@ internal fun AppController.previewSources(media: Media) {
         try { probedCapabilities = PlaybackClientCapabilities.from(backendFactory.probe()) }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { }
+        _state.value = _state.value.copy(sourceCapabilities = probedCapabilities)
         sourcePreview.refresh()
     }
     sourcePreview.start(key, media)

@@ -485,12 +485,35 @@ Native-ineligible input uses ordinary backend-authorized gateway admission befor
 native work. Once native is admitted, failure cannot silently start gateway,
 transcode, choose another source or retry indefinitely, including any existing
 automatic direct-to-gateway recovery hook. Preserve position/pause/tracks and use
-existing Retry / Choose another source / Back recovery. An explicit retry may
-request `force_gateway=true` for the same opaque source/exact file after releasing
-failed native authority; refusal of authorization/selection cannot be downgraded
-into a bypass. Back cancels by playback ID or request ID, invalidates local work
+existing Retry / Choose another source / Back recovery. Retry releases failed
+native authority and requests one fresh, bounded native admission for the same
+opaque source/exact file, preserving position, pause and track intent. It must
+not require a gateway that the account cannot use. Refusal of authorization or
+selection returns to the corresponding recovery instead of bypassing it.
+Back cancels by playback ID or request ID, invalidates local work
 and restores source/title/queue focus. Release is idempotent even after timeout;
 late response/callback cannot reopen playback.
+
+Source discovery previews have a monotonic reuse budget. Android uses five
+minutes measured from discovery start, including partial arrivals, and replaces
+expired rows before reopening its picker. A source-handle 404 discards the
+retained preview; Choose another source performs fresh discovery. Fresh Title
+and picker frames can share one discovery without duplicate requests.
+
+The picker uses the shared batch ranking with actual decoder capabilities.
+Likely playable sources precede unknown or unsupported candidates. Best match
+is shown only when the shared projection supplies that recommendation; first
+position alone is insufficient. Provider filtering preserves ranking and manual
+selection, and Back restores the existing source/title focus. Unknown and
+unsupported sources remain selectable without a recommendation. Label evidence
+does not guarantee the codec profile of the actual media.
+
+Acceptance includes picker reuse immediately before and at expiry, stale-handle
+404 followed by fresh discovery, a supported AVC row ahead of an unsupported
+HEVC/4K row, and explicit Retry on an account without gateway availability.
+Metadata acquisition keeps its existing absolute startup budget and concurrent
+peer requests. A peer count supplied by an addon is not proof of reachable
+metadata peers; timeout offers one explicit fresh attempt or another source.
 
 Private hashes/magnets/metainfo/paths/tokens remain transient transport objects
 and unavoidable sensitive engine-cache internals only. No public Source/cards,

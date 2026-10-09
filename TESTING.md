@@ -1,3 +1,129 @@
+# Torrent source recovery fixes — 2026-10-09
+
+The normal APK was rebuilt from Android `685f66c` plus the local source-recovery
+changes, with core `d737c43`, design `01abe2e` and unchanged gateway `698372d`.
+Installed APK SHA-256 is
+`b277b03a0bedc31a51864532a6e98d4b52cea85d430316f172fbe0a37f9c96c1`.
+The installed bytes matched the checked build, all three native ABIs are present,
+and no fixture CA was packaged. The shared API 36 x86_64 TV emulator retained
+its account, profile and HTTPS backend; the development backend remains `d66085b`.
+
+Implemented behavior:
+
+- Android discovery previews expire five minutes after their monotonic start,
+  including partial arrivals. Fresh Title/picker frames still share discovery.
+  A source-handle 404 clears retained rows; Retry requests fresh source selection,
+  including failures before native admission.
+- The picker consumes shared batch ranking and recommendations with measured
+  decoder facts. Likely playable rows precede unknown/unsupported rows; the first
+  row has no automatic Best match badge. Decoder probe completion updates UI state.
+- Explicit native Retry waits for authority retirement, requests one fresh native
+  admission for the same selection, and preserves position, pause and track intent.
+  Authorization/selection refusals retain their recovery paths.
+- Metadata deadlines and concurrent public-DHT peer acquisition remain bounded.
+  The failure copy explains the fresh attempt and another-source options. Addon
+  peer counts do not prove that metadata peers are reachable.
+
+Validation passed: 125 Rust workspace tests; 477 native/actual-WASM torrent
+vectors; 37 shared-policy parity vectors and the browser WASM checks; 48 Android
+library and 300 app tests; 33 native artifact importer tests; 29 qualification
+Python tests; Android host/native builds, normal APK assembly and lint against
+its existing baseline. TV-web typecheck, 291 tests and production build passed.
+Its initial parallel run had one guide pagination timeout; that test passed alone
+and the full suite passed with one worker. Design validation and imported core,
+design and torrent artifact integrity checks passed.
+
+Observed emulator behavior:
+
+- The picker ranked a 1080p AVC source ahead of the original 4K-first discovery
+  order and did not invent a Best match badge for its first row.
+- The raw Torrentio 1080p AVC/AAC-LAMA source initially reached the 60-second
+  Media3 open timeout. Explicit Retry obtained a fresh native grant, decoded video
+  at the retained title position and advanced normally, without `gateway_required`.
+  Lease checks remained ready beyond a renewal interval.
+- Pause held at 1:32:37. Back 10 seconds and forward 30 seconds reached 1:32:27
+  and 1:32:57; playback resumed after buffering. Exit returned to the picker and
+  the backend reported the retired grant released.
+- The raw 1080p YIFY source reached `native_metadata_timeout` on its first attempt
+  and explicit native retry. Both displayed the current recovery explanation,
+  released authority, and avoided the previous forced-gateway dead end.
+- Choose another source returned to discovery; Back returned to the Title.
+  All tested grants were released. No sign-in, server or profile reset was used.
+
+Expiry boundaries, stale-owner rejection and pre-admission stale-handle recovery
+were verified through regression tests rather than altering live server handles.
+This is emulator evidence, not physical decoder qualification. Public torrents
+remain dependent on peer availability; a retry cannot guarantee a reachable swarm.
+Private captures, diagnostic logs and installed APK are in ignored qualification
+artifacts, never tracked.
+
+# Hero emulator performance — 2026-10-09
+
+The owner authorized the separate API 36 x86_64 hero emulator. Thirty primary
+device windows cover Home idle, horizontal/vertical D-pad navigation,
+Details/Back and process-cold launch, three repetitions with motion enabled
+and with the existing static fallback. The known candidate is `9bcce38`, core
+`3078943`, design `581289b`, APK SHA-256
+`9157f524eeda3a0294669240894398928e85f8ccf6418dd9544a2b08ce7d44f5`.
+Its real APK packaging/trust check and 25 hero unit tests pass.
+
+Animated Home idle has median 93.39% jank and 48 ms p50; static Home and
+offscreen-hero idle windows record no new frames. Traces show substantial
+hero GL/RenderThread work and separate focus-driven recomposition/layout
+costs. First-display launch has a 1,505 ms median in both variants; Home
+UIAutomation probes are coarse upper bounds, not fully loaded hero timings.
+These are debug/SwiftShader emulator observations, not physical-TV qualification.
+
+The original APK was restored and its hash verified. Normal animation scale
+is enabled, sign-in/storage remain intact, and the app is on Home. The shared
+browser emulator was untouched during this follow-up. Private raw captures,
+traces and logs remain ignored. No production app behavior changed.
+See [method, results and optimization priorities](docs/history/2026-10-09-hero-emulator-performance.md).
+
+# Public torrent source sweep — 2026-10-09
+
+The shared API 36 x86_64 TV emulator retained its account, profile and HTTPS
+backend. The installed normal APK has SHA-256
+`81a9a7315e7db2df60e9a0f6e0834bfd716b1bfc3b18a76c4c544ed378166fe7`;
+Android main is `685f66c`, with core `df62d8a`, gateway `698372d` and design
+`d956279`. The development backend is running `d66085b`. Private UI captures,
+test logs and the installed APK are in ignored qualification artifacts.
+
+Observed results for manually selected raw Torrentio sources for Limitless:
+
+- The 1080p H.264/AAC source displayed decoded video with advancing position.
+  Pause held the same position, resume and short backward/forward seeks returned
+  to PLAYING, and audio/subtitle menus opened. The source has one unidentified
+  audio language and no subtitle tracks; alternate tracks were not qualified.
+  Native authority stayed ready across lease periods. The same source decoded
+  again after the failed selections below.
+- A second 1080p H.264 source reached native admission but failed with
+  `native_metadata_timeout`. Its advertised peer count did not establish actual
+  peer responsiveness. Retry selected the contract's forced-gateway path and
+  returned HTTP 409 because no usable account gateway was configured.
+- A 1080p HEVC source reached native transport but failed Media3 decoding with
+  `media3_4003` on this emulator. This is not a physical-TV codec result.
+- Back during the opening of a fourth, 4K source returned to details and
+  released backend authority. Player exit also released authority. After the
+  failed source's cleanup, the private native cache tree occupied about 40 KiB;
+  the successful source's measured cache remained below its 256 MiB ceiling.
+- A retained selector initially reproduced HTTP 404. Fresh discovery and
+  selecting the same first source reached native admission. The backend expires
+  source handles after 30 minutes; completed title previews have no age check.
+  Existing Choose another source recovery discards the retained preview.
+
+Fresh Android test runs pass 48 library and 294 app unit tests; the qualification
+harness passes 29 tests. Gateway's locked workspace suite with torrent and
+owned-network fixture features passes 215 tests with 56 opt-in tests ignored.
+The backend passes 297 tests with four opt-in tests
+ignored when run with one test thread. Its default parallel run returned an
+unexpected HTTP 429 in a parental-policy test; that test passes alone and in
+the full sequential run. That concurrency finding is separate from this source
+sweep. No APK replacement, provider configuration, production deployment or
+physical-device run occurred. Audible output and long-duration soak stability
+were not qualified. Native playback works for the tested H.264 source, but the
+source-selection and recovery findings prevent a general stability claim.
+
 # Native source HTTP errors and public torrent playback — 2026-10-07
 
 The native control HTTP regression reproduces a real backend

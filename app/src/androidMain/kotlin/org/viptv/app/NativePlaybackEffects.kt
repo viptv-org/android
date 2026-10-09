@@ -126,10 +126,10 @@ internal class NativePlaybackEffects(
     }
 
     /** Retry waits for paired cleanup and uses Rust's shared refusal/recovery decision. */
-    suspend fun recoveryDecision(): String {
-        val receipt = failure ?: return decision(false, true, false, false)
+    suspend fun recoveryDecision(selectionRefused: Boolean = false): String {
+        val receipt = failure ?: return nativeRecoveryDecision(false, true, false, selectionRefused)
         receipt.retired = retire(receipt.control)
-        return decision(receipt.admitted, receipt.retired, receipt.authorizationRefused, receipt.selectionRefused)
+        return nativeRecoveryDecision(receipt.admitted, receipt.retired, receipt.authorizationRefused, receipt.selectionRefused || selectionRefused)
     }
 
     suspend fun failActive(error: Throwable) {
@@ -160,11 +160,12 @@ internal class NativePlaybackEffects(
         settled
     }
 
-    private fun decision(admitted: Boolean, retired: Boolean, authorization: Boolean, selection: Boolean): String =
-        normalize("nativeTorrent", JSONObject().put("operation", "recovery").put("facts", JSONObject()
-            .put("admitted", admitted).put("authorityRetired", retired).put("authorizationRefused", authorization)
-            .put("selectionRefused", selection).put("action", "retry")).toString(), "").trim('"')
-
     private class Recovery(val control: NativePlaybackControl, val admitted: Boolean, var retired: Boolean, val authorizationRefused: Boolean, val selectionRefused: Boolean)
     override fun toString() = "NativePlaybackEffects(<redacted>)"
 }
+
+/** The same shared recovery applies when a stale handle fails before native admission. */
+internal fun nativeRecoveryDecision(admitted: Boolean, retired: Boolean, authorization: Boolean, selection: Boolean): String =
+    normalize("nativeTorrent", JSONObject().put("operation", "recovery").put("facts", JSONObject()
+        .put("admitted", admitted).put("authorityRetired", retired).put("authorizationRefused", authorization)
+        .put("selectionRefused", selection).put("action", "retry")).toString(), "").trim('"')

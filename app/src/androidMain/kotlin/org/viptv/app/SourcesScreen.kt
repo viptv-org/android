@@ -60,7 +60,12 @@ internal suspend fun requestInitialSourceFocusAfterFrame(
     val state by controller.state.collectAsState()
     var provider by remember(media.id) { mutableStateOf<String?>(null) }
     val groups = remember(sources) { sources.associateWith { SourceDisplayPolicy.providerKey(it) to SourceDisplayPolicy.providerLabel(it) } }
-    val shown = sources.filter { provider == null || groups[it]?.first == provider }
+    val capabilities = controller.rankCapabilities() ?: state.sourceCapabilities
+    val ranks = remember(sources, capabilities, state.preferences.audioLanguage) {
+        SharedPresentation.ranks(sources, capabilities, state.preferences.audioLanguage)
+    }
+    val recommended = sources.indices.filter { ranks.ranks[it].best }.map { sources[it].id }.toSet()
+    val shown = ranks.orderedIndices.map { sources[it.toInt()] }.filter { provider == null || groups[it]?.first == provider }
     val first = remember(media.id) { FocusRequester() }
     var claimed by remember(media.id) { mutableStateOf(false) }
     fun chooseProvider(value: String?) { claimed = true; provider = value }
@@ -121,13 +126,13 @@ internal suspend fun requestInitialSourceFocusAfterFrame(
                         .hoverable(hoverSource)
                         .clip(RoundedCornerShape(measure(22, 18)))
                         .background(if (tv && focused) C.textPrimary else C.surfaceN2)
-                        .border(1.dp, if (index == 0 && !tv) LocalAccent.current else Color.Transparent, RoundedCornerShape(measure(22, 18)))) {
+                        .border(1.dp, if (source.id in recommended && !tv) LocalAccent.current else Color.Transparent, RoundedCornerShape(measure(22, 18)))) {
                     Row(Modifier.fillMaxSize().padding(horizontal = measure(26, 14)), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(measure(20, 12))) {
                         Box(Modifier.size(measure(92, 60), measure(64, 52)).clip(RoundedCornerShape(10.dp)).background(if (focused && tv) C.lineOnAccent else C.surfaceN3), contentAlignment = Alignment.Center) {
                             VText(source.quality ?: "Auto", if (tv) 22 else 12, color = foreground, bold = true, lines = 1)
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            if (index == 0) VText("BEST MATCH", if (tv) 18 else 10, color = if (tv && focused) C.textOnLightAccent else LocalAccent.current, bold = true)
+                            if (source.id in recommended) VText("BEST MATCH", if (tv) 18 else 10, color = if (tv && focused) C.textOnLightAccent else LocalAccent.current, bold = true)
                             VText(SourceDisplayPolicy.title(source).replace('\n', ' '), if (tv) 26 else 15, color = foreground, bold = true, lines = 2)
                             SourceDescriptionWindow(if (opening) "Opening source…" else SourceDisplayPolicy.body(source),
                                 if (tv) 20 else 12, if (tv && focused) C.textOnLightSecondary else C.textSecondary,

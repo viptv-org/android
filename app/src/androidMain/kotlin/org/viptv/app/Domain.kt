@@ -173,6 +173,8 @@ data class AppState(
     val addons: List<Addon> = emptyList(),
     val serverAbout: ServerAbout? = null,
     val preferences: PlaybackPreferences = PlaybackPreferences(),
+    /** Measured decoder facts keep source recommendations reactive to the async probe. */
+    val sourceCapabilities: PlaybackClientCapabilities? = null,
     val playbackTracks: PlaybackTrackChoices = PlaybackTrackChoices(),
     /** Server delivery category; safe UI state used to choose native versus managed seek. */
     val playbackDeliveryMode: String = "direct",

@@ -1,6 +1,7 @@
 package org.viptv.app
 
 import android.content.Context
+import android.os.SystemClock
 import org.viptv.video.AndroidMedia3BackendFactory
 import org.viptv.video.AndroidMedia3VideoPlayer
 import kotlinx.coroutines.CoroutineScope
@@ -72,7 +73,7 @@ class AppController(context: Context, private val origin: String) {
             SourceSummary(it.key, SourceRankPolicy.order(it.sources, rankCapabilities(), _state.value.preferences.audioLanguage).firstOrNull(),
                 it.sources.size, it.done, it.error != null)
         })
-    })
+    }, elapsedRealtime = SystemClock::elapsedRealtime)
     internal var queueContinuationJob: Job? = null
     /** Last queue/Home refresh wins over any earlier response racing Undo. */
     internal var homeRefreshGeneration = 0L
@@ -126,6 +127,7 @@ class AppController(context: Context, private val origin: String) {
     internal var activePlaybackDelivery = PlaybackDeliveryOptions()
     internal val playbackPrepareMutex = Mutex()
     internal var playbackGeneration = 0L
+    internal var playbackSelectionRefused = false
     internal var playbackInteractionVersion = 0L
     internal var nativePlaybackAvailable: () -> Boolean = NativeTorrentRuntime::isAvailable
     internal var nativeScopeOwnerOverride: NativeTorrentScopeOwner? = null
