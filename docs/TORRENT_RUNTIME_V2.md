@@ -87,3 +87,27 @@ The latest artifact update preserves repeated tracker hints from magnets/metainf
 and add-ons by validating and deduplicating destinations before admission. All
 three API-24/16-KiB libraries and the normal debug APK were rebuilt and checked
 from the same immutable revision used by desktop and gateway.
+
+## Phone and full-authority qualification, 2026-10-09
+
+An owned API 36 x86_64 phone emulator decoded the original privately recorded
+failing source through the shared worker and Media3. One cold observation reached
+the endpoint in 65.5 s and its first rendered frame in 68.2 s. It is retained as
+a slow-start observation. Restarting with verified cache gave a frame in 1.61 s;
+a forward seek required 9.83 s and fresh TextureView updates after landing.
+Backward seeking and worker retirement passed. A position-only 1 ms seek result
+is excluded. Physical ARM/API24/16-KiB-page device playback remains separate.
+
+The real backend/core/coordinator path exposed an app cache ownership defect:
+its marker was being passed to Go's strict record directory. The manager keeps
+ownership markers in `content-v2` and Go records in `content-v2/pieces`.
+Actual-worker instrumentation covers this boundary. The corrected full-authority
+run negotiated v2, received a native grant, acquired locally and rendered a
+frame in 25.9 s, then joined native/cache retirement. No gateway fallback occurred.
+Its backend account/profile/vault and source fixtures were ephemeral; ordinary
+login/catalog screens were not driven. Source IDs, bearer and captures remain
+private. One interrupted instrumentation run is excluded from evidence.
+
+The shared runtime also retains resolved torrent/archive selection in budgeted,
+checksummed cache records. Restart revalidates it against content metadata;
+retained records never grant playback authority.

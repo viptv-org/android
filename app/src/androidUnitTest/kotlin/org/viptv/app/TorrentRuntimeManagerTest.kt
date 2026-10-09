@@ -34,6 +34,7 @@ class TorrentRuntimeManagerTest {
         assertEquals(first.first, second.first)
         assertEquals(1,ports.size)
         assertEquals(1,ports[0].commands.count { it.getString("op") == "open" })
+        assertEquals(java.io.File(directory,"pieces").path,ports[0].commands.first { it.getString("op")=="open" }.getJSONObject("config").getString("cache_dir"))
         assertEquals(source.toString(),ports[0].commands.first { it.getString("op") == "prepare" }.getJSONObject("source").toString())
         assertFalse(ports[0].commands.last().getJSONObject("source").has("file_index"))
         ports[0].alive = false

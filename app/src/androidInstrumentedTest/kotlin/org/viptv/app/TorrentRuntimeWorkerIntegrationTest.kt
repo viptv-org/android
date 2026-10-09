@@ -35,4 +35,18 @@ class TorrentRuntimeWorkerIntegrationTest {
             directory.deleteRecursively()
         }
     }
+    @Test fun actualAppOwnershipMarkerAndGoStorageHaveSeparateDirectories() {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val parent=File(context.noBackupFilesDir,"runtime-marker-qa-${UUID.randomUUID()}").apply {mkdirs()}
+        val cache=NativeTorrentCache.open(parent,{directory,capacity->
+            NativeTorrentEngineCacheManager(directory,capacity){TorrentRuntimeWorker(context)}.also {it.initialize()}
+        },nowNanos=android.os.SystemClock::elapsedRealtimeNanos,retainContent=true)
+        try {
+            assertTrue(cache.isAvailable,"actual app ownership files must not enter Go's strict record directory")
+            assertTrue(parent.walkTopDown().any {it.name=="pieces" && it.isDirectory})
+        } finally {
+            assertTrue(cache.closeScope(clearContent=true))
+            parent.deleteRecursively()
+        }
+    }
 }

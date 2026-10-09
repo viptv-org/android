@@ -18,3 +18,15 @@ It removes the source input and writes only numeric outcomes to
 warm/restart trial. The cache is 128 MiB; first-frame startup and seek deadlines
 are bounded. This probe supplements the application control/lifecycle tests;
 it does not exercise a live backend account or qualify physical devices.
+
+The media probe waits for fresh TextureView updates after seek position/buffering
+settle; an immediate position discontinuity is not decoded-seek evidence.
+
+`TorrentRuntimeAuthorityMediaTest` accepts a private
+`no_backup/torrent-runtime-authority-qa.json` containing an ephemeral backend
+origin, bearer and stream ID. It exercises production control/core/coordinator,
+app cache ownership, Go acquisition and Media3, and writes only numeric results.
+For trusted local HTTPS, `-PfixtureCa=/path/to/public-ca.crt` is permitted only
+with this isolated debug QA package. No fixture trust enters a normal APK.
+`TorrentRuntimeWorkerIntegrationTest` additionally opens the real app cache with
+its ownership marker and verifies Go uses a separate `pieces/` subdirectory.

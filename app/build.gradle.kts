@@ -154,7 +154,7 @@ tasks.named("preBuild") { dependsOn(verifyNativeTorrent, prepareNativeTorrentNot
 // Public CA material is generated under build/; production resources never use it.
 val fixtureCa = providers.gradleProperty("fixtureCa")
 if (fixtureCa.isPresent) {
-    require(providers.gradleProperty("nativeTorrentFixtureArtifacts").isPresent) {
+    require(providers.gradleProperty("nativeTorrentFixtureArtifacts").isPresent || providers.gradleProperty("torrentRuntimeMediaQa").isPresent) {
         "Fixture trust requires the isolated owned native fixture application"
     }
     val fixtureResources = layout.buildDirectory.dir("generated/fixtureRes")

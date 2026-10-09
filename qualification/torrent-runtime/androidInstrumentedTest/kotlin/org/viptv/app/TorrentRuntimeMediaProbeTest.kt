@@ -5,6 +5,9 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import android.graphics.SurfaceTexture
+import android.view.TextureView
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -35,6 +38,7 @@ class TorrentRuntimeMediaProbeTest {
         val player = AndroidMedia3BackendFactory(context).createAndroidPlayer()
         var handle: String? = null
         val running = AtomicBoolean(true)
+        val presentedFrames = AtomicLong()
         val firstFrame = CompletableDeferred<Unit>()
         var pendingSeek: CompletableDeferred<Unit>? = null
         val frameObserver = launch {
@@ -74,7 +78,16 @@ class TorrentRuntimeMediaProbeTest {
                 lateinit var activity: TorrentRuntimeQaActivity
                 scenario.onActivity { activity = it }
                 withTimeout(10_000) { while (!activity.texture.isAvailable) delay(20) }
-                withContext(Dispatchers.Main.immediate) { player.attach(activity.texture) }
+                withContext(Dispatchers.Main.immediate) {
+                    player.attach(activity.texture)
+                    val delegate = activity.texture.surfaceTextureListener
+                    activity.texture.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                        override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) { delegate?.onSurfaceTextureAvailable(surface, width, height) }
+                        override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) { delegate?.onSurfaceTextureSizeChanged(surface, width, height) }
+                        override fun onSurfaceTextureDestroyed(surface: SurfaceTexture) = delegate?.onSurfaceTextureDestroyed(surface) ?: true
+                        override fun onSurfaceTextureUpdated(surface: SurfaceTexture) { delegate?.onSurfaceTextureUpdated(surface); presentedFrames.incrementAndGet() }
+                    }
+                }
                 player.open(PlaybackSource(requireNotNull(media), kindHint = PlaybackKind.OnDemand,
                     options = PlaybackOptions(openTimeoutMillis = (120_000 - (SystemClock.elapsedRealtime() - started)).coerceAtLeast(1), httpReadTimeoutMillis = 60_000)), true)
                 withTimeout((120_000 - (SystemClock.elapsedRealtime() - started)).coerceAtLeast(1)) { firstFrame.await() }
@@ -88,13 +101,20 @@ class TorrentRuntimeMediaProbeTest {
                     pendingSeek!!.await()
                     while (player.state.value.positionMillis < 119_000 || player.state.value.isBuffering) delay(100)
                 }
+                // A position discontinuity can precede decoding. Require fresh texture
+                // updates after landing and buffering have actually settled.
+                val landedFrames = presentedFrames.get()
+                withTimeout(60_000) { while (presentedFrames.get() < landedFrames + 3) delay(20) }
                 result.put("forward_seek_ms", SystemClock.elapsedRealtime() - seekStarted)
+                    .put("presented_frames", presentedFrames.get())
                 pendingSeek = CompletableDeferred()
                 player.seekTo(0)
                 withTimeout(60_000) {
                     pendingSeek!!.await()
                     while (player.state.value.positionMillis > 5_000 || player.state.value.isBuffering) delay(100)
                 }
+                val backwardFrames = presentedFrames.get()
+                withTimeout(60_000) { while (presentedFrames.get() < backwardFrames + 3) delay(20) }
                 result.put("passed", true)
                 withContext(Dispatchers.Main.immediate) { player.stop(); player.close() }
             }

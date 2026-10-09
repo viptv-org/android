@@ -18,6 +18,8 @@ internal class NativeTorrentEngineCacheManager(
     private val maxBytes: Long,
     private val createWorker: () -> TorrentRuntimePort,
 ) : NativeTorrentCacheManager {
+    // The app's ownership marker belongs to its parent; Go owns only its strict piece/index directory.
+    private val storageDirectory = File(directory, "pieces")
     @Volatile private var worker: TorrentRuntimePort? = null
     @Volatile private var epoch = 0L
     private var failedSettlement = false
@@ -26,7 +28,7 @@ internal class NativeTorrentEngineCacheManager(
             if (worker?.terminate() == false) { failedSettlement = true; throw NativeTorrentCacheUnavailable() }
             worker = createWorker()
             try { worker!!.call(JSONObject().put("op", "open").put("config", JSONObject()
-                .put("cache_dir", directory.path).put("cache_bytes", maxBytes).put("readahead_bytes", 32 * 1024 * 1024)), 8_000).also(::requireOK) }
+                .put("cache_dir", storageDirectory.path).put("cache_bytes", maxBytes).put("readahead_bytes", 32 * 1024 * 1024)), 8_000).also(::requireOK) }
                 catch (_: Exception) {
                     if (!worker!!.terminate()) failedSettlement = true
                     throw NativeTorrentCacheUnavailable()
