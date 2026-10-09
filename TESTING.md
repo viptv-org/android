@@ -2019,3 +2019,112 @@ checklist is README-performance-fixes.md. Raw captures/source/session data stay
 private. Diagnostic playback that outlasted its capture was stopped; the affected
 movie's original source and 41:41 position were restored, with `watched=false`
 and Continue Watching membership verified.
+
+### Android playback/performance follow-up — 2026-10-08
+
+Native gateway revision 8301ceb includes deterministic first-DHT-response,
+metadata-to-payload peer continuity, cold-bootstrap, six-hop discovery and
+packet-loss deadline regressions. The gateway workspace and owned native FFI
+checks pass. Fresh public-swarm Android TV emulator probes obtain metadata and
+first bytes for the exact DTS Iron Man and Unabomber sources. Actual Media3
+opens the DTS source at the beginning and resumed positions with six-channel
+48 kHz audio selected. The emulator rejects the tested Unabomber 4K HEVC video
+with decoder error 4003 after reading media bytes; transport and decoder results
+are distinct. Public cold transfer latency varies; a one-second cold-start claim
+is not supported. Numeric transport diagnostics expose counts/bytes only.
+
+The optimized APK regression that removed FFmpeg's native-called
+`growOutputBuffer` is corrected by module consumer rules. Packaged DEX validation
+fails on the broken APK and passes on the repaired one. The physical owner
+reports audio appears restored and TV diagnostics show DTS handled/selected.
+Artwork uses wsrv for recognized public credential-free images, bounded size
+buckets, WebP quality 65, a 64 MiB disk cache, four fetches/two decodes. Continue
+Watching/hero enrichment remains; lower-shelf focus does not enrich. Public
+poster measurement changes 25,631 to 7,220 bytes. Unit checks: 299 app and 49
+player-library tests; 19 Home/source/focus emulator checks; APK/native integrity
+and assembly/lint pass with the existing lint baseline. Further physical
+startup and lower-shelf network acceptance remain in README-performance-fixes.
+
+The emulator subsequently reproduced a cold Resume `media3_open_timeout` while
+verified lookahead bytes grew past 100 MiB. Gateway db29ed5 adds native
+current-piece recovery before any completed-piece speed sample, requiring the
+new peer's exact-piece bitfield and retaining locks/hash checks. The original
+41:41 Resume then passed (metadata 1.47 s / Media3 9.58 s), 73:26 Resume passed
+(1.57 s / 14.0 s), and start-from-zero passed (1.79 s / 1.19 s), using fresh
+clients with no preliminary range read. Acquisition failures are separately
+covered by first-response, hop-depth and packet-loss regressions. These varying
+public-swarm measurements do not establish the requested one-second target.
+
+Seek controls: a real 300-second owned AAC fixture exercises native player
+preview/commit with four Forward activations, retained Forward selection, then
+another activation after commit. The old controls fail the regression; repaired
+controls and unchanged seek-title/track geometry pass four emulator tests. Hold
+repeat is time-throttled rather than exponentially multiplying every key event.
+The buffered indicator uses actual media position even when its scrub thumb
+moves beyond the buffer. The lower-Home-shelf focus regression now includes a
+selected synthetic profile and verifies no new metadata count across repeated
+400 ms hovers. All 24 combined Home/source/seek emulator checks pass.
+
+A standalone Android resolver probe (without restarting VIPTV) compares explicit
+A queries with system lookups on emulator/TV. An A query on the TV still waits
+1.17 seconds and another hits a three-second deadline. This does not establish
+an AAAA-only delay. The candidate typed-query change was removed. The final
+HTTP clients retain Android DNS/VPN/private-DNS address selection and share
+a bounded network-fenced 30-second cache; tests cover IPv6 preservation, expiry,
+network change and uncached failure retries. Genuinely cold upstream DNS and
+public swarm speed remain outside a one-second acceptance claim.
+
+Native retirement has a paired receipt regression: a concurrent caller must not
+report completion while the first bounded remote cleanup attempt is held. The
+old ordering fails this real HTTP/Core/coordinator test; moving the shared
+retirement receipt after the bounded release fixes it and the full effect suite.
+The legacy release was already serialized; no source or credential bypass is
+introduced.
+
+Opened-media clock snapshot regression: the common facade previously published
+Ready with zero position and no buffer, discarding the backend observation until
+its next tick. OpenedMedia now carries observed position/buffer and Android's
+snapshot carries current play intent/status. The regression fails before the
+facade fix and passes afterwards. It prevents false initial seek/progress/buffer
+state while preserving Media3's actual clock.
+
+An isolated, discarded 64 MiB HTTP byte-cache prototype reduces repeated exact
+Resume from approximately 5.7 to 4.2 seconds on the emulator but does not reach
+one second. It is not in the delivered implementation. Packet inspection of the
+exact file finds its preceding indexed keyframe at 2492.991 seconds for a
+requested 2501-second Resume. Roughly 32 MiB of preroll are consumed in the
+opening trace; the exact Resume clock was retained in the experiments.
+
+
+Native gateway cd3e43e keeps one verified torrent reader throughout each HTTP
+response and registers the requested offset before waking peers. Its actual
+HTTP-body regression fails before the fix and passes afterwards, including
+cancellation and read-accounting assertions. Gateway workspace checks pass
+192 tests with 56 opt-in fixtures ignored. The three-ABI optimized APK passes
+native/core/JNA/notice/checksum/alignment and FFmpeg JNI callback integrity;
+Android checks retain 302 app / 52 library tests with no failures, and assembly/
+lint pass against the existing baseline (81 warnings, six filtered errors).
+
+Fresh emulator cd3e43e start-from-zero opens with selected DTS audio (metadata
+2.237 s, Media3 4.319 s). The actual 41:41 Resume, at 2,501,000 ms, still reaches
+the strict 20-second opening deadline: metadata takes 590 ms, verified lookahead
+exceeds 100 MiB, but the desired range returns zero bytes. A 2,501 ms probe is
+excluded from Resume evidence. Startup remains unaccepted.
+
+The next owned regression isolates idle requester recovery from socket expiry:
+a slow seeder holds every piece, then an available fast seeder must recover the
+current decoder piece before 3.8 seconds. The five-second wait fails; a one-second
+native retry passes in approximately 2.7 seconds and joins shutdown. The wider
+inherited librqbit e2e-download test separately fails peer-metadata discovery
+on both baseline cd3e43e and this change; it is not counted as a passing check.
+Public-swarm qualification for the retry change is pending.
+
+
+Gateway c790792 retry qualification: the isolated current-piece regression passes
+three consecutive runs in 2.36–2.38 s. Required gateway workspace checks pass
+192 tests / 56 opt-in ignores. Fresh Android TV emulator public-swarm probes
+open exact 41:41 Resume with selected DTS audio in 12.989 s after 1.684 s
+metadata, and start-from-zero in 3.909 s after 1.864 s metadata. Both retain the
+requested clock and settle teardown; these measurements still miss the one-second
+target. The Resume trace fetches approximately 172 MiB while the player consumes
+52 MiB, motivating a separately measured native lookahead cap.

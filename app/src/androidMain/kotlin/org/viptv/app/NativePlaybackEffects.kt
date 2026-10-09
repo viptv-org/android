@@ -5,6 +5,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancelAndJoin
 import org.json.JSONObject
 import org.viptv.video.PlaybackKind
 import org.viptv.video.PlaybackOptions
@@ -84,11 +88,25 @@ internal class NativePlaybackEffects(
                 boundary()
                 val state = candidate.control.state()
                 position = ((state.position ?: 0.0) * 1000).toLong()
-                measurePlaybackStartup(PlaybackStartupStage.Player) { open(PlaybackSource(capability.url, headers = emptyMap(), title = title,
-                    kindHint = PlaybackKind.OnDemand, startPositionMillis = position,
-                    options = PlaybackOptions(preferredAudioLanguage = state.audioLanguage,
-                        preferredSubtitleLanguage = state.subtitleLanguage, subtitlesEnabled = state.subtitlesEnabled,
-                        openTimeoutMillis = 60_000, httpReadTimeoutMillis = 35_000)), playWhenReady) }
+                coroutineScope {
+                    val diagnostic = if (BuildConfig.PLAYBACK_DIAGNOSTICS) launch(Dispatchers.IO) {
+                        while (true) {
+                            runCatching { candidate.work.diagnostic() }.getOrNull()?.let {
+                                android.util.Log.i("NativeTransportDiagnostic", it)
+                            }
+                            delay(2_000)
+                        }
+                    } else null
+                    try {
+                        measurePlaybackStartup(PlaybackStartupStage.Player) {
+                            open(PlaybackSource(capability.url, headers = emptyMap(), title = title,
+                                kindHint = PlaybackKind.OnDemand, startPositionMillis = position,
+                                options = PlaybackOptions(preferredAudioLanguage = state.audioLanguage,
+                                    preferredSubtitleLanguage = state.subtitleLanguage, subtitlesEnabled = state.subtitlesEnabled,
+                                    openTimeoutMillis = 60_000, httpReadTimeoutMillis = 35_000)), playWhenReady)
+                        }
+                    } finally { diagnostic?.cancelAndJoin() }
+                }
             }
             failure = null
             position

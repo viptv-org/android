@@ -36,6 +36,24 @@ class NativePlaybackControlTest {
         assertTrue(owner.closeScope())
     }
 
+    @Test fun immediateNativePreparationDoesNotPayAnInitialPollingSleep() = runBlocking {
+        val owner = cache()
+        NativeControlHttpFixture { request ->
+            NativeHttpReply((when {
+                request.target.endsWith("playback-protocol") -> """{"version":1,"native_torrent_versions":[1]}"""
+                request.method == "DELETE" -> """{"ok":true}"""
+                request.method == "POST" -> """{"id":"playback_fixture","status":"starting","delivery":null,"error_code":null,"error":null,"expires_at":1700000060,"renew_after_seconds":20}"""
+                else -> ready()
+            }).toByteArray())
+        }.use { server ->
+            val control = control(server, owner, this)
+            try {
+                assertIs<NativePlaybackStart.Native>(withTimeout(300) { control.start(input(), true, true, owner) })
+                assertEquals(1, server.requests.count { it.method == "GET" && it.target.endsWith("playback_fixture") })
+            } finally { control.stop(); assertTrue(owner.closeScope()) }
+        }
+    }
+
     @Test fun overallStartupDeadlineReportsFailureButOwnerCancellationStaysCancellation() = runBlocking {
         for (cancelOwner in listOf(false, true)) {
             val owner = cache()

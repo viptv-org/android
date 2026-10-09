@@ -8,9 +8,11 @@ builds enable native capability from their actual runtime prerequisites; see
 
 ## Producer and trust boundary
 
-Build on the VPS gateway checkout at one committed revision. Run the gateway's
-native dependency guard, required Rust tests and binding generator, then its
-Android ABI build with a provisioned Linux NDK. Kotlin and native libraries must
+Build from the owning gateway checkout at one committed revision on a Linux
+host, either the VPS or the organization workspace. Run the gateway's native
+dependency guard, required Rust tests and binding generator, then its Android
+ABI build with a provisioned Linux NDK. The producer location does not replace
+the source, build-proof, dependency, ABI or notice checks. Kotlin and native libraries must
 come from that same revision. Transfer only generated artifacts and their notices
 into this Android checkout; do not create an independent Windows gateway clone.
 

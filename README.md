@@ -104,7 +104,8 @@ checks. Production delivery requires separate authorization.
 
 A passing build does not qualify physical playback hardware. Emulator and
 physical evidence and outstanding qualification limits are recorded in
-[TESTING.md](TESTING.md).
+[TESTING.md](TESTING.md). Playback/performance work and remaining startup
+acceptance are tracked in [README-performance-fixes.md](README-performance-fixes.md).
 
 Use `app/build/outputs/apk/performance/app-performance.apk` for interactive
 phone/TV use. It applies R8 optimization, resource shrinking and non-debuggable
