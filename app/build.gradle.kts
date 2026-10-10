@@ -159,8 +159,13 @@ if (legacyTorrentComparison) tasks.named("preBuild") { dependsOn(verifyNativeTor
 // An opt-in, debug-only trust anchor for the loopback emulator fixture server.
 // Public CA material is generated under build/; production resources never use it.
 val fixtureCa = providers.gradleProperty("fixtureCa")
+val simklExperiment = providers.gradleProperty("simklExperiment").isPresent
+if (simklExperiment) {
+    require(gradle.startParameter.taskNames.none { it.contains("release", ignoreCase = true) }) { "SIMKL experiment is debug-only" }
+    android.buildTypes.getByName("debug").applicationIdSuffix = ".simkl"
+}
 if (fixtureCa.isPresent) {
-    require(providers.gradleProperty("nativeTorrentFixtureArtifacts").isPresent || providers.gradleProperty("torrentRuntimeMediaQa").isPresent) {
+    require(simklExperiment || providers.gradleProperty("nativeTorrentFixtureArtifacts").isPresent || providers.gradleProperty("torrentRuntimeMediaQa").isPresent) {
         "Fixture trust requires the isolated owned native fixture application"
     }
     val fixtureResources = layout.buildDirectory.dir("generated/fixtureRes")

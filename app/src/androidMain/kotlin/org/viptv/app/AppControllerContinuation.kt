@@ -9,6 +9,7 @@ import org.viptv.video.PlaybackStatus
 
 /** Controlled continuation is the only non-Resume automatic source path. */
 internal fun AppController.nextEpisode(outgoing: Media, resolved: NextResult? = null, playWhenReady: Boolean? = null) {
+    sendSimklEvent("stop",outgoing)
     cancelUpNext()
     nextEpisodeJob?.cancel()
     val outgoingRoute = _state.value.route as? Route.Player ?: return

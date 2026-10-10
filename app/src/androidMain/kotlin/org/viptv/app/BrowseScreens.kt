@@ -35,6 +35,7 @@ import org.viptv.app.theme.ViptvColor as C
     LaunchedEffect(ui.loading) { if (tv && !ui.loading && !claimedFocus) { withFrameNanos {}; claimedFocus = runCatching { first.requestFocus() }.getOrDefault(false) } }
     Column(Modifier.fillMaxSize().padding(start = measure(104, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
         ScreenHeader("Discover", trailing = { PhoneTabActions(state, controller) })
+        VText("Today · " + java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("EEEE MMMM d, yyyy")), 14, color=C.textTertiary)
         FilterTabs(types.map { it.groupLabel }, selectedType.groupLabel, { label ->
             types.firstOrNull { it.groupLabel == label }?.group?.let(controller::setDiscoverType)
         }, Modifier.fillMaxWidth(), first)
@@ -54,7 +55,7 @@ import org.viptv.app.theme.ViptvColor as C
         if (ui.error != null && ui.items.isNotEmpty()) VText(ui.error, if (tv) 24 else 14, Modifier.padding(bottom = 16.dp), C.statusDanger)
         if (ui.items.isEmpty() && ui.loading) PosterSkeletonGrid(if (tv) 4 else 3)
         else if (ui.items.isEmpty()) EmptyState("No titles yet",
-            ui.error ?: if (ui.catalogs.isEmpty()) "Add or enable a catalog addon in Settings." else "Choose another catalog or filter.", "discover",
+            ui.error ?: if (ui.catalogs.isEmpty()) "SIMKL feeds are unavailable. Retry shortly." else "Choose another catalog or filter.", "discover",
             retry = { claimedFocus = false; controller.openDiscover() },
             retryModifier = Modifier.focusRequester(first).focusProperties { if (tv) left = rail })
         else MediaGrid(ui.items, onClick = { controller.activateCard(it) }, onHold = { controller.requestDialog(DialogKind.MyListManage, it.name, it) },

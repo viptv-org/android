@@ -115,7 +115,7 @@ data class ServerAbout(val mediaServiceAvailable: Boolean)
 /** A labelled source section retained when another search source fails. */
 data class SearchSection(val source: String, val items: List<Media>, val id: String = source, val type: String? = null)
 /** Partial failures are explicit so the UI can retain results without lying about coverage. */
-data class SearchResults(val sections: List<SearchSection>, val partialFailure: Boolean)
+data class SearchResults(val sections: List<SearchSection>, val partialFailure: Boolean, val coverage: String = "", val hasMore: Boolean = false)
 
 data class PlaybackPreferences(
     val audioLanguage: String = "en", val subtitleLanguage: String = "en", val subtitlesEnabled: Boolean = false,

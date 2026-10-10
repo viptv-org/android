@@ -205,6 +205,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                     if (target == null && retryDetail)
                         AppButton("Try again", { controller.open(media, controller.detailReturnRoute, showWhileLoading = true) }, Modifier.focusRequester(initial))
                     else if (target == null) VText(label, 22, Modifier.align(Alignment.CenterVertically), C.textSecondary)
+                    AppIconButton("plus", "Add to SIMKL watchlist", { controller.addToSimklWatchlist(media) })
                     AppIconButton(if (saved) "check" else "plus", if (saved) "Remove from My List" else "Add to My List", { controller.toggleMyList(media) }, Modifier.then(if (target == null && !retryDetail) Modifier.focusRequester(initial) else Modifier))
                 }
             }
@@ -249,7 +250,8 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
         if (!tv) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, LocalGround.current, LocalGround.current))).navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (target != null) TitleSourceControl(sourceSummary) { controller.chooseSources(target) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                AppIconButton(if (saved) "check" else "plus", "My List", { controller.toggleMyList(media) }, Modifier.size(ViptvDimen.sizeButtonPhoneDetail))
+                AppIconButton("plus", "Add to SIMKL watchlist", { controller.addToSimklWatchlist(media) })
+                    AppIconButton(if (saved) "check" else "plus", "My List", { controller.toggleMyList(media) }, Modifier.size(ViptvDimen.sizeButtonPhoneDetail))
                 if (target != null) AppButton(label, ::play, Modifier.weight(1f).height(ViptvDimen.sizeButtonPhoneDetail), "play", primary = true)
                 else if (retryDetail)
                     AppButton("Try again", { controller.open(media, controller.detailReturnRoute, showWhileLoading = true) }, Modifier.weight(1f).height(ViptvDimen.sizeButtonPhoneDetail))

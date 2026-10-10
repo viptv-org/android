@@ -111,6 +111,7 @@ class VipTvHttpGateway(
     override suspend fun home(profileId: String, onUpdate: (List<HomeShelf>) -> Unit): List<HomeShelf> = loadHome(profileId, onUpdate, null, {})
     override suspend fun refreshHome(profileId: String, previous: List<HomeShelf>, onIncomplete: () -> Unit, onUpdate: (List<HomeShelf>) -> Unit): List<HomeShelf> = loadHome(profileId, onUpdate, previous, onIncomplete)
     private suspend fun loadHome(profileId: String, onUpdate: (List<HomeShelf>) -> Unit, previous: List<HomeShelf>?, onIncomplete: () -> Unit): List<HomeShelf> = coroutineScope {
+        val syncRequest=async { runCatching { simklSync(profileId) } }
         val rows = java.util.TreeMap<Int, HomeShelf>()
         val publisher = kotlinx.coroutines.sync.Mutex()
         suspend fun publish(order: Int, shelf: HomeShelf) = publisher.withLock {
@@ -157,7 +158,7 @@ class VipTvHttpGateway(
             val title = listOfNotNull(catalog.addonName, catalog.name).joinToString(" · ")
             publish(index + 2, HomeShelf(title, items, id = catalog.key.stableId, contentType = catalog.key.type, catalogName = catalog.name))
         } }.awaitAll()
-        queue.await(); recent.await(); saved.await(); live.await()
+        queue.await(); recent.await(); saved.await(); live.await(); syncRequest.await()
         rows.values.filter { it.items.isNotEmpty() }
     }
     override suspend fun discover(type: String, search: String?): List<Media> = json("GET", discoverPath(type, search = search)).mediaArray()
@@ -175,7 +176,7 @@ class VipTvHttpGateway(
                 skip = request.skip,
                 search = request.search,
                 genre = request.genre,
-                extras = request.extras,
+                extras = request.extras + ("timezone" to java.util.TimeZone.getDefault().id),
             ),
         )
         val hasMore = root.optBoolean("has_more", false)
@@ -188,39 +189,52 @@ class VipTvHttpGateway(
             hasMore = hasMore,
         )
     }
-    override suspend fun search(query: String, onUpdate: (SearchResults) -> Unit): SearchResults {
-        val term = query.trim()
-        if (term.isEmpty()) return SearchResults(emptyList(), false)
-        return coroutineScope {
-            val gate = Semaphore(3)
-            val publisher = kotlinx.coroutines.sync.Mutex()
-            val completed = java.util.TreeMap<Int, SearchSection>()
-            var partial = false
-            suspend fun publish(index: Int, result: SearchAttempt<SearchSection>) = publisher.withLock {
-                when (result) {
-                    is SearchAttempt.Value -> if (result.value.items.isNotEmpty()) completed[index] = result.value
-                    SearchAttempt.Failure -> partial = true
-                }
-                onUpdate(SearchResults(completed.values.toList(), partial))
-            }
-            val liveRequest = async {
-                publish(128, attempt {
-                    SearchSection("Live TV", liveV2(LiveCatalogQuery(search = term, limit = 24)).items.map { CoreModels.mediaNormalized(it) })
-                })
-            }
-            val catalogs = when (val result = attempt { catalogs() }) {
-                is SearchAttempt.Value -> result.value.filter { it.supportsSearch && it.key.type != "live" }.take(128)
-                SearchAttempt.Failure -> { partial = true; emptyList() }
-            }
-            catalogs.mapIndexed { index, catalog -> async {
-                publish(index, attempt { gate.withPermit {
-                    val items = discover(DiscoverPolicy.request(catalog, DiscoverPolicy.defaults(catalog) + ("search" to term), 0)).items
-                    SearchSection(listOfNotNull(catalog.addonName?.takeIf(String::isNotBlank), catalog.name).joinToString(" · "), items.distinctBy { HomeFocusPolicy.mediaKey(it) }.take(24), catalog.key.stableId, catalog.key.type)
-                } })
-            } }.awaitAll()
-            liveRequest.await()
-            SearchResults(completed.values.toList(), partial)
+    override suspend fun search(query: String, onUpdate: (SearchResults) -> Unit): SearchResults = advancedSearch(query, emptyMap(), onUpdate)
+    override suspend fun advancedSearch(query: String, filters: Map<String,String>, onUpdate: (SearchResults) -> Unit): SearchResults {
+        val sections=mutableListOf<SearchSection>()
+        var partial=false;var linked=false;var more=false
+        val categories=filters["category"]?.takeIf { it in listOf("movie","tv","anime") }?.let(::listOf) ?: listOf("movie","tv","anime")
+        for(category in categories) {
+            try {
+                val root=json("GET",discoverPath(if(category=="movie") "movie" else "series",catalog=if(category=="anime") "anime-today" else "today",skip=filters["skip"]?.toIntOrNull() ?: 0,search=query.takeIf { it.isNotBlank() },genre=filters["genre"],extras=filters.filterKeys { it !in listOf("category","skip","genre") }))
+                linked=linked || root.optBoolean("full_search",false);more=more || root.optBoolean("has_more",false)
+                val items=root.mediaArray()
+                if(items.isNotEmpty()) sections.add(SearchSection("SIMKL " + category,items,"simkl:" + category,if(category=="movie") "movie" else "series"))
+                onUpdate(SearchResults(sections.toList(),partial,if(linked) "Full SIMKL search" else "Public feeds and known titles · link SIMKL for full search",more))
+            } catch(cancelled:CancellationException){throw cancelled} catch(_:Exception){partial=true}
         }
+        return SearchResults(sections,partial,if(linked) "Full SIMKL search" else "Public feeds and known titles · link SIMKL for full search",more)
+    }
+    override suspend fun simklInfo(profileId:String):String {
+        val data=json("GET","/profiles/${enc(profileId)}/integrations/simkl")
+        return if(data.optBoolean("connected")) "Connected as ${data.optString("user_name")} · ${data.optString("error").takeUnless { it == "null" }.orEmpty()}" else "Not linked · public discovery and local tracking are available"
+    }
+    override suspend fun simklLists(profileId:String,page:Int):List<Pair<String,String>> {
+        val data=json("GET","/profiles/${enc(profileId)}/integrations/simkl/lists?page=$page")
+        if(data.optString("error")=="premium_only") throw GatewayError(403,"Custom lists require SIMKL PRO or VIP")
+        val rows=data.optJSONArray("items") ?: data.optJSONArray("lists") ?: JSONArray()
+        return rows.objects().mapNotNull { item -> val id=item.opt("id")?.toString() ?: item.opt("list_id")?.toString();id?.let { it to item.optString("name",item.optString("title","SIMKL list")) } }
+    }
+    override suspend fun simklList(profileId:String,id:String,page:Int):List<Media> {
+        val data=json("GET","/profiles/${enc(profileId)}/integrations/simkl/lists/${enc(id)}?page=$page")
+        if(data.optString("error")=="premium_only") throw GatewayError(403,"Custom lists require SIMKL PRO or VIP")
+        return data.mediaArray()
+    }
+    override suspend fun simklSync(profileId:String) { json("POST","/profiles/${enc(profileId)}/integrations/simkl/sync?manual=false",JSONObject()) }
+    private fun simklItem(media:Media):JSONObject {
+        val normalized=JSONObject(media.normalizedJson(false))
+        val raw=normalized.optJSONObject("raw") ?: JSONObject()
+        return JSONObject().put("id",media.id).put("type",if(media.type=="episode") "series" else media.type).put("name",media.name).putOpt("poster",media.poster).putOpt("season",media.season).putOpt("episode",media.episode).putOpt("series_id",media.seriesId).apply {
+            for(key in listOf("simkl_category","simkl_ids","simkl_episode_ids","tvdb","year")) if(raw.has(key)) put(key,raw.get(key))
+        }
+    }
+    override suspend fun simklPlayback(profileId:String,media:Media,sessionId:String,action:String,positionMillis:Long,durationMillis:Long?) {
+        json("POST","/profiles/${enc(profileId)}/integrations/simkl/playback",JSONObject().put("event_id",java.util.UUID.randomUUID().toString()).put("session_id",sessionId).put("action",action).put("item",simklItem(media)).put("position",seconds(positionMillis)).put("duration",durationMillis?.let(::seconds) ?: 0))
+    }
+    override suspend fun simklWatchlist(profileId:String,media:Media,status:String) {
+        val item=simklItem(media)
+        json("PUT","/profiles/${enc(profileId)}/integrations/simkl/watchlist",JSONObject().put("item",item).put("status",status))
+        json("PUT","/profiles/${enc(profileId)}/favorites",item)
     }
     override suspend fun seriesProgress(profileId: String, seriesId: String): List<Media> =
         jsonArray("GET", "/profiles/${enc(profileId)}/progress/series?series_id=${enc(seriesId)}").objects().take(2000).map { it.media() }

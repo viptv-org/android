@@ -14,6 +14,13 @@ interface BackendGateway {
     suspend fun catalogs(): List<DiscoverCatalog>
     suspend fun discover(request: CatalogDiscoverRequest): DiscoverPage
     suspend fun search(query: String, onUpdate: (SearchResults) -> Unit = {}): SearchResults
+    suspend fun advancedSearch(query: String, filters: Map<String, String>, onUpdate: (SearchResults) -> Unit = {}): SearchResults = search(query, onUpdate)
+    suspend fun simklSync(profileId: String) {}
+    suspend fun simklPlayback(profileId: String, media: Media, sessionId: String, action: String, positionMillis: Long, durationMillis: Long?) {}
+    suspend fun simklWatchlist(profileId: String, media: Media, status: String) {}
+    suspend fun simklInfo(profileId: String): String = "SIMKL unavailable"
+    suspend fun simklLists(profileId: String, page: Int = 1): List<Pair<String,String>> = emptyList()
+    suspend fun simklList(profileId: String, id: String, page: Int = 1): List<Media> = emptyList()
     suspend fun metadata(media: Media): Media
     suspend fun seriesProgress(profileId: String, seriesId: String): List<Media> = emptyList()
     suspend fun sources(media: Media, onProducerUpdate: (List<SourceProducerOutcome>) -> Unit = {}, onUpdate: (List<Source>) -> Unit = {}): List<Source>

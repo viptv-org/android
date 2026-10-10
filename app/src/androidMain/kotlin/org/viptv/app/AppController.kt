@@ -54,6 +54,11 @@ class AppController(context: Context, private val origin: String) {
     }
     val player: AndroidMedia3VideoPlayer get() = playerDelegate.value
     internal fun clearPlayerHttpRedirects() { if (playerDelegate.isInitialized()) player.clearHttpRedirects() }
+    internal var simklSearchFilters: Map<String,String> = emptyMap()
+    internal var simklPlaybackSession = ""
+    internal var simklActiveItem: String? = null
+    internal var simklPaused = false
+    internal var simklEventJob: Job? = null
     internal var homeJob: Job? = null
     internal var homeContentFocused = false
     private var homeRevisionJob: Job? = null
@@ -651,6 +656,7 @@ class AppController(context: Context, private val origin: String) {
         }
     }
     internal fun stopPlayback(media: Media? = null): Job? {
+        if (media != null) sendSimklEvent("stop", media)
         cancelUpNext()
         invalidatePlaybackPreparation()
         if (!playerDelegate.isInitialized()) { nativeEffects?.stop(); return null }

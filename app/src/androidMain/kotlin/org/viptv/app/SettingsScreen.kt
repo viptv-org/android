@@ -27,6 +27,7 @@ private data class SettingRow(val title: String, val detail: String, val icon: S
     var server by remember { mutableStateOf(false) }
     var about by remember { mutableStateOf(false) }
     var selected by remember(page) { mutableIntStateOf(0) }
+    if(page=="SIMKL") { androidx.activity.compose.BackHandler { page="Settings" };SimklSettings(state,controller,model.origin);return }
     val first = LocalContentFocus.current
     val rail = LocalRailFocus.current
     val avatarFocus = remember { FocusRequester() }
@@ -50,6 +51,7 @@ private data class SettingRow(val title: String, val detail: String, val icon: S
         SettingRow("Accent colour", "Make it yours", "settings", {
             choice = "Accent colour" to listOf("Gold" to C.accentDefault, "Coral" to C.accentOptionsCoral, "Mint" to C.accentOptionsMint, "Periwinkle" to C.accentOptionsPeriwinkle).map { (name, color) -> name to { model.updateAccent(color); choice = null } }
         }),
+        SettingRow("SIMKL", "Profile connection and custom lists", "person", { page = "SIMKL" }),
         SettingRow("Addons", "Shared by your account", "addons", { page = "Addons" }),
         SettingRow("Server", model.origin, "settings", { server = true }),
         SettingRow("About VIPTV", "Version " + BuildConfig.VERSION_NAME, "info", { about = true }),

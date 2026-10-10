@@ -31,6 +31,7 @@ internal fun AppController.pausePlayback() {
     if (ManagedPausePolicy.usesAnchor(_state.value.playbackDeliveryMode, route.media.type == "live")) {
         managedPauseAnchorMillis = absolutePositionMillis()
     }
+    sendSimklEvent("pause")
     player.pause()
     showPlayerChrome()
 }
@@ -59,6 +60,7 @@ internal fun AppController.resumePlayback() {
     } else {
         if (nativeEffects?.authorizeRead() == false) return
         player.play()
+        sendSimklEvent("start")
     }
     showPlayerChrome()
 }

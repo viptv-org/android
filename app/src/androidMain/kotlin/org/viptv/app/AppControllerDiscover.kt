@@ -179,12 +179,12 @@ internal fun AppController.search(query: String) {
         loading = false,
         message = null,
     )
-    if (normalized.isEmpty()) return
+    if (normalized.isEmpty() && simklSearchFilters.isEmpty()) return
     searchJob = scope.launch {
         delay(650)
         try {
             val profileId = _state.value.selectedProfile?.id
-            val results = gateway.search(normalized) { partial ->
+            val results = gateway.advancedSearch(normalized, simklSearchFilters) { partial ->
                 if (isActive && _state.value.route == Route.Search && _state.value.selectedProfile?.id == profileId && _state.value.searchQuery.trim() == normalized) {
                     _state.value = _state.value.copy(searchSections = partial.sections, searchResults = partial.sections.flatMap { it.items }, searchStatus = "Searching…")
                 }
@@ -195,7 +195,7 @@ internal fun AppController.search(query: String) {
                 _state.value = _state.value.copy(
                     searchSections = results.sections,
                     searchResults = results.sections.flatMap(SearchSection::items),
-                    searchStatus = if (results.partialFailure) "$baseStatus  Some sources couldn't load." else baseStatus,
+                    searchStatus = (if (results.partialFailure) "$baseStatus  Some sources couldn't load." else baseStatus) + " · " + results.coverage,
                     loading = false,
                 )
             }

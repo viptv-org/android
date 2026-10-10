@@ -207,7 +207,13 @@ private suspend fun AppController.prepareAndStartLocked(
     }
 }
 internal fun AppController.onPlayerEvent(event: PlaybackEvent) {
-    if (event is PlaybackEvent.FirstFrame) { nativeEffects?.firstFrame(); return }
+    if (event is PlaybackEvent.FirstFrame) {
+        nativeEffects?.firstFrame()
+        val active=(_state.value.route as? Route.Player)?.media
+        if(active!=null && (simklActiveItem!=active.id || simklPaused)) sendSimklEvent("start",active)
+        return
+    }
+    if (event is PlaybackEvent.Ended) { sendSimklEvent("complete"); return }
     if (event !is PlaybackEvent.Failed || _state.value.dialog?.kind == DialogKind.PlaybackRecovery || _state.value.preparingSourceId != null) return
     val active = _state.value.route as? Route.Player ?: return
     cancelUpNext()

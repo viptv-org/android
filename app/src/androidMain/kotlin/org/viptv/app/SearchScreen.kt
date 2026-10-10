@@ -106,6 +106,7 @@ import org.viptv.app.theme.ViptvColor as C
                         }, onSubmit = ::enterResults) }
                 AppButton("Results", ::enterResults, Modifier.width(220.dp).focusRequester(resultsButton).focusProperties { left = first })
             }
+            SimklSearchControls(controller)
             VText(state.searchStatus, 22, Modifier.padding(top = 24.dp, end = 96.dp, bottom = 20.dp), C.textTertiary)
             LazyColumn(state = resultRows, verticalArrangement = Arrangement.spacedBy(36.dp), contentPadding = PaddingValues(4.dp)) {
                 items(state.searchSections, key = { state.searchQuery + "\u0000" + it.id }) { section ->
@@ -114,6 +115,8 @@ import org.viptv.app.theme.ViptvColor as C
             }
         } else {
             AppField(state.searchQuery, controller::search, "Search movies and series", Modifier.focusRequester(first))
+            SimklSearchControls(controller)
+            VText(state.searchStatus,14,color=C.textTertiary)
             FilterTabs(listOf("All", "Movies", "Series", "Live TV"), filter, { filter = it }, Modifier.padding(vertical = 18.dp))
             if (results.isEmpty() && state.searchQuery.isNotBlank() && state.searchStatus == "Searching…") PosterSkeletonGrid(3)
             else if (results.isEmpty()) EmptyState(if (state.searchQuery.isBlank()) "Find your next favorite" else "No matching titles", if (state.searchQuery.isBlank()) "Search movies, series and live TV." else state.searchStatus, "search")
