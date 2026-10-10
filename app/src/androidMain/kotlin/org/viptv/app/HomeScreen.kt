@@ -2,8 +2,22 @@
 package org.viptv.app
 
 import android.view.KeyEvent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseOutCubic
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.pager.*
@@ -41,132 +55,152 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
 
 @Composable internal fun HomeScreen(state: AppState, controller: AppController, list: LazyListState = rememberLazyListState()) {
     val tv = LocalTv.current
-    val shelves = remember(state.shelves) { state.shelves.filter { it.items.isNotEmpty() } }
+    val shelves = remember(state.shelves, tv) { state.shelves.filter { it.items.isNotEmpty() && (!tv || (it.title != "Recently watched live TV" && it.contentType != "live" && it.items.any { media -> media.type != "live" })) } }
     val queue = shelves.firstOrNull { it.isQueueShelf }
     val firstShelf = shelves.firstOrNull()
     val phoneHeroShelf = shelves.firstOrNull { !it.isQueueShelf && it.items.firstOrNull()?.type != "live" } ?: queue
     val featured = if (tv) firstShelf?.items.orEmpty().take(1) else phoneHeroShelf?.items.orEmpty().take(if (phoneHeroShelf?.isQueueShelf == true) 1 else 5)
-    val heroShelf = firstShelf
-    val heroKey = state.homeFocus.heroMediaKey ?: state.homeFocus.mediaKey.takeIf { state.homeFocus.shelfTitle == firstShelf?.id }
-    val hero = if (tv) firstShelf?.items?.firstOrNull { HomeFocusPolicy.mediaKey(it) == heroKey }
-        ?: featured.firstOrNull() else featured.firstOrNull()
-    val heroNeighbours = remember(firstShelf?.items, hero) {
-        neighbouringHeroItems(firstShelf?.items.orEmpty(), firstShelf?.items?.indexOf(hero) ?: -1)
+    val heroShelf = shelves.firstOrNull { it.id == state.homeFocus.shelfTitle } ?: firstShelf
+    val hero = if (tv) heroShelf?.items?.firstOrNull { HomeFocusPolicy.mediaKey(it) == state.homeFocus.mediaKey }
+        ?: heroShelf?.items?.firstOrNull() else featured.firstOrNull()
+    val heroNeighbours = remember(heroShelf?.items, hero) {
+        neighbouringHeroItems(heroShelf?.items.orEmpty(), heroShelf?.items?.indexOf(hero) ?: -1)
     }
-    val initial = LocalContentFocus.current
-    val rail = LocalRailFocus.current
+    val shelfFocus = remember(shelves.map { it.id }) { shelves.map { FocusRequester() } }
+    var rowRequest by remember { mutableIntStateOf(0) }
+    var requestedRow by remember { mutableIntStateOf(0) }
+    var pendingRowId by remember { mutableStateOf<String?>(null) }
+    var requestedRowId by remember { mutableStateOf<String?>(null) }
+    var rowDirection by remember { mutableIntStateOf(1) }
+    val rowEntrance = remember { Animatable(1f) }
+    val context = LocalContext.current
+    val animateRows = remember(context) { systemAnimationsEnabled(context) }
+    val rowTravel = with(LocalDensity.current) { 32.dp.toPx() }
+    val rowInputMode = LocalInputModeManager.current
+    LaunchedEffect(rowRequest, shelves.map { it.id }) {
+        val target = shelves.indexOfFirst { it.id == requestedRowId }
+        if (tv && rowRequest > 0 && target in shelves.indices) {
+            val request = rowRequest
+            rowEntrance.snapTo(if (animateRows) 0f else 1f)
+            list.scrollToItem(target)
+            withFrameNanos {}
+            rowInputMode.requestInputMode(InputMode.Keyboard)
+            var attempts = 0
+            while ((attempts == 0 || controller.state.value.homeFocus.shelfTitle != shelves[target].id || !controller.homeContentFocused) && attempts++ < 6) {
+                runCatching { shelfFocus[target].requestFocus() }
+                withFrameNanos {}
+            }
+            if (animateRows) rowEntrance.animateTo(1f, tween(180, easing = EaseOutCubic))
+            if (rowRequest == request) pendingRowId = null
+        }
+    }
     val restoreFocus = remember(state.homeFocus.restoreRequest) {
         state.homeFocus.takeIf { it.restoreRequest > 0 && it.surface == HomeFocusSurface.Card }
     }
-    val showHero = tv && (state.homeFocus.surface == HomeFocusSurface.Hero || state.homeFocus.shelfIndex == 0)
-    LaunchedEffect(showHero, state.homeFocus.shelfIndex) {
-        // Reveal the current focus immediately; directional repeats never queue motion.
-        if (showHero) {
-            list.scrollToItem(0)
-        } else if (tv && state.homeFocus.surface == HomeFocusSurface.Card && state.homeFocus.shelfIndex == 1) {
-            // Reveal the full selected row and caption at the first downward boundary.
-            val target = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == state.homeFocus.shelfTitle }
-            val remaining = target?.let { it.offset + it.size - list.layoutInfo.viewportEndOffset } ?: 0
-            if (remaining > 0) list.scrollBy(remaining.toFloat())
-        }
-    }
-    LaunchedEffect(state.homeFocus.restoreRequest, tv) {
-        if (tv && state.homeFocus.mediaKey != null && state.homeFocus.surface == HomeFocusSurface.Card) {
+    LaunchedEffect(state.homeFocus.shelfTitle, state.homeFocus.restoreRequest, tv, queue?.id) {
+        if (tv) {
             val row = shelves.indexOfFirst { it.id == state.homeFocus.shelfTitle }
-            if (row >= 0) list.scrollToItem(if (row == 0) 0 else row + 1)
+            if (state.homeFocus.mediaKey == null) list.scrollToItem(0)
+            else if (row >= 0) list.scrollToItem(row)
         }
     }
-    Box(Modifier.fillMaxSize()) {
-        LazyColumn(state = list, modifier = Modifier.fillMaxSize().onFocusChanged { controller.homeContentFocused = it.hasFocus }.onPreviewKeyEvent {
-            if (it.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) controller.recordHomeDirectionalInput()
-            false
-        }, contentPadding = PaddingValues(start = measure(0, 16), end = measure(0, 16), top = measure(0, 8), bottom = measure(54, 164)),
-            verticalArrangement = Arrangement.spacedBy(measure(36, 20))) {
-            item(key = "featured") {
-                if (tv) {
-                    if (hero != null) Box(Modifier.fillMaxWidth().height(664.dp)) {
-                        TvHeroBackdrop(hero, preloadItems = heroNeighbours)
-                        Box(Modifier.padding(start = 192.dp, end = 96.dp, top = 54.dp)) { TelevisionHero(hero, heroShelf?.isQueueShelf == true, heroShelf?.let(shelves::indexOf)?.coerceAtLeast(0) ?: 0, heroShelf?.id.orEmpty(), state, controller, initial, rail) }
-                    }
-                    else EmptyState(if (state.homeLoading) "Starting VIPTV…" else "Your library is ready", "Browse Discover to find something to watch.", "home", Modifier.height(540.dp))
-                } else {
-                    // AND-042-HOME: no header bar; the rounded hero is the first element.
-                    if (featured.isEmpty() && state.homeLoading) PhoneHomeSkeleton(shelves.isEmpty())
-                    else if (featured.isEmpty()) EmptyState("Your library is empty", "Browse Discover to find movies and series.", "home")
-                    else {
-                        val pager = rememberPagerState(pageCount = { featured.size })
-                        HorizontalPager(pager, pageSpacing = 16.dp, key = { featured[it].id }) { index ->
-                            LaunchedEffect(featured[index].id, state.homeLoading) { controller.enrichVisibleHomeItem(featured[index]) }
-                            PhoneHero(featured[index], phoneHeroShelf?.isQueueShelf == true, state, controller)
+    when (tv) {
+        true -> {
+            Box(Modifier.fillMaxSize()) {
+                if (hero != null) {
+                    TvHeroBackdrop(hero, preloadItems = heroNeighbours)
+                    Box(Modifier.padding(start = 104.dp, top = 54.dp).height(626.dp), contentAlignment = Alignment.CenterStart) { TelevisionHero(hero, heroShelf?.isQueueShelf == true) }
+                } else EmptyState(if (state.homeLoading) "Starting VIPTV…" else "Your library is ready", "Browse Discover to find something to watch.", "home", Modifier.height(600.dp))
+                LazyColumn(state = list, modifier = Modifier.fillMaxWidth().height(400.dp).align(Alignment.BottomStart)
+                    .onFocusChanged { controller.homeContentFocused = it.hasFocus }
+                    .onPreviewKeyEvent {
+                        val key = it.nativeKeyEvent
+                        val direction = when (key.keyCode) { KeyEvent.KEYCODE_DPAD_UP -> -1; KeyEvent.KEYCODE_DPAD_DOWN -> 1; else -> 0 }
+                        if (key.action == KeyEvent.ACTION_DOWN) {
+                            controller.recordHomeDirectionalInput()
+                            if (direction != 0 && shelves.isNotEmpty()) {
+                                val currentRow = pendingRowId?.let { id -> shelves.indexOfFirst { it.id == id }.takeIf { it >= 0 } } ?: shelves.indexOfFirst { shelf -> shelf.id == controller.state.value.homeFocus.shelfTitle }.coerceAtLeast(0)
+                                rowDirection = direction
+                                requestedRow = (currentRow + direction).coerceIn(shelves.indices)
+                                if (requestedRow != currentRow) { requestedRowId = shelves[requestedRow].id; pendingRowId = requestedRowId; rowRequest++ }
+                            }
                         }
-                        if (featured.size > 1) Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.Center) {
-                            repeat(featured.size) { index -> Box(Modifier.padding(horizontal = 3.dp).size(if (pager.currentPage == index) 18.dp else 6.dp, 6.dp).clip(CircleShape).background(if (pager.currentPage == index) C.textPrimary else C.fillDot)) }
+                        direction != 0
+                    }, userScrollEnabled = false) {
+                    itemsIndexed(shelves, key = { _, shelf -> shelf.id }) { row, shelf ->
+                        Box(Modifier.height(400.dp).padding(start = 104.dp, end = 20.dp, top = 16.dp)) {
+                            ShelfRow(shelf, row, state.homeLoading, restoreFocus?.takeIf { it.shelfTitle == shelf.id }, controller, shelfFocus[row], Modifier.graphicsLayer {
+                                translationY = rowDirection * rowTravel * (1f - rowEntrance.value)
+                                alpha = .65f + .35f * rowEntrance.value
+                            }, contentEntry = row == list.firstVisibleItemIndex)
                         }
                     }
                 }
+                if (shelves.size > 1) CarouselPosition(shelves.size, list.firstVisibleItemIndex,
+                    Modifier.align(Alignment.BottomEnd).padding(end = 14.dp, bottom = 90.dp).width(4.dp).height(220.dp))
             }
-            itemsIndexed(shelves, key = { _, shelf -> shelf.id }) { row, shelf ->
-                Box(Modifier.padding(start = measure(192, 0))) {
-                    ShelfRow(shelf, row, state.homeLoading, restoreFocus?.takeIf { it.shelfTitle == shelf.id }, controller)
+        }
+        false -> {
+            Box(Modifier.fillMaxSize()) {
+                LazyColumn(state = list, modifier = Modifier.fillMaxSize().onFocusChanged { controller.homeContentFocused = it.hasFocus }.onPreviewKeyEvent {
+                    if (it.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) controller.recordHomeDirectionalInput()
+                    false
+                }, contentPadding = PaddingValues(start = measure(0, 16), end = measure(0, 16), top = measure(0, 8), bottom = measure(54, 164)),
+                    verticalArrangement = Arrangement.spacedBy(measure(36, 20))) {
+                    item(key = "featured") {
+                        // AND-042-HOME: no header bar; the rounded hero is the first element.
+                        if (featured.isEmpty() && state.homeLoading) PhoneHomeSkeleton(shelves.isEmpty())
+                        else if (featured.isEmpty()) EmptyState("Your library is empty", "Browse Discover to find movies and series.", "home")
+                        else {
+                            val pager = rememberPagerState(pageCount = { featured.size })
+                            HorizontalPager(pager, pageSpacing = 16.dp, key = { featured[it].id }) { index ->
+                                LaunchedEffect(featured[index].id, state.homeLoading) { controller.enrichVisibleHomeItem(featured[index]) }
+                                PhoneHero(featured[index], phoneHeroShelf?.isQueueShelf == true, state, controller)
+                            }
+                            if (featured.size > 1) Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.Center) {
+                                repeat(featured.size) { index -> Box(Modifier.padding(horizontal = 3.dp).size(if (pager.currentPage == index) 18.dp else 6.dp, 6.dp).clip(CircleShape).background(if (pager.currentPage == index) C.textPrimary else C.fillDot)) }
+                            }
+                        }
+                    }
+                    itemsIndexed(shelves, key = { _, shelf -> shelf.id }) { row, shelf ->
+                        Box(Modifier.padding(start = measure(104, 0))) {
+                            ShelfRow(shelf, row, state.homeLoading, restoreFocus?.takeIf { it.shelfTitle == shelf.id }, controller)
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-@Composable private fun TelevisionHero(media: Media, queue: Boolean, shelfIndex: Int, shelfId: String, state: AppState, controller: AppController, initial: FocusRequester, rail: FocusRequester) {
+@Composable private fun CarouselPosition(count: Int, selected: Int, modifier: Modifier) {
+    Canvas(modifier.semantics { contentDescription = "Carousel ${selected + 1} of $count" }) {
+        val gap = minOf(8.dp.toPx(), size.height / (count * 2f))
+        val unit = minOf(6.dp.toPx(), (size.height - gap * (count - 1)) / (count + 2f))
+        val total = unit * (count + 2) + gap * (count - 1)
+        var y = (size.height - total) / 2f
+        for (index in 0 until count) {
+            val length = if (index == selected) unit * 3f else unit
+            drawRoundRect(if (index == selected) C.textPrimary else C.textSecondary.copy(alpha = .45f),
+                Offset(0f, y), Size(size.width, length), CornerRadius(size.width / 2f))
+            y += length + gap
+        }
+    }
+}
+
+@Composable private fun TelevisionHero(media: Media, queue: Boolean) {
     val hero = remember(media) { CoreModels.presentation(media) }
     val actions = remember(media, queue) { SharedPresentation.home(media, queue) }
-    val saved = state.favorites.any { it.id == media.id && it.type == media.type }
-    var actionsPlaced by remember { mutableStateOf(false) }
-    var subjectFocusHandled by remember(media.id) { mutableStateOf(false) }
-    val heroRestore = remember(state.homeFocus.restoreRequest) { state.homeFocus }
-    var handledRestore by remember { mutableStateOf<HomeFocusSnapshot?>(null) }
-    val windowFocused = LocalWindowInfo.current.isWindowFocused
-    val inputMode = LocalInputModeManager.current
-    LaunchedEffect(media.id, actionsPlaced, windowFocused) {
-        if (!actionsPlaced || !windowFocused || subjectFocusHandled) return@LaunchedEffect
-        subjectFocusHandled = true
-        val current = controller.state.value.homeFocus
-        if (current.mediaKey == null || (current.surface == HomeFocusSurface.Hero && controller.homeContentFocused)) {
-            inputMode.requestInputMode(InputMode.Keyboard)
-            runCatching { initial.requestFocus() }
+    Column(Modifier.width(950.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (hero.titleLogo.isNullOrBlank()) VText(media.name, 56, Modifier.width(800.dp).height(118.dp), display = true, lines = 2)
+        else Artwork(hero.titleLogo, media.name, Modifier.size(410.dp, 118.dp), ContentScale.Fit, Alignment.CenterStart, trimTransparency = true)
+        if (hero.episodeLabel.isNotBlank()) VText(hero.episodeLabel, 24, bold = true, lines = 1)
+        if (actions.showHeroProgress) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+            ProgressLine(hero.progress.toFloat(), Modifier.width(300.dp))
+            VText(formatTime(media.positionMillis) + " of " + ((media.durationMillis ?: 0) / 60000) + " min", 22, color = C.textSecondary)
         }
-    }
-    LaunchedEffect(media.id, heroRestore, actionsPlaced, windowFocused) {
-        if (!actionsPlaced || !windowFocused) return@LaunchedEffect
-        val requested = heroRestore
-        if (requested.restoreRequest == 0L || handledRestore === requested) return@LaunchedEffect
-        handledRestore = requested
-        if (requested.restoreRequest > 0 && requested.surface == HomeFocusSurface.Hero &&
-            requested.mediaKey == HomeFocusPolicy.mediaKey(media)) {
-            val current = controller.state.value.homeFocus
-            if (current.restoreRequest == requested.restoreRequest && current.surface == requested.surface &&
-                current.mediaKey == requested.mediaKey && HomeFocusPolicy.mayRestore(current, requested.inputEpoch)) {
-                inputMode.requestInputMode(InputMode.Keyboard)
-                runCatching { initial.requestFocus() }
-            }
-        }
-    }
-    Box(Modifier.fillMaxWidth().height(610.dp)) {
-        VText(if (queue) "CONTINUE WATCHING" else if (media.type == "live") "LIVE NOW" else "FEATURED", 20, Modifier.offset(y = 96.dp), C.textSecondary, bold = true)
-        if (hero.titleLogo.isNullOrBlank()) VText(media.name, 56, Modifier.offset(y = 142.dp).width(800.dp), display = true, lines = 2)
-        else Artwork(hero.titleLogo, media.name, Modifier.offset(y = 142.dp).size(410.dp, 118.dp), ContentScale.Fit)
-        VText(hero.episodeLabel, 24, Modifier.offset(y = 286.dp).width(420.dp), bold = true, lines = 1)
-        if (actions.showHeroProgress) {
-            ProgressLine(hero.progress.toFloat(), Modifier.offset(444.dp, 298.dp).width(180.dp))
-            VText(formatTime(media.positionMillis) + " of " + ((media.durationMillis ?: 0) / 60000) + " min", 24, Modifier.offset(644.dp, 286.dp), C.textSecondary)
-        }
-        VText(mediaFacts(media), 22, Modifier.offset(y = 336.dp).width(950.dp), C.textSecondary, lines = 1)
-        VText(media.description.orEmpty(), 26, Modifier.offset(y = 394.dp).width(760.dp), C.textBody, lines = 2)
-        Row(Modifier.offset(y = 496.dp).onGloballyPositioned { actionsPlaced = true }
-            .onFocusChanged { if (it.hasFocus) controller.recordHomeFocus(shelfIndex, shelfId, media, HomeFocusSurface.Hero) }.focusGroup(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-            AppButton(actions.heroPrimaryActionLabel, { controller.activateHero(media, queue) }, Modifier.width(228.dp).focusRequester(initial).focusProperties { left = rail },
-                "play", tvAccent = actions.heroPrimaryAction == "resume", onHold = { controller.chooseHeroSources(media, queue) },
-                onFocused = { controller.recordHomeFocus(shelfIndex, shelfId, media, HomeFocusSurface.Hero) })
-            AppButton("Details", { controller.open(media) }, Modifier.width(228.dp))
-            AppIconButton(if (saved) "check" else "plus", if (saved) "Remove from My List" else "Add to My List", { controller.toggleMyList(media) })
-        }
+        VText(mediaFacts(media), 22, color = C.textSecondary, lines = 1)
+        VText(media.description.orEmpty(), 26, Modifier.width(675.dp), C.textBody, lines = 5)
     }
 }
 
@@ -193,11 +227,34 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
     }
 }
 
-@Composable private fun ShelfRow(shelf: HomeShelf, index: Int, homeLoading: Boolean, restoreFocus: HomeFocusSnapshot?, controller: AppController) {
+/** Home carousels keep the selected card at their leading edge until scrolling reaches its limit. */
+internal class HomeCarouselScroll(private val leadingInset: Float) : BringIntoViewSpec {
+    override val scrollAnimationSpec: AnimationSpec<Float> = tween(220, easing = FastOutSlowInEasing)
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = offset - leadingInset
+}
+
+@Composable private fun ShelfRow(shelf: HomeShelf, index: Int, homeLoading: Boolean, restoreFocus: HomeFocusSnapshot?, controller: AppController, entryFocus: FocusRequester? = null, rowDecoration: Modifier = Modifier, contentEntry: Boolean = index == 0) {
     val tv = LocalTv.current
     val rail = LocalRailFocus.current
+    val initial = LocalContentFocus.current
     val horizontal = rememberLazyListState()
+    val leadingInset = 0f
+    val carouselScroll = remember(leadingInset) { HomeCarouselScroll(leadingInset) }
     val focuses = remember(shelf.items.map { it.id }) { shelf.items.map { FocusRequester() } }
+    var firstPlaced by remember { mutableStateOf(false) }
+    var initialHandled by remember { mutableStateOf(false) }
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    val inputMode = LocalInputModeManager.current
+    LaunchedEffect(tv, index, firstPlaced, windowFocused, homeLoading, shelf.isQueueShelf) {
+        if (tv && index == 0 && firstPlaced && windowFocused && !initialHandled && (!homeLoading || shelf.isQueueShelf)) {
+            initialHandled = true
+            if (controller.state.value.homeFocus.mediaKey == null) {
+                inputMode.requestInputMode(InputMode.Keyboard)
+                runCatching { focuses.firstOrNull()?.requestFocus() }
+            }
+        }
+    }
+
     LaunchedEffect(restoreFocus?.restoreRequest) {
         if (tv && restoreFocus != null) {
             fun stillRequested(): Boolean {
@@ -216,20 +273,23 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
         }
     }
     Column {
-        Row(Modifier.fillMaxWidth().padding(end = measure(96, 0), bottom = measure(18, 12)), verticalAlignment = Alignment.CenterVertically) {
+        if (tv) VText(shelf.title.uppercase(), 20, Modifier.padding(bottom = 18.dp), color = C.textSecondary, bold = true, lines = 1)
+        if (!tv) Row(Modifier.fillMaxWidth().padding(end = measure(96, 0), bottom = measure(18, 12)), verticalAlignment = Alignment.CenterVertically) {
             VText(if (shelf.isQueueShelf) "Continue watching" else if (tv) shelf.title else PhonePresentationPolicy.shelfHeading(shelf), if (tv) 32 else 20, Modifier.weight(1f), display = true, lines = 1)
             if (!tv && shelf.isQueueShelf) Holdable({ controller.openContinueWatching() }, modifier = Modifier.height(44.dp).padding(start = 12.dp)) { VText("See all", 13, color = C.textSecondary) }
         }
         // Phone rows start exactly on the heading edge (AND-042-CARDS).
-        LazyRow(state = horizontal, modifier = Modifier.fillMaxWidth().focusGroup(), horizontalArrangement = Arrangement.spacedBy(measure(36, if (shelf.items.firstOrNull()?.type == "live") 10 else 12)), contentPadding = if (tv) PaddingValues(4.dp) else PaddingValues(vertical = 4.dp)) {
-            itemsIndexed(shelf.items, key = { _, item -> HomeFocusPolicy.mediaKey(item) }) { column, media ->
-                val action = { controller.activateCard(media, shelf.isQueueShelf, SourceReturn.Home) }
-                val hold = { if (shelf.isQueueShelf) controller.requestQueueManage(media) else controller.requestDialog(DialogKind.MyListManage, media.name, media) }
-                LaunchedEffect(media.id, homeLoading) { controller.enrichVisibleHomeItem(media) }
-                if (!tv && shelf.isQueueShelf) QueueCard(media, action, hold)
-                else if (!tv && media.type == "live") LiveLogoTile(media, action, hold)
-                else MediaCard(media, Modifier.focusRequester(focuses[column]).then(if (column == 0 && tv) Modifier.focusProperties { left = rail } else Modifier),
-                    shelf.isQueueShelf, action, hold, onFocused = { controller.recordHomeFocus(index, shelf.id, media) })
+        CompositionLocalProvider(LocalBringIntoViewSpec provides if (tv) carouselScroll else LocalBringIntoViewSpec.current) {
+            LazyRow(state = horizontal, modifier = Modifier.fillMaxWidth().then(rowDecoration).focusGroup(), horizontalArrangement = Arrangement.spacedBy(measure(36, if (shelf.items.firstOrNull()?.type == "live") 10 else 12)), contentPadding = PaddingValues(vertical = 4.dp)) {
+                itemsIndexed(shelf.items, key = { _, item -> HomeFocusPolicy.mediaKey(item) }) { column, media ->
+                    val action = { controller.activateCard(media, shelf.isQueueShelf, SourceReturn.Home) }
+                    val hold = { if (shelf.isQueueShelf) controller.requestQueueManage(media) else controller.requestDialog(DialogKind.MyListManage, media.name, media) }
+                    if (!tv) LaunchedEffect(media.id, homeLoading) { controller.enrichVisibleHomeItem(media) }
+                    if (!tv && shelf.isQueueShelf) QueueCard(media, action, hold)
+                    else if (!tv && media.type == "live") LiveLogoTile(media, action, hold)
+                    else MediaCard(media, Modifier.focusRequester(focuses[column]).then(if (column == horizontal.firstVisibleItemIndex && entryFocus != null) Modifier.focusRequester(entryFocus) else Modifier).onGloballyPositioned { if (column == 0) firstPlaced = true }.then(if (contentEntry && column == horizontal.firstVisibleItemIndex && tv) Modifier.focusRequester(initial) else Modifier).then(if (column == 0 && tv) Modifier.focusProperties { left = rail } else Modifier),
+                        shelf.isQueueShelf, action, hold, onFocused = { controller.recordHomeFocus(index, shelf.id, media) })
+                }
             }
         }
     }

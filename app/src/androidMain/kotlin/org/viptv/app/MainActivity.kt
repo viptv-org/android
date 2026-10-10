@@ -1,6 +1,19 @@
 package org.viptv.app
 
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.clipRect
 import android.app.Application
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import android.content.res.Configuration
 import android.os.Bundle
 import android.content.pm.ActivityInfo
@@ -9,6 +22,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
@@ -216,38 +230,79 @@ private fun destination(route: Route) = when (route) {
     else -> Destination.Home
 }
 
+/** The dark glyph layer is clipped to the actual moving white capsule, rather than timed independently. */
+private fun Modifier.railHighlightInk(highlightY: () -> Float, visible: () -> Boolean,
+    rowY: Float, density: Float, highlightHeight: () -> Float, centeredHeight: Float? = null): Modifier = drawWithContent {
+    drawContent()
+    if (visible()) {
+        val rowTop = rowY * density + (centeredHeight?.let { (it * density - size.height) / 2f } ?: 0f)
+        val top = highlightY() * density - rowTop
+        val height = highlightHeight() * density
+        val paint = Paint().apply { colorFilter = ColorFilter.tint(C.onLight) }
+        fun darkContent() {
+            drawContext.canvas.saveLayer(Rect(Offset.Zero, size), paint)
+            drawContent()
+            drawContext.canvas.restore()
+        }
+        if (centeredHeight != null) clipRect(top = top, bottom = top + height) { darkContent() }
+        else {
+            val path = Path().apply { addRoundRect(RoundRect(Rect(0f, top, size.width, top + height), CornerRadius(height / 2f))) }
+            clipPath(path) { darkContent() }
+        }
+    }
+}
+
 @Composable internal fun TelevisionRail(state: AppState, controller: AppController, expanded: Boolean, onExpanded: (Boolean) -> Unit, rail: FocusRequester, initial: FocusRequester, memory: FocusMemory) {
     val current = destination(state.route)
     val profileTarget = remember { FocusRequester() }
     val targets = remember { navItems.associate { it.first to FocusRequester() } }
+    var railHasFocus by remember { mutableStateOf(false) }
+    var focusY by remember { mutableStateOf<Float?>(null) }
+    val highlightY = remember { Animatable(0f) }
+    var highlightPlaced by remember { mutableStateOf(false) }
+    val density = LocalDensity.current.density
+    val context = LocalContext.current
+    val animateFocus = remember(context) { systemAnimationsEnabled(context) }
+    LaunchedEffect(focusY) {
+        val target = focusY ?: return@LaunchedEffect
+        if (!highlightPlaced || !animateFocus) {
+            highlightY.snapTo(target)
+            highlightPlaced = true
+        } else highlightY.animateTo(target, tween(220, easing = FastOutSlowInEasing))
+    }
     val restoreContentOnRight = Modifier.onPreviewKeyEvent { event ->
         if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
             if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN && memory.restore(initial)) onExpanded(false)
             true
         } else false
     }
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().onFocusChanged { railHasFocus = it.hasFocus }.focusGroup()) {
         if (expanded) {
             Box(Modifier.fillMaxSize().background(C.scrimTvMenu))
             Box(Modifier.width(520.dp).fillMaxHeight().background(Brush.horizontalGradient(listOf(LocalGround.current, LocalGround.current.copy(alpha = .98f), Color.Transparent))))
         }
+        if (railHasFocus && focusY != null) Box(Modifier.offset(x = 20.dp)
+            .graphicsLayer { translationY = highlightY.value * density }
+            .size(if (expanded) 376.dp else 64.dp, if (focusY == 48f) 68.dp else 64.dp)
+            .clip(CircleShape).background(C.textPrimary))
         var profileFocused by remember { mutableStateOf(false) }
-        Holdable({ onExpanded(false); controller.navigate(Destination.Profile) }, modifier = Modifier.offset(40.dp, 48.dp)
+        Holdable({ onExpanded(false); controller.navigate(Destination.Profile) }, modifier = Modifier.offset(20.dp, 48.dp)
             .focusRequester(profileTarget).focusProperties { up = FocusRequester.Cancel; down = targets.getValue(Destination.Search); left = FocusRequester.Cancel }
-            .size(if (expanded) 376.dp else 64.dp, 68.dp).onFocusChanged { profileFocused = it.isFocused; if (it.isFocused) onExpanded(true) }
+            .size(if (expanded) 376.dp else 64.dp, 68.dp).onFocusChanged { profileFocused = it.isFocused; if (it.isFocused) { focusY = 48f; onExpanded(true) } }
             .then(restoreContentOnRight)
-            .clip(CircleShape).background(if (profileFocused) C.textPrimary else Color.Transparent), rememberFocus = false) {
+            .clip(CircleShape).background(Color.Transparent), rememberFocus = false) {
             Row(Modifier.fillMaxSize().padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 ProfileAvatar(state.selectedProfile, Modifier.size(56.dp).clip(CircleShape))
-                if (expanded) Column(Modifier.padding(start = 24.dp)) {
-                    VText(state.selectedProfile?.name ?: "Profile", 26, color = if (profileFocused) C.onLight else C.textPrimary, bold = true)
-                    VText("Switch profile", 20, color = if (profileFocused) C.textOnLightSecondary else C.textSecondary)
+                if (expanded) Column(Modifier.padding(start = 24.dp).railHighlightInk({ highlightY.value }, { railHasFocus && focusY != null },
+                    48f, density, { if (focusY == 48f) 68f else 64f }, centeredHeight = 68f)) {
+                    VText(state.selectedProfile?.name ?: "Profile", 26, color = C.textPrimary, bold = true)
+                    VText("Switch profile", 20, color = C.textSecondary)
                 }
             }
         }
         navItems.forEachIndexed { index, (item, icon, y) ->
             var focused by remember(item) { mutableStateOf(false) }
-            Holdable({ onExpanded(false); controller.navigate(item) }, modifier = Modifier.offset(40.dp, (y - 20).dp)
+            Holdable({ onExpanded(false); controller.navigate(item) }, modifier = Modifier.offset(20.dp, (y - 20).dp)
                 .focusRequester(targets.getValue(item)).focusProperties {
                     up = if (index == 0) profileTarget else targets.getValue(navItems[index - 1].first)
                     down = if (index == navItems.lastIndex) FocusRequester.Cancel else targets.getValue(navItems[index + 1].first)
@@ -255,11 +310,12 @@ private fun destination(route: Route) = when (route) {
                 }
                 .size(if (expanded) 376.dp else 64.dp, 64.dp)
                 .then(if (current == item) Modifier.focusRequester(rail) else Modifier)
-                .onFocusChanged { focused = it.isFocused; if (it.isFocused) onExpanded(true) }
-                .then(restoreContentOnRight).clip(CircleShape).background(if (focused) C.textPrimary else if (!expanded && current == item) C.surfaceN3 else Color.Transparent), rememberFocus = false) {
-                Row(Modifier.fillMaxSize().padding(start = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                    VIcon(icon, item.label, Modifier.size(24.dp), if (focused) C.onLight else if (current == item) C.textPrimary else C.textSecondary)
-                    if (expanded) VText(item.label, 26, Modifier.padding(start = 40.dp), if (focused) C.onLight else C.textPrimary, bold = focused || current == item)
+                .onFocusChanged { focused = it.isFocused; if (it.isFocused) { focusY = (y - 20).toFloat(); onExpanded(true) } }
+                .then(restoreContentOnRight).clip(CircleShape).background(if (!focused && !expanded && current == item) C.surfaceN3 else Color.Transparent), rememberFocus = false) {
+                Row(Modifier.fillMaxSize().railHighlightInk({ highlightY.value }, { railHasFocus && focusY != null },
+                    (y - 20).toFloat(), density, { if (focusY == 48f) 68f else 64f }).padding(start = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    VIcon(icon, item.label, Modifier.size(24.dp), if (current == item) C.textPrimary else C.textSecondary)
+                    if (expanded) VText(item.label, 26, Modifier.padding(start = 40.dp), C.textPrimary)
                 }
             }
         }

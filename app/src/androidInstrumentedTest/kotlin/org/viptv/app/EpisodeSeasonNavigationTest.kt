@@ -38,47 +38,34 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Text/semantics assertions only: no screenshots, pixel assertions or image fixtures. */
+/** Remote season selection, episode jump and return focus. */
 @RunWith(AndroidJUnit4::class)
 @OptIn(ExperimentalTestApi::class)
 class EpisodeSeasonNavigationTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun remoteEdgeCardsFollowAvailableSeasonsWithoutWrapping() {
+    @Test fun seasonPillsFollowAvailableSeasonsWithoutEdgeCards() {
         withDetails {
-            episode("S5 E11").assertIsFocused().performKeyInput { pressKey(Key.DirectionLeft) }
-            compose.onNodeWithText("Previous season").assertIsFocused()
-            compose.onNodeWithText("Season 5").assertExists() // Focusing the card does not switch.
-            compose.onNodeWithText("Previous season").performKeyInput { pressKey(Key.DirectionCenter) }
-            compose.onNodeWithText("Season 0").assertExists()
-            episode("S0 E8").assertIsFocused()
-            compose.onNodeWithText("Previous season").assertDoesNotExist()
-            episode("S0 E8").performKeyInput { pressKey(Key.DirectionRight) }
-            compose.onNodeWithText("Next season").assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
             episode("S5 E11").assertIsFocused()
-            episode("S5 E11").performKeyInput { pressKey(Key.DirectionRight) }
-            episode("S5 E31").assertIsFocused().performKeyInput { pressKey(Key.DirectionRight) }
-            compose.onNodeWithText("Next season").assertIsFocused()
-            compose.onNodeWithText("Season 5").assertExists()
-            compose.onNodeWithText("Next season").performKeyInput { pressKey(Key.DirectionCenter) }
-            compose.onNodeWithText("Season 9").assertExists()
-            episode("S9 E1").assertIsFocused()
+            compose.onNodeWithText("Previous season").assertDoesNotExist()
             compose.onNodeWithText("Next season").assertDoesNotExist()
-            episode("S9 E1").performKeyInput { pressKey(Key.DirectionLeft) }
-            compose.onNodeWithText("Previous season").assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
-            episode("S5 E31").assertIsFocused()
+            compose.onNodeWithText("Season 0").performClick()
+            episode("S0 E2").assertIsFocused()
+            compose.onNodeWithText("Season 9").performClick()
+            episode("S9 E1").assertIsFocused()
+            compose.onNodeWithText("Season 5").performClick()
+            episode("S5 E11").assertIsFocused()
         }
     }
 
-    @Test fun savedEpisodeAndNumberJumpAccountForPreviousSeasonCard() {
+    @Test fun savedEpisodeAndNumberJumpUseEpisodeIndices() {
         withDetails(media = series().copy(episode = 31)) {
             episode("S5 E31").assertIsFocused()
             compose.onNodeWithContentDescription("Jump to episode number").performClick()
             compose.onNode(hasSetTextAction()).performTextInput("11")
             compose.onNodeWithText("Go").performClick()
-            episode("S5 E11").assertIsFocused().performKeyInput { pressKey(Key.DirectionLeft) }
-            compose.onNodeWithText("Previous season").assertIsFocused()
-            compose.onNodeWithText("Season 5").assertExists()
+            episode("S5 E11").assertIsFocused()
+            compose.onNodeWithText("Previous season").assertDoesNotExist()
         }
     }
 
@@ -110,15 +97,13 @@ class EpisodeSeasonNavigationTest {
     @Test fun sourceBackKeepsNavigatedSeasonAndItsEpisodeFocus() {
         WatchedEpisodeServer().use { server ->
             withDetails(server.origin) { controller ->
-                episode("S5 E11").performKeyInput { pressKey(Key.DirectionRight) }
-                episode("S5 E31").performKeyInput { pressKey(Key.DirectionRight) }
-                compose.onNodeWithText("Next season").performKeyInput { pressKey(Key.DirectionCenter) }
+                compose.onNodeWithText("Season 9").performClick()
                 episode("S9 E1").assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
                 compose.waitUntil(5_000) { controller.state.value.route is Route.Sources }
                 compose.runOnIdle { controller.back() }
                 compose.onNodeWithText("Season 9").assertExists()
-                episode("S9 E1").assertIsFocused().performKeyInput { pressKey(Key.DirectionLeft) }
-                compose.onNodeWithText("Previous season").assertIsFocused()
+                episode("S9 E1").assertIsFocused()
+                compose.onNodeWithText("Previous season").assertDoesNotExist()
             }
         }
     }

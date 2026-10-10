@@ -36,29 +36,29 @@ import org.junit.runner.RunWith
 class TelevisionRailFocusTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun rightFromHomeRailRestoresTheOriginatingHeroControl() {
+    @Test fun rightFromHomeRailRestoresTheOriginatingCard() {
         withHome {
-            compose.onNodeWithText("Play").assertIsFocused().performKeyInput { pressKey(Key.DirectionLeft) }
+            compose.onNode(hasText("Fixture movie") and hasClickAction()).assertIsFocused().performKeyInput { pressKey(Key.DirectionLeft) }
             compose.onNodeWithContentDescription("Home").assertIsFocused().performKeyInput { pressKey(Key.DirectionRight) }
-            compose.onNodeWithText("Play").assertIsFocused()
+            compose.onNode(hasText("Fixture movie") and hasClickAction()).assertIsFocused()
         }
     }
 
     @Test fun rightFromHomeRailFocusesContentRecreatedDuringRefresh() {
         withHome { controller ->
-            compose.onNodeWithText("Play").assertIsFocused().performKeyInput { pressKey(Key.DirectionLeft) }
+            compose.onNode(hasText("Fixture movie") and hasClickAction()).assertIsFocused().performKeyInput { pressKey(Key.DirectionLeft) }
             compose.onNodeWithContentDescription("Home").assertIsFocused()
             val populated = controller.state.value.shelves
             compose.runOnIdle { controller._state.value = controller.state.value.copy(shelves = emptyList(), homeLoading = true) }
             compose.runOnIdle { controller._state.value = controller.state.value.copy(shelves = populated, homeLoading = false) }
             compose.onNodeWithContentDescription("Home").assertIsFocused().performKeyInput { pressKey(Key.DirectionRight) }
-            compose.onNodeWithText("Play").assertIsFocused()
+            compose.onNode(hasText("Fixture movie") and hasClickAction()).assertIsFocused()
         }
     }
 
-    @Test fun rightRestoresTheShelfCardInsteadOfResettingToHero() {
+    @Test fun rightRestoresTheShelfCard() {
         withHome {
-            compose.onNodeWithText("Play").assertIsFocused().performKeyInput { pressKey(Key.DirectionDown) }
+            compose.onNode(hasText("Fixture movie") and hasClickAction()).assertIsFocused()
             val card = compose.onNode(hasText("Fixture movie") and hasClickAction())
             card.assertIsFocused().performKeyInput { pressKey(Key.DirectionLeft) }
             compose.onNodeWithContentDescription("Home").assertIsFocused().performKeyInput { pressKey(Key.DirectionRight) }
@@ -68,7 +68,7 @@ class TelevisionRailFocusTest {
 
     @Test fun rightFromProfileUsesFreshHomeContentAfterRefresh() {
         withHome { controller ->
-            compose.onNodeWithText("Play").performKeyInput { pressKey(Key.DirectionLeft) }
+            compose.onNode(hasText("Fixture movie") and hasClickAction()).performKeyInput { pressKey(Key.DirectionLeft) }
             compose.onNodeWithContentDescription("Home").performKeyInput { pressKey(Key.DirectionUp) }
             compose.onNodeWithContentDescription("Search").performKeyInput { pressKey(Key.DirectionUp) }
             compose.onNodeWithText("Switch profile").assertIsFocused()
@@ -76,13 +76,13 @@ class TelevisionRailFocusTest {
             compose.runOnIdle { controller._state.value = controller.state.value.copy(shelves = emptyList(), homeLoading = true) }
             compose.runOnIdle { controller._state.value = controller.state.value.copy(shelves = populated, homeLoading = false) }
             compose.onNodeWithText("Switch profile").assertIsFocused().performKeyInput { pressKey(Key.DirectionRight) }
-            compose.onNodeWithText("Play").assertIsFocused()
+            compose.onNode(hasText("Fixture movie") and hasClickAction()).assertIsFocused()
         }
     }
 
     @Test fun loadingHomeKeepsNavigationFocusedUntilContentArrives() {
         withHome { controller ->
-            compose.onNodeWithText("Play").performKeyInput { pressKey(Key.DirectionLeft) }
+            compose.onNode(hasText("Fixture movie") and hasClickAction()).performKeyInput { pressKey(Key.DirectionLeft) }
             val populated = controller.state.value.shelves
             compose.runOnIdle { controller._state.value = controller.state.value.copy(shelves = emptyList(), homeLoading = true) }
             compose.onNodeWithContentDescription("Home").assertIsFocused().performKeyInput { pressKey(Key.DirectionRight) }
@@ -90,7 +90,7 @@ class TelevisionRailFocusTest {
             compose.onNodeWithText("Home").assertExists() // The rail remains expanded without an actionable target.
             compose.runOnIdle { controller._state.value = controller.state.value.copy(shelves = populated, homeLoading = false) }
             compose.onNodeWithContentDescription("Home").performKeyInput { pressKey(Key.DirectionRight) }
-            compose.onNodeWithText("Play").assertIsFocused()
+            compose.onNode(hasText("Fixture movie") and hasClickAction()).assertIsFocused()
         }
     }
 

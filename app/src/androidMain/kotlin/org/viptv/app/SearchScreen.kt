@@ -84,7 +84,7 @@ import org.viptv.app.theme.ViptvColor as C
             lastShownEntry = state.searchEntryEpoch
         }
     }
-    Column(Modifier.fillMaxSize().imePadding().padding(start = measure(192, 16), end = measure(0, 16), top = measure(54, 12), bottom = measure(54, 0))) {
+    Column(Modifier.fillMaxSize().imePadding().padding(start = measure(104, 16), end = measure(0, 16), top = measure(54, 12), bottom = measure(54, 0))) {
         Box(Modifier.fillMaxWidth().padding(end = measure(96, 0))) { ScreenHeader("Search", if (tv) null else controller::back) }
         if (tv) Column(Modifier.fillMaxSize()) {
             Row(Modifier.padding(end = 96.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {

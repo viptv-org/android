@@ -80,6 +80,9 @@ class AppController(context: Context, private val origin: String) {
     internal var homeRefreshGeneration = 0L
     private val homeMetadataGate = Semaphore(3)
     private val homeMetadataRequested = mutableSetOf<String>()
+    private val homeMetadataCache = linkedMapOf<String, Media>()
+    private var homeMetadataOwner: String? = null
+    private val homeEnrichmentMemo = linkedMapOf<String, Triple<Media, Media, Media>>()
     internal var libraryRevision = 0L
     internal var discoverJob: Job? = null
     internal var searchJob: Job? = null
@@ -405,6 +408,7 @@ class AppController(context: Context, private val origin: String) {
         homeJob = job
         val refresh = ++homeRefreshGeneration
         homeMetadataRequested.clear()
+        ensureHomeMetadataScope(profile.id)
         val library = libraryRevision
         if (!atomicRefresh) _state.value = _state.value.copy(homeLoading = true)
         if (enter) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), selectedProfile = profile, loading = false)
@@ -416,17 +420,12 @@ class AppController(context: Context, private val origin: String) {
             if (generation == sessionRenderGeneration && refresh == homeRefreshGeneration && _state.value.selectedProfile?.id == profile.id) staged = shelves
         } else gateway.home(profile.id) { shelves ->
             if (generation == sessionRenderGeneration && refresh == homeRefreshGeneration && _state.value.selectedProfile?.id == profile.id) {
-                _state.value = _state.value.copy(
-                    shelves = if (library == libraryRevision) shelves else shelves.map { if (it.id == "My List") it.copy(items = _state.value.favorites) else it },
-                    queue = shelves.firstOrNull { it.isQueueShelf }?.items.orEmpty(),
-                    favorites = if (library == libraryRevision) shelves.firstOrNull { it.id == "My List" }?.items.orEmpty() else _state.value.favorites,
-                    loading = if (_state.value.route == Route.Browse(Destination.Home)) false else _state.value.loading,
-                )
+                publishHomeShelves(shelves, library)
             }
         }) }
         if (atomicRefresh && result.isSuccess && generation == sessionRenderGeneration && refresh == homeRefreshGeneration &&
             _state.value.selectedProfile?.id == profile.id && homeForeground && _state.value.route == Route.Browse(Destination.Home)) {
-            val shelves = staged ?: result.getOrThrow()
+            val shelves = enrichedHomeShelves(staged ?: result.getOrThrow())
             val previous = _state.value
             val presented = if (library == libraryRevision) shelves else shelves.map { if (it.id == "My List") it.copy(items = previous.favorites) else it }
             _state.value = previous.copy(shelves = presented,
@@ -447,9 +446,43 @@ class AppController(context: Context, private val origin: String) {
         return accepted && !partial.get()
     }
     internal fun refreshProfileIdentity() { keepProfilesOnIdentityRefresh = true; coreSession.retry() }
+    private fun ensureHomeMetadataScope(profile: String) {
+        val owner = "${verifiedIdentity?.account?.id}\u0000$profile"
+        if (homeMetadataOwner != owner) {
+            homeMetadataCache.clear()
+            homeEnrichmentMemo.clear()
+            homeMetadataOwner = owner
+        }
+    }
+    private fun enrichHomeItem(item: Media, metadata: Media): Media {
+        val key = item.type + ":" + item.id
+        val prior = homeEnrichmentMemo[key]
+        if (prior != null && prior.first == item && prior.second === metadata) return prior.third
+        val result = runCatching { CoreModels.enrich(item, metadata) }.getOrDefault(item)
+        if (key !in homeEnrichmentMemo && homeEnrichmentMemo.size >= 256) homeEnrichmentMemo.keys.firstOrNull()?.let { homeEnrichmentMemo.remove(it) }
+        homeEnrichmentMemo[key] = Triple(item, metadata, result)
+        return result
+    }
+    private fun enrichedHomeShelves(shelves: List<HomeShelf>): List<HomeShelf> {
+        val profile = _state.value.selectedProfile?.id ?: return shelves
+        ensureHomeMetadataScope(profile)
+        if (homeMetadataCache.isEmpty()) return shelves
+        return shelves.map { shelf -> shelf.copy(items = shelf.items.map { item ->
+            homeMetadataCache[item.type + ":" + item.id]?.let { enrichHomeItem(item, it) } ?: item
+        }) }
+    }
+    internal fun publishHomeShelves(shelves: List<HomeShelf>, library: Long = libraryRevision) {
+        val presented = enrichedHomeShelves(shelves)
+        _state.value = _state.value.copy(
+            shelves = if (library == libraryRevision) presented else presented.map { if (it.id == "My List") it.copy(items = _state.value.favorites) else it },
+            queue = presented.firstOrNull { it.isQueueShelf }?.items.orEmpty(),
+            favorites = if (library == libraryRevision) presented.firstOrNull { it.id == "My List" }?.items.orEmpty() else _state.value.favorites,
+            loading = if (_state.value.route == Route.Browse(Destination.Home)) false else _state.value.loading,
+        )
+    }
     internal suspend fun enrichVisibleHomeItem(media: Media) {
         val current = _state.value
-        if (media.type == "live" || current.homeLoading || current.route != Route.Browse(Destination.Home)) return
+        if (media.type == "live" || current.route != Route.Browse(Destination.Home)) return
         val profile = current.selectedProfile?.id ?: return
         val generation = homeRefreshGeneration
         val key = media.type + ":" + media.id
@@ -462,9 +495,12 @@ class AppController(context: Context, private val origin: String) {
                 val rich = try { gateway.metadata(media) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { return@withPermit }
                 if (generation != homeRefreshGeneration || _state.value.selectedProfile?.id != profile ||
                     _state.value.route != Route.Browse(Destination.Home)) return@withPermit
+                ensureHomeMetadataScope(profile)
+                if (key !in homeMetadataCache && homeMetadataCache.size >= 256) homeMetadataCache.keys.firstOrNull()?.let { homeMetadataCache.remove(it) }
+                homeMetadataCache[key] = rich
                 val state = _state.value
                 val shelves = state.shelves.map { shelf -> shelf.copy(items = shelf.items.map { item ->
-                    if (item.type == media.type && item.id == media.id) CoreModels.enrich(item, rich) else item
+                    if (item.type == media.type && item.id == media.id) enrichHomeItem(item, rich) else item
                 }) }
                 _state.value = state.copy(shelves = shelves, queue = shelves.firstOrNull { it.isQueueShelf }?.items.orEmpty())
                 completed = true

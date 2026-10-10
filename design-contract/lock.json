@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/design",
-  "revision": "9998da83ef42cfe1d1c46d76f7ee6d8a2e43242e",
+  "revision": "b5ad0f4592a4c1366585d755c788a9f9149a9850",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
@@ -12,7 +12,7 @@
     },
     "design-contract/ANDROID_DESIGN.md": {
       "source": "docs/platforms/ANDROID_DESIGN.md",
-      "sha256": "1a6b3b519aa0da80985f37cb3e50b782cedb95d350d4af08ddbdf84b64a7fdc0"
+      "sha256": "8e7702f331a6357c3f7bd8412ed646130cb6087eb0d8ff9aa069de8a5b256ec2"
     },
     "design-contract/TV_POLISH.md": {
       "source": "docs/platforms/TV_POLISH.md",
@@ -61,6 +61,10 @@
     "design-contract/specs/behavior/torrent-native-android.md": {
       "source": "specs/behavior/torrent-native-android.md",
       "sha256": "0ff8cda20866bdfedba94861725581379677ef2acbf4b8acfc88bc6548cfa697"
+    },
+    "design-contract/specs/behavior/tv-ui-trial.md": {
+      "source": "specs/behavior/tv-ui-trial.md",
+      "sha256": "19b896764726aece6e9cd10cd783589b4004a0c8c91a5b1e483b4448464cacc8"
     },
     "app/src/androidMain/assets/design/fonts/README.md": {
       "source": "assets/fonts/README.md",

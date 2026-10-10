@@ -1,5 +1,8 @@
 package org.viptv.app
 
+import android.graphics.Bitmap
+import coil.size.Size
+import coil.transform.Transformation
 import android.app.Application
 import android.content.Context
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,6 +25,27 @@ import kotlinx.coroutines.Dispatchers
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
+
+internal object TrimLogoPadding : Transformation {
+    override val cacheKey = "viptv-logo-alpha-bounds-v1"
+    override suspend fun transform(input: Bitmap, size: Size): Bitmap {
+        if (!input.hasAlpha()) return input
+        val pixels = IntArray(input.width * input.height)
+        input.getPixels(pixels, 0, input.width, 0, 0, input.width, input.height)
+        var left = input.width
+        var top = input.height
+        var right = -1
+        var bottom = -1
+        for (y in 0 until input.height) for (x in 0 until input.width) {
+            if ((pixels[y * input.width + x] ushr 24) > 8) {
+                left = minOf(left, x); top = minOf(top, y)
+                right = maxOf(right, x); bottom = maxOf(bottom, y)
+            }
+        }
+        if (right < left || (left == 0 && top == 0 && right == input.width - 1 && bottom == input.height - 1)) return input
+        return Bitmap.createBitmap(input, left, top, right - left + 1, bottom - top + 1)
+    }
+}
 
 /** Public artwork transport only; Core retains image choice and fallback ownership. */
 internal object ArtworkImages {
@@ -88,13 +112,15 @@ class ViptvApplication : Application(), ImageLoaderFactory {
 
 @Composable internal fun SizedArtwork(url: String, description: String?, modifier: Modifier,
     fit: ContentScale = ContentScale.Crop, alignment: Alignment = Alignment.Center,
-    onSuccess: () -> Unit = {}, onError: () -> Unit = {}) {
+    onSuccess: () -> Unit = {}, onError: () -> Unit = {}, trimTransparency: Boolean = false) {
     val context = LocalContext.current
     BoxWithConstraints(modifier) {
         val width = if (constraints.hasBoundedWidth) constraints.maxWidth else 320
         val height = if (constraints.hasBoundedHeight) constraints.maxHeight else 240
-        val request = remember(url, width, height, fit, context) {
-            ArtworkImages.request(context, url, width, height, fit == ContentScale.Crop)
+        val request = remember(url, width, height, fit, context, trimTransparency) {
+            ArtworkImages.request(context, url, width, height, fit == ContentScale.Crop).let { request ->
+                if (trimTransparency) request.newBuilder().allowHardware(false).transformations(TrimLogoPadding).build() else request
+            }
         }
         AsyncImage(request, description, Modifier.fillMaxSize(), contentScale = fit, alignment = alignment,
             onSuccess = { onSuccess() }, onError = { onError() })

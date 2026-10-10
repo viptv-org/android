@@ -1,5 +1,8 @@
 # AND-035 — Native Android phone and TV design adoption
 
+Android TV UI trial: [TV-044 / LIVE-044](../../specs/behavior/tv-ui-trial.md).
+Proposed local Android trial; adoption and other TV platforms await owner review.
+
 ## AND-043 — Title source summary and episode watching marker (2026-10-02)
 
 Status: proposed for Android phone and TV, tracked by design issue 6. Source

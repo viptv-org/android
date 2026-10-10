@@ -2540,3 +2540,86 @@ changes. See [scope and method](docs/TV_ANIMATION_PERFORMANCE.md).
 Preloading candidate APK SHA256: `9157f524eeda3a0294669240894398928e85f8ccf6418dd9544a2b08ce7d44f5`.
 Real APK minSdk, three-ABI contents, pins/notices/trust/alignment and all 23
 packaged hero hashes pass.
+
+## 2026-10-10 — Android TV UI trial (uncommitted)
+
+Owner-requested trial against the existing DESIGN_REF, with proposed shared
+changes in `../design/specs/behavior/tv-ui-trial.md`; adoption pin awaits review.
+Fixed Home hero follows the focused card across shelves, only one shelf is
+visible, hero buttons/focus are removed, progress has its own line, seasons use
+pills, Title retains Play/Resume and icon-only list access, and collapsed sidebar
+gutters are equal. Phone layout and other platform implementations remain pending.
+Playlist switching is a design proposal only, per owner choice.
+
+Host/native preparation succeeded. All 387 JVM unit tests passed; debug and
+optimized performance APK assembly and lint passed (existing baselined warnings
+remain). Fifteen emulator instrumentation tests passed for Home navigation and
+window handoff, season selection/jump/corrections/source return, title manual
+source return, and sidebar focus/refresh. Evidence is privately retained in
+`qualification/artifacts/tv-ui-*.log`; no app captures are committed. Tests used
+an isolated API 36 Android TV emulator at 1920×1080 and density 160. This qualifies
+the tested remote/focus scenarios, not physical TV hardware or artwork parity.
+The optimized APK was installed with data-preserving replacement on the shared
+design emulator for owner review; no commit, push or production rollout occurred.
+
+### Home polish and anchored carousel follow-up
+
+The owner requested five synopsis lines, the selected shelf name above the hero,
+no duplicate row heading or hold hint, leading-edge horizontal carousel focus,
+and Android-specific vertical row motion. The carousel holds the selected card
+at the leading edge until the scroll limit, then focus crosses remaining cards.
+Both Continue Watching and other shelves use x=104 without a 4dp inner gutter.
+The entering row slides 48dp and fades over 180ms, respecting disabled system
+animations and cancelling earlier direction changes.
+
+Thirteen focused API36 TV emulator tests passed, covering early queue metadata,
+leading-edge/end-of-row navigation, equal gutters across row changes, reversal
+during motion, hero/control inventory and sidebar focus/refresh. The metadata
+regression was demonstrated failing with the original homeLoading guard and
+passing with that guard removed: visible saved cards can hydrate before optional
+catalog loading completes. This is a scheduling regression check with synthetic
+HTTP metadata, not a real-provider timing benchmark. Private evidence is in
+`qualification/artifacts/tv-carousel-final-*.log` and
+`qualification/artifacts/tv-metadata-guard-repro.log`.
+
+Final follow-up checks: 387 JVM tests, debug and optimized APK assembly, both
+lint variants and design validation passed. The optimized APK was installed on
+the owner's full-screen design emulator with app data/sign-in preserved. The
+trial remains uncommitted and other platform implementations remain unchanged.
+
+The partial-publication regression additionally demonstrated that a later Home
+row update discarded an already loaded synopsis. Account/profile-scoped bounded
+metadata retention fixes that path, merging metadata through Core while keeping
+incoming saved progress authoritative. The same thirteen emulator checks passed
+with assertions covering retained descriptions and newer progress after a partial
+publication. Evidence: `tv-metadata-publish-red.log` and
+`tv-metadata-publish-fixed-tests.log` in the ignored qualification directory.
+
+The metadata-retention follow-up also passed all 387 JVM tests, both lint variants
+and the optimized APK build. It was installed data-preservingly on the full-screen
+design emulator for owner review; all changes remain uncommitted.
+
+Final owner adjustment: the 20px bold uppercase carousel title sits above the
+cards, with no duplicate hero label. Android TV hides live Home shelves and
+skips their live/recent requests; phone and the sidebar Live TV destination
+retain their flows. All 388 JVM tests and 20 targeted emulator UI tests passed,
+along with debug/optimized builds, both lint variants and design validation.
+The optimized APK is installed on the owner's full-screen design emulator.
+Temporary live diagnostic logging was removed; no changes were committed.
+
+### Owner-managed validation from this point
+
+The owner requested that testing stop. Latest edits preserve original TV Home
+feed metadata without focus-triggered enrichment, clip sidebar glyph colors to
+the moving highlight, add the vertical dash indicator, and track navigation by
+row identity with visible-card focus recovery. These latest edits are untested;
+earlier pass counts apply only to the revisions tested at those times. No further
+validation was started after the stop request. Subsequent preview launches used
+compile-only APK builds at the owner's request.
+
+Owner follow-up: Continue Watching resolves saved title metadata before publishing
+its row; ordinary catalog cards retain original feed metadata on focus. Sidebar
+navigation labels keep a fixed font weight. These edits have not been tested.
+
+The owner requested publication to GitHub after preview. Latest UI adjustments
+remain owner-validated; earlier automated pass counts do not cover later edits.

@@ -33,7 +33,7 @@ import org.viptv.app.theme.ViptvColor as C
     val rail = LocalRailFocus.current
     var claimedFocus by remember { mutableStateOf(false) }
     LaunchedEffect(ui.loading) { if (tv && !ui.loading && !claimedFocus) { withFrameNanos {}; claimedFocus = runCatching { first.requestFocus() }.getOrDefault(false) } }
-    Column(Modifier.fillMaxSize().padding(start = measure(192, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
+    Column(Modifier.fillMaxSize().padding(start = measure(104, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
         ScreenHeader("Discover", trailing = { PhoneTabActions(state, controller) })
         FilterTabs(types.map { it.groupLabel }, selectedType.groupLabel, { label ->
             types.firstOrNull { it.groupLabel == label }?.group?.let(controller::setDiscoverType)
@@ -72,7 +72,7 @@ import org.viptv.app.theme.ViptvColor as C
     val queue = state.libraryQueue
     val items = if (queue) state.queue else state.favorites
     LaunchedEffect(Unit) { if (tv) { withFrameNanos {}; runCatching { first.requestFocus() } } }
-    Column(Modifier.fillMaxSize().padding(start = measure(192, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
+    Column(Modifier.fillMaxSize().padding(start = measure(104, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
         ScreenHeader("My List", trailing = { PhoneTabActions(state, controller) })
         FilterTabs(listOf("My List", "Continue Watching"), if (queue) "Continue Watching" else "My List", {
             if (it == "My List") controller.openMyList() else controller.openContinueWatching()

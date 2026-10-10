@@ -22,6 +22,8 @@ if (mode === 'sync') {
   const docs = ['DESIGN.md', 'DESIGN_SYNC.md', 'ANDROID_DESIGN.md', 'TV_POLISH.md', 'specs/behavior/home-addon-refresh.md', 'specs/behavior/episode-number-jump.md', 'specs/behavior/android-tv-media-rows.md', 'specs/behavior/torrent-gateway-sources.md', 'specs/behavior/torrent-runtime-v2.md', 'viptv-design-system/README.md', 'viptv-design-system/components.md', 'viptv-design-system/copy.md', 'viptv-design-system/decisions.md', 'viptv-design-system/tokens/tokens.json'];
   const nativeTorrentContract = 'specs/behavior/torrent-native-android.md';
   if (names.includes(nativeTorrentContract)) docs.push(nativeTorrentContract);
+  const tvUiContract = 'specs/behavior/tv-ui-trial.md';
+  if (names.includes(tvUiContract)) docs.push(tvUiContract);
   const relocated = {
     'DESIGN_SYNC.md': 'docs/process/DESIGN_SYNC.md',
     'ANDROID_DESIGN.md': 'docs/platforms/ANDROID_DESIGN.md',

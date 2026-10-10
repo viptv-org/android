@@ -101,7 +101,7 @@ internal suspend fun requestInitialSourceFocusAfterFrame(
     Box(Modifier.fillMaxSize()) {
         if (tv) {
             TvHeroBackdrop(media)
-            Column(Modifier.padding(start = 192.dp, top = 96.dp).width(760.dp), verticalArrangement = Arrangement.spacedBy(28.dp)) {
+            Column(Modifier.padding(start = 104.dp, top = 96.dp).width(760.dp), verticalArrangement = Arrangement.spacedBy(28.dp)) {
                 VText(media.name, 56, display = true, lines = 2)
                 VText(mediaFacts(media), 22, color = C.textSecondary)
                 VText(media.description.orEmpty(), 26, color = C.textBody, lines = 3)

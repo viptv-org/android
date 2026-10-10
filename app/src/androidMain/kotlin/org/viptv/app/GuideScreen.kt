@@ -165,7 +165,7 @@ import org.viptv.app.theme.ViptvColor as C
             ui.channels.getOrNull(index)?.let { controller.selectGuideChannel(it) }
         }
     }
-    Column(Modifier.fillMaxSize().padding(start = measure(192, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
+    Column(Modifier.fillMaxSize().padding(start = measure(104, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
         if (tv) {
             VText("LIVE", 18, color = C.statusLive, bold = true)
             VText(programme?.title ?: selected?.name ?: "Live TV", 56, Modifier.padding(top = 14.dp), display = true, lines = 1)

@@ -118,6 +118,7 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
 
 /** One input owner for touch, accessibility and release-to-activate remotes. */
 @Composable internal fun Holdable(onActivate: () -> Unit, onHold: (() -> Unit)? = null, modifier: Modifier = Modifier, selected: Boolean = false, onInfo: (() -> Unit)? = null, rememberFocus: Boolean = true, enabled: Boolean = true, content: @Composable BoxScope.() -> Unit) {
+    val tv = LocalTv.current
     var pressed by remember { mutableStateOf(false) }
     var consumed by remember { mutableStateOf(false) }
     val activate by rememberUpdatedState(onActivate)
@@ -150,7 +151,7 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
                 }
                 else -> false
             }
-        }.combinedClickable(enabled = enabled, role = Role.Button, onClick = { activate() }, onLongClick = onHold?.let { { hold?.invoke() } }),
+        }.focusProperties { if (tv) canFocus = enabled }.combinedClickable(enabled = enabled, role = Role.Button, onClick = { activate() }, onLongClick = onHold?.let { { hold?.invoke() } }),
         contentAlignment = Alignment.Center, content = content)
 }
 
@@ -196,8 +197,8 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
     }
 }
 
-@Composable internal fun Artwork(url: String?, description: String?, modifier: Modifier, fit: ContentScale = ContentScale.Crop, alignment: Alignment = Alignment.Center) {
-    if (!url.isNullOrBlank()) SizedArtwork(url, description, modifier, fit, alignment)
+@Composable internal fun Artwork(url: String?, description: String?, modifier: Modifier, fit: ContentScale = ContentScale.Crop, alignment: Alignment = Alignment.Center, trimTransparency: Boolean = false) {
+    if (!url.isNullOrBlank()) SizedArtwork(url, description, modifier, fit, alignment, trimTransparency = trimTransparency)
 }
 
 @Composable internal fun Avatar(name: String, url: String?, modifier: Modifier) {

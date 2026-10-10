@@ -49,7 +49,7 @@ internal object CoreModels {
             subtitlesEnabled = it.deliveryKind?.let { _ -> it.preferredSubtitleLanguage != null || it.subtitleTracks.any { track -> track.selected } })
     }
     private fun track(item: MediaTrack) = PlaybackTrack(item.inputIndex.toInt(), item.codec, item.language, item.languageStatus, item.title, item.selected, item.supported, item.selectable)
-    fun enrich(original: Media, metadata: Media): Media = CoreJson.decode<MediaItem>(normalize("enrichHome", JSONObject().put("original", JSONObject(original.normalizedJson())).put("metadata", JSONObject(metadata.normalizedJson())).toString(), "")).view()
+    fun enrich(original: Media, metadata: Media): Media = CoreJson.decode<MediaItem>(normalize("enrichHome", JSONObject().put("original", JSONObject(original.normalizedJson(includeEpisodes = false))).put("metadata", metadata.homeMetadataJson()).toString(), "")).view()
     // The occurrence contributes scalar facts; the lookup contributes the one full episode catalog.
     fun enrichDetail(original: Media, metadata: Media): Media = CoreJson.decode<MediaItem>(normalize("enrichDetail", JSONObject().put("original", JSONObject(original.normalizedJson(includeEpisodes = false))).put("metadata", JSONObject(metadata.normalizedJson())).toString(), "")).view()
     fun mergeEpisodeProgress(details: Media, progress: List<Media>): Media {
@@ -83,6 +83,13 @@ private fun MediaItem.view(): Media = Media(
 )
 
 /** Copies carry current progress/artwork into the generated DTO without re-reading backend JSON. */
+/** Home needs episode identity and display facts, not full episode synopses or nested catalogs. */
+private fun Media.homeMetadataJson(): JSONObject = JSONObject(normalizedJson(includeEpisodes = false)).put("episodes", org.json.JSONArray().also { rows ->
+    episodes.forEach { episode -> rows.put(JSONObject().put("id", episode.id).put("name", episode.name)
+        .putOpt("season", episode.season?.toDouble()).putOpt("episode", episode.episode?.toDouble())
+        .putOpt("episodeTitle", episode.episodeTitle).putOpt("thumbnail", episode.thumbnail)) }
+})
+
 internal fun Media.normalizedJson(includeEpisodes: Boolean = true): String = CoreJson.encode(wireItem(includeEpisodes))
 
 private fun Media.wireItem(includeEpisodes: Boolean = true): MediaItem {

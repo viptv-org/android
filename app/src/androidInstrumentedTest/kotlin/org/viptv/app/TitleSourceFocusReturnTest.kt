@@ -34,7 +34,7 @@ import org.junit.runner.RunWith
 class TitleSourceFocusReturnTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun backFromManualPickerRestoresTvTitleSourceFocus() {
+    @Test fun backFromManualPickerRestoresTvTitlePlayFocus() {
         lateinit var controller: AppController
         compose.runOnUiThread {
             controller = AppController(ApplicationProvider.getApplicationContext(), "https://127.0.0.1:1")
@@ -62,16 +62,18 @@ class TitleSourceFocusReturnTest {
                     }
                 }
             }
-            compose.onNodeWithContentDescription("Choose source")
+            compose.onNodeWithText("Play")
                 .performSemanticsAction(SemanticsActions.RequestFocus)
                 .assertIsFocused()
-                .performKeyInput { pressKey(Key.DirectionCenter) }
+                .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
             compose.waitUntil { controller.state.value.route is Route.Sources }
             compose.waitForIdle()
             InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
             compose.waitUntil { controller.state.value.route is Route.Details }
-            compose.onNodeWithContentDescription("Choose source").assertIsFocused()
-            // Consuming the source return must not redirect the next Play visit.
+            compose.onNodeWithContentDescription("Choose source").assertDoesNotExist()
+            compose.onNodeWithText("More info").assertDoesNotExist()
+            compose.onNodeWithText("Play").assertIsFocused()
+            // Both hold and ordinary Play return to the remaining primary control.
             compose.onNodeWithText("Play")
                 .performSemanticsAction(SemanticsActions.RequestFocus)
                 .assertIsFocused()

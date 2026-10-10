@@ -62,7 +62,7 @@ private data class SettingRow(val title: String, val detail: String, val icon: S
     BackHandler(page != "Settings") { page = "Settings" }
     LaunchedEffect(page) { if (tv && page != "Addons") { withFrameNanos {}; runCatching { first.requestFocus() } } }
     if (page == "Addons") AddonsContent(state, controller) { page = "Settings" }
-    else Row(Modifier.fillMaxSize().padding(start = measure(192, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 32)), horizontalArrangement = Arrangement.spacedBy(144.dp)) {
+    else Row(Modifier.fillMaxSize().padding(start = measure(104, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 32)), horizontalArrangement = Arrangement.spacedBy(144.dp)) {
         Column(Modifier.then(if (tv) Modifier.width(704.dp) else Modifier.fillMaxWidth())) {
             ScreenHeader(page, { if (page != "Settings") page = "Settings" else controller.back() })
             LazyColumn(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(measure(14, 0)), contentPadding = PaddingValues(bottom = 40.dp)) {
@@ -136,7 +136,7 @@ private data class SettingRow(val title: String, val detail: String, val icon: S
     var selected by remember { mutableStateOf<Addon?>(null) }
     var removal by remember { mutableStateOf<Addon?>(null) }
     val first = LocalContentFocus.current
-    Column(Modifier.fillMaxSize().padding(start = measure(192, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 32))) {
+    Column(Modifier.fillMaxSize().padding(start = measure(104, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 32))) {
         ScreenHeader("Addons", onBack)
         VText("Shared by your account", if (tv) 24 else 15, color = C.textSecondary)
         AppButton("Install addon", { install = true }, Modifier.padding(vertical = 24.dp).focusRequester(first), "plus", primary = !tv)

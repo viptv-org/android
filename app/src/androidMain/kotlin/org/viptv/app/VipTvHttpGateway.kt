@@ -128,14 +128,26 @@ class VipTvHttpGateway(
             catch (error: GatewayError) { if (previous != null || error.status in listOf(401, 403)) throw error else emptyList() }
             catch (error: IOException) { if (previous != null) throw error else emptyList() }
         }
-        val queue = async { publish(0, HomeShelf("Continue watching", optional(prior("Continue watching")) {
-            json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray()
-        }, true)) }
+        val queue = async {
+            val savedItems = optional(prior("Continue watching")) {
+                json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray()
+            }
+            val items = if (television) {
+                val metadataGate = Semaphore(3)
+                savedItems.map { media -> async(Dispatchers.Default) {
+                    metadataGate.withPermit {
+                        val title = metadataOr(media)
+                        try { CoreModels.enrich(media, title) } catch (_: Exception) { media }
+                    }
+                } }.awaitAll()
+            } else savedItems
+            publish(0, HomeShelf("Continue watching", items, true))
+        }
         val recent = async {
-            publish(1, HomeShelf("Recently watched live TV", optional(prior("Recently watched live TV")) { liveV2(LiveCatalogQuery(collection = "recent", limit = 24)).items.map { CoreModels.mediaNormalized(it) } }))
+            if (!television) publish(1, HomeShelf("Recently watched live TV", optional(prior("Recently watched live TV")) { liveV2(LiveCatalogQuery(collection = "recent", limit = 24)).items.map { CoreModels.mediaNormalized(it) } }))
         }
         val saved = async { publish(1000, HomeShelf("My List", optional(prior("My List")) { favorites(profileId) })) }
-        val live = async { publish(1001, HomeShelf("Live now", optional(prior("Live now")) { this@VipTvHttpGateway.live().map(LiveChannel::asMedia) })) }
+        val live = async { if (!television) publish(1001, HomeShelf("Live now", optional(prior("Live now")) { this@VipTvHttpGateway.live().map(LiveChannel::asMedia) })) }
         val catalogs = catalogList.await().filter { catalog ->
             catalog.key.type != "live" && catalog.filters.none { it.required && DiscoverPolicy.defaults(catalog)[it.name].isNullOrBlank() }
         }
