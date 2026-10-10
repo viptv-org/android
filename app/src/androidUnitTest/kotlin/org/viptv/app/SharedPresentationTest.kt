@@ -54,6 +54,20 @@ class SharedPresentationTest {
         assertEquals(listOf(high, first, equal), SourceRankPolicy.order(sources, null, "en"))
     }
 
+    @Test fun measuredDecoderSupportControlsOrderingAndRecommendations() {
+        val unsupported = Source("hevc", "Provider", "2160p HEVC English audio dubbed")
+        val supported = Source("avc", "Provider", "1080p h264")
+        val caps = PlaybackClientCapabilities(1920, 1080, true, false, false, true, true)
+        val ranks = SharedPresentation.ranks(listOf(unsupported, supported), caps, "en")
+        assertEquals(listOf(1, 0), ranks.orderedIndices.map { it.toInt() })
+        assertFalse(ranks.ranks[0].best)
+        assertFalse(ranks.ranks[0].likely)
+        assertTrue(ranks.ranks[1].likely)
+        val noAvc = SharedPresentation.ranks(listOf(supported), caps.copy(h264 = false), "en")
+        assertFalse(noAvc.ranks.single().likely)
+        assertFalse(noAvc.ranks.single().best)
+    }
+
     @Test fun producerUpdatesRetainFailureWhenLaterEventReturnsRows() = runBlocking {
         FixtureServer(2) { request -> when (request.target) {
             "/api/v2/streams" -> FixtureResponse("""{"id":"shared-producer-job"}""")

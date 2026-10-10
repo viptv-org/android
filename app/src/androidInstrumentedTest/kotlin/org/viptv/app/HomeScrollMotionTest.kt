@@ -4,10 +4,13 @@ package org.viptv.app
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
@@ -21,6 +24,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.cancel
@@ -29,7 +34,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import kotlin.math.abs
 
 /** Real Home, DPAD input and numeric scroll positions; no image fixtures. */
 @RunWith(AndroidJUnit4::class)
@@ -46,7 +50,7 @@ class HomeScrollMotionTest {
         assertEquals(0, list.firstVisibleItemScrollOffset)
     }
 
-    @Test fun returningToContinueWatchingMovesOverMultipleFrames() = withHome { list ->
+    @Test fun returningToContinueWatchingRestoresTheTopWithoutAQueuedAnimation() = withHome { list ->
         compose.onNodeWithText("Resume").performKeyInput { pressKey(Key.DirectionDown) }
         card("Queue fixture").performKeyInput { pressKey(Key.DirectionDown) }
         card("Shelf fixture").assertIsFocused()
@@ -64,12 +68,10 @@ class HomeScrollMotionTest {
         card("Queue fixture").assertIsFocused()
         assertEquals(0, list.firstVisibleItemIndex)
         assertEquals(0, list.firstVisibleItemScrollOffset)
-        val maxStep = offsets.zipWithNext { a, b -> abs(a - b) }.maxOrNull() ?: 0
-        println("HOME_SCROLL before=$before maxFrameStep=$maxStep samples=${offsets.joinToString(",")}")
-        assertTrue("Top restoration teleported $maxStep of $before pixels in one frame", maxStep < before * .75f)
+        assertTrue("Top restoration should finish within three frames: $offsets", offsets.take(4).contains(0))
     }
 
-    @Test fun leavingContinueWatchingMovesOverMultipleFrames() = withHome { list ->
+    @Test fun leavingContinueWatchingRevealsTheNextShelfWithoutAQueuedAnimation() = withHome { list ->
         compose.onNodeWithText("Resume").performKeyInput { pressKey(Key.DirectionDown) }
         card("Queue fixture").assertIsFocused()
         compose.mainClock.autoAdvance = false
@@ -83,10 +85,8 @@ class HomeScrollMotionTest {
         compose.mainClock.autoAdvance = true
         card("Shelf fixture").assertIsFocused()
         val distance = list.firstVisibleItemScrollOffset
-        val maxStep = offsets.zipWithNext { a, b -> abs(a - b) }.maxOrNull() ?: 0
-        println("HOME_SCROLL_DOWN distance=$distance maxFrameStep=$maxStep")
         assertTrue("Next shelf must be revealed", distance > 100)
-        assertTrue("Leaving Continue Watching moved too harshly: $maxStep of $distance pixels", maxStep < distance * .4f)
+        assertTrue("Shelf reveal should finish within three frames: $offsets", offsets.take(4).any { it > 100 })
     }
 
     @Test fun reversingDirectionCancelsTheOlderTopRestore() = withHome { list ->
@@ -114,40 +114,36 @@ class HomeScrollMotionTest {
         compose.onNodeWithText("Resume").assertExists()
     }
 
-    @Test fun lowerShelfFocusDoesNotRequestMetadataOrReplaceArtwork() = withHome {
-        compose.onNodeWithText("Resume").performKeyInput { pressKey(Key.DirectionDown) }
-        card("Queue fixture").performKeyInput { pressKey(Key.DirectionDown) }
-        card("Shelf fixture").assertIsFocused()
-        val controller = activeController!!
-        val before = controller.gateway.metadataRequestCount
-        repeat(2) {
-            card("Shelf fixture").performKeyInput { pressKey(Key.DirectionDown) }
-            card("Lower fixture").assertIsFocused()
-            Thread.sleep(400)
-            card("Lower fixture").performKeyInput { pressKey(Key.DirectionUp) }
-            card("Shelf fixture").assertIsFocused()
-            Thread.sleep(400)
-        }
-        compose.runOnIdle {
-            assertEquals(before, controller.gateway.metadataRequestCount)
-            assertEquals("Shelf fixture", controller.state.value.shelves[1].items.single().name)
-            assertEquals("Lower fixture", controller.state.value.shelves[2].items.single().name)
+    @Test fun aWindowHandoffDoesNotReplaceTheFocusedHeroControl() {
+        var dialog by mutableStateOf(false)
+        withHome(overlay = {
+            if (dialog) Dialog(onDismissRequest = { dialog = false }) { Box(Modifier.size(40.dp)) }
+        }) {
+            compose.onNodeWithText("Resume").assertIsFocused().performKeyInput { pressKey(Key.DirectionRight) }
+            compose.onNodeWithText("Details").assertIsFocused()
+            compose.runOnIdle { dialog = true }
+            compose.waitForIdle()
+            compose.runOnIdle { dialog = false }
+            compose.waitForIdle()
+            compose.onNodeWithText("Details").assertIsFocused()
         }
     }
 
-    private var activeController: AppController? = null
-
     private fun card(title: String) = compose.onNode(hasText(title) and hasClickAction())
 
-    private fun withHome(action: (LazyListState) -> Unit) {
-        val controller = AppController(InstrumentationRegistry.getInstrumentation().targetContext, "https://example.invalid")
-        activeController = controller
+    private fun withHome(overlay: @androidx.compose.runtime.Composable () -> Unit = {}, action: (LazyListState) -> Unit) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val fixtureContext = object : android.content.ContextWrapper(context) {
+            override fun getSharedPreferences(name: String, mode: Int) = super.getSharedPreferences("home-scroll-fixture-$name", mode)
+        }
+        val controller = AppController(fixtureContext, "https://example.invalid")
+        compose.waitUntil(5_000) { !controller.state.value.sessionRestoring }
         val list = LazyListState()
         val initial = FocusRequester()
         val memory = FocusMemory()
         try {
             controller._state.value = AppState(route = Route.Browse(Destination.Home), sessionRestoring = false,
-                homeLoading = false, selectedProfile = Profile("owned-home-focus", "Owned home focus"), shelves = listOf(
+                homeLoading = false, shelves = listOf(
                     HomeShelf("Continue Watching", listOf(
                         Media("queue", "movie", name = "Queue fixture", positionMillis = 60_000, durationMillis = 120_000),
                         Media("queue-next", "movie", name = "Queue next fixture", positionMillis = 30_000, durationMillis = 120_000)), isQueueShelf = true),
@@ -158,14 +154,13 @@ class HomeScrollMotionTest {
                 CompositionLocalProvider(LocalTv provides true, LocalDensity provides Density(1f, 1f),
                     LocalContentFocus provides initial, LocalFocusMemory provides memory,
                     LocalBringIntoViewSpec provides VisibleFocusScroll) {
-                    ViptvTheme(false, Color.White) { Box(Modifier.fillMaxSize()) { HomeScreen(state, controller, list) } }
+                    ViptvTheme(false, Color.White) { Box(Modifier.fillMaxSize()) { HomeScreen(state, controller, list); overlay() } }
                 }
             }
             action(list)
         } finally {
             compose.mainClock.autoAdvance = true
             controller.scope.cancel()
-            activeController = null
         }
     }
 }

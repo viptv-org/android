@@ -5,6 +5,12 @@ authorized with current measured performance accepted for this phase; performanc
 improvements remain follow-up work. Existing native v1 and gateway behavior
 remain the deployed baseline until delivery is separately coordinated.
 
+Owner acceptance, 2026-10-09: the current emulated playback and controlled
+runtime checks are sufficient to merge this unreleased implementation into
+`main`. Physical-device testing is not a gate for this integration phase.
+Known untested hardware remains unqualified; production rollout and further
+performance work are outside this main-branch promotion.
+
 ## Delivery and ownership
 
 Android/API24+ (phone and TV), Linux and Windows acquire torrents locally. They

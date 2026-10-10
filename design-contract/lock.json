@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/design",
-  "revision": "16277caf2c7bf16296e25da40f143666465f0d2b",
+  "revision": "9998da83ef42cfe1d1c46d76f7ee6d8a2e43242e",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
@@ -16,7 +16,7 @@
     },
     "design-contract/TV_POLISH.md": {
       "source": "docs/platforms/TV_POLISH.md",
-      "sha256": "2c65fbdbebff40990a8529810e3b35619f983d23e8c3da8cd090810c98df854e"
+      "sha256": "92386e88850bf70c46cb6fa356f7cab2a087d8f44f33e5d7e5a92e49fd8dd4a8"
     },
     "design-contract/specs/behavior/home-addon-refresh.md": {
       "source": "specs/behavior/home-addon-refresh.md",
@@ -36,7 +36,7 @@
     },
     "design-contract/specs/behavior/torrent-runtime-v2.md": {
       "source": "specs/behavior/torrent-runtime-v2.md",
-      "sha256": "8ff0158c7fd56eba72be4e3d206cda788565bf0d169d96135bbd98a749b15a85"
+      "sha256": "b09d0cd1b01cd4fb699d1c22dd2aa282cf2349846807b4f5405ba512681a57ba"
     },
     "design-contract/viptv-design-system/README.md": {
       "source": "viptv-design-system/README.md",
@@ -60,7 +60,7 @@
     },
     "design-contract/specs/behavior/torrent-native-android.md": {
       "source": "specs/behavior/torrent-native-android.md",
-      "sha256": "6d1ab0246bc203bc8a4d0d3fd727fda7300bd59b1600eff6e9e4b14722dcbd8f"
+      "sha256": "0ff8cda20866bdfedba94861725581379677ef2acbf4b8acfc88bc6548cfa697"
     },
     "app/src/androidMain/assets/design/fonts/README.md": {
       "source": "assets/fonts/README.md",

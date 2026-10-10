@@ -29,7 +29,8 @@ internal object SharedPresentation {
     /** Only safe display facts enter ranking; unknown measured limits remain absent. */
     fun ranks(sources: List<Source>, capabilities: PlaybackClientCapabilities?, audioLanguage: String): SourceRanks = project("sourceRanks",
         JSONObject().put("sources", JSONArray().also { rows -> sources.forEach { rows.put(sourceLabel(it)) } })
-            .put("capabilities", JSONObject().putOpt("maxHeight", capabilities?.maxHeight?.takeIf { it > 0 }).put("hevcSdr", capabilities?.hevcSdr == true))
+            .put("capabilities", JSONObject().putOpt("maxHeight", capabilities?.maxHeight?.takeIf { it > 0 })
+                .putOpt("h264", capabilities?.h264).put("hevcSdr", capabilities?.hevcSdr == true))
             .put("preferences", JSONObject().put("audioLanguage", audioLanguage)))
 
     private fun sourceLabel(source: Source): JSONObject = JSONObject().put("name", source.name)

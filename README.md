@@ -126,7 +126,7 @@ checkout or deployment:
 
 ## Design and native preview
 
-`DESIGN_REF` pins AND-037 and the current shared visual system. The generated tokens, local Onest/Bricolage fonts and licensed Lucide assets are checked by `scripts/design-sync.mjs`; never edit generated files. To adopt a new committed design:
+`DESIGN_REF` pins AND-037, TV-042-STATIC and the current shared visual system. TV uses static hero artwork with bounded neighbour preloading and immediate route and shelf navigation; phone entrance motion retains its timing. The generated tokens, local Onest/Bricolage fonts and licensed Lucide assets are checked by `scripts/design-sync.mjs`; never edit generated files. [Static hero performance evidence](docs/history/2026-10-09-static-hero-performance.md) records emulator measurements and qualification limits. To adopt a new committed design:
 
 ```sh
 node scripts/design-sync.mjs sync ../design <full-commit-sha>

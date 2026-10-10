@@ -36,9 +36,9 @@ internal object CoreLifecycle {
     fun previewScope(profileId: String?, media: Media?, activeKey: String? = null, route: PreviewRoute = PreviewRoute.OTHER, releasing: Boolean = false): PreviewScopeDecision =
         decide("previewScope", PreviewScopeInput(profileId, media?.type.orEmpty(), media?.id.orEmpty(), media?.episode != null, activeKey, route, releasing))
 
-    fun preview(action: PreviewAction, requestedKey: String, snapshot: SourcePreviewSnapshot?, running: Boolean = false, ownerMatches: Boolean = true): PreviewDecision =
+    fun preview(action: PreviewAction, requestedKey: String, snapshot: SourcePreviewSnapshot?, running: Boolean = false, ownerMatches: Boolean = true, elapsedMillis: Long? = null, reuseBudgetMillis: Long? = null): PreviewDecision =
         decide("preview", PreviewInput(action, requestedKey, snapshot?.key, running, snapshot?.sources?.isNotEmpty() == true,
-            snapshot?.done == true, snapshot?.error != null, ownerMatches))
+            snapshot?.done == true, snapshot?.error != null, ownerMatches, elapsedMillis, reuseBudgetMillis))
 
     fun upNextPlayback(media: Media, previous: Media?, attemptedKey: String?, resumeAwaitingKey: String?, explicitResume: Boolean): UpNextPlaybackDecision =
         decide("upNextPlayback", UpNextPlaybackInput("${media.type}.${media.id}", previous?.let { "${it.type}.${it.id}" },

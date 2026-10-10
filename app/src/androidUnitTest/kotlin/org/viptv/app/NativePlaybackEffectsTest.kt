@@ -23,6 +23,11 @@ import kotlin.test.assertTrue
 
 /** Actual controller effect seam and Rust private bridge; transport acquisition is a controlled effect. */
 class NativePlaybackEffectsTest {
+    @Test fun staleHandleBeforeNativeAdmissionRequiresFreshSourceSelection() {
+        assertEquals("chooseSource", nativeRecoveryDecision(false, true, false, true))
+        assertEquals("waitForRetirement", nativeRecoveryDecision(true, false, false, true))
+        assertEquals("authRecovery", nativeRecoveryDecision(false, true, true, true))
+    }
     private fun corpus() = JSONObject(File(requireNotNull(System.getProperty("viptv.core.nativeVectors"))).readText())
     private fun ready() = corpus().getJSONArray("cases").getJSONObject(0).getJSONArray("steps").getJSONObject(0).getString("body").runtimeV2Fixture()
     private fun request() = corpus().getJSONObject("context").getJSONObject("request")
@@ -115,7 +120,7 @@ class NativePlaybackEffectsTest {
         } }
     }
 
-    @Test fun admittedDecoderFailureReleasesNativeAndBackendBeforeExplicitGatewayRetry() = runBlocking {
+    @Test fun admittedDecoderFailureReleasesNativeAndBackendBeforeExplicitNativeRetry() = runBlocking {
         FixtureServer(3) { incoming -> FixtureResponse(when {
             incoming.target.endsWith("torrent-runtime-protocol") -> protocol
             incoming.method == "DELETE" -> """{"ok":true}"""
@@ -127,7 +132,7 @@ class NativePlaybackEffectsTest {
                 h.effects.accept(prepared, "Exact episode", false, {}) { _, _ -> h.events.add("player.open"); throw failure }
             }
             assertFalse(h.effects.hasActive)
-            assertEquals("ordinaryRetry", h.effects.recoveryDecision())
+            assertEquals("nativeRetry", h.effects.recoveryDecision())
             h.effects.resetRecovery()
             assertEquals("ordinaryRetry", h.effects.recoveryDecision())
             assertEquals(1, server.requests.count { it.method == "POST" })
@@ -140,7 +145,8 @@ class NativePlaybackEffectsTest {
 
     @Test fun nativeCapacityAndInvalidSelectionKeepDistinctRecoveryAfterJoinedRetirement() = runBlocking {
         for ((failure, expected) in listOf(
-            NativeTorrentFailure("native_payload_limit") to "ordinaryRetry",
+            NativeTorrentFailure("native_payload_limit") to "nativeRetry",
+            NativeTorrentFailure("native_metadata_timeout") to "nativeRetry",
             NativeTorrentFailure("native_metadata_invalid") to "chooseSource",
         )) {
             FixtureServer(3) { incoming -> FixtureResponse(when {
@@ -155,6 +161,34 @@ class NativePlaybackEffectsTest {
                 assertEquals(1, server.requests.count { it.method == "DELETE" })
             } }
         }
+    }
+
+    @Test fun explicitRetryCreatesFreshNativeAuthorityWithoutRequiringGateway() = runBlocking {
+        FixtureServer(6) { incoming -> FixtureResponse(when {
+            incoming.target.endsWith("torrent-runtime-protocol") -> protocol
+            incoming.method == "DELETE" -> """{"ok":true}"""
+            else -> ready()
+        }) }.use { server -> Harness().use { h ->
+            val failed = h.effects.prepare(h.control(server), request(), 7) as NativePlaybackEffects.Prepared.Native
+            assertFailsWith<PlaybackFailure> {
+                h.effects.accept(failed, "Exact episode", false, {}) { _, _ ->
+                    throw PlaybackFailure(PlaybackError(PlaybackErrorCode.Network, "Unavailable", true))
+                }
+            }
+            assertEquals("nativeRetry", h.effects.recoveryDecision())
+            assertEquals(1, server.requests.count { it.method == "DELETE" })
+            val retried = h.effects.prepare(h.control(server), request(), 7) as NativePlaybackEffects.Prepared.Native
+            h.effects.accept(retried, "Exact episode", false, {}) { source, playing ->
+                assertEquals(120_000L, source.startPositionMillis)
+                assertFalse(playing)
+            }
+            assertEquals(2, h.starts)
+            assertTrue(h.effects.hasActive)
+            assertEquals(2, server.requests.count { it.method == "POST" })
+            assertTrue(server.requests.filter { it.method == "POST" }.all {
+                !JSONObject(it.body).optBoolean("force_gateway", false)
+            })
+        } }
     }
 
     @Test fun failedNativeSettlementCannotAuthorizeRetryOrDiscardItsReservations() = runBlocking {

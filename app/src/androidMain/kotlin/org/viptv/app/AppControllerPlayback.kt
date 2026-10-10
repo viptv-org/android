@@ -11,6 +11,7 @@ import kotlinx.coroutines.sync.withLock
 internal fun AppController.start(media: Media, source: Source, explicitResume: Boolean = false, deliveryOptions: PlaybackDeliveryOptions = PlaybackDeliveryOptions(), retryIntent: NativePlaybackRetryIntent? = null) {
     cancelUpNext()
     if (_state.value.preparingSourceId != null) return
+    playbackSelectionRefused = false
     if (retryIntent == null) {
         nativeEffects?.resetRecovery()
         nativeRetryIntent = null
@@ -74,7 +75,7 @@ private suspend fun AppController.prepareAndStartLocked(
         is Route.Player -> current.returnDestination
         else -> PlaybackReturn.Details
     }
-    val retryIntent = nativeRetryIntent
+    val retryIntent = if (!resetTrackChoices) nativeRetryIntent else null
     val requestedAudio = if (resetTrackChoices || retryIntent != null) null else selectedAudioTrackIndex
     val requestedSubtitle = if (resetTrackChoices || retryIntent != null) null else selectedSubtitleTrackIndex
     val requestedSubtitlesOff = if (resetTrackChoices || retryIntent != null) false else subtitlesOff
@@ -192,6 +193,11 @@ private suspend fun AppController.prepareAndStartLocked(
         if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) update(loading = false)
         throw error
     } catch (error: Throwable) {
+        if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration) && error is GatewayError && error.status == 404) {
+            playbackSelectionRefused = true
+            sourcePreview.cancel()
+            _state.value = _state.value.copy(sources = emptyList(), sourceProducers = emptyList())
+        }
         // Native replacement has crossed the outgoing lease boundary.
         if (nativeBoundaryCrossed && PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) { player.stop(); retirePlaybackSession() }
         if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) update(loading = false, message = playbackFailureMessage(error))
@@ -283,7 +289,8 @@ internal fun AppController.retryPlaybackRecovery() {
     val media = dialog.media ?: return
     val source = dialog.source ?: return
     scope.launch {
-        val decision = nativeEffects?.recoveryDecision() ?: "ordinaryRetry"
+        val decision = nativeEffects?.recoveryDecision(playbackSelectionRefused)
+            ?: nativeRecoveryDecision(false, true, false, playbackSelectionRefused)
         if (_state.value.dialog !== dialog) return@launch
         when (decision) {
             "waitForRetirement" -> return@launch
@@ -292,7 +299,7 @@ internal fun AppController.retryPlaybackRecovery() {
         }
         _state.value = _state.value.copy(dialog = null, message = null)
         start(media, source, explicitResume = false, deliveryOptions = PlaybackDeliveryOptions(forceGateway = decision == "forceGatewayRetry"),
-            retryIntent = nativeRetryIntent)
+            retryIntent = nativeRetryIntent.takeIf { decision == "nativeRetry" || decision == "forceGatewayRetry" })
     }
 }
 

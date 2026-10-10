@@ -1,3 +1,254 @@
+# Static TV hero integration — 2026-10-09
+
+The integration combines main `9f58755` with `perf/static-tv-hero` at `26e8378`.
+HomeScreen and HomeScrollMotionTest are taken unchanged from the static branch,
+including composed-item metadata enrichment without the focus-only 300ms delay.
+The static artwork, bounded neighbour preloader, immediate TV entrance/scroll
+behavior and focus restoration are retained. Main's source recovery, ranking,
+native torrent and DTS/FFmpeg changes remain. Core stays at `aae69de`, matching
+TV-web; design `e0bdc14` specifies TV-042-STATIC. The unused shader edge bridge
+and shader assets are omitted from the current build; the animated implementation
+at `9bcce38` and its preceding commits remain ancestors of the merge.
+
+Host core preparation and the complete unit suite pass with JDK 17 and one
+Gradle worker: 52 library and 329 app tests, with no skipped tests. The first
+full run failed the unchanged native explicit-retry test's cleanup count
+(two DELETE requests instead of one). Its full test class passed in isolation,
+then all 381 tests passed on a full rerun without implementation changes.
+Core and design integrity and design repository validation pass.
+
+All three native core ABIs, debug APK, instrumentation test APK and optimized
+performance APK assembly pass. Debug and performance lint pass with the existing
+81 warnings and six baseline-filtered errors. Both ordinary APKs pass minSdk 24,
+three-ABI native/core/JNA contents, pinned checksums, notices, system trust,
+HTTP-media policy, 16 KiB ZIP alignment and FFmpeg library/notice checks.
+Debug APK SHA-256:
+`661167252473c547334546ecd66fb01568e2515f661c0308e73e6bd3fff74e4e`.
+Performance APK SHA-256:
+`c66c0cd9e2309a53527bfcb0c1966a4ab8f27f0540c2d2f83987065f137f26d4`.
+
+No APK installation or device run was performed for this integration. Earlier
+static-hero emulator measurements below describe their original candidate;
+they do not qualify the merged build on a physical TV or establish faster startup.
+
+# Torrent source recovery fixes — 2026-10-09
+
+The normal APK was rebuilt from Android `685f66c` plus the local source-recovery
+changes, with core `d737c43`, design `01abe2e` and unchanged gateway `698372d`.
+Installed APK SHA-256 is
+`b277b03a0bedc31a51864532a6e98d4b52cea85d430316f172fbe0a37f9c96c1`.
+The installed bytes matched the checked build, all three native ABIs are present,
+and no fixture CA was packaged. The shared API 36 x86_64 TV emulator retained
+its account, profile and HTTPS backend; the development backend remains `d66085b`.
+
+Implemented behavior:
+
+- Android discovery previews expire five minutes after their monotonic start,
+  including partial arrivals. Fresh Title/picker frames still share discovery.
+  A source-handle 404 clears retained rows; Retry requests fresh source selection,
+  including failures before native admission.
+- The picker consumes shared batch ranking and recommendations with measured
+  decoder facts. Likely playable rows precede unknown/unsupported rows; the first
+  row has no automatic Best match badge. Decoder probe completion updates UI state.
+- Explicit native Retry waits for authority retirement, requests one fresh native
+  admission for the same selection, and preserves position, pause and track intent.
+  Authorization/selection refusals retain their recovery paths.
+- Metadata deadlines and concurrent public-DHT peer acquisition remain bounded.
+  The failure copy explains the fresh attempt and another-source options. Addon
+  peer counts do not prove that metadata peers are reachable.
+
+Validation passed: 125 Rust workspace tests; 477 native/actual-WASM torrent
+vectors; 37 shared-policy parity vectors and the browser WASM checks; 48 Android
+library and 300 app tests; 33 native artifact importer tests; 29 qualification
+Python tests; Android host/native builds, normal APK assembly and lint against
+its existing baseline. TV-web typecheck, 291 tests and production build passed.
+Its initial parallel run had one guide pagination timeout; that test passed alone
+and the full suite passed with one worker. Design validation and imported core,
+design and torrent artifact integrity checks passed.
+
+Observed emulator behavior:
+
+- The picker ranked a 1080p AVC source ahead of the original 4K-first discovery
+  order and did not invent a Best match badge for its first row.
+- The raw Torrentio 1080p AVC/AAC-LAMA source initially reached the 60-second
+  Media3 open timeout. Explicit Retry obtained a fresh native grant, decoded video
+  at the retained title position and advanced normally, without `gateway_required`.
+  Lease checks remained ready beyond a renewal interval.
+- Pause held at 1:32:37. Back 10 seconds and forward 30 seconds reached 1:32:27
+  and 1:32:57; playback resumed after buffering. Exit returned to the picker and
+  the backend reported the retired grant released.
+- The raw 1080p YIFY source reached `native_metadata_timeout` on its first attempt
+  and explicit native retry. Both displayed the current recovery explanation,
+  released authority, and avoided the previous forced-gateway dead end.
+- Choose another source returned to discovery; Back returned to the Title.
+  All tested grants were released. No sign-in, server or profile reset was used.
+
+Expiry boundaries, stale-owner rejection and pre-admission stale-handle recovery
+were verified through regression tests rather than altering live server handles.
+This is emulator evidence, not physical decoder qualification. Public torrents
+remain dependent on peer availability; a retry cannot guarantee a reachable swarm.
+Private captures, diagnostic logs and installed APK are in ignored qualification
+artifacts, never tracked.
+
+# Hero emulator performance — 2026-10-09
+
+The owner authorized the separate API 36 x86_64 hero emulator. Thirty primary
+device windows cover Home idle, horizontal/vertical D-pad navigation,
+Details/Back and process-cold launch, three repetitions with motion enabled
+and with the existing static fallback. The known candidate is `9bcce38`, core
+`3078943`, design `581289b`, APK SHA-256
+`9157f524eeda3a0294669240894398928e85f8ccf6418dd9544a2b08ce7d44f5`.
+Its real APK packaging/trust check and 25 hero unit tests pass.
+
+Animated Home idle has median 93.39% jank and 48 ms p50; static Home and
+offscreen-hero idle windows record no new frames. Traces show substantial
+hero GL/RenderThread work and separate focus-driven recomposition/layout
+costs. First-display launch has a 1,505 ms median in both variants; Home
+UIAutomation probes are coarse upper bounds, not fully loaded hero timings.
+These are debug/SwiftShader emulator observations, not physical-TV qualification.
+
+The original APK was restored and its hash verified. Normal animation scale
+is enabled, sign-in/storage remain intact, and the app is on Home. The shared
+browser emulator was untouched during this follow-up. Private raw captures,
+traces and logs remain ignored. No production app behavior changed.
+See [method, results and optimization priorities](docs/history/2026-10-09-hero-emulator-performance.md).
+
+# Public torrent source sweep — 2026-10-09
+
+The shared API 36 x86_64 TV emulator retained its account, profile and HTTPS
+backend. The installed normal APK has SHA-256
+`81a9a7315e7db2df60e9a0f6e0834bfd716b1bfc3b18a76c4c544ed378166fe7`;
+Android main is `685f66c`, with core `df62d8a`, gateway `698372d` and design
+`d956279`. The development backend is running `d66085b`. Private UI captures,
+test logs and the installed APK are in ignored qualification artifacts.
+
+Observed results for manually selected raw Torrentio sources for Limitless:
+
+- The 1080p H.264/AAC source displayed decoded video with advancing position.
+  Pause held the same position, resume and short backward/forward seeks returned
+  to PLAYING, and audio/subtitle menus opened. The source has one unidentified
+  audio language and no subtitle tracks; alternate tracks were not qualified.
+  Native authority stayed ready across lease periods. The same source decoded
+  again after the failed selections below.
+- A second 1080p H.264 source reached native admission but failed with
+  `native_metadata_timeout`. Its advertised peer count did not establish actual
+  peer responsiveness. Retry selected the contract's forced-gateway path and
+  returned HTTP 409 because no usable account gateway was configured.
+- A 1080p HEVC source reached native transport but failed Media3 decoding with
+  `media3_4003` on this emulator. This is not a physical-TV codec result.
+- Back during the opening of a fourth, 4K source returned to details and
+  released backend authority. Player exit also released authority. After the
+  failed source's cleanup, the private native cache tree occupied about 40 KiB;
+  the successful source's measured cache remained below its 256 MiB ceiling.
+- A retained selector initially reproduced HTTP 404. Fresh discovery and
+  selecting the same first source reached native admission. The backend expires
+  source handles after 30 minutes; completed title previews have no age check.
+  Existing Choose another source recovery discards the retained preview.
+
+Fresh Android test runs pass 48 library and 294 app unit tests; the qualification
+harness passes 29 tests. Gateway's locked workspace suite with torrent and
+owned-network fixture features passes 215 tests with 56 opt-in tests ignored.
+The backend passes 297 tests with four opt-in tests
+ignored when run with one test thread. Its default parallel run returned an
+unexpected HTTP 429 in a parental-policy test; that test passes alone and in
+the full sequential run. That concurrency finding is separate from this source
+sweep. No APK replacement, provider configuration, production deployment or
+physical-device run occurred. Audible output and long-duration soak stability
+were not qualified. Native playback works for the tested H.264 source, but the
+source-selection and recovery findings prevent a general stability claim.
+# Static TV hero and direct navigation — 2026-10-09
+
+Branch `perf/static-tv-hero` in `.scratch/android-tv-performance` builds on the
+tested hero branch at `9bcce382`; those hero changes were not merged into main
+when this work began. The final APK is
+`fe7d074ad2453ef7453bbe2a3c417245327e2f6bfc3db8d186d2ede58bdacb23`.
+The hero uses static artwork with a cached ambient blur; TV entrances and the
+280 ms first-shelf boundary scroll animation are removed. Shelf inputs are
+narrower, and initial TV focus explicitly enters remote mode after placement and
+window readiness. Phone entrance timing retains its existing behavior.
+
+Host/native preparation, 48 library and 314 app unit tests, APK assembly, app lint
+against its baseline, and the APK integrity probe pass. All 13 selected device
+tests pass, including real Home focus/scroll and artwork replacement/cancellation;
+the six Home cases also pass on repetition. Testing uses the owner-authorized
+hero emulator with sign-in preserved and global animation scale 1.
+
+Three repeats per journey compare the animated hero, an intermediate static hero
+and the final implementation: 45 measurement windows. Median idle frames fall
+from 118 to zero; horizontal janky frames from 46 to 19; vertical from 68 to 14;
+Details/Back from 49 to 11. Details p99 falls from 1,300 to 550 ms. First display
+is slower (1,456 to 1,730 ms), with startup outliers; loading remains unresolved.
+Frame populations differ, so these counts/percentiles are not button latency.
+Physical-TV performance and fully drawn Home were not qualified.
+
+See [the dated report](docs/history/2026-10-09-static-hero-performance.md) for
+artifact provenance, complete tables, fixture corrections and measurement limits.
+
+# TV hero motion and screen entrances — 2026-10-07
+
+Source `83cd81c` pins design `3efe0cad3d398376a62e942d2c665bc32b013cf3` and core
+`30789432121f54348d705460c0fa29495795295c`. The hero catalog is seven
+transitions (0.4–0.9 s, front-loaded) and eleven edge styles; core pools draw only
+from those edges. design-sync now removes artifacts the previous pin imported,
+and 18 hero shaders remain in the APK. 48 library and 306 app unit tests pass,
+including the screen-motion rules; all three core ABIs build and the normal APK
+assembles (SHA-256 `a9ee75547ed1a22a6faaf8bde8554595faa47354f9b92175ff12ef81b22da6ec`).
+
+The APK was installed with `install -r` on the local `viptv-design-tv` emulator
+against the development backend, preserving sign-in. Screen recordings at 30 fps
+show the hero art changing about 70 ms after a key press and settling about
+0.45 s later; three presses 200 ms apart start at once from the frame on screen
+and settle 0.45 s after the last, with no queued transitions. Discover, Details
+and Back enter with their fade, rail travel and scale motion. Edge styles meet
+the shelves without a seam. During one frame of each route change the rail
+appears expanded while focus moves; this was not investigated. Frame times,
+physical TV hardware and the animations-off path were not measured.
+
+# TV shader hero backdrop (TV-042) — 2026-10-07
+
+Branch `feat/hero-shader-backdrop` source `b422a3f` (origin/main
+`685f66c` merged) pins core `dac4841e618f246f2e83e5bc96a3b210553092d5`, design
+`706a2462ea3c64427cdf1fa9f47ab77836c80c4f` (TV-042 scoped to Android TV;
+its shader sources are unchanged from `59a9e57`, the build-tested pin) and gateway
+`698372df3734f6ec8019f70591b549280f47c28f`. Core, design and torrent artifact
+integrity checks pass. The 65 `assets/hero` shaders and catalog are imported by
+design-sync and pinned in `design-contract/lock.json`; the catalog has no
+`genreEdges`.
+
+Host checks pass 48 library and 302 app unit tests. `HeroMotionPolicyTest` calls
+the real native `heroEdgePool`: series and other Animation titles, a
+case-insensitive first pooled genre, the uncategorised pool, a title without
+genres, an empty pool showing `linear`, bag rounds without repeats, and a style
+shown from another category's bag. Against core `6882b6a` a title without genres
+failed: the generated `HeroEdgePoolInput` codec omits the empty list, which that
+core rejected. Core `dac4841` defaults absent lists to empty, and the test passes
+through both the generated codec and Android's request, which writes every
+field. All three core ABIs build, the normal
+APK assembles, and app lint passes against its baseline after a NewApi guard on
+`Bitmap.Config.HARDWARE`. The real APK probe verifies minSdk 24, three-ABI
+core/native/JNA contents, pinned checksums, notices, trust policy and 16 KiB ZIP
+alignment. The normal APK SHA-256 is
+`e5172cff28e36ebf3c714a0aa06189c79bd8d645677a7cfaf420740185d982c8`.
+
+That APK was installed with `install -r` on the local `viptv-design-tv` API 36
+x86_64 TV emulator (1920x1080) against the development backend; sign-in and app
+data were preserved. Animations were enabled and the backdrop ran on its GLES
+thread. Observed on screen: Home renders the 16:9 art at the right with drift
+between captures, the left text scrim and the lower fade into the shelves. Moving
+Continue Watching focus from American Horror Story to Re:Zero played a shader
+transition and changed the edge from the horror pool (dithered static) to the
+anime pool (cel, ink strokes, speed lines). Details for both series show the
+series backdrop with the series' pool. Rapid traversal of a 19-episode season
+queued no transitions and the app did not crash. Neither series switched to an
+episode still: their stills did not reach 60% of the art width, so the series
+backdrop correctly remained; a still-substitution transition was not observed.
+The narrower text scrim leaves edge strokes behind the hero progress label.
+
+Not verified: frame times, the static fallback with animations disabled, GL
+failure fallback, OLED ground and physical TV hardware. During navigation My
+List was toggled on for one title by a mis-targeted key press and immediately
+toggled off; no other account state changed.
+
 # Native source HTTP errors and public torrent playback — 2026-10-07
 
 The native control HTTP regression reproduces a real backend
@@ -2214,3 +2465,78 @@ original Kotlin Intrinsics class is not in the shrunk target. The probe does not
 open media or modify sign-in/history. Both temporary TV probe packages are
 removed after validation. LintDebug passes with 81 warnings and six existing
 baseline-filtered errors. The alternative-source metadata failure remains open.
+# Source recovery and playback performance merge — 2026-10-09
+
+The merged tree retains local preview expiry, capability-aware source ranking,
+stale-selection recovery and explicit native Retry alongside upstream `1e795bf`'s
+DTS/FFmpeg support, bounded artwork loading, seek controls, source-page work and
+native torrent recovery. Core `aae69de27d69f87f79ce513e47a78985cede4a39` is the
+same regenerated revision adopted by TV-web; design remains
+`01abe2ea695ae2041742056de756e11d7d191eb5` and native gateway artifacts are
+`a3f4db1a665615f4f5c9897de98af8325e201750`.
+
+The local Home loading measurement's eager six-request assertion conflicted with
+upstream's deliberate removal of unfocused metadata hydration. Its first/repeat
+measurements retain the fixture and require zero metadata requests. A separate
+on-demand check verifies the selected item is fetched once and cached; blocked
+catalog work still leaves the saved queue available. Historical measurements
+below describe their original revisions.
+
+Validation passed with JDK 17 and one worker: 52 library and 309 app unit tests,
+host core build, all three native core ABIs and normal debug APK assembly. Core,
+design and torrent integrity checks pass. The APK check verifies minSdk 24,
+native/core/JNA libraries, pinned checksums, notices, system trust and 16 KiB ZIP
+alignment; FFmpeg checks verify its three ABIs, packaged JNI callback and notices.
+APK SHA-256:
+`d3954e8389c8d35ff2d0273e07e5cf691a67efd54d139b5e98fbd3fb9761726e`.
+
+No emulator installation or physical-device playback was performed for this
+merge. The APK is a checked build, not evidence of decoder, remote or public-peer
+acceptance on a device. TV-web's separate browser limitation is recorded there.
+# Android TV animation optimization — 2026-10-08
+
+`perf/tv-animation-latency` adopts design
+`e860bb2dd60463ca7b930e51f9df8f0f94dcb559`. The transition-budget regression
+fails against `463b126` and passes against the candidate. All 48 library and
+312 app unit tests pass, including frame pacing at 30/60/120 Hz, immediate
+rest-to-transition response and surface recreation. Three core ABIs, normal
+debug APK assembly and baseline-aware lint pass; pre-existing lint warnings and
+baseline exclusions remain. The real APK probe and all 23 packaged hero asset
+hashes pass. APK SHA256:
+`a59bcb7977ab65749d190eb76176652c9bcf11791c0c8001d75467db58c152f6`.
+
+The desktop GLES probe passes all 11 edge styles at full/scaled TV sizes,
+including edge blends, OLED ground, nonempty output and GLES error checks.
+The 24-sample full-size run measured a median paired 18.3% ambient/edge cost
+reduction; this excludes the scene, mipmaps, Android composition and device
+presentation. Resting updates halve on a 60 Hz display, catalog transition
+duration is 280–350 ms, browsing dissolve 180 ms and episode settle 120 ms.
+See [method, measurements and remaining qualification](docs/TV_ANIMATION_PERFORMANCE.md).
+
+The shared emulator and physical TV were not used for this candidate; emulator
+coordination remained pending. Device frame times, rapid-input focus, visual
+review and background/return remain unverified. No deployment changed.
+
+# Neighbouring TV hero artwork preloading — 2026-10-08
+
+The animated Home/Details backdrop adopts design
+`581289b695f6802e77da4efeedad9bf64bab9b04`. It preloads at most two adjacent
+artworks with one speculative loader, shares ready/pending software-bitmap
+decodes with foreground selection, and retains at most three images/12 MiB.
+Core artwork projections run off the input thread; no metadata fetches are added.
+
+All 48 library and 324 app unit tests pass. The twelve preloader tests establish
+warm/in-flight reuse, serial speculation, cancellation, foreground priority,
+duplicate filtering, memory limits, disposal and retry. A warmed controlled
+250 ms loader fixture requires zero additional fetch/decode time and no duplicate
+request. Three core ABIs, debug APK assembly and baseline-aware lint pass.
+The real APK and packaged design checks are recorded with the candidate artifact.
+
+No shared emulator or physical TV was installed/navigated for this candidate.
+Actual Coil/network latency, focus navigation, visual review and frame-time
+improvement remain unverified on device. GPU uploads/mipmaps still run on image
+changes. See [scope and method](docs/TV_ANIMATION_PERFORMANCE.md).
+
+Preloading candidate APK SHA256: `9157f524eeda3a0294669240894398928e85f8ccf6418dd9544a2b08ce7d44f5`.
+Real APK minSdk, three-ABI contents, pins/notices/trust/alignment and all 23
+packaged hero hashes pass.
