@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import androidx.compose.foundation.Image
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithCache
@@ -126,7 +128,7 @@ import org.viptv.app.normalizedJson
             val sharp = remember(artwork) { artwork.sharp.asImageBitmap() }
             Image(ambient, null, Modifier.fillMaxSize().alpha(.6f), contentScale = ContentScale.Crop)
             if (!ambientOnly) Image(sharp, null, Modifier.align(Alignment.TopEnd).then(if (fullScreen) Modifier.fillMaxSize() else Modifier.width(ART_WIDTH.dp).height(ART_HEIGHT.dp))
-                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .then(if (fullScreen) Modifier else Modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                 .drawWithCache {
                     val left = Brush.horizontalGradient(0f to Color.Transparent, .3f to Color.Black, 1f to Color.Black)
                     val bottom = Brush.verticalGradient(0f to Color.Black, .58f to Color.Black, 1f to Color.Transparent)
@@ -135,13 +137,15 @@ import org.viptv.app.normalizedJson
                         drawRect(left, blendMode = BlendMode.DstIn)
                         drawRect(bottom, blendMode = BlendMode.DstIn)
                     }
-                }, contentScale = ContentScale.Crop)
+                }), contentScale = ContentScale.Crop)
         }
         }
         }
         // Static fades keep the copy readable and join the art to the shelves.
-        Box(Modifier.matchParentSize().background(copyFade))
-        Box(Modifier.matchParentSize().background(lowerFade))
+        if (fullScreen) DetailHeroScrim(Modifier.matchParentSize()) else {
+            Box(Modifier.matchParentSize().background(copyFade))
+            Box(Modifier.matchParentSize().background(lowerFade))
+        }
     }
 }
 
@@ -174,4 +178,19 @@ private suspend fun loadArt(context: Context, url: String, width: Int, height: I
         if (small !== sharp) small.recycle()
         HeroArtwork(sharp, ambient)
     }
+}
+
+/** Shade only the copy area; leave the upper and right artwork at full brightness. */
+@Composable internal fun DetailHeroScrim(modifier: Modifier = Modifier, compact: Boolean = false) {
+    val ground = LocalGround.current
+    Box(modifier.drawWithCache {
+        val center = Offset(size.width * .12f, size.height * .87f)
+        val radius = size.width * if (compact) 1.05f else .52f
+        val fade = Brush.radialGradient(0f to ground.copy(alpha = .94f), .60f to ground.copy(alpha = .88f), 1f to Color.Transparent, center = center, radius = radius)
+        onDrawBehind {
+            scale(scaleX = 1f, scaleY = size.height * .57f / radius, pivot = center) {
+                drawCircle(fade, radius = radius, center = center)
+            }
+        }
+    })
 }

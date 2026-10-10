@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.viptv.app.hero.TvHeroBackdrop
+import org.viptv.app.hero.DetailHeroScrim
 import org.viptv.app.theme.ViptvColor as C
 
 /** Whole-hero entry focus and bounded tab panes keep long series usable on a remote. */
@@ -63,7 +64,7 @@ import org.viptv.app.theme.ViptvColor as C
         if (tv) TvHeroBackdrop(media, fullScreen = true)
         else {
             Artwork(art.heroImage, null, Modifier.fillMaxSize())
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, LocalGround.current.copy(alpha = .75f), LocalGround.current))))
+            DetailHeroScrim(Modifier.fillMaxSize(), compact = true)
         }
         if (paneOpen) Box(Modifier.fillMaxSize().background(LocalGround.current.copy(alpha = .96f)))
         Column(Modifier.fillMaxSize().padding(start = measure(104, 16), end = measure(64, 16), top = measure(48, 56), bottom = measure(54, 32)), verticalArrangement = Arrangement.spacedBy(measure(24, 16))) {
@@ -77,8 +78,8 @@ import org.viptv.app.theme.ViptvColor as C
                     Column(Modifier.widthIn(max = if (tv) 1100.dp else androidx.compose.ui.unit.Dp.Infinity).fillMaxWidth().padding(bottom = measure(60, 16)), verticalArrangement = Arrangement.spacedBy(measure(18, 12))) {
                         TitleArtwork(media.name, art.titleLogo, Modifier.fillMaxWidth().height(measure(118, 82)), if (tv) 54 else 30)
                         VText(mediaFacts(media), if (tv) 22 else 14, color = C.textSecondary, lines = 2)
-                        Box(Modifier.height(measure(32, 26))) { HeroAiring(media) }
-                        Box(Modifier.widthIn(max = if (tv) 980.dp else androidx.compose.ui.unit.Dp.Infinity).fillMaxWidth().height(measure(110, 70))) {
+                        HeroAiring(media)
+                        Box(Modifier.widthIn(max = if (tv) 654.dp else androidx.compose.ui.unit.Dp.Infinity).fillMaxWidth(if (tv) 1f else .667f).height(measure(110, 70))) {
                             if (media.description.isNullOrBlank() && app.loading) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { repeat(3) { SkeletonBlock(Modifier.fillMaxWidth(if (it == 2) .7f else .94f).height(measure(18, 12))) } }
                             else VText(media.description?.takeIf { it.isNotBlank() } ?: "No description available.", if (tv) 26 else 16, color = C.textBody, lines = if (tv) 3 else 3)
                         }
