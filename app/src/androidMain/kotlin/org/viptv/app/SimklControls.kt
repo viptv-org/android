@@ -4,6 +4,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Alignment
+import org.viptv.app.theme.ViptvColor as C
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -94,22 +101,6 @@ internal fun AppController.addToSimklWatchlist(media:Media,status:String="planto
 }
 
 
-@Composable internal fun SimklTitleActions(media:Media,controller:AppController) {
-    var open by remember(media.id) {mutableStateOf(false)}
-    val context=androidx.compose.ui.platform.LocalContext.current
-    AppIconButton("plus","Watchlist status",{open=true})
-    val raw=org.json.JSONObject(media.normalizedJson(false)).optJSONObject("raw")
-    val link=raw?.optString("simkl_url")?.takeIf {it.startsWith("https://simkl.com/")}
-    if(link!=null) AppIconButton("info","View on SIMKL",{runCatching {context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,android.net.Uri.parse(link)))}.onFailure {controller.fail(it)}})
-    if(open) ChoiceDialog("${media.name} · Watchlist",listOfNotNull(
-        "Plan to watch" to {controller.addToSimklWatchlist(media,"plantowatch");open=false},
-        if(media.type!="movie") "Watching" to {controller.addToSimklWatchlist(media,"watching");open=false} else null,
-        if(media.type!="movie") "On hold" to {controller.addToSimklWatchlist(media,"hold");open=false} else null,
-        "Completed" to {controller.addToSimklWatchlist(media,"completed");open=false},
-        "Dropped" to {controller.addToSimklWatchlist(media,"dropped");open=false}
-    ),{open=false})
-}
-
 @Composable internal fun SimklCalendarControls(state:AppState,controller:AppController,catalog:DiscoverCatalog) {
     val calendar=catalog.key.id.contains("calendar") || catalog.key.id.contains("new-episodes") || catalog.key.id.contains("premieres") || catalog.key.id.contains("upcoming")
     if(!calendar) return
@@ -119,14 +110,117 @@ internal fun AppController.addToSimklWatchlist(media:Media,status:String="planto
     val month=runCatching {java.time.YearMonth.parse(filters["month"])}.getOrDefault(java.time.YearMonth.from(day))
     var picking by remember {mutableStateOf(false)}
     LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.padding(bottom=8.dp)) {
-        item {AppChip("Previous day",{controller.setDiscoverFilter("month",null);controller.setDiscoverFilter("date",day.minusDays(1).toString())})}
-        item {AppChip("Today",{controller.setDiscoverFilter("month",null);controller.setDiscoverFilter("date",today.toString())})}
+        item {AppChip("Previous day",{controller.setCalendarPeriod(date = day.minusDays(1).toString())})}
+        item {AppChip("Today",{controller.setCalendarPeriod(date = today.toString())})}
         item {AppChip(day.format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d")),{picking=true})}
-        item {AppChip("Next day",{controller.setDiscoverFilter("month",null);controller.setDiscoverFilter("date",day.plusDays(1).toString())})}
-        item {AppChip("Previous month",{controller.setDiscoverFilter("date",null);controller.setDiscoverFilter("month",month.minusMonths(1).toString())})}
-        item {AppChip(month.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy")),{controller.setDiscoverFilter("date",null);controller.setDiscoverFilter("month",month.toString())})}
-        item {AppChip("Next month",{controller.setDiscoverFilter("date",null);controller.setDiscoverFilter("month",month.plusMonths(1).toString())})}
-        item {AppChip("All dates",{controller.setDiscoverFilter("date",null);controller.setDiscoverFilter("month",null)})}
+        item {AppChip("Next day",{controller.setCalendarPeriod(date = day.plusDays(1).toString())})}
+        item {AppChip("Previous month",{controller.setCalendarPeriod(month = month.minusMonths(1).toString())})}
+        item {AppChip(month.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy")),{controller.setCalendarPeriod(month = month.toString())})}
+        item {AppChip("Next month",{controller.setCalendarPeriod(month = month.plusMonths(1).toString())})}
+        item {AppChip("All dates",{controller.setCalendarPeriod()})}
     }
-    if(picking) TextEntry("Calendar date","Enter a date, for example 2026-10-10",day.toString(),onDone={value->if(runCatching {java.time.LocalDate.parse(value)}.isSuccess){controller.setDiscoverFilter("month",null);controller.setDiscoverFilter("date",value);picking=false}},onCancel={picking=false})
+    SimklCalendarMonth(month, day, controller)
+    if(picking) TextEntry("Calendar date","Enter a date, for example 2026-10-10",day.toString(),onDone={value->if(runCatching {java.time.LocalDate.parse(value)}.isSuccess){controller.setCalendarPeriod(date = value);picking=false}},onCancel={picking=false})
+}
+
+/** Discovery entry points use the existing chips and category screens on both form factors. */
+@Composable internal fun SimklHomeShortcuts(controller: AppController) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(measure(16, 8)), contentPadding = PaddingValues(4.dp)) {
+        listOf("Calendar" to "calendar", "My calendar" to "my-calendar", "New episodes" to "new-episodes", "Premieres" to "premieres", "Upcoming" to "upcoming").forEach { (label, catalog) ->
+            item(key = catalog) { AppChip(label, { controller.openSimklFeed(catalog) }) }
+        }
+    }
+}
+internal fun AppController.openSimklFeed(id: String) {
+    scope.launch {
+        try {
+            val catalogs = _state.value.discoverUi.catalogs.takeIf { it.isNotEmpty() } ?: gateway.catalogs()
+            val category = if (id == "premieres") "movie" else "series"
+            val catalog = catalogs.firstOrNull { it.key.id == id && it.key.type == category } ?: catalogs.firstOrNull { it.key.id == id } ?: return@launch
+            _state.value = _state.value.copy(discoverUi = _state.value.discoverUi.copy(catalogs = catalogs))
+            setDiscoverCatalog(catalog.key)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (error: Exception) { fail(error) }
+    }
+}
+
+@Composable internal fun SimklDetailFacts(media: Media) {
+    val raw = remember(media) { org.json.JSONObject(media.normalizedJson(false)).optJSONObject("raw") }
+    val next = raw?.optJSONObject("next_airing")
+    val tv = LocalTv.current
+    val date = next?.optString("released")?.takeIf { it.isNotBlank() && it != "null" }
+    val schedule = raw?.optJSONObject("airs")
+    val airing = date?.let { value ->
+        runCatching { java.time.OffsetDateTime.parse(value).atZoneSameInstant(java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a z")) }.getOrDefault(value)
+    }
+    if (airing != null) VText("Next episode · ${next?.optString("episodeTitle")?.takeIf { it.isNotBlank() } ?: next?.optString("name").orEmpty()} · $airing", if (tv) 22 else 14, color = org.viptv.app.theme.ViptvColor.textSecondary, lines = 3)
+    else if (schedule != null) {
+        val parts = listOf("day", "time", "timezone").mapNotNull { key -> schedule.optString(key).takeIf { it.isNotBlank() && it != "null" } }
+        if (parts.isNotEmpty()) VText("Airs · " + parts.joinToString(" · "), if (tv) 22 else 14, color = org.viptv.app.theme.ViptvColor.textSecondary, lines = 2)
+    }
+    val facts = listOfNotNull(raw?.optString("status")?.takeIf { it.isNotBlank() && it != "null" }, raw?.optString("network")?.takeIf { it.isNotBlank() && it != "null" }, raw?.optJSONObject("ratings")?.optJSONObject("simkl")?.optDouble("rating")?.takeIf { !it.isNaN() }?.let { "SIMKL %.1f/10".format(it) }, raw?.optInt("rank")?.takeIf { it > 0 }?.let { "Rank #$it" })
+    if (facts.isNotEmpty()) VText(facts.joinToString(" · "), if (tv) 22 else 14, color = org.viptv.app.theme.ViptvColor.textSecondary, lines = 2)
+}
+
+@Composable private fun SimklCalendarMonth(month: java.time.YearMonth, selected: java.time.LocalDate, controller: AppController) {
+    var expanded by remember { mutableStateOf(false) }
+    AppChip(if (expanded) "Hide month" else "Show month", { expanded = !expanded }, modifier = Modifier.padding(bottom = 8.dp))
+    if (!expanded) return
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        Row(Modifier.fillMaxWidth()) {
+            listOf("M", "T", "W", "T", "F", "S", "S").forEach { VText(it, if (LocalTv.current) 20 else 12, Modifier.weight(1f).padding(start = 12.dp)) }
+        }
+        val offset = month.atDay(1).dayOfWeek.value - 1
+        repeat((offset + month.lengthOfMonth() + 6) / 7) { week ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                repeat(7) { column ->
+                    val number = week * 7 + column - offset + 1
+                    if (number in 1..month.lengthOfMonth()) {
+                        val date = month.atDay(number)
+                        var focused by remember(date) { mutableStateOf(false) }
+                        val tv = LocalTv.current
+                        Holdable({ controller.setCalendarPeriod(date = date.toString()) }, modifier = Modifier.weight(1f).height(measure(52, 44))
+                            .onFocusChanged { focused = it.isFocused }.background(if (date == selected || focused) C.surfaceN3 else Color.Transparent, RoundedCornerShape(8.dp))
+                            .border(if (tv && focused) 2.dp else 0.dp, if (tv && focused) C.textPrimary else Color.Transparent, RoundedCornerShape(8.dp))) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { VText(number.toString(), if (tv) 20 else 14, bold = date == selected || focused) }
+                        }
+                    } else Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable internal fun SimklSaveAction(media: Media, saved: Boolean, controller: AppController, modifier: Modifier = Modifier) {
+    var open by remember(media.id) { mutableStateOf(false) }
+    AppIconButton(if (saved) "check" else "plus", "My List and watchlist status", { open = true }, modifier)
+    if (open) ChoiceDialog(media.name, listOfNotNull(
+        (if (saved) "Remove from My List" else "Add to My List") to { controller.toggleMyList(media); open = false },
+        "Plan to watch" to { controller.addToSimklWatchlist(media, "plantowatch"); open = false },
+        if (media.type != "movie") "Watching" to { controller.addToSimklWatchlist(media, "watching"); open = false } else null,
+        if (media.type != "movie") "On hold" to { controller.addToSimklWatchlist(media, "hold"); open = false } else null,
+        "Completed" to { controller.addToSimklWatchlist(media, "completed"); open = false },
+        "Dropped" to { controller.addToSimklWatchlist(media, "dropped"); open = false }
+    ), { open = false })
+}
+
+@Composable internal fun SimklRecommendations(media: Media, controller: AppController) {
+    val groups = remember(media) {
+        val raw = org.json.JSONObject(media.normalizedJson(false)).optJSONObject("raw")
+        listOf("users_recommendations" to "Viewers also watched", "similar" to "More like this").map { (key, label) ->
+            val array = raw?.optJSONArray(key)
+            label to (0 until (array?.length() ?: 0)).mapNotNull { index -> array?.optJSONObject(index)?.let { runCatching { CoreModels.media(it) }.getOrNull() } }.take(20)
+        }.filter { it.second.isNotEmpty() }
+    }
+    Column(Modifier.padding(horizontal = measure(0, 20), vertical = measure(24, 16)), verticalArrangement = Arrangement.spacedBy(measure(24, 16))) {
+        groups.forEach { (label, items) ->
+            VText(label, if (LocalTv.current) 28 else 20, display = true)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(measure(24, 12)), contentPadding = PaddingValues(4.dp)) {
+                items.forEach { item -> item(key = item.id) {
+                    MediaCard(item, Modifier.width(measure(200, 116)), portrait = true, onClick = { controller.open(item) }, onHold = { controller.requestDialog(DialogKind.MyListManage, item.name, item) })
+                } }
+            }
+        }
+    }
 }

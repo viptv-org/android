@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/core",
-  "revision": "3ab8f57bbf0a5ec0452b237bf0f0357e11c8072d",
+  "revision": "2a04850e994a2a892178456b9ab541ffca5bfe3c",
   "files": {
     "Cargo.lock": "45176001f797ead9a088abc6e3b48aeffaa7a3dba28b06dea8125c7f6ad4e714",
     "Cargo.toml": "ff5e8fab6e9e59e8228217826b39a74321c7d57468af65705896a73b0ee4becc",
@@ -84,7 +84,7 @@
     "crates/viptv-provider/src/lib.rs": "918a5716816fdf8cf693b3c2f9ad811f543bf8cd4ef9f0527bcdc0dda3cb8c8e",
     "crates/viptv-provider/src/normalize.rs": "d697b4f01d26dacf808767dbb23ca706ea582c7260f45f69fff49b5511902a12",
     "crates/viptv-simkl/Cargo.toml": "219d152810ec2131995ce979a531cd4db30513e48305cc756e09d23663291963",
-    "crates/viptv-simkl/src/http.rs": "ed48a04f491e38a85e3565ebe49033eef58da13ef625a1cce543bd5cac408bca",
+    "crates/viptv-simkl/src/http.rs": "ee67e256870016c8375d034ba0734f947c61eb8929dce52cd2dfe8ef2e0d27cb",
     "crates/viptv-simkl/src/lib.rs": "cca0cf54a4fcd473bc515c8872a30b63d87469095648f59c6165bb5933db01fc",
     "crates/viptv-simkl/tests/contracts.rs": "99867de35ed0c981313588fb850861852abfa6f5484639b183763eccbea0f68d",
     "generated/kotlin-wire/Wire.kt": "9ab7537a2c1ec86cd5ea291822f6289f4532186162db0700d37c0576ddb848b8",

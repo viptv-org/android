@@ -39,13 +39,22 @@ import org.viptv.app.theme.ViptvColor as C
 @Composable internal fun Pairing(state: AppState, controller: AppController, model: ViptvModel) {
     val tv = LocalTv.current
     if (!tv && state.sessionRestoring && state.loading) {
+        var slow by remember { mutableStateOf(false) }
+        var serverEntry by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { kotlinx.coroutines.delay(8000); slow = true }
         Box(Modifier.fillMaxSize().background(LocalGround.current), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(24.dp)) {
                 Image(painterResource(R.drawable.viptv_mark), "VIPTV", Modifier.size(88.dp))
                 VText("VIPTV", 34, display = true)
                 CircularProgressIndicator(Modifier.size(22.dp), color = LocalAccent.current, strokeWidth = 2.dp)
+                if (slow) {
+                    VText("Connecting is taking longer than usual", 14, color = C.textSecondary)
+                    AppButton("Retry", controller::retryAuthentication)
+                    AppButton("Change server", { serverEntry = true })
+                }
             }
         }
+        if (serverEntry) ServerAddressEntry(model) { serverEntry = false }
         return
     }
     if (!tv && !state.sessionRestoring && !state.pairingRequested) { PhoneSignIn(state, controller, model); return }

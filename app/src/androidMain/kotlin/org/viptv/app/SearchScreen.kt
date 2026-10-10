@@ -115,7 +115,9 @@ import org.viptv.app.theme.ViptvColor as C
             }
         } else {
             AppField(state.searchQuery, controller::search, "Search movies and series", Modifier.focusRequester(first))
-            SimklSearchControls(state,controller)
+            var filtersOpen by rememberSaveable { mutableStateOf(false) }
+            AppChip(if (filtersOpen) "Hide filters" else "Filters" + if (state.simklSearchFilters.isEmpty()) "" else " · ${state.simklSearchFilters.size}", { filtersOpen = !filtersOpen }, modifier = Modifier.padding(vertical = 8.dp))
+            if (filtersOpen) SimklSearchControls(state,controller)
             VText(state.searchStatus,14,color=C.textTertiary)
             FilterTabs(listOf("All", "Movies", "Series", "Live TV"), filter, { filter = it }, Modifier.padding(vertical = 18.dp))
             if (results.isEmpty() && state.searchQuery.isNotBlank() && state.searchStatus == "Searching…") PosterSkeletonGrid(3)

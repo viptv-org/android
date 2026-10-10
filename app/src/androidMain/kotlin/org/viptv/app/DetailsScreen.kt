@@ -196,6 +196,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                     if (tv && !presentation.titleLogo.isNullOrBlank()) Artwork(presentation.titleLogo, media.name, Modifier.size(310.dp, 90.dp), ContentScale.Fit, Alignment.CenterStart, trimTransparency = true)
                     else if (tv || presentation.titleLogo.isNullOrBlank()) VText(media.name, if (tv) 56 else 34, display = true, lines = 2)
                     VText(mediaFacts(media), if (tv) 22 else 14, color = C.textSecondary, lines = if (tv) 1 else 2)
+                    SimklDetailFacts(media)
                     VText(media.description.orEmpty(), if (tv) 26 else 16, Modifier.widthIn(max = if (tv) 780.dp else Dp.Infinity), color = C.textBody, lines = if (tv) 2 else 12)
                     if (!tv && !media.credits.isNullOrBlank()) VText(media.credits.orEmpty(), 14, color = C.textSecondary, lines = 3)
                 }
@@ -205,8 +206,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                     if (target == null && retryDetail)
                         AppButton("Try again", { controller.open(media, controller.detailReturnRoute, showWhileLoading = true) }, Modifier.focusRequester(initial))
                     else if (target == null) VText(label, 22, Modifier.align(Alignment.CenterVertically), C.textSecondary)
-                    if(media.type!="live") SimklTitleActions(media,controller)
-                    AppIconButton(if (saved) "check" else "plus", if (saved) "Remove from My List" else "Add to My List", { controller.toggleMyList(media) }, Modifier.then(if (target == null && !retryDetail) Modifier.focusRequester(initial) else Modifier))
+                                        SimklSaveAction(media, saved, controller, Modifier.then(if (target == null && !retryDetail) Modifier.focusRequester(initial) else Modifier))
                 }
             }
             if (seasons.isNotEmpty()) {
@@ -242,6 +242,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                         onHold = { controller.requestDialog(DialogKind.EpisodeManage, episode.episodeTitle ?: episode.name, episode) }, artworkContext = episodeArtworkContext)
                 }
             }
+            item(key = "simkl-related") { SimklRecommendations(media, controller) }
         }
         if (!tv) {
             if (scrolledHeader) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(112.dp).background(Brush.verticalGradient(listOf(LocalGround.current, LocalGround.current.copy(alpha = .9f), Color.Transparent))))
@@ -250,8 +251,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
         if (!tv) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, LocalGround.current, LocalGround.current))).navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (target != null) TitleSourceControl(sourceSummary) { controller.chooseSources(target) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if(media.type!="live") SimklTitleActions(media,controller)
-                    AppIconButton(if (saved) "check" else "plus", "My List", { controller.toggleMyList(media) }, Modifier.size(ViptvDimen.sizeButtonPhoneDetail))
+                                    SimklSaveAction(media, saved, controller, Modifier.size(ViptvDimen.sizeButtonPhoneDetail))
                 if (target != null) AppButton(label, ::play, Modifier.weight(1f).height(ViptvDimen.sizeButtonPhoneDetail), "play", primary = true)
                 else if (retryDetail)
                     AppButton("Try again", { controller.open(media, controller.detailReturnRoute, showWhileLoading = true) }, Modifier.weight(1f).height(ViptvDimen.sizeButtonPhoneDetail))

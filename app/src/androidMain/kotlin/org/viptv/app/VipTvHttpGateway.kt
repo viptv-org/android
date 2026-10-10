@@ -111,7 +111,6 @@ class VipTvHttpGateway(
     override suspend fun home(profileId: String, onUpdate: (List<HomeShelf>) -> Unit): List<HomeShelf> = loadHome(profileId, onUpdate, null, {})
     override suspend fun refreshHome(profileId: String, previous: List<HomeShelf>, onIncomplete: () -> Unit, onUpdate: (List<HomeShelf>) -> Unit): List<HomeShelf> = loadHome(profileId, onUpdate, previous, onIncomplete)
     private suspend fun loadHome(profileId: String, onUpdate: (List<HomeShelf>) -> Unit, previous: List<HomeShelf>?, onIncomplete: () -> Unit): List<HomeShelf> = coroutineScope {
-        val syncRequest=async { runCatching { simklSync(profileId) } }
         val rows = java.util.TreeMap<Int, HomeShelf>()
         val publisher = kotlinx.coroutines.sync.Mutex()
         suspend fun publish(order: Int, shelf: HomeShelf) = publisher.withLock {
@@ -133,24 +132,17 @@ class VipTvHttpGateway(
             val savedItems = optional(prior("Continue watching")) {
                 json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray()
             }
-            val items = if (television) {
-                val metadataGate = Semaphore(3)
-                savedItems.map { media -> async(Dispatchers.Default) {
-                    metadataGate.withPermit {
-                        val title = metadataOr(media)
-                        try { CoreModels.enrich(media, title) } catch (_: Exception) { media }
-                    }
-                } }.awaitAll()
-            } else savedItems
+            val items = savedItems
             publish(0, HomeShelf("Continue watching", items, true))
         }
         val recent = async {
             if (!television) publish(1, HomeShelf("Recently watched live TV", optional(prior("Recently watched live TV")) { liveV2(LiveCatalogQuery(collection = "recent", limit = 24)).items.map { CoreModels.mediaNormalized(it) } }))
         }
-        val saved = async { publish(1000, HomeShelf("My List", optional(prior("My List")) { favorites(profileId) })) }
+        val saved = async { publish(1000, HomeShelf("My List", optional(prior("My List")) { json("GET", "/profiles/${enc(profileId)}/favorites/page?limit=24").mediaArray() })) }
         val live = async { if (!television) publish(1001, HomeShelf("Live now", optional(prior("Live now")) { this@VipTvHttpGateway.live().map(LiveChannel::asMedia) })) }
         val catalogs = catalogList.await().filter { catalog ->
-            catalog.key.type != "live" && catalog.filters.none { it.required && DiscoverPolicy.defaults(catalog)[it.name].isNullOrBlank() }
+            catalog.key.type != "live" && catalog.key.id.removePrefix("anime-") in setOf("today", "new-episodes", "premieres") &&
+                (catalog.key.id.removePrefix("anime-") != "premieres" || catalog.key.type == "movie") && catalog.filters.none { it.required && DiscoverPolicy.defaults(catalog)[it.name].isNullOrBlank() }
         }
         val catalogGate = Semaphore(3)
         catalogs.mapIndexed { index, catalog -> async {
@@ -158,7 +150,7 @@ class VipTvHttpGateway(
             val title = listOfNotNull(catalog.addonName, catalog.name).joinToString(" · ")
             publish(index + 2, HomeShelf(title, items, id = catalog.key.stableId, contentType = catalog.key.type, catalogName = catalog.name))
         } }.awaitAll()
-        queue.await(); recent.await(); saved.await(); live.await(); syncRequest.await()
+        queue.await(); recent.await(); saved.await(); live.await()
         rows.values.filter { it.items.isNotEmpty() }
     }
     override suspend fun discover(type: String, search: String?): List<Media> = json("GET", discoverPath(type, search = search)).mediaArray()
@@ -214,7 +206,11 @@ class VipTvHttpGateway(
     override suspend fun simklWatchlistItems(profileId:String):List<Media> = json("GET","/profiles/${enc(profileId)}/integrations/simkl/watchlist").mediaArray()
     override suspend fun simklInfo(profileId:String):String {
         val data=json("GET","/profiles/${enc(profileId)}/integrations/simkl")
-        return if(data.optBoolean("connected")) "Connected as ${data.optString("user_name")} · ${data.optString("error").takeUnless { it == "null" }.orEmpty()}" else "Not linked · public discovery and local tracking are available"
+        return if(data.optBoolean("connected")) {
+            val counts = data.optJSONObject("counts")
+            val last = data.optLong("last_sync").takeIf { it > 0 }?.let { java.time.Instant.ofEpochSecond(it).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("MMM d · h:mm a")) }
+            listOfNotNull("Connected as ${data.optString("user_name")}", counts?.let { "${it.optInt("imported")} imported · ${it.optInt("exported")} exported" }, last?.let { "Last synced $it" }, data.optString("error").takeIf { it.isNotBlank() && it != "null" }).joinToString(" · ")
+        } else "Not linked · public discovery and local tracking are available"
     }
     override suspend fun simklLists(profileId:String,page:Int):List<Pair<String,String>> {
         val data=json("GET","/profiles/${enc(profileId)}/integrations/simkl/lists?page=$page")
@@ -244,7 +240,7 @@ class VipTvHttpGateway(
 
     }
     override suspend fun seriesProgress(profileId: String, seriesId: String): List<Media> =
-        jsonArray("GET", "/profiles/${enc(profileId)}/progress/series?series_id=${enc(seriesId)}").objects().take(2000).map { it.media() }
+        JSONObject().put("items", jsonArray("GET", "/profiles/${enc(profileId)}/progress/series?series_id=${enc(seriesId)}")).mediaArray()
     override suspend fun metadata(media: Media): Media {
         val type = if (media.type == "episode") "series" else media.type
         val id = if (type == "series") media.seriesId ?: media.id else media.id
@@ -398,18 +394,20 @@ class VipTvHttpGateway(
         val result = coreRequest("nextEpisode", profileId, media)
         return NextResult(result.optString("status"), result.optJSONObject("item")?.media())
     }
-    override suspend fun favorites(profileId: String): List<Media> = json("GET", "/profiles/${enc(profileId)}/favorites/page?limit=40").mediaArray()
-    override suspend fun toggleFavorite(profileId: String, media: Media): Boolean = coreRequest("toggleFavorite", profileId, media).optBoolean("saved")
-    override suspend fun queue(profileId: String): List<Media> = coroutineScope {
-        val items = json("GET", "/profiles/${enc(profileId)}/continue/page?limit=40").mediaArray()
-        val slots = Semaphore(3)
-        items.map { item -> async {
-            slots.withPermit {
-                val rich = metadataOr(item)
-                CoreModels.enrich(item, rich)
-            }
-        } }.awaitAll()
+    override suspend fun favorites(profileId: String): List<Media> {
+        val items = mutableListOf<Media>()
+        var offset = 0
+        while (true) {
+            val page = json("GET", "/profiles/${enc(profileId)}/favorites/page?limit=100&offset=$offset").mediaArray()
+            items.addAll(page)
+            if (page.size < 100) break
+            offset += page.size
+        }
+        return items.distinctBy { it.id }
     }
+    override suspend fun toggleFavorite(profileId: String, media: Media): Boolean = coreRequest("toggleFavorite", profileId, media).optBoolean("saved")
+    override suspend fun queue(profileId: String): List<Media> =
+        json("GET", "/profiles/${enc(profileId)}/continue/page?limit=40").mediaArray()
     override suspend fun setQueueVisibility(profileId: String, media: Media, hidden: Boolean) {
         coreRequest("setQueueVisibility", profileId, media, JSONObject().put("hidden", hidden))
     }

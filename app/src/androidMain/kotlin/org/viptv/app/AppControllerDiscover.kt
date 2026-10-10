@@ -7,6 +7,10 @@ import kotlinx.coroutines.launch
 
 /** Fetches declared catalogs before exposing Discover; no synthetic filters or catalog IDs. */
 internal fun AppController.openDiscover() {
+    if (_state.value.discoverUi.catalogs.isNotEmpty() && _state.value.discoverUi.items.isNotEmpty()) {
+        _state.value = _state.value.copy(route = Route.Browse(Destination.Discover), discoverUi = _state.value.discoverUi.copy(loading = false), loading = false)
+        return
+    }
     discoverJob?.cancel()
     val generation = ++discoverGeneration
     discoverJob = scope.launch {
@@ -50,7 +54,10 @@ internal fun AppController.openDiscover() {
 
 internal fun AppController.setDiscoverType(type: String) {
     val current = _state.value.discoverUi
-    val catalog = DiscoverPolicy.firstCatalog(current.catalogs, type) ?: return
+    val catalog = current.catalogs.firstOrNull { catalog ->
+        if (type == "anime") catalog.key.id.startsWith("anime-")
+        else catalog.key.type == type && !catalog.key.id.startsWith("anime-")
+    } ?: return
     startDiscoverRequest(catalog, DiscoverPolicy.defaults(catalog), skip = 0, previousSkips = emptyList(), selectedType = type)
 }
 
@@ -198,4 +205,15 @@ private fun AppController.runSimklSearch(query: String, append: Boolean) {
         } catch(cancelled:CancellationException){throw cancelled}
         catch(error:Exception){if(isActive) _state.value=_state.value.copy(loading=false,searchStatus=error.message ?: "Search unavailable")}
     }
+}
+
+internal fun AppController.setCalendarPeriod(date: String? = null, month: String? = null) {
+    val current = _state.value.discoverUi
+    val catalog = current.catalogs.firstOrNull { it.key == current.selectedCatalogKey } ?: return
+    val filters = current.selectedFilters.toMutableMap().apply {
+        remove("date"); remove("month")
+        date?.let { put("date", it) }; month?.let { put("month", it) }
+    }
+    if (filters == current.selectedFilters) return
+    startDiscoverRequest(catalog, filters, 0, emptyList(), current.selectedType)
 }

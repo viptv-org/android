@@ -66,11 +66,11 @@ internal fun AppController.open(media: Media, returnRoute: Route? = null, showWh
             val progress = try { gateway.seriesProgress(requireProfile(), details.id) }
                 catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
                 catch (_: Exception) { emptyList() }
-            mergeSeriesProgress(details, progress)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { mergeSeriesProgress(details, progress) }
         }
     }.onSuccess { metadata ->
         if (generation != detailGeneration || _state.value.selectedProfile?.id != profile) return@onSuccess
-        val detail = CoreModels.enrichDetail(media, metadata)
+        val detail = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { CoreModels.enrichDetail(media, metadata) }
         detailReturnDestination = origin
         detailReturnRoute = backRoute
         _state.value = _state.value.copy(route = Route.Details(detail, generation), loading = false,

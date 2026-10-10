@@ -51,7 +51,7 @@ internal object TrimLogoPadding : Transformation {
 internal object ArtworkImages {
     private val publicHosts = setOf("images.metahub.space", "live.metahub.space", "image.tmdb.org",
         "artworks.thetvdb.com", "assets.fanart.tv", "images.fanart.tv", "static.tvmaze.com",
-        "i.imgur.com", "upload.wikimedia.org")
+        "i.imgur.com", "upload.wikimedia.org", "simkl.in", "cdn.simkl.in", "simkl.com")
     private val sizes = intArrayOf(96, 160, 240, 320, 480, 640, 960, 1280)
     fun dimension(value: Int): Int = sizes.firstOrNull { it >= value.coerceAtLeast(1) } ?: sizes.last()
 

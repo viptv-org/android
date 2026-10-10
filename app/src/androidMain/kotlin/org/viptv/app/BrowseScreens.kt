@@ -17,16 +17,17 @@ import org.viptv.app.theme.ViptvColor as C
     val tv = LocalTv.current
     val ui = state.discoverUi
     val catalog = ui.catalogs.firstOrNull { it.key == ui.selectedCatalogKey }
-    val groupsByType = remember(ui.catalogs) {
-        ui.catalogs.map { it.key.type }.distinct().associateWith(DiscoverPolicy::grouping)
+    fun family(item: DiscoverCatalog): String = if (item.key.id.startsWith("anime-")) "Anime" else if (item.key.type == "movie") "Movies" else "TV shows"
+    val types = remember(ui.catalogs) { ui.catalogs.filter { it.key.type != "live" }.map(::family).distinct() }
+    val selectedFamily = catalog?.let(::family) ?: if (ui.selectedType == "movie") "Movies" else "TV shows"
+    val visibleCatalogs = remember(ui.catalogs, selectedFamily) { ui.catalogs.filter { family(it) == selectedFamily } }
+    val catalogScroll = rememberLazyListState()
+    LaunchedEffect(ui.selectedCatalogKey) {
+        val index = visibleCatalogs.indexOfFirst { it.key == ui.selectedCatalogKey }
+        if (index >= 0) catalogScroll.scrollToItem(index)
     }
-    val types = remember(ui.catalogs) {
-        ui.catalogs.filter { it.key.type != "live" }.map { groupsByType.getValue(it.key.type) }.distinctBy { it.group }
-    }
-    val selectedType = remember(ui.selectedType) { DiscoverPolicy.grouping(ui.selectedType) }
-    val visibleCatalogs = remember(ui.catalogs, selectedType.group) {
-        ui.catalogs.filter { groupsByType.getValue(it.key.type).group == selectedType.group }
-    }
+    var filtersOpen by remember { mutableStateOf(tv) }
+    val filterLabels = mapOf("search" to "Search this feed", "genre" to "Genre", "year_min" to "From year", "year_max" to "To year", "rating_min" to "Minimum rating", "rank_max" to "Maximum rank", "sort" to "Sort")
     var choice by remember { mutableStateOf<Pair<String, List<Pair<String, () -> Unit>>>?>(null) }
     var entry by remember { mutableStateOf<CatalogFilter?>(null) }
     val first = LocalContentFocus.current
@@ -34,20 +35,19 @@ import org.viptv.app.theme.ViptvColor as C
     var claimedFocus by remember { mutableStateOf(false) }
     LaunchedEffect(ui.loading) { if (tv && !ui.loading && !claimedFocus) { withFrameNanos {}; claimedFocus = runCatching { first.requestFocus() }.getOrDefault(false) } }
     Column(Modifier.fillMaxSize().padding(start = measure(104, 16), end = measure(96, 16), top = measure(54, 12), bottom = measure(54, 0))) {
-        ScreenHeader("Discover", trailing = { PhoneTabActions(state, controller) })
+        ScreenHeader(if (catalog?.key?.id?.contains("calendar") == true) "Calendar" else "Discover", trailing = { PhoneTabActions(state, controller) })
         VText("Today · " + java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("EEEE MMMM d, yyyy")), 14, color=C.textTertiary)
-        FilterTabs(types.map { it.groupLabel }, selectedType.groupLabel, { label ->
-            types.firstOrNull { it.groupLabel == label }?.group?.let(controller::setDiscoverType)
-        }, Modifier.fillMaxWidth(), first)
-        LazyRow(Modifier.padding(top = measure(24, 12), bottom = measure(28, 20)), horizontalArrangement = Arrangement.spacedBy(measure(16, 8)), contentPadding = PaddingValues(4.dp)) {
+        FilterTabs(types, selectedFamily, { label -> controller.setDiscoverType(when(label) { "Movies" -> "movie"; "Anime" -> "anime"; else -> "series" }) }, Modifier.fillMaxWidth(), first)
+        LazyRow(state = catalogScroll, modifier = Modifier.padding(top = measure(24, 12), bottom = measure(28, 20)), horizontalArrangement = Arrangement.spacedBy(measure(16, 8)), contentPadding = PaddingValues(4.dp)) {
             items(visibleCatalogs, key = { it.key.stableId }) { item ->
                 AppChip(item.name, { controller.setDiscoverCatalog(item.key) }, item.key == ui.selectedCatalogKey)
             }
         }
         if(catalog!=null) SimklCalendarControls(state,controller,catalog)
-        LazyRow(Modifier.padding(bottom=measure(20,12)),horizontalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(4.dp)) {
+        if (!tv) AppChip(if (filtersOpen) "Hide filters" else "Filters", { filtersOpen = !filtersOpen }, modifier = Modifier.padding(bottom = 8.dp))
+        if (filtersOpen) LazyRow(Modifier.padding(bottom=measure(20,12)),horizontalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(4.dp)) {
             items(catalog?.filters.orEmpty().filter { it.name !in listOf("date","month","timezone") }, key = { it.name }) { filter ->
-                AppChip(ui.selectedFilters[filter.name] ?: filter.name.replaceFirstChar(Char::titlecase), {
+                AppChip(ui.selectedFilters[filter.name]?.let { "${filterLabels[filter.name] ?: filter.name}: $it" } ?: (filterLabels[filter.name] ?: filter.name), {
                     if (filter.options.isEmpty()) entry = filter
                     else choice = filter.name.replaceFirstChar(Char::titlecase) to
                         (if (filter.required) emptyList() else listOf("All" to { controller.setDiscoverFilter(filter.name, null); choice = null })) +

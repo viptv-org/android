@@ -167,6 +167,7 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
     CompositionLocalProvider(LocalRailFocus provides rail, LocalContentFocus provides initial, LocalFocusMemory provides focusMemory, LocalCloseRail provides { railOpen = false }) {
         Box(Modifier.fillMaxSize()) {
             val insets = if (tv || route is Route.Player || route is Route.Details) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+            key(key) {
             saved.SaveableStateProvider(key) {
                 Box(Modifier.fillMaxSize().then(insets).then(if (tv) Modifier else Modifier.screenEntrance(entrance, vertical = false))) {
                     when (route) {
@@ -187,6 +188,7 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
                         Route.Addons -> AddonsScreen(state, controller)
                     }
                 }
+            }
             }
             if (!tv && tab) PhoneNavigation(route, controller, Modifier.align(Alignment.BottomCenter))
             if (tv && browse) TelevisionRail(state, controller, railExpanded, { railOpen = televisionRailExpanded(it, keyboardVisible, modalVisible, windowFocused) }, rail, initial, focusMemory)

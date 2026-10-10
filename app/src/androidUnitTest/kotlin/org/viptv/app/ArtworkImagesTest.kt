@@ -21,6 +21,15 @@ class ArtworkImagesTest {
         assertEquals("inside", huge.queryParameter("fit"))
     }
 
+    @Test fun simklPostersUseTheSameBoundedImageTransport() {
+        val original = "https://simkl.in/posters/12/12345_m.jpg"
+        val result = ArtworkImages.transport(original, 170, 260, true).toHttpUrl()
+        assertEquals("wsrv.nl", result.host)
+        assertEquals("240", result.queryParameter("w"))
+        assertEquals("320", result.queryParameter("h"))
+        assertEquals(original, result.queryParameter("url"))
+    }
+
     @Test fun localPrivateAndCredentialBearingImagesNeverGoToAThirdParty() {
         for (url in listOf("file:///android_asset/avatar.png", "https://192.168.1.1/art.jpg",
             "https://provider.example/private/art.jpg", "https://image.tmdb.org.evil.example/art.jpg",

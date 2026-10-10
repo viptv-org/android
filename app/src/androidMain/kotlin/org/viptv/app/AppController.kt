@@ -60,6 +60,7 @@ class AppController(context: Context, private val origin: String) {
     internal var simklPaused = false
     internal var simklEventJob: Job? = null
     internal var homeJob: Job? = null
+    internal var simklSyncJob: Job? = null
     internal var homeContentFocused = false
     private var homeRevisionJob: Job? = null
     private var homeWatcherKey: String? = null
@@ -274,7 +275,7 @@ class AppController(context: Context, private val origin: String) {
         renderedCatalogRevision = null; revisionOwner = null
         gateway.clearProfileCache()
         cancelGuideWork(); cancelPendingQueueContinuation(); cancelUpNext()
-        homeRefreshGeneration++; homeJob?.cancel()
+        homeRefreshGeneration++; homeJob?.cancel(); simklSyncJob?.cancel()
         detailGeneration++; detailJob?.cancel()
         discoverGeneration++; discoverJob?.cancel(); searchJob?.cancel(); sourceDiscovery?.cancel()
         nextEpisodeJob?.cancel(); queueContinuationJob?.cancel()
@@ -372,7 +373,21 @@ class AppController(context: Context, private val origin: String) {
                 if (changed) invalidateNativeAuthorization()
                 if (changed) _state.value = _state.value.copy(shelves = emptyList(), favorites = emptyList(), queue = emptyList(), discoverUi = DiscoverUiState(), searchQuery = "", searchResults = emptyList(), searchSections = emptyList(), guideUi = GuideUiState(), homeFocus = HomeFocusSnapshot())
                 _state.value = _state.value.copy(profiles = profiles, selectedProfile = chosen, loading = false, message = null)
-                chosen?.let { profile -> scope.launch { loadHome(profile, generation, enter) } }
+                chosen?.let { profile ->
+                    if (enter || _state.value.shelves.isEmpty()) scope.launch { loadHome(profile, generation, enter) }
+                    if (simklSyncJob?.isActive != true) simklSyncJob = scope.launch {
+                        try {
+                            gateway.simklSync(profile.id)
+                            if (_state.value.selectedProfile?.id == profile.id) {
+                                val favorites = gateway.favorites(profile.id)
+                                val queue = gateway.queue(profile.id)
+                                if (_state.value.selectedProfile?.id == profile.id) _state.value = _state.value.copy(favorites = favorites, queue = queue,
+                                    shelves = _state.value.shelves.map { shelf -> when { shelf.isQueueShelf -> shelf.copy(items = queue); shelf.id == "My List" -> shelf.copy(items = favorites.take(24)); else -> shelf } })
+                            }
+                        } catch (cancelled: CancellationException) { throw cancelled }
+                        catch (_: Exception) { /* The local library remains available when sync is offline. */ }
+                    }
+                }
             }
             "PROFILES" -> {
                 verifiedIdentity = view.identity
@@ -412,7 +427,7 @@ class AppController(context: Context, private val origin: String) {
         if (homeJob !== job) homeJob?.cancel()
         homeJob = job
         val refresh = ++homeRefreshGeneration
-        homeMetadataRequested.clear()
+        try {
         ensureHomeMetadataScope(profile.id)
         val library = libraryRevision
         if (!atomicRefresh) _state.value = _state.value.copy(homeLoading = true)
@@ -435,7 +450,7 @@ class AppController(context: Context, private val origin: String) {
             val presented = if (library == libraryRevision) shelves else shelves.map { if (it.id == "My List") it.copy(items = previous.favorites) else it }
             _state.value = previous.copy(shelves = presented,
                 queue = shelves.firstOrNull { it.isQueueShelf }?.items.orEmpty(),
-                favorites = if (library == libraryRevision) shelves.firstOrNull { it.id == "My List" }?.items.orEmpty() else previous.favorites,
+                favorites = previous.favorites.ifEmpty { shelves.firstOrNull { it.id == "My List" }?.items.orEmpty() },
                 homeFocus = HomeFocusPolicy.reconcile(previous.homeFocus, previous.shelves, presented,
                     restoreFocusedCard = homeContentFocused && previous.dialog == null && previous.pinPrompt == null))
         }
@@ -449,6 +464,12 @@ class AppController(context: Context, private val origin: String) {
             if (revisionOwner == owner) renderedCatalogRevision = loadRevision
         }
         return accepted && !partial.get()
+        } finally {
+            if (homeJob === job && refresh == homeRefreshGeneration) {
+                homeJob = null
+                _state.value = _state.value.copy(homeLoading = false)
+            }
+        }
     }
     internal fun refreshProfileIdentity() { keepProfilesOnIdentityRefresh = true; coreSession.retry() }
     private fun ensureHomeMetadataScope(profile: String) {
@@ -481,7 +502,7 @@ class AppController(context: Context, private val origin: String) {
         _state.value = _state.value.copy(
             shelves = if (library == libraryRevision) presented else presented.map { if (it.id == "My List") it.copy(items = _state.value.favorites) else it },
             queue = presented.firstOrNull { it.isQueueShelf }?.items.orEmpty(),
-            favorites = if (library == libraryRevision) presented.firstOrNull { it.id == "My List" }?.items.orEmpty() else _state.value.favorites,
+            favorites = _state.value.favorites.ifEmpty { presented.firstOrNull { it.id == "My List" }?.items.orEmpty() },
             loading = if (_state.value.route == Route.Browse(Destination.Home)) false else _state.value.loading,
         )
     }
@@ -536,7 +557,7 @@ class AppController(context: Context, private val origin: String) {
         quietSessionAdoption = false
         keepProfilesOnIdentityRefresh = false
         cancelUpNext()
-        homeJob?.cancel()
+        homeJob?.cancel(); simklSyncJob?.cancel()
         homeRefreshGeneration++
         detailGeneration++; detailJob?.cancel()
         searchJob?.cancel(); discoverJob?.cancel(); sourceDiscovery?.cancel()

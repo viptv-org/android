@@ -28,7 +28,7 @@ internal class CoreSession(
     private val effectScope = CoroutineScope(scope.coroutineContext + effectsJob)
     private val core = CoreBridge()
     private val executor = Executors.newFixedThreadPool(3)
-    private val transport = HttpTransport(setOf(origin), executor, maxResponseBytes = 2 * 1024 * 1024)
+    private val transport = HttpTransport(setOf(origin), executor, timeoutMs = 10_000, maxResponseBytes = 2 * 1024 * 1024)
     private var lastView: String? = null
     private val calls = mutableSetOf<HttpTransport.Call>()
     private var closed = false

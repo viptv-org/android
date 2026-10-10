@@ -111,6 +111,7 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
                     TvHeroBackdrop(hero, preloadItems = heroNeighbours)
                     Box(Modifier.padding(start = 104.dp, top = 54.dp).height(626.dp), contentAlignment = Alignment.CenterStart) { TelevisionHero(hero, heroShelf?.isQueueShelf == true) }
                 } else EmptyState(if (state.homeLoading) "Starting VIPTV…" else "Your library is ready", "Browse Discover to find something to watch.", "home", Modifier.height(600.dp))
+                Box(Modifier.align(Alignment.TopEnd).padding(top = 24.dp, end = 40.dp).widthIn(max = 1000.dp)) { SimklHomeShortcuts(controller) }
                 LazyColumn(state = list, modifier = Modifier.fillMaxWidth().height(400.dp).align(Alignment.BottomStart)
                     .onFocusChanged { controller.homeContentFocused = it.hasFocus }
                     .onPreviewKeyEvent {
@@ -147,8 +148,8 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
                     false
                 }, contentPadding = PaddingValues(start = measure(0, 16), end = measure(0, 16), top = measure(0, 8), bottom = measure(54, 164)),
                     verticalArrangement = Arrangement.spacedBy(measure(36, 20))) {
+                    item(key = "home-header") { ScreenHeader("Home", trailing = { PhoneTabActions(state, controller) }) }
                     item(key = "featured") {
-                        // AND-042-HOME: no header bar; the rounded hero is the first element.
                         if (featured.isEmpty() && state.homeLoading) PhoneHomeSkeleton(shelves.isEmpty())
                         else if (featured.isEmpty()) EmptyState("Your library is empty", "Browse Discover to find movies and series.", "home")
                         else {
@@ -162,6 +163,7 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
                             }
                         }
                     }
+                    item(key = "simkl-shortcuts") { SimklHomeShortcuts(controller) }
                     itemsIndexed(shelves, key = { _, shelf -> shelf.id }) { row, shelf ->
                         Box(Modifier.padding(start = measure(104, 0))) {
                             ShelfRow(shelf, row, state.homeLoading, restoreFocus?.takeIf { it.shelfTitle == shelf.id }, controller)

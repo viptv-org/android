@@ -18,9 +18,8 @@ class BackendGatewayBrowseWireTest {
 
     @Test
     fun `queue next keeps the prior episode as the management and exact resume target`() = runBlocking {
-        FixtureServer(2) { request ->
+        FixtureServer(1) { request ->
             assertEquals("GET", request.method)
-            if (request.target == "/api/meta/series/episode-2") return@FixtureServer FixtureResponse("""{"meta":{"id":"episode-2","type":"series","name":"Fixture Show","background":"https://images.example/series.jpg"}}""")
             assertEquals("/api/profiles/profile/continue/page?limit=40", request.target)
             FixtureResponse(
                 """{"items":[{

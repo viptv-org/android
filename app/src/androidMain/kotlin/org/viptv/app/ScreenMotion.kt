@@ -107,6 +107,10 @@ internal fun screenEntranceDuration(motion: ScreenMotion, tv: Boolean): Int =
 @Composable internal fun Modifier.screenEntrance(entrance: ScreenEntrance, vertical: Boolean): Modifier {
     val travel = with(LocalDensity.current) { 40.dp.toPx() }
     return graphicsLayer {
+        // A settled/reused route must clear every property left by its entrance.
+        alpha = 1f
+        scaleX = 1f; scaleY = 1f
+        translationX = 0f; translationY = 0f
         val p = entrance.progress.value
         if (p >= 1f) return@graphicsLayer
         val e = EaseOutCubic.transform(p)
