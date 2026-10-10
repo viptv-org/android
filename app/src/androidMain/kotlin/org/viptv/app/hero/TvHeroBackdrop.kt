@@ -70,8 +70,8 @@ import org.viptv.app.normalizedJson
     val artW = with(density) { ART_WIDTH.dp.roundToPx() }
     val artH = with(density) { ART_HEIGHT.dp.roundToPx() }
     val scope = rememberCoroutineScope()
-    val artwork = remember(context, artW, artH) {
-        HeroArtPreloader(scope, { url: String -> loadArt(context, url, artW, artH) }, { it.sharp.allocationByteCount + it.ambient.allocationByteCount })
+    val artwork = remember(context, artW, artH, fullScreen) {
+        HeroArtPreloader(scope, { url: String -> loadArt(context, url, artW, artH, originalAmbient = !fullScreen) }, { it.sharp.allocationByteCount + it.ambient.allocationByteCount })
     }
     DisposableEffect(artwork) { onDispose { artwork.close() } }
 
@@ -115,8 +115,8 @@ import org.viptv.app.normalizedJson
     }
 
     val copyFade = remember(ground) {
-        Brush.horizontalGradient(0f to ground.copy(alpha = .84f), 0.25f to ground.copy(alpha = .64f),
-            0.55f to Color.Transparent, 1f to Color.Transparent)
+        Brush.horizontalGradient(0f to ground, 0.22f to ground.copy(alpha = .9f),
+            0.4f to ground.copy(alpha = .35f), 0.65f to Color.Transparent)
     }
     val lowerFadeStart = with(density) { LOWER_FADE_START.dp.toPx() }
     val lowerFade = remember(ground, lowerFadeStart) {
@@ -129,8 +129,8 @@ import org.viptv.app.normalizedJson
             val ambient = remember(artwork) { artwork.ambient.asImageBitmap() }
             val sharp = remember(artwork) { artwork.sharp.asImageBitmap() }
             Image(ambient, null, Modifier.fillMaxSize().alpha(.6f), contentScale = ContentScale.Crop)
-            if (ambientOnly) Image(sharp, null, Modifier.align(if (fullScreen) Alignment.CenterEnd else Alignment.TopEnd).padding(top = if (fullScreen) 0.dp else 80.dp, end = 96.dp).width(360.dp).height(540.dp), contentScale = ContentScale.Fit)
-            if (!ambientOnly) Image(sharp, null, Modifier.align(Alignment.TopEnd).then(if (fullScreen) Modifier.fillMaxSize() else Modifier.width(ART_WIDTH.dp).height(ART_HEIGHT.dp))
+            if (ambientOnly && fullScreen) Image(sharp, null, Modifier.align(if (fullScreen) Alignment.CenterEnd else Alignment.TopEnd).padding(top = if (fullScreen) 0.dp else 80.dp, end = 96.dp).width(360.dp).height(540.dp), contentScale = ContentScale.Fit)
+            if (!ambientOnly || !fullScreen) Image(sharp, null, Modifier.align(Alignment.TopEnd).then(if (fullScreen) Modifier.fillMaxSize() else Modifier.width(ART_WIDTH.dp).height(ART_HEIGHT.dp))
                 .then(if (fullScreen) Modifier else Modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                 .drawWithCache {
                     val left = Brush.horizontalGradient(0f to Color.Transparent, .3f to Color.Black, 1f to Color.Black)
@@ -161,23 +161,23 @@ private const val MIN_FILL = 0.6f
 private const val ART_HEIGHT = 720
 private const val BACKDROP_HEIGHT = 950
 /** The lower fade runs from transparent here (logical px) to ground at the backdrop's bottom edge. */
-internal const val LOWER_FADE_START = 650
+internal const val LOWER_FADE_START = 440
 
 private class HeroArtwork(val sharp: Bitmap, val ambient: Bitmap)
 
 /** Decodes without upscaling, so the bitmap width reflects the artwork's real resolution. */
-private suspend fun loadArt(context: Context, url: String, width: Int, height: Int): HeroArtwork? {
+private suspend fun loadArt(context: Context, url: String, width: Int, height: Int, originalAmbient: Boolean): HeroArtwork? {
     val request = ImageRequest.Builder(context).data(ArtworkImages.transport(url, width, height, crop = false)).size(width, height).precision(Precision.INEXACT).allowHardware(false).build()
     val sharp = ((context.imageLoader.execute(request) as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap
         ?.takeIf { Build.VERSION.SDK_INT < 26 || it.config != Bitmap.Config.HARDWARE } ?: return null
     return withContext(Dispatchers.Default) {
         // Keep blur/decode allocation off the input thread. The foreground stays sharp.
-        val ambientWidth = minOf(640, sharp.width)
+        val ambientWidth = minOf(if (originalAmbient) 160 else 640, sharp.width)
         val ambientHeight = (sharp.height.toLong() * ambientWidth / sharp.width).toInt().coerceAtLeast(1)
         val small = Bitmap.createScaledBitmap(sharp, ambientWidth, ambientHeight, true)
         val pixels = IntArray(ambientWidth * ambientHeight)
         small.getPixels(pixels, 0, ambientWidth, 0, 0, ambientWidth, ambientHeight)
-        val blurred = blurAmbientPixels(pixels, ambientWidth, ambientHeight, 2)
+        val blurred = blurAmbientPixels(pixels, ambientWidth, ambientHeight, if (originalAmbient) 8 else 2)
         val ambient = Bitmap.createBitmap(blurred, ambientWidth, ambientHeight, Bitmap.Config.ARGB_8888)
         if (small !== sharp) small.recycle()
         HeroArtwork(sharp, ambient)
