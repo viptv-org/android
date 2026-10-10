@@ -25,6 +25,8 @@ import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import org.viptv.core.wire.HomeShelfPlan
+import org.viptv.core.wire.HomeShelfRole
 
 /** HTTP adapter for the documented Rust /api contract. It owns credentials and never logs them. */
 class VipTvHttpGateway(
@@ -111,11 +113,19 @@ class VipTvHttpGateway(
     override suspend fun home(profileId: String, onUpdate: (List<HomeShelf>) -> Unit): List<HomeShelf> = loadHome(profileId, onUpdate, null, {})
     override suspend fun refreshHome(profileId: String, previous: List<HomeShelf>, onIncomplete: () -> Unit, onUpdate: (List<HomeShelf>) -> Unit): List<HomeShelf> = loadHome(profileId, onUpdate, previous, onIncomplete)
     private suspend fun loadHome(profileId: String, onUpdate: (List<HomeShelf>) -> Unit, previous: List<HomeShelf>?, onIncomplete: () -> Unit): List<HomeShelf> = coroutineScope {
-        val rows = java.util.TreeMap<Int, HomeShelf>()
+        // Shared core owns which shelves exist, their order, titles and limits;
+        // this loop runs one fetch per planned shelf and publishes in plan order.
+        val liveShelves = !television
+        val loaded = mutableMapOf<String, HomeShelf>()
+        var catalogs = emptyList<DiscoverCatalog>()
+        var plan = SharedPresentation.homeLayout(catalogs, liveShelves).shelves
         val publisher = kotlinx.coroutines.sync.Mutex()
-        suspend fun publish(order: Int, shelf: HomeShelf) = publisher.withLock {
-            rows[order] = shelf
-            onUpdate(rows.values.filter { it.items.isNotEmpty() })
+        fun shelfId(shelf: HomeShelfPlan): String =
+            shelf.catalogIndex?.let { catalogs[it.toInt()].key.stableId } ?: shelf.title
+        fun ordered(): List<HomeShelf> = plan.mapNotNull { loaded[shelfId(it)] }.filter { it.items.isNotEmpty() }
+        suspend fun publish(shelf: HomeShelf) = publisher.withLock {
+            loaded[shelf.id] = shelf
+            onUpdate(ordered())
         }
         fun prior(id: String): List<Media> = previous?.firstOrNull { it.id == id }?.items.orEmpty()
         suspend fun optional(fallback: List<Media> = emptyList(), failed: () -> Unit = {}, load: suspend () -> List<Media>): List<Media> = try { load() }
@@ -128,37 +138,46 @@ class VipTvHttpGateway(
             catch (error: GatewayError) { if (previous != null || error.status in listOf(401, 403)) throw error else emptyList() }
             catch (error: IOException) { if (previous != null) throw error else emptyList() }
         }
-        val queue = async {
-            val savedItems = optional(prior("Continue watching")) {
-                json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray()
-            }
-            val items = if (television) {
-                val metadataGate = Semaphore(3)
-                savedItems.map { media -> async(Dispatchers.Default) {
-                    metadataGate.withPermit {
-                        val title = metadataOr(media)
-                        try { CoreModels.enrich(media, title) } catch (_: Exception) { media }
+        val fixed = plan.map { shelf -> async {
+            val title = shelf.title
+            when (shelf.role) {
+                HomeShelfRole.CONTINUEWATCHING -> {
+                    val savedItems = optional(prior(title)) {
+                        json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=" + (shelf.limit ?: 40)).mediaArray()
                     }
-                } }.awaitAll()
-            } else savedItems
-            publish(0, HomeShelf("Continue watching", items, true))
-        }
-        val recent = async {
-            if (!television) publish(1, HomeShelf("Recently watched live TV", optional(prior("Recently watched live TV")) { liveV2(LiveCatalogQuery(collection = "recent", limit = 24)).items.map { CoreModels.mediaNormalized(it) } }))
-        }
-        val saved = async { publish(1000, HomeShelf("My List", optional(prior("My List")) { favorites(profileId) })) }
-        val live = async { if (!television) publish(1001, HomeShelf("Live now", optional(prior("Live now")) { this@VipTvHttpGateway.live().map(LiveChannel::asMedia) })) }
-        val catalogs = catalogList.await().filter { catalog ->
-            catalog.key.type != "live" && catalog.filters.none { it.required && DiscoverPolicy.defaults(catalog)[it.name].isNullOrBlank() }
+                    val items = if (television) {
+                        val metadataGate = Semaphore(3)
+                        savedItems.map { media -> async(Dispatchers.Default) {
+                            metadataGate.withPermit {
+                                val metadata = metadataOr(media)
+                                try { CoreModels.enrich(media, metadata) } catch (_: Exception) { media }
+                            }
+                        } }.awaitAll()
+                    } else savedItems
+                    publish(HomeShelf(title, items, true))
+                }
+                HomeShelfRole.RECENTLIVE -> publish(HomeShelf(title, optional(prior(title)) {
+                    liveV2(LiveCatalogQuery(collection = "recent", limit = (shelf.limit ?: 24).toInt())).items.map { CoreModels.mediaNormalized(it) }
+                }))
+                HomeShelfRole.MYLIST -> publish(HomeShelf(title, optional(prior(title)) { favorites(profileId) }))
+                HomeShelfRole.LIVENOW -> publish(HomeShelf(title, optional(prior(title)) { this@VipTvHttpGateway.live().map(LiveChannel::asMedia) }))
+                HomeShelfRole.CATALOG -> Unit
+            }
+        } }
+        val available = catalogList.await()
+        publisher.withLock {
+            catalogs = available
+            plan = SharedPresentation.homeLayout(available, liveShelves).shelves
+            onUpdate(ordered())
         }
         val catalogGate = Semaphore(3)
-        catalogs.mapIndexed { index, catalog -> async {
+        plan.filter { it.role == HomeShelfRole.CATALOG }.map { shelf -> async {
+            val catalog = available[requireNotNull(shelf.catalogIndex).toInt()]
             val items = optional(prior(catalog.key.stableId), onIncomplete) { catalogGate.withPermit { discover(DiscoverPolicy.request(catalog, DiscoverPolicy.defaults(catalog), 0)).items } }
-            val title = listOfNotNull(catalog.addonName, catalog.name).joinToString(" · ")
-            publish(index + 2, HomeShelf(title, items, id = catalog.key.stableId, contentType = catalog.key.type, catalogName = catalog.name))
+            publish(HomeShelf(shelf.title, items, id = catalog.key.stableId, contentType = catalog.key.type, catalogName = catalog.name))
         } }.awaitAll()
-        queue.await(); recent.await(); saved.await(); live.await()
-        rows.values.filter { it.items.isNotEmpty() }
+        fixed.awaitAll()
+        publisher.withLock { ordered() }
     }
     override suspend fun discover(type: String, search: String?): List<Media> = json("GET", discoverPath(type, search = search)).mediaArray()
     override suspend fun catalogs(): List<DiscoverCatalog> = jsonArray("GET", "/catalogs")
@@ -189,8 +208,7 @@ class VipTvHttpGateway(
         )
     }
     override suspend fun search(query: String, onUpdate: (SearchResults) -> Unit): SearchResults {
-        val term = query.trim()
-        if (term.isEmpty()) return SearchResults(emptyList(), false)
+        if (query.isBlank()) return SearchResults(emptyList(), false)
         return coroutineScope {
             val gate = Semaphore(3)
             val publisher = kotlinx.coroutines.sync.Mutex()
@@ -203,19 +221,26 @@ class VipTvHttpGateway(
                 }
                 onUpdate(SearchResults(completed.values.toList(), partial))
             }
-            val liveRequest = async {
-                publish(128, attempt {
-                    SearchSection("Live TV", liveV2(LiveCatalogQuery(search = term, limit = 24)).items.map { CoreModels.mediaNormalized(it) })
-                })
-            }
             val catalogs = when (val result = attempt { catalogs() }) {
-                is SearchAttempt.Value -> result.value.filter { it.supportsSearch && it.key.type != "live" }.take(128)
+                is SearchAttempt.Value -> result.value
                 SearchAttempt.Failure -> { partial = true; emptyList() }
             }
-            catalogs.mapIndexed { index, catalog -> async {
+            // Shared core selects the searched catalogs, their titles, the live
+            // channel search and every limit; Live TV follows the catalog sections.
+            val plan = SharedPresentation.searchPlan(query, catalogs)
+            if (plan.query.isEmpty()) return@coroutineScope SearchResults(emptyList(), partial)
+            val limit = plan.sectionLimit.toInt()
+            val liveRequest = async {
+                if (plan.live) publish(plan.sections.size, attempt {
+                    SearchSection(plan.liveTitle, liveV2(LiveCatalogQuery(search = plan.query, limit = plan.liveRequestLimit.toInt())).items
+                        .map { CoreModels.mediaNormalized(it) }.take(limit))
+                })
+            }
+            plan.sections.mapIndexed { index, section -> async {
+                val catalog = catalogs[section.catalogIndex.toInt()]
                 publish(index, attempt { gate.withPermit {
-                    val items = discover(DiscoverPolicy.request(catalog, DiscoverPolicy.defaults(catalog) + ("search" to term), 0)).items
-                    SearchSection(listOfNotNull(catalog.addonName?.takeIf(String::isNotBlank), catalog.name).joinToString(" · "), items.distinctBy { HomeFocusPolicy.mediaKey(it) }.take(24), catalog.key.stableId, catalog.key.type)
+                    val items = discover(DiscoverPolicy.request(catalog, DiscoverPolicy.defaults(catalog) + ("search" to plan.query), 0)).items
+                    SearchSection(section.title, items.distinctBy { HomeFocusPolicy.mediaKey(it) }.take(limit), catalog.key.stableId, catalog.key.type)
                 } })
             } }.awaitAll()
             liveRequest.await()
@@ -225,15 +250,16 @@ class VipTvHttpGateway(
     override suspend fun seriesProgress(profileId: String, seriesId: String): List<Media> =
         jsonArray("GET", "/profiles/${enc(profileId)}/progress/series?series_id=${enc(seriesId)}").objects().take(2000).map { it.media() }
     override suspend fun metadata(media: Media): Media {
-        val type = if (media.type == "episode") "series" else media.type
-        val id = if (type == "series") media.seriesId ?: media.id else media.id
-        val key = type + "\u0000" + id
+        val target = SharedPresentation.metadataTargets(listOf(media)).single() ?: return media
+        val key = target.type + "\u0000" + target.id
         val epoch = synchronized(titleArtwork) { titleArtwork[key]?.let { return it }; metadataEpoch }
         if (BuildConfig.PLAYBACK_DIAGNOSTICS) runCatching {
             android.util.Log.i("MetadataRequestDiagnostic", "request_count=${metadataRequests.incrementAndGet()}")
         }
         val result = withContext(Dispatchers.Default) {
-            json("GET", "/meta/${enc(type)}/${enc(id)}").optJSONObject("meta")?.media() ?: media
+            val request = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.ApiRequest>(uniffi.viptv_core.normalize("request",
+                JSONObject().put("operation", "metadata").put("item", SharedPresentation.metadataFacts(media)).toString(), origin))
+            json(request.method, request.path.removePrefix("/api")).optJSONObject("meta")?.media() ?: media
         }
         synchronized(titleArtwork) { if (epoch == metadataEpoch) {
             if (titleArtwork.size >= 256) titleArtwork.keys.firstOrNull()?.let { titleArtwork.remove(it) }

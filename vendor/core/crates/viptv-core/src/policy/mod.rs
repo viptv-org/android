@@ -13,6 +13,7 @@ macro_rules! policy_regex {
 }
 
 mod catalog;
+mod layout;
 pub mod playback_control;
 mod presentation;
 mod progress;
@@ -47,10 +48,15 @@ pub(super) fn poster_image(v: &Value) -> Value {
         .filter_map(|k| v[*k].as_str())
         .map(|id| id.split(':').next().unwrap_or(""))
         .find(|id| {
-            id.strip_prefix("tt")
-                .is_some_and(|d| (5..=12).contains(&d.len()) && d.bytes().all(|b| b.is_ascii_digit()))
+            id.strip_prefix("tt").is_some_and(|d| {
+                (5..=12).contains(&d.len()) && d.bytes().all(|b| b.is_ascii_digit())
+            })
         })
-        .map_or(Value::Null, |id| json!(format!("https://images.metahub.space/poster/medium/{id}/img")))
+        .map_or(Value::Null, |id| {
+            json!(format!(
+                "https://images.metahub.space/poster/medium/{id}/img"
+            ))
+        })
 }
 pub(super) fn watched(v: &Value) -> bool {
     v["watched"]
@@ -115,6 +121,9 @@ pub fn normalize(kind: &str, v: &Value) -> Result {
         "itemRequest" => item_request(v),
         "playbackRequest" | "preferencesRequest" => snake(v),
         "request" => requests::request(v)?,
+        "metadataTargets" => requests::metadata_targets(v),
+        "homeLayout" => layout::home_layout(v)?,
+        "searchPlan" => layout::search_plan(v)?,
         "playbackV2Intent" => requests::playback_v2_intent(v)?,
         "enrichDetail" => progress::enrich_detail(v),
         "mergeEpisodeProgress" => progress::merge_episode_progress(v)?,

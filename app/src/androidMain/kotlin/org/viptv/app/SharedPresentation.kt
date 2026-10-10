@@ -6,7 +6,10 @@ import org.viptv.core.wire.CoreJson
 import org.viptv.core.wire.DiscoverPolicyProjection
 import org.viptv.core.wire.EpisodeWatching
 import org.viptv.core.wire.HomeActions
+import org.viptv.core.wire.HomeLayout
+import org.viptv.core.wire.MetadataTarget
 import org.viptv.core.wire.PhonePresentation
+import org.viptv.core.wire.SearchPlan
 import org.viptv.core.wire.SourceRanks
 import uniffi.viptv_core.normalize
 
@@ -51,10 +54,27 @@ internal object SharedPresentation {
     fun discover(type: String, catalogs: List<DiscoverCatalog> = emptyList(), catalog: DiscoverCatalog? = null): DiscoverPolicyProjection = project("discoverPolicy",
         JSONObject().put("type", type)
             .put("catalogs", JSONArray().also { rows -> catalogs.forEach { rows.put(JSONObject().put("type", it.key.type)) } })
-            .put("catalog", JSONObject().put("supportsSearch", catalog?.supportsSearch == true).put("extras", JSONArray().also { rows ->
-                catalog?.filters?.forEach { rows.put(JSONObject().put("name", it.name).put("required", it.required)
-                    .put("options", JSONArray(it.options)).putOpt("defaultValue", it.defaultValue)) }
-            })))
+            .put("catalog", catalog?.let(::catalogFacts) ?: JSONObject().put("supportsSearch", false).put("extras", JSONArray())))
+
+    /** Shelf order, titles and limits; `catalogIndex` addresses [catalogs]. */
+    fun homeLayout(catalogs: List<DiscoverCatalog>, liveShelves: Boolean): HomeLayout = project("homeLayout",
+        JSONObject().put("catalogs", JSONArray().also { rows -> catalogs.forEach { rows.put(catalogFacts(it)) } }).put("liveShelves", liveShelves))
+
+    /** Catalog sections and live channel search behind one query. */
+    fun searchPlan(query: String, catalogs: List<DiscoverCatalog>, scope: String = "all"): SearchPlan = project("searchPlan",
+        JSONObject().put("query", query).put("scope", scope)
+            .put("catalogs", JSONArray().also { rows -> catalogs.forEach { rows.put(catalogFacts(it)) } }))
+
+    /** One nullable metadata title per item, in order, for lookup, cache and batch-row identity. */
+    fun metadataTargets(items: List<Media>): List<MetadataTarget?> = project("metadataTargets",
+        JSONObject().put("items", JSONArray().also { rows -> items.forEach { rows.put(metadataFacts(it)) } }))
+
+    fun metadataFacts(media: Media): JSONObject = JSONObject().put("id", media.id).put("type", media.type).putOpt("seriesId", media.seriesId)
+
+    private fun catalogFacts(catalog: DiscoverCatalog): JSONObject = JSONObject().put("type", catalog.key.type)
+        .put("name", catalog.name).putOpt("addonName", catalog.addonName).put("supportsSearch", catalog.supportsSearch)
+        .put("extras", JSONArray().also { rows -> catalog.filters.forEach { rows.put(JSONObject().put("name", it.name).put("required", it.required)
+            .put("options", JSONArray(it.options)).putOpt("defaultValue", it.defaultValue)) } })
 
     private fun SourceProducerOutcome.wire() = org.viptv.core.wire.SourceProducerOutcome(sourceId, label, errorCode, errorMessage)
     private fun org.viptv.core.wire.SourceProducerOutcome.view() = SourceProducerOutcome(sourceId, label, errorCode, errorMessage)

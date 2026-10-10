@@ -671,7 +671,8 @@ class AppController(context: Context, private val origin: String) {
     }
     internal suspend fun guarded(pinTitle: String, action: suspend () -> Unit) {
         try { action() } catch (error: GatewayError) {
-            if (error.status == 403 && (error.message.contains("PIN", true) || error.message.contains("Parent", true))) {
+            // Shared core assigns the code, including for servers that send only the message.
+            if (error.code == "parent_required") {
                 afterParentUnlock = action
                 _state.value = _state.value.copy(pinPrompt = PinPrompt(pinTitle), loading = false)
             } else fail(error)
