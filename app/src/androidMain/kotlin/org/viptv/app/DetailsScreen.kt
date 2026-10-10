@@ -31,7 +31,7 @@ import org.viptv.app.hero.TvHeroBackdrop
 internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
     episodes.indexOfFirst { it.episode == number }
 
-@Composable internal fun DetailsScreen(media: Media, controller: AppController) {
+@Composable internal fun LegacyDetailsScreen(media: Media, controller: AppController) {
     val tv = LocalTv.current
     val app by controller.state.collectAsState()
     val entryId = (app.route as? Route.Details)?.entryId ?: 0L
@@ -190,11 +190,9 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                 if (!tv) Box(Modifier.fillMaxWidth().height(300.dp)) {
                     Artwork(presentation.heroImage, null, Modifier.fillMaxSize())
                     Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Transparent, LocalGround.current))))
-                    if (!presentation.titleLogo.isNullOrBlank()) Artwork(presentation.titleLogo, media.name, Modifier.align(Alignment.BottomStart).padding(20.dp).size(280.dp, 88.dp), ContentScale.Fit, Alignment.CenterStart)
                 }
                 Column(Modifier.then(if (!tv) Modifier.padding(horizontal = 20.dp) else Modifier.width(1000.dp)), verticalArrangement = Arrangement.spacedBy(measure(22, 14))) {
-                    if (tv && !presentation.titleLogo.isNullOrBlank()) Artwork(presentation.titleLogo, media.name, Modifier.size(310.dp, 90.dp), ContentScale.Fit, Alignment.CenterStart, trimTransparency = true)
-                    else if (tv || presentation.titleLogo.isNullOrBlank()) VText(media.name, if (tv) 56 else 34, display = true, lines = 2)
+                    TitleArtwork(media.name, presentation.titleLogo, Modifier.fillMaxWidth().height(if (tv) 118.dp else 90.dp), if (tv) 56 else 34)
                     VText(mediaFacts(media), if (tv) 22 else 14, color = C.textSecondary, lines = if (tv) 1 else 2)
                     SimklDetailFacts(media)
                     VText(media.description.orEmpty(), if (tv) 26 else 16, Modifier.widthIn(max = if (tv) 780.dp else Dp.Infinity), color = C.textBody, lines = if (tv) 2 else 12)
@@ -274,7 +272,7 @@ internal fun episodeIndexForNumber(episodes: List<Media>, number: Int): Int =
                     jumpRequest++
                 } else jumpEntry = false
             }, onCancel = { jumpEntry = false; jumpCancelRequest++ })
-        if (info) FullInfo(media.name, listOf(mediaFacts(media), media.description.orEmpty(), media.credits.orEmpty()).filter { it.isNotBlank() }.joinToString("\n\n"), { info = false })
+        if (info) FullInfo(media.name, listOf(mediaFacts(media), media.description.orEmpty(), media.credits.orEmpty(), "Metadata: SIMKL · Logo artwork: MetaHub").filter { it.isNotBlank() }.joinToString("\n\n"), { info = false })
     }
 }
 

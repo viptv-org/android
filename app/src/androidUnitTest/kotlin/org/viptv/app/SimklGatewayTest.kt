@@ -42,7 +42,7 @@ class SimklGatewayTest {
             server.assertHealthy()
         }
     }
-    @Test fun `home requests curated feeds without syncing or hydrating every queue item`() = runBlocking {
+    @Test fun `home requests curated feeds without syncing and enriches only visible queue items`() = runBlocking {
         val paths = java.util.Collections.synchronizedList(mutableListOf<String>())
         val catalogs = org.json.JSONArray()
         for (type in listOf("movie", "series", "anime")) {
@@ -57,6 +57,7 @@ class SimklGatewayTest {
             when {
                 request.target == "/api/catalogs" -> FixtureResponse(catalogs.toString())
                 request.target.contains("/continue/page") -> FixtureResponse("""{"items":[{"id":"simkl:tv:7:1:1","type":"episode","name":"Fixture episode","position":30,"duration":100}]}""")
+                request.target.startsWith("/api/meta/") -> FixtureResponse("""{"meta":{"id":"simkl:tv:7","type":"series","name":"Fixture show","description":"Known description","poster":"https://simkl.in/posters/7.webp"}}""")
                 request.target.contains("/favorites/page") -> FixtureResponse("""{"items":[]}""")
                 request.target.startsWith("/api/discover?") -> FixtureResponse("""{"metas":[{"id":"simkl:movies:42","type":"movie","name":"Fixture movie"}],"has_more":false}""")
                 else -> error("Unexpected home request: " + request.target)
@@ -64,7 +65,8 @@ class SimklGatewayTest {
         }.use { server ->
             val shelves = VipTvHttpGateway(server.origin, television = true).home("1") {}
             assertEquals(6, paths.count { it.startsWith("/api/discover?") })
-            assertTrue(paths.none { it.contains("/sync") || it.contains("/meta/") })
+            assertTrue(paths.none { it.contains("/sync") })
+            assertEquals(0, paths.count { it.contains("/meta/") })
             assertEquals(30000, shelves.first { it.isQueueShelf }.items.single().positionMillis)
             server.assertHealthy()
         }

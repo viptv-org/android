@@ -22,6 +22,7 @@ interface BackendGateway {
     suspend fun simklInfo(profileId: String): String = "SIMKL unavailable"
     suspend fun simklLists(profileId: String, page: Int = 1): List<Pair<String,String>> = emptyList()
     suspend fun simklList(profileId: String, id: String, page: Int = 1): List<Media> = emptyList()
+    suspend fun summary(media: Media): Media = metadata(media)
     suspend fun metadata(media: Media): Media
     suspend fun seriesProgress(profileId: String, seriesId: String): List<Media> = emptyList()
     suspend fun sources(media: Media, onProducerUpdate: (List<SourceProducerOutcome>) -> Unit = {}, onUpdate: (List<Source>) -> Unit = {}): List<Source>

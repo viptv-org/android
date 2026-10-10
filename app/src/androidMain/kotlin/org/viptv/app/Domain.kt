@@ -1,7 +1,11 @@
 package org.viptv.app
 
+import androidx.compose.runtime.Immutable
+
 import org.json.JSONObject
 
+/** UI snapshots are never mutated; updates replace this instance. */
+@Immutable
 data class Media(
     val id: String,
     val type: String,
@@ -106,6 +110,7 @@ data class DeviceSession(val accessToken: String, val refreshToken: String, val 
  * Queue controls follow this flag even when the row has just become empty.
  */
 /** [contentType]/[catalogName] identify a catalog shelf so phones can head it by content type (AND-042). */
+@Immutable
 data class HomeShelf(val title: String, val items: List<Media>, val isQueueShelf: Boolean = false, val id: String = title, val contentType: String? = null, val catalogName: String? = null)
 
 data class NextResult(val status: String, val item: Media? = null)

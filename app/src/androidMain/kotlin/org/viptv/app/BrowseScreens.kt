@@ -17,6 +17,7 @@ import org.viptv.app.theme.ViptvColor as C
     val tv = LocalTv.current
     val ui = state.discoverUi
     val catalog = ui.catalogs.firstOrNull { it.key == ui.selectedCatalogKey }
+    if (catalog?.key?.id?.endsWith("calendar") == true) { CalendarScreen(state, controller, catalog); return }
     fun family(item: DiscoverCatalog): String = if (item.key.id.startsWith("anime-")) "Anime" else if (item.key.type == "movie") "Movies" else "TV shows"
     val types = remember(ui.catalogs) { ui.catalogs.filter { it.key.type != "live" }.map(::family).distinct() }
     val selectedFamily = catalog?.let(::family) ?: if (ui.selectedType == "movie") "Movies" else "TV shows"

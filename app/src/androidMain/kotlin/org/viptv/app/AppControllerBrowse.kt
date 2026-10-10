@@ -46,7 +46,7 @@ internal fun applyRefreshedEpisodeReturn(
     return if (current === originalDetails && refreshedDetails != null) refreshedDetails else current
 }
 
-internal fun AppController.open(media: Media, returnRoute: Route? = null, showWhileLoading: Boolean = false) {
+internal fun AppController.open(media: Media, returnRoute: Route? = null, showWhileLoading: Boolean = true) {
     if (media.type == "live") { activateCard(media); return }
     detailJob?.cancel()
     val generation = ++detailGeneration
@@ -73,11 +73,13 @@ internal fun AppController.open(media: Media, returnRoute: Route? = null, showWh
         val detail = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { CoreModels.enrichDetail(media, metadata) }
         detailReturnDestination = origin
         detailReturnRoute = backRoute
-        _state.value = _state.value.copy(route = Route.Details(detail, generation), loading = false,
-            shelves = _state.value.shelves.map { shelf -> shelf.copy(items = shelf.items.map { item ->
+        val shelves = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            _state.value.shelves.map { shelf -> shelf.copy(items = shelf.items.map { item ->
                 if ((item.seriesId ?: item.id) == (detail.seriesId ?: detail.id)) item.withArtworkFrom(detail) else item
-            }) },
-        )
+            }) }
+        }
+        if (generation != detailGeneration || _state.value.selectedProfile?.id != profile) return@onSuccess
+        _state.value = _state.value.copy(route = Route.Details(detail, generation), loading = false, shelves = shelves)
     }.onFailure { if (it !is CancellationException && generation == detailGeneration) fail(it) }
     }
 }

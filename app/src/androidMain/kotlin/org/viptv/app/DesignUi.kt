@@ -88,10 +88,10 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
 }
 
 @Composable internal fun measure(tv: Int, phone: Int): Dp = (if (LocalTv.current) tv else phone).dp
-@Composable internal fun VText(text: String, size: Int = if (LocalTv.current) 26 else 16, modifier: Modifier = Modifier, color: Color = C.textPrimary, bold: Boolean = false, display: Boolean = false, lines: Int = Int.MAX_VALUE, align: TextAlign = TextAlign.Start) {
-    Text(text, modifier, color, fontSize = size.sp, fontFamily = if (display) Bricolage else Onest,
+@Composable internal fun VText(text: String, size: Int = if (LocalTv.current) 26 else 16, modifier: Modifier = Modifier, color: Color = C.textPrimary, bold: Boolean = false, display: Boolean = false, lines: Int = Int.MAX_VALUE, align: TextAlign = TextAlign.Start, marquee: Boolean = false) {
+    Text(text, modifier.then(if (marquee) Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 1400, repeatDelayMillis = 1400) else Modifier), color, fontSize = size.sp, fontFamily = if (display) Bricolage else Onest,
         fontWeight = if (bold || display) FontWeight.Bold else FontWeight.Normal, textAlign = align,
-        maxLines = lines, overflow = TextOverflow.Ellipsis, lineHeight = (size * 1.35f).sp)
+        maxLines = if (marquee) 1 else lines, overflow = if (marquee) TextOverflow.Visible else TextOverflow.Ellipsis, lineHeight = (size * 1.35f).sp)
 }
 
 @Composable internal fun VIcon(name: String, description: String? = null, modifier: Modifier = Modifier.size(measure(28, 22)), color: Color = C.textPrimary) {

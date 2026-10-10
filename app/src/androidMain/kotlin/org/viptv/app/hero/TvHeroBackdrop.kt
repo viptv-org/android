@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.background
@@ -41,8 +42,11 @@ import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import org.viptv.app.CoreModels
+import org.viptv.app.CorePolicy
+import org.viptv.app.ArtworkImages
 import org.viptv.app.LocalGround
 import org.viptv.app.Media
+import org.viptv.app.normalizedJson
 
 /**
  * Static TV artwork with one cached ambient image and readable scrims. The focused
@@ -54,6 +58,7 @@ import org.viptv.app.Media
     focusImage: String? = null,
     preloadItems: List<Media> = emptyList(),
     preloadEpisodes: Boolean = false,
+    fullScreen: Boolean = false,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -66,7 +71,9 @@ import org.viptv.app.Media
     }
     DisposableEffect(artwork) { onDispose { artwork.close() } }
 
-    val base = remember(media) { CoreModels.presentation(media).heroImage }
+    val facts = remember(media) { CorePolicy.value("heroBackdrop", org.json.JSONObject(media.normalizedJson(false))) as org.json.JSONObject }
+    val base = facts.optString("url").takeIf { it.isNotBlank() && it != "null" }
+    val ambientOnly = facts.optBoolean("ambientOnly")
     var shown by remember(artwork) { mutableStateOf<String?>(null) }
     var displayed by remember(artwork) { mutableStateOf<HeroArtwork?>(null) }
     LaunchedEffect(base, focusImage, artwork) {
@@ -104,19 +111,21 @@ import org.viptv.app.Media
     }
 
     val copyFade = remember(ground) {
-        Brush.horizontalGradient(0f to ground, 0.22f to ground.copy(alpha = .9f),
-            0.4f to ground.copy(alpha = .35f), 0.65f to Color.Transparent)
+        Brush.horizontalGradient(0f to ground, 0.25f to ground.copy(alpha = .96f),
+            0.55f to ground.copy(alpha = .72f), 0.8f to Color.Transparent)
     }
     val lowerFadeStart = with(density) { LOWER_FADE_START.dp.toPx() }
     val lowerFade = remember(ground, lowerFadeStart) {
         Brush.verticalGradient(listOf(Color.Transparent, ground), startY = lowerFadeStart)
     }
-    Box(Modifier.fillMaxWidth().height(BACKDROP_HEIGHT.dp)) {
-        displayed?.let { artwork ->
+    Box(Modifier.fillMaxWidth().then(if (fullScreen) Modifier.fillMaxHeight() else Modifier.height(BACKDROP_HEIGHT.dp))) {
+        androidx.compose.animation.Crossfade(targetState = displayed, modifier = Modifier.fillMaxSize(), animationSpec = androidx.compose.animation.core.tween(150), label = "hero-artwork") { current ->
+        Box(Modifier.fillMaxSize()) {
+        current?.let { artwork ->
             val ambient = remember(artwork) { artwork.ambient.asImageBitmap() }
             val sharp = remember(artwork) { artwork.sharp.asImageBitmap() }
             Image(ambient, null, Modifier.fillMaxSize().alpha(.6f), contentScale = ContentScale.Crop)
-            Image(sharp, null, Modifier.align(Alignment.TopEnd).width(ART_WIDTH.dp).height(ART_HEIGHT.dp)
+            if (!ambientOnly) Image(sharp, null, Modifier.align(Alignment.TopEnd).then(if (fullScreen) Modifier.fillMaxSize() else Modifier.width(ART_WIDTH.dp).height(ART_HEIGHT.dp))
                 .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                 .drawWithCache {
                     val left = Brush.horizontalGradient(0f to Color.Transparent, .3f to Color.Black, 1f to Color.Black)
@@ -127,6 +136,8 @@ import org.viptv.app.Media
                         drawRect(bottom, blendMode = BlendMode.DstIn)
                     }
                 }, contentScale = ContentScale.Crop)
+        }
+        }
         }
         // Static fades keep the copy readable and join the art to the shelves.
         Box(Modifier.matchParentSize().background(copyFade))
@@ -148,7 +159,7 @@ private class HeroArtwork(val sharp: Bitmap, val ambient: Bitmap)
 
 /** Decodes without upscaling, so the bitmap width reflects the artwork's real resolution. */
 private suspend fun loadArt(context: Context, url: String, width: Int, height: Int): HeroArtwork? {
-    val request = ImageRequest.Builder(context).data(url).size(width, height).precision(Precision.INEXACT).allowHardware(false).build()
+    val request = ImageRequest.Builder(context).data(ArtworkImages.transport(url, width, height, crop = false)).size(width, height).precision(Precision.INEXACT).allowHardware(false).build()
     val sharp = ((context.imageLoader.execute(request) as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap
         ?.takeIf { Build.VERSION.SDK_INT < 26 || it.config != Bitmap.Config.HARDWARE } ?: return null
     return withContext(Dispatchers.Default) {

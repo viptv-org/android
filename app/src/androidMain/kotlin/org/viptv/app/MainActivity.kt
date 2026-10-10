@@ -152,6 +152,8 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
     val focusMemory = remember(key) { FocusMemory() }
     val entrance = rememberScreenEntrance(route, key)
     var railOpen by remember { mutableStateOf(false) }
+    var explicitRailEntry by remember { mutableStateOf(false) }
+    LaunchedEffect(key) { railOpen = false; explicitRailEntry = false }
     val keyboardVisible = WindowInsets.isImeVisible
     val modalVisible = state.dialog != null || state.pinPrompt != null
     val windowFocused = LocalWindowInfo.current.isWindowFocused
@@ -165,7 +167,10 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
     BackHandler(controller.consumesBack(state)) { controller.handleBack() }
     BackHandler(tv && railExpanded) { if (focusMemory.restore(initial)) railOpen = false }
     CompositionLocalProvider(LocalRailFocus provides rail, LocalContentFocus provides initial, LocalFocusMemory provides focusMemory, LocalCloseRail provides { railOpen = false }) {
-        Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().onPreviewKeyEvent { event ->
+            if (tv && event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) explicitRailEntry = event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+            false
+        }) {
             val insets = if (tv || route is Route.Player || route is Route.Details) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
             key(key) {
             saved.SaveableStateProvider(key) {
@@ -191,7 +196,7 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
             }
             }
             if (!tv && tab) PhoneNavigation(route, controller, Modifier.align(Alignment.BottomCenter))
-            if (tv && browse) TelevisionRail(state, controller, railExpanded, { railOpen = televisionRailExpanded(it, keyboardVisible, modalVisible, windowFocused) }, rail, initial, focusMemory)
+            if (tv && browse) TelevisionRail(state, controller, railExpanded, { requested -> railOpen = televisionRailExpanded(if (requested) railOpen || explicitRailEntry else false, keyboardVisible, modalVisible, windowFocused) }, rail, initial, focusMemory)
             if (state.loading && route !is Route.Player && route != Route.Pairing) {
                 CircularProgressIndicator(Modifier.align(Alignment.TopEnd).then(if (tv) Modifier else Modifier.statusBarsPadding()).padding(measure(40, 16)).size(measure(32, 22)), color = LocalAccent.current, strokeWidth = measure(4, 2))
             }

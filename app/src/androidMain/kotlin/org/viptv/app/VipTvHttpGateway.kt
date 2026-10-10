@@ -69,7 +69,7 @@ class VipTvHttpGateway(
     private var metadataEpoch = 0L
     private val metadataRequests = java.util.concurrent.atomic.AtomicLong()
     internal val metadataRequestCount: Long get() = metadataRequests.get()
-    fun clearProfileCache() = synchronized(titleArtwork) { metadataEpoch++; titleArtwork.clear() }
+    fun clearProfileCache() = synchronized(titleArtwork) { metadataEpoch++; titleArtwork.clear(); CoreModels.clearProjections(); SharedPresentation.clear() }
     private val client = OkHttpClient.Builder()
         .dns(dns)
         .followRedirects(false).followSslRedirects(false)
@@ -133,7 +133,11 @@ class VipTvHttpGateway(
                 json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=40").mediaArray()
             }
             val items = savedItems
+            if (television) withContext(Dispatchers.Default) {
+                items.take(6).forEach { CoreModels.card(it, true); CoreModels.presentation(it); SharedPresentation.home(it, true) }
+            }
             publish(0, HomeShelf("Continue watching", items, true))
+
         }
         val recent = async {
             if (!television) publish(1, HomeShelf("Recently watched live TV", optional(prior("Recently watched live TV")) { liveV2(LiveCatalogQuery(collection = "recent", limit = 24)).items.map { CoreModels.mediaNormalized(it) } }))
@@ -241,7 +245,22 @@ class VipTvHttpGateway(
     }
     override suspend fun seriesProgress(profileId: String, seriesId: String): List<Media> =
         JSONObject().put("items", jsonArray("GET", "/profiles/${enc(profileId)}/progress/series?series_id=${enc(seriesId)}")).mediaArray()
+    override suspend fun summary(media: Media): Media {
+        val type = if (media.type == "episode") "series" else media.type
+        val id = media.id
+        val key = "summary\u0000$type\u0000$id"
+        synchronized(titleArtwork) { titleArtwork[key]?.let { return it } }
+        val epoch = metadataEpoch
+        val result = withContext(Dispatchers.Default) { json("GET", "/meta/${enc(type)}/${enc(id)}?summary=true").optJSONObject("meta")?.media() ?: media }
+        synchronized(titleArtwork) { if (epoch == metadataEpoch) titleArtwork[key] = result }
+        return result
+    }
+    private val metadataLocks = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
     override suspend fun metadata(media: Media): Media {
+        val key = (media.seriesId ?: media.id) + "\u0000" + media.type
+        return metadataLocks.computeIfAbsent(key) { kotlinx.coroutines.sync.Mutex() }.withLock { metadataOnce(media) }
+    }
+    private suspend fun metadataOnce(media: Media): Media {
         val type = if (media.type == "episode") "series" else media.type
         val id = if (type == "series") media.seriesId ?: media.id else media.id
         val key = type + "\u0000" + id
@@ -642,7 +661,9 @@ private fun JSONObject.media(): Media = CoreModels.media(this)
 /** Core owns the page-key order (`metas`, then `items`, then `rows`); callers do not choose keys. */
 private suspend fun JSONObject.mediaArray(): List<Media> = withContext(Dispatchers.Default) {
     val page = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.DiscoverPage>(uniffi.viptv_core.normalize("discover", this@mediaArray.toString(), ""))
-    page.items.map { CoreModels.mediaNormalized(it) }
+    val items = page.items.map { CoreModels.mediaNormalized(it) }
+    items.take(6).forEach { item -> CoreModels.card(item); CoreModels.presentation(item) }
+    items
 }
 private fun JSONObject.source(eventProvider: String? = null): Source = CoreModels.source(JSONObject(toString()).also {
     if (!it.has("provider") && eventProvider != null) it.put("provider", eventProvider)

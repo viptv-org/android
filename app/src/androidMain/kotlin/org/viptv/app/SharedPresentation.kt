@@ -12,13 +12,18 @@ import uniffi.viptv_core.normalize
 
 /** Generated semantic projections; Android supplies facts and executes their intents. */
 internal object SharedPresentation {
+    private val homes = ProjectionMemo<HomeActions>()
+    private val queueHomes = ProjectionMemo<HomeActions>()
+    private val episodes = ProjectionMemo<EpisodeWatching>()
+    fun clear() { homes.clear(); queueHomes.clear(); episodes.clear() }
     private inline fun <reified T> project(operation: String, input: JSONObject): T =
         CoreJson.decode(normalize(operation, input.toString(), ""))
 
-    fun home(media: Media, queueShelf: Boolean = false): HomeActions = project("homeActions",
-        JSONObject().put("item", JSONObject(media.normalizedJson(includeEpisodes = false))).put("queueShelf", queueShelf))
+    fun home(media: Media, queueShelf: Boolean = false): HomeActions = (if (queueShelf) queueHomes else homes).get(media) {
+        project("homeActions", JSONObject().put("item", JSONObject(media.normalizedJson(includeEpisodes = false))).put("queueShelf", queueShelf))
+    }
 
-    fun episode(media: Media): EpisodeWatching = project("episodeWatching", JSONObject(media.normalizedJson(includeEpisodes = false)))
+    fun episode(media: Media): EpisodeWatching = episodes.get(media) { project("episodeWatching", JSONObject(media.normalizedJson(includeEpisodes = false))) }
 
     fun phone(media: Media? = null, shelf: HomeShelf? = null, contentType: String? = null): PhonePresentation = project("phonePresentation",
         JSONObject().putOpt("contentType", contentType)

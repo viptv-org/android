@@ -509,6 +509,7 @@ class AppController(context: Context, private val origin: String) {
     internal suspend fun enrichVisibleHomeItem(media: Media) {
         val current = _state.value
         if (media.type == "live" || current.route != Route.Browse(Destination.Home)) return
+        if (!media.description.isNullOrBlank() && !media.backdrop.isNullOrBlank()) return
         val profile = current.selectedProfile?.id ?: return
         val generation = homeRefreshGeneration
         val key = media.type + ":" + media.id
@@ -518,7 +519,7 @@ class AppController(context: Context, private val origin: String) {
             homeMetadataGate.withPermit {
                 if (generation != homeRefreshGeneration || _state.value.selectedProfile?.id != profile ||
                     _state.value.route != Route.Browse(Destination.Home)) return@withPermit
-                val rich = try { gateway.metadata(media) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { return@withPermit }
+                val rich = try { gateway.summary(media) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { return@withPermit }
                 if (generation != homeRefreshGeneration || _state.value.selectedProfile?.id != profile ||
                     _state.value.route != Route.Browse(Destination.Home)) return@withPermit
                 ensureHomeMetadataScope(profile)

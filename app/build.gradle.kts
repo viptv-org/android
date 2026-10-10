@@ -165,6 +165,11 @@ if (simklExperiment) {
     require(gradle.startParameter.taskNames.none { it.contains("release", ignoreCase = true) }) { "SIMKL experiment is debug-only" }
     android.buildTypes.getByName("debug").applicationIdSuffix = ".simkl"
     android.buildTypes.getByName("debug").buildConfigField("String", "DEFAULT_SERVER_ORIGIN", "\"https://beta-viptv.syek.tech\"")
+    android.buildTypes.getByName("performance").apply {
+        applicationIdSuffix = ".simkl"
+        buildConfigField("String", "DEFAULT_SERVER_ORIGIN", "\"https://beta-viptv.syek.tech\"")
+        buildConfigField("boolean", "PLAYBACK_DIAGNOSTICS", "false")
+    }
 }
 if (fixtureCa.isPresent) {
     require(simklExperiment || providers.gradleProperty("nativeTorrentFixtureArtifacts").isPresent || providers.gradleProperty("torrentRuntimeMediaQa").isPresent) {

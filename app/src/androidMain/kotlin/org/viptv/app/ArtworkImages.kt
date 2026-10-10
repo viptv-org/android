@@ -73,13 +73,13 @@ internal object ArtworkImages {
 
     fun request(context: Context, url: String, width: Int, height: Int, crop: Boolean, blur: Int = 0): ImageRequest =
         ImageRequest.Builder(context).data(transport(url, width, height, crop, blur))
-            .size(dimension(width), dimension(height).coerceAtMost(960)).crossfade(false).build()
+            .size(dimension(width), dimension(height).coerceAtMost(960)).crossfade(120).build()
 }
 
 /** One bounded image pool/cache for every native screen, independent of playback/control IO. */
 class ViptvApplication : Application(), ImageLoaderFactory {
     override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
-        .crossfade(false)
+        .crossfade(120)
         .bitmapFactoryMaxParallelism(2)
         .decoderDispatcher(Dispatchers.IO.limitedParallelism(2))
         .fetcherDispatcher(Dispatchers.IO.limitedParallelism(4))

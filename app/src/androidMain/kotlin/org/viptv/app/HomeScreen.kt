@@ -27,6 +27,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.InputMode
@@ -66,6 +68,7 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
     val heroNeighbours = remember(heroShelf?.items, hero) {
         neighbouringHeroItems(heroShelf?.items.orEmpty(), heroShelf?.items?.indexOf(hero) ?: -1)
     }
+    val shortcuts = remember { FocusRequester() }
     val shelfFocus = remember(shelves.map { it.id }) { shelves.map { FocusRequester() } }
     var rowRequest by remember { mutableIntStateOf(0) }
     var requestedRow by remember { mutableIntStateOf(0) }
@@ -108,10 +111,22 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
         true -> {
             Box(Modifier.fillMaxSize()) {
                 if (hero != null) {
+                    LaunchedEffect(hero.id, state.selectedProfile?.id) {
+                        kotlinx.coroutines.delay(180)
+                        controller.enrichVisibleHomeItem(hero)
+                    }
                     TvHeroBackdrop(hero, preloadItems = heroNeighbours)
                     Box(Modifier.padding(start = 104.dp, top = 54.dp).height(626.dp), contentAlignment = Alignment.CenterStart) { TelevisionHero(hero, heroShelf?.isQueueShelf == true) }
                 } else EmptyState(if (state.homeLoading) "Starting VIPTV…" else "Your library is ready", "Browse Discover to find something to watch.", "home", Modifier.height(600.dp))
-                Box(Modifier.align(Alignment.TopEnd).padding(top = 24.dp, end = 40.dp).widthIn(max = 1000.dp)) { SimklHomeShortcuts(controller) }
+                Box(Modifier.fillMaxSize().drawWithCache {
+                    val radius = size.width * .74f
+                    val center = Offset(size.width * .85f, 0f)
+                    val shade = Brush.radialGradient(0f to Color.Black.copy(alpha = .84f), .55f to Color.Black.copy(alpha = .76f), 1f to Color.Transparent, center = center, radius = radius)
+                    onDrawBehind { scale(scaleX = 1f, scaleY = .18f, pivot = center) {
+                        drawRect(shade, size = Size(size.width, maxOf(size.height, radius)))
+                    } }
+                })
+                Box(Modifier.align(Alignment.TopEnd).padding(top = 24.dp, end = 40.dp).widthIn(max = 1000.dp)) { SimklHomeShortcuts(controller, shortcuts, shelfFocus.firstOrNull()) }
                 LazyColumn(state = list, modifier = Modifier.fillMaxWidth().height(400.dp).align(Alignment.BottomStart)
                     .onFocusChanged { controller.homeContentFocused = it.hasFocus }
                     .onPreviewKeyEvent {
@@ -121,6 +136,10 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
                             controller.recordHomeDirectionalInput()
                             if (direction != 0 && shelves.isNotEmpty()) {
                                 val currentRow = pendingRowId?.let { id -> shelves.indexOfFirst { it.id == id }.takeIf { it >= 0 } } ?: shelves.indexOfFirst { shelf -> shelf.id == controller.state.value.homeFocus.shelfTitle }.coerceAtLeast(0)
+                                if (direction < 0 && currentRow == 0) {
+                                    runCatching { shortcuts.requestFocus() }
+                                    return@onPreviewKeyEvent true
+                                }
                                 rowDirection = direction
                                 requestedRow = (currentRow + direction).coerceIn(shelves.indices)
                                 if (requestedRow != currentRow) { requestedRowId = shelves[requestedRow].id; pendingRowId = requestedRowId; rowRequest++ }
@@ -194,15 +213,17 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
     val hero = remember(media) { CoreModels.presentation(media) }
     val actions = remember(media, queue) { SharedPresentation.home(media, queue) }
     Column(Modifier.width(950.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (hero.titleLogo.isNullOrBlank()) VText(media.name, 56, Modifier.width(800.dp).height(118.dp), display = true, lines = 2)
-        else Artwork(hero.titleLogo, media.name, Modifier.size(410.dp, 118.dp), ContentScale.Fit, Alignment.CenterStart, trimTransparency = true)
-        if (hero.episodeLabel.isNotBlank()) VText(hero.episodeLabel, 24, bold = true, lines = 1)
+        TitleArtwork(media.name, hero.titleLogo, Modifier.width(800.dp).height(118.dp), 56)
+        Box(Modifier.height(34.dp)) { if (hero.episodeLabel.isNotBlank()) VText(hero.episodeLabel, 24, bold = true, lines = 1) }
         if (actions.showHeroProgress) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             ProgressLine(hero.progress.toFloat(), Modifier.width(300.dp))
             VText(formatTime(media.positionMillis) + " of " + ((media.durationMillis ?: 0) / 60000) + " min", 22, color = C.textSecondary)
         }
-        VText(mediaFacts(media), 22, color = C.textSecondary, lines = 1)
-        VText(media.description.orEmpty(), 26, Modifier.width(675.dp), C.textBody, lines = 5)
+        Box(Modifier.height(32.dp)) {
+            if (mediaFacts(media).isNotBlank()) VText(mediaFacts(media), 22, color = C.textSecondary, lines = 1)
+            else SkeletonBlock(Modifier.width(420.dp).height(20.dp), radius = 8.dp)
+        }
+        HeroDescription(media.description, Modifier.width(675.dp).height(180.dp), television = true)
     }
 }
 
@@ -216,11 +237,10 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
         VText("FEATURED", 11, Modifier.padding(14.dp).clip(CircleShape).background(C.fillBadgeGlass).padding(horizontal = 12.dp, vertical = 7.dp), bold = true)
         Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Holdable({ controller.open(media) }, modifier = Modifier.fillMaxWidth()) {
-                if (hero.titleLogo.isNullOrBlank()) VText(media.name, 30, Modifier.fillMaxWidth(), display = true, lines = 2)
-                else Artwork(hero.titleLogo, media.name, Modifier.fillMaxWidth().height(64.dp), ContentScale.Fit, Alignment.CenterStart)
+                TitleArtwork(media.name, hero.titleLogo, Modifier.fillMaxWidth().height(82.dp), 30)
             }
             VText(mediaFacts(media), 13, color = C.textSecondary, lines = 1)
-            VText(media.description.orEmpty(), 15, color = C.textBody, lines = 2)
+            HeroDescription(media.description, Modifier.fillMaxWidth().height(42.dp), television = false)
             Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppButton(actions.heroPrimaryActionLabel, { controller.activateHero(media, queue) }, Modifier.weight(1f), "play", primary = true)
                 AppIconButton(if (saved) "check" else "plus", if (saved) "Remove from My List" else "Add to My List", { controller.toggleMyList(media) })
@@ -286,7 +306,7 @@ internal class HomeCarouselScroll(private val leadingInset: Float) : BringIntoVi
                 itemsIndexed(shelf.items, key = { _, item -> HomeFocusPolicy.mediaKey(item) }) { column, media ->
                     val action = { controller.activateCard(media, shelf.isQueueShelf, SourceReturn.Home) }
                     val hold = { if (shelf.isQueueShelf) controller.requestQueueManage(media) else controller.requestDialog(DialogKind.MyListManage, media.name, media) }
-                    if (!tv) LaunchedEffect(media.id, homeLoading) { controller.enrichVisibleHomeItem(media) }
+                    if (shelf.isQueueShelf) LaunchedEffect(media.id, controller.state.value.selectedProfile?.id) { controller.enrichVisibleHomeItem(media) }
                     if (!tv && shelf.isQueueShelf) QueueCard(media, action, hold)
                     else if (!tv && media.type == "live") LiveLogoTile(media, action, hold)
                     else MediaCard(media, Modifier.focusRequester(focuses[column]).then(if (column == horizontal.firstVisibleItemIndex && entryFocus != null) Modifier.focusRequester(entryFocus) else Modifier).onGloballyPositioned { if (column == 0) firstPlaced = true }.then(if (contentEntry && column == horizontal.firstVisibleItemIndex && tv) Modifier.focusRequester(initial) else Modifier).then(if (column == 0 && tv) Modifier.focusProperties { left = rail } else Modifier),
@@ -322,6 +342,19 @@ internal class HomeCarouselScroll(private val leadingInset: Float) : BringIntoVi
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     repeat(2) { SkeletonBlock(Modifier.width(232.dp).aspectRatio(16f / 9)) }
                 }
+            }
+        }
+    }
+}
+
+/** Fixed geometry during metadata arrival; only the copy fades, never the layout. */
+@Composable private fun HeroDescription(description: String?, modifier: Modifier, television: Boolean) {
+    Box(modifier) {
+        androidx.compose.animation.Crossfade(targetState = description?.takeIf { it.isNotBlank() },
+            animationSpec = androidx.compose.animation.core.tween(180), label = "hero-details") { text ->
+            if (text != null) VText(text, if (television) 26 else 15, color = C.textBody, lines = if (television) 5 else 2)
+            else Column(verticalArrangement = Arrangement.spacedBy(if (television) 16.dp else 8.dp)) {
+                repeat(if (television) 4 else 2) { row -> SkeletonBlock(Modifier.fillMaxWidth(if (row == (if (television) 3 else 1)) .65f else .94f).height(if (television) 18.dp else 11.dp), radius = 6.dp) }
             }
         }
     }

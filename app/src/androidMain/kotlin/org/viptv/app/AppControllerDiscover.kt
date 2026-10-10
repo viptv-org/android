@@ -63,7 +63,12 @@ internal fun AppController.setDiscoverType(type: String) {
 
 internal fun AppController.setDiscoverCatalog(key: CatalogKey) {
     val catalog = _state.value.discoverUi.catalogs.firstOrNull { it.key == key } ?: return
-    startDiscoverRequest(catalog, DiscoverPolicy.defaults(catalog), skip = 0, previousSkips = emptyList(), selectedType = DiscoverPolicy.typeGroup(catalog.key.type))
+    val defaults = DiscoverPolicy.defaults(catalog).toMutableMap()
+    if (catalog.key.id.endsWith("calendar")) {
+        defaults["date"] = java.time.LocalDate.now().toString()
+        defaults["timezone"] = java.time.ZoneId.systemDefault().id
+    }
+    startDiscoverRequest(catalog, defaults, skip = 0, previousSkips = emptyList(), selectedType = DiscoverPolicy.typeGroup(catalog.key.type))
 }
 
 /** Search, genre, and extras all reset the forward-only server cursor. */
@@ -126,6 +131,8 @@ private fun AppController.startDiscoverRequest(
                 selectedType = selectedType,
                 selectedCatalogKey = catalog.key,
                 selectedFilters = filters,
+                items = if (catalog.key.id.endsWith("calendar") && (catalog.key != _state.value.discoverUi.selectedCatalogKey || filters != _state.value.discoverUi.selectedFilters)) emptyList() else _state.value.discoverUi.items,
+                nextSkip = null,
                 requestedSkip = skip,
                 previousSkips = previousSkips,
                 loading = true,
@@ -216,4 +223,14 @@ internal fun AppController.setCalendarPeriod(date: String? = null, month: String
     }
     if (filters == current.selectedFilters) return
     startDiscoverRequest(catalog, filters, 0, emptyList(), current.selectedType)
+}
+
+internal fun AppController.switchCalendar(type: String? = null, mine: Boolean? = null) {
+    val current = _state.value.discoverUi
+    val prior = current.catalogs.firstOrNull { it.key == current.selectedCatalogKey } ?: return
+    val anime = type == "anime" || (type == null && prior.key.id.startsWith("anime-"))
+    val category = type ?: if (anime) "anime" else prior.key.type
+    val id = (if (anime) "anime-" else "") + (if (mine ?: prior.key.id.contains("my-calendar")) "my-calendar" else "calendar")
+    val catalog = current.catalogs.firstOrNull { it.key.id == id && it.key.type == if (category == "anime") "series" else category } ?: return
+    startDiscoverRequest(catalog, current.selectedFilters, 0, emptyList(), DiscoverPolicy.typeGroup(catalog.key.type))
 }

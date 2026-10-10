@@ -8,6 +8,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import org.viptv.app.theme.ViptvColor as C
@@ -124,10 +127,13 @@ internal fun AppController.addToSimklWatchlist(media:Media,status:String="planto
 }
 
 /** Discovery entry points use the existing chips and category screens on both form factors. */
-@Composable internal fun SimklHomeShortcuts(controller: AppController) {
+@Composable internal fun SimklHomeShortcuts(controller: AppController, entry: FocusRequester? = null, below: FocusRequester? = null) {
+    val rail = LocalRailFocus.current
     LazyRow(horizontalArrangement = Arrangement.spacedBy(measure(16, 8)), contentPadding = PaddingValues(4.dp)) {
         listOf("Calendar" to "calendar", "My calendar" to "my-calendar", "New episodes" to "new-episodes", "Premieres" to "premieres", "Upcoming" to "upcoming").forEach { (label, catalog) ->
-            item(key = catalog) { AppChip(label, { controller.openSimklFeed(catalog) }) }
+            item(key = catalog) { AppChip(label, { controller.openSimklFeed(catalog) }, modifier = Modifier.background(Color.Black.copy(alpha = .16f), RoundedCornerShape(50))
+                .then(if (catalog == "calendar" && entry != null) Modifier.focusRequester(entry) else Modifier)
+                .focusProperties { if (below != null) down = below; if (catalog == "calendar") left = rail }) }
         }
     }
 }
@@ -146,6 +152,8 @@ internal fun AppController.openSimklFeed(id: String) {
 
 @Composable internal fun SimklDetailFacts(media: Media) {
     val raw = remember(media) { org.json.JSONObject(media.normalizedJson(false)).optJSONObject("raw") }
+    val original = raw?.optString("original_title")?.takeIf { it.isNotBlank() && it != "null" && it != media.name }
+    if (original != null) VText("Also known as $original", if (LocalTv.current) 20 else 13, color = C.textTertiary, lines = 2)
     val next = raw?.optJSONObject("next_airing")
     val tv = LocalTv.current
     val date = next?.optString("released")?.takeIf { it.isNotBlank() && it != "null" }
