@@ -283,7 +283,11 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
 @Composable internal fun ScreenHeader(title: String, onBack: (() -> Unit)? = null, trailing: @Composable RowScope.() -> Unit = {}) {
     Row(Modifier.fillMaxWidth().padding(bottom = measure(32, 10)), verticalAlignment = Alignment.CenterVertically) {
         if (onBack != null && !LocalTv.current) { Holdable(onBack, modifier = Modifier.size(44.dp)) { VIcon("back", "Back") }; Spacer(Modifier.width(8.dp)) }
-        VText(title, if (LocalTv.current) 56 else if (onBack != null) 24 else 34, Modifier.weight(1f), display = true, lines = 1)
+        val size = if (LocalTv.current) 48 else if (onBack != null) 24 else 28
+        Text(title, Modifier.weight(1f), color = C.textPrimary, fontFamily = Onest,
+            fontWeight = FontWeight.SemiBold, fontSize = size.sp,
+            lineHeight = (size * 1.15f).sp, letterSpacing = (-0.4).sp,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
         trailing()
     }
 }
