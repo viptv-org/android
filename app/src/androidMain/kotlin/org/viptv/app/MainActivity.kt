@@ -162,11 +162,11 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
         // Input/window handoffs must not preserve expansion for focus restoration.
         if (tv && (keyboardVisible || modalVisible || !windowFocused)) railOpen = false
     }
-    val browse = route is Route.Browse || route is Route.Guide || route == Route.Search || route == Route.Settings || route == Route.Addons || route is Route.Details
+    val browse = route is Route.Browse || route is Route.Guide || route == Route.Search || route == Route.Settings || route == Route.Addons
     val tab = route is Route.Browse || route is Route.Guide
     BackHandler(controller.consumesBack(state)) { controller.handleBack() }
     BackHandler(tv && railExpanded) { if (focusMemory.restore(initial)) railOpen = false }
-    CompositionLocalProvider(LocalRailFocus provides rail, LocalContentFocus provides initial, LocalFocusMemory provides focusMemory, LocalCloseRail provides { railOpen = false }) {
+    CompositionLocalProvider(LocalRailFocus provides if (route is Route.Details) FocusRequester.Cancel else rail, LocalContentFocus provides initial, LocalFocusMemory provides focusMemory, LocalCloseRail provides { railOpen = false }) {
         Box(Modifier.fillMaxSize().onPreviewKeyEvent { event ->
             if (tv && event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) explicitRailEntry = event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
             false
@@ -270,7 +270,8 @@ private fun Modifier.railHighlightInk(highlightY: () -> Float, visible: () -> Bo
     val density = LocalDensity.current.density
     val context = LocalContext.current
     val animateFocus = remember(context) { systemAnimationsEnabled(context) }
-    LaunchedEffect(focusY) {
+    LaunchedEffect(focusY, railHasFocus) {
+        if (!railHasFocus) { highlightPlaced = false; return@LaunchedEffect }
         val target = focusY ?: return@LaunchedEffect
         if (!highlightPlaced || !animateFocus) {
             highlightY.snapTo(target)

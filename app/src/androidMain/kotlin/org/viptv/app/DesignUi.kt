@@ -117,7 +117,7 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
 }
 
 /** One input owner for touch, accessibility and release-to-activate remotes. */
-@Composable internal fun Holdable(onActivate: () -> Unit, onHold: (() -> Unit)? = null, modifier: Modifier = Modifier, selected: Boolean = false, onInfo: (() -> Unit)? = null, rememberFocus: Boolean = true, enabled: Boolean = true, content: @Composable BoxScope.() -> Unit) {
+@Composable internal fun Holdable(onActivate: () -> Unit, onHold: (() -> Unit)? = null, modifier: Modifier = Modifier, selected: Boolean = false, onInfo: (() -> Unit)? = null, rememberFocus: Boolean = true, enabled: Boolean = true, showIndication: Boolean = true, content: @Composable BoxScope.() -> Unit) {
     val tv = LocalTv.current
     var pressed by remember { mutableStateOf(false) }
     var consumed by remember { mutableStateOf(false) }
@@ -151,7 +151,7 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
                 }
                 else -> false
             }
-        }.focusProperties { if (tv) canFocus = enabled }.combinedClickable(enabled = enabled, role = Role.Button, onClick = { activate() }, onLongClick = onHold?.let { { hold?.invoke() } }),
+        }.focusProperties { if (tv) canFocus = enabled }.combinedClickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = if (showIndication) androidx.compose.foundation.LocalIndication.current else null, enabled = enabled, role = Role.Button, onClick = { activate() }, onLongClick = onHold?.let { { hold?.invoke() } }),
         contentAlignment = Alignment.Center, content = content)
 }
 

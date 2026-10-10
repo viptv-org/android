@@ -57,7 +57,7 @@ import org.viptv.app.theme.ViptvColor as C
         onDispose { target?.let { controller.releaseSourcePreview(it) } }
     }
     fun watch() { target?.let { controller.chooseSources(it, resume = targetArt?.primaryAction == "resume") } }
-    LaunchedEffect(paneOpen) { if (tv && paneOpen) { withFrameNanos {}; runCatching { tabFocus[tabs.indexOf(tab).coerceAtLeast(0)].requestFocus() } } }
+    LaunchedEffect(paneOpen, tab) { if (tv && paneOpen) { withFrameNanos {}; runCatching { tabFocus[tabs.indexOf(tab).coerceAtLeast(0)].requestFocus() } } }
     val entry = (app.route as? Route.Details)?.entryId
     LaunchedEffect(media.id, entry) { if (tv) { withFrameNanos {}; runCatching { if (paneOpen) tabFocus[tabs.indexOf(tab).coerceAtLeast(0)].requestFocus() else heroFocus.requestFocus() } } }
     Box(Modifier.fillMaxSize()) {
@@ -67,7 +67,7 @@ import org.viptv.app.theme.ViptvColor as C
             DetailHeroScrim(Modifier.fillMaxSize(), compact = true)
         }
         if (paneOpen) Box(Modifier.fillMaxSize().background(LocalGround.current.copy(alpha = .96f)))
-        Column(Modifier.fillMaxSize().padding(start = measure(104, 16), end = measure(64, 16), top = measure(48, 56), bottom = measure(54, 32)), verticalArrangement = Arrangement.spacedBy(measure(24, 16))) {
+        Column(Modifier.fillMaxSize().padding(start = measure(64, 16), end = measure(64, 16), top = measure(48, 56), bottom = measure(54, 32)), verticalArrangement = Arrangement.spacedBy(measure(24, 16))) {
             if (!paneOpen) {
             var heroSelected by remember { mutableStateOf(false) }
             val heroModifier = Modifier.fillMaxWidth().weight(1f)
@@ -92,14 +92,14 @@ import org.viptv.app.theme.ViptvColor as C
                     }
                 }
             }
-            if (tv) Holdable(::watch, modifier = heroModifier, onHold = { target?.let { controller.chooseSources(it) } }) { heroContent() }
+            if (tv) Holdable(::watch, modifier = heroModifier, showIndication = false, onHold = { target?.let { controller.chooseSources(it) } }) { heroContent() }
             else Box(heroModifier) { heroContent() }
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(measure(20, 8))) {
                 tabs.forEachIndexed { index, label ->
                     AppChip(label, { tab = label; paneOpen = true }, paneOpen && tab == label,
                         Modifier.focusRequester(tabFocus[index]).onFocusChanged { if (tv && it.isFocused && paneOpen) tab = label }
-                            .focusProperties { up = if (paneOpen) FocusRequester.Cancel else heroFocus; if (label == "Episodes" && episodes.isNotEmpty()) down = episodeFocus; if (label == "Details" && paneOpen) down = detailFocus; if (index == 0 && tv) left = rail })
+                            .focusProperties { up = if (paneOpen) FocusRequester.Cancel else heroFocus; if (!paneOpen) down = FocusRequester.Cancel else if (tab == "Episodes" && episodes.isNotEmpty()) down = episodeFocus else if (tab == "Details") down = detailFocus; if (index == 0 && tv) left = rail })
                 }
             }
             if (paneOpen) Box(Modifier.fillMaxWidth().weight(1f)) {

@@ -115,7 +115,7 @@ internal fun AppController.chooseHeroSources(media: Media, queue: Boolean, resum
                         kotlinx.coroutines.delay(180)
                         controller.enrichVisibleHomeItem(hero)
                     }
-                    TvHeroBackdrop(hero, preloadItems = heroNeighbours)
+                    TvHeroBackdrop(hero, preloadItems = heroNeighbours, fullScreen = true, copyAtBottom = false)
                     Box(Modifier.padding(start = 104.dp, top = 54.dp).height(626.dp), contentAlignment = Alignment.CenterStart) { TelevisionHero(hero, heroShelf?.isQueueShelf == true) }
                 } else EmptyState(if (state.homeLoading) "Starting VIPTV…" else "Your library is ready", "Browse Discover to find something to watch.", "home", Modifier.height(600.dp))
                 Box(Modifier.fillMaxSize().drawWithCache {

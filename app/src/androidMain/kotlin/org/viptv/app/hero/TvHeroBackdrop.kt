@@ -61,6 +61,7 @@ import org.viptv.app.normalizedJson
     preloadItems: List<Media> = emptyList(),
     preloadEpisodes: Boolean = false,
     fullScreen: Boolean = false,
+    copyAtBottom: Boolean = true,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -142,7 +143,8 @@ import org.viptv.app.normalizedJson
         }
         }
         // Static fades keep the copy readable and join the art to the shelves.
-        if (fullScreen) DetailHeroScrim(Modifier.matchParentSize()) else {
+        if (fullScreen && !copyAtBottom) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(400.dp).background(Brush.verticalGradient(listOf(Color.Transparent, ground.copy(alpha = .92f)))))
+        if (fullScreen) DetailHeroScrim(Modifier.matchParentSize(), atBottom = copyAtBottom) else {
             Box(Modifier.matchParentSize().background(copyFade))
             Box(Modifier.matchParentSize().background(lowerFade))
         }
@@ -181,14 +183,14 @@ private suspend fun loadArt(context: Context, url: String, width: Int, height: I
 }
 
 /** Shade only the copy area; leave the upper and right artwork at full brightness. */
-@Composable internal fun DetailHeroScrim(modifier: Modifier = Modifier, compact: Boolean = false) {
+@Composable internal fun DetailHeroScrim(modifier: Modifier = Modifier, compact: Boolean = false, atBottom: Boolean = true) {
     val ground = LocalGround.current
     Box(modifier.drawWithCache {
-        val center = Offset(size.width * .12f, size.height * .87f)
+        val center = Offset(size.width * .12f, size.height * if (atBottom) .87f else .42f)
         val radius = size.width * if (compact) 1.05f else .52f
-        val fade = Brush.radialGradient(0f to ground.copy(alpha = .94f), .60f to ground.copy(alpha = .88f), 1f to Color.Transparent, center = center, radius = radius)
+        val fade = Brush.radialGradient(0f to ground.copy(alpha = .84f), .50f to ground.copy(alpha = .70f), 1f to Color.Transparent, center = center, radius = radius)
         onDrawBehind {
-            scale(scaleX = 1f, scaleY = size.height * .57f / radius, pivot = center) {
+            scale(scaleX = 1f, scaleY = size.height * (if (atBottom) .57f else .46f) / radius, pivot = center) {
                 drawCircle(fade, radius = radius, center = center)
             }
         }
