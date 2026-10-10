@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -128,6 +129,7 @@ import org.viptv.app.normalizedJson
             val ambient = remember(artwork) { artwork.ambient.asImageBitmap() }
             val sharp = remember(artwork) { artwork.sharp.asImageBitmap() }
             Image(ambient, null, Modifier.fillMaxSize().alpha(.6f), contentScale = ContentScale.Crop)
+            if (ambientOnly) Image(sharp, null, Modifier.align(if (fullScreen) Alignment.CenterEnd else Alignment.TopEnd).padding(top = if (fullScreen) 0.dp else 80.dp, end = 96.dp).width(360.dp).height(540.dp), contentScale = ContentScale.Fit)
             if (!ambientOnly) Image(sharp, null, Modifier.align(Alignment.TopEnd).then(if (fullScreen) Modifier.fillMaxSize() else Modifier.width(ART_WIDTH.dp).height(ART_HEIGHT.dp))
                 .then(if (fullScreen) Modifier else Modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                 .drawWithCache {
@@ -170,12 +172,12 @@ private suspend fun loadArt(context: Context, url: String, width: Int, height: I
         ?.takeIf { Build.VERSION.SDK_INT < 26 || it.config != Bitmap.Config.HARDWARE } ?: return null
     return withContext(Dispatchers.Default) {
         // Keep blur/decode allocation off the input thread. The foreground stays sharp.
-        val ambientWidth = minOf(160, sharp.width)
+        val ambientWidth = minOf(640, sharp.width)
         val ambientHeight = (sharp.height.toLong() * ambientWidth / sharp.width).toInt().coerceAtLeast(1)
         val small = Bitmap.createScaledBitmap(sharp, ambientWidth, ambientHeight, true)
         val pixels = IntArray(ambientWidth * ambientHeight)
         small.getPixels(pixels, 0, ambientWidth, 0, 0, ambientWidth, ambientHeight)
-        val blurred = blurAmbientPixels(pixels, ambientWidth, ambientHeight, 8)
+        val blurred = blurAmbientPixels(pixels, ambientWidth, ambientHeight, 2)
         val ambient = Bitmap.createBitmap(blurred, ambientWidth, ambientHeight, Bitmap.Config.ARGB_8888)
         if (small !== sharp) small.recycle()
         HeroArtwork(sharp, ambient)

@@ -72,7 +72,10 @@ internal fun AppController.addToSimklWatchlist(media:Media,status:String="planto
     scope.launch { runCatching { gateway.simklWatchlist(profile,media,status) }.onSuccess { _state.value=_state.value.copy(message="Watchlist updated") }.onFailure { fail(it) } }
 }
 
-@Composable internal fun SimklSettings(state:AppState,controller:AppController,origin:String) {
+@Composable internal fun SimklSettings(state:AppState,controller:AppController,origin:String,onBack:()->Unit = controller::back) {
+    val tv = LocalTv.current
+    val first = LocalContentFocus.current
+    val rail = LocalRailFocus.current
     val profile=state.selectedProfile?.id ?: return
     val scope=rememberCoroutineScope()
     val context=androidx.compose.ui.platform.LocalContext.current
@@ -85,13 +88,14 @@ internal fun AppController.addToSimklWatchlist(media:Media,status:String="planto
     var statuses by remember(profile) {mutableStateOf(false)}
     var statusFilter by remember(profile) {mutableStateOf("all")}
     LaunchedEffect(profile){runCatching {controller.gateway.simklInfo(profile)}.onSuccess{info=it}.onFailure{info=it.message ?: "SIMKL unavailable"}}
-    Column(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        VText("SIMKL · This profile",22)
-        VText(info,14)
-        VText("Link this profile in your account settings: $origin",14)
+    LaunchedEffect(profile) { if (tv) { withFrameNanos {}; runCatching { first.requestFocus() } } }
+    Column(Modifier.fillMaxSize().padding(start=measure(104,16),end=measure(96,16),top=measure(54,12),bottom=measure(54,24)),verticalArrangement=Arrangement.spacedBy(measure(20,12))) {
+        ScreenHeader("SIMKL", onBack)
+        VText(info,if(tv) 22 else 14)
+        VText("Link this profile in your account settings: $origin",if(tv) 20 else 14)
         AppButton("Open account settings",{runCatching {context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,android.net.Uri.parse(origin)))}.onFailure {info="Open $origin on your phone or computer to link this profile."}})
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            AppChip("Watchlist",{scope.launch {runCatching {controller.gateway.simklWatchlistItems(profile)}.onSuccess {items=it;statuses=true;selected=null}.onFailure{info=it.message ?: "Watchlist unavailable"}}})
+            AppChip("Watchlist",{scope.launch {runCatching {controller.gateway.simklWatchlistItems(profile)}.onSuccess {items=it;statuses=true;selected=null}.onFailure{info=it.message ?: "Watchlist unavailable"}}}, modifier=Modifier.focusRequester(first).focusProperties { left=rail })
             AppChip("Sync",{scope.launch {runCatching {controller.gateway.simklSync(profile);controller.gateway.simklInfo(profile)}.onSuccess{info=it}.onFailure{info=it.message ?: "Sync failed"}}})
             AppChip("Custom lists",{scope.launch {runCatching {controller.gateway.simklLists(profile,page)}.onSuccess{lists=(lists+it).distinctBy {entry->entry.first};page++}.onFailure{info=it.message ?: "Lists unavailable"}}})
             if(selected!=null) AppChip("Next list page",{scope.launch {runCatching {controller.gateway.simklList(profile,selected!!,listPage)}.onSuccess{items=(items+it).distinctBy {entry->HomeFocusPolicy.mediaKey(entry)};listPage++}.onFailure{info=it.message ?: "List unavailable"}}})

@@ -27,7 +27,7 @@ private data class SettingRow(val title: String, val detail: String, val icon: S
     var server by remember { mutableStateOf(false) }
     var about by remember { mutableStateOf(false) }
     var selected by remember(page) { mutableIntStateOf(0) }
-    if(page=="SIMKL") { androidx.activity.compose.BackHandler { page="Settings" };SimklSettings(state,controller,model.origin);return }
+    if(page=="SIMKL") { androidx.activity.compose.BackHandler { page="Settings" };SimklSettings(state,controller,model.origin) { page="Settings" };return }
     val first = LocalContentFocus.current
     val rail = LocalRailFocus.current
     val avatarFocus = remember { FocusRequester() }
