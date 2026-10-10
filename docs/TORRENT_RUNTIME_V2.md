@@ -126,3 +126,9 @@ optimized phone/TV APK, performance lint and packaged API24/checksum/notice/
 library and assets. The first hosted attempt exposed a loopback fixture shutdown
 race; a smaller regression reproduced it and graceful fixture joining fixed it
 without changing the native cancellation or stale-response assertions.
+
+The current core pin is `0f3d9f78e6df7e9550a9335b835dbebef454a3b5`, shared with
+TV-web/backend and containing the closed gateway decoder-start/control requests.
+Native Android still acknowledges Media3 rendered frames directly to its local
+worker. Host units, all three Android ABI products, optimized APK/lint and actual
+APK integrity/alignment checks pass after this adoption.
