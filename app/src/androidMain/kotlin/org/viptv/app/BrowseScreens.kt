@@ -43,7 +43,10 @@ import org.viptv.app.theme.ViptvColor as C
             items(visibleCatalogs, key = { it.key.stableId }) { item ->
                 AppChip(item.name, { controller.setDiscoverCatalog(item.key) }, item.key == ui.selectedCatalogKey)
             }
-            items(catalog?.filters.orEmpty(), key = { it.name }) { filter ->
+        }
+        if(catalog!=null) SimklCalendarControls(state,controller,catalog)
+        LazyRow(Modifier.padding(bottom=measure(20,12)),horizontalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(4.dp)) {
+            items(catalog?.filters.orEmpty().filter { it.name !in listOf("date","month","timezone") }, key = { it.name }) { filter ->
                 AppChip(ui.selectedFilters[filter.name] ?: filter.name.replaceFirstChar(Char::titlecase), {
                     if (filter.options.isEmpty()) entry = filter
                     else choice = filter.name.replaceFirstChar(Char::titlecase) to

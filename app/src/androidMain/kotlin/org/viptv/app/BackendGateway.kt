@@ -18,6 +18,7 @@ interface BackendGateway {
     suspend fun simklSync(profileId: String) {}
     suspend fun simklPlayback(profileId: String, media: Media, sessionId: String, action: String, positionMillis: Long, durationMillis: Long?) {}
     suspend fun simklWatchlist(profileId: String, media: Media, status: String) {}
+    suspend fun simklWatchlistItems(profileId:String): List<Media> = emptyList()
     suspend fun simklInfo(profileId: String): String = "SIMKL unavailable"
     suspend fun simklLists(profileId: String, page: Int = 1): List<Pair<String,String>> = emptyList()
     suspend fun simklList(profileId: String, id: String, page: Int = 1): List<Media> = emptyList()

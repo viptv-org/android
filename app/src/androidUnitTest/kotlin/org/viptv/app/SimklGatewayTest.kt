@@ -9,8 +9,9 @@ import kotlin.test.assertTrue
 class SimklGatewayTest {
     @Test fun `advanced search uses one request per SIMKL category and reports limited coverage`() = runBlocking {
         val paths=mutableListOf<String>()
-        FixtureServer(3) { request ->
+        FixtureServer(4) { request ->
             paths.add(request.target)
+            if(request.target.startsWith("/api/v2/iptv/live/channels")) return@FixtureServer FixtureResponse("""{"catalog_id":1,"generation":1,"items":[],"next_cursor":null,"previous_cursor":null}""")
             assertTrue(request.target.startsWith("/api/discover?"))
             FixtureResponse("""{"metas":[{"id":"simkl:movies:42","type":"movie","name":"Fixture movie"}],"full_search":false,"has_more":false}""")
         }.use { server ->

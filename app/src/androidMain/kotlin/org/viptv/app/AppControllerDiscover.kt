@@ -169,40 +169,33 @@ private fun AppController.isCurrentDiscover(generation: Long): Boolean =
 
 /** Each edit replaces prior work; a late response cannot repopulate a cleared query. */
 internal fun AppController.search(query: String) {
+    simklSearchFilters=simklSearchFilters.filterKeys { it!="skip" }
+    runSimklSearch(query,false)
+}
+internal fun AppController.appendSimklSearch() { runSimklSearch(_state.value.searchQuery,true) }
+private fun AppController.runSimklSearch(query: String, append: Boolean) {
     searchJob?.cancel()
-    val normalized = query.trim()
-    _state.value = _state.value.copy(
-        searchQuery = query.take(256),
-        searchResults = emptyList(),
-        searchSections = emptyList(),
-        searchStatus = if (normalized.isEmpty()) "Find your next favorite." else "Searching…",
-        loading = false,
-        message = null,
-    )
-    if (normalized.isEmpty() && simklSearchFilters.isEmpty()) return
-    searchJob = scope.launch {
-        delay(650)
+    val normalized=query.trim()
+    val previous=if(append) _state.value.searchSections else emptyList()
+    fun combine(next:List<SearchSection>):List<SearchSection> = (previous+next).groupBy { it.id }.values.map { entries -> entries.last().copy(items=entries.flatMap { it.items }.distinctBy { HomeFocusPolicy.mediaKey(it) }) }
+    _state.value=_state.value.copy(searchQuery=query.take(256),searchResults=previous.flatMap {it.items},searchSections=previous,simklSearchFilters=simklSearchFilters,
+        searchHasMore=false,searchStatus="Searching…",loading=false,message=null)
+    searchJob=scope.launch {
+        delay(if(append) 0 else 650)
         try {
-            val profileId = _state.value.selectedProfile?.id
-            val results = gateway.advancedSearch(normalized, simklSearchFilters) { partial ->
-                if (isActive && _state.value.route == Route.Search && _state.value.selectedProfile?.id == profileId && _state.value.searchQuery.trim() == normalized) {
-                    _state.value = _state.value.copy(searchSections = partial.sections, searchResults = partial.sections.flatMap { it.items }, searchStatus = "Searching…")
+            val profileId=_state.value.selectedProfile?.id
+            val results=gateway.advancedSearch(normalized,simklSearchFilters) { partial ->
+                if(isActive && _state.value.route==Route.Search && _state.value.selectedProfile?.id==profileId && _state.value.searchQuery.trim()==normalized) {
+                    val sections=combine(partial.sections)
+                    _state.value=_state.value.copy(searchSections=sections,searchResults=sections.flatMap {it.items},searchStatus="Searching…")
                 }
             }
-            if (isActive && _state.value.route == Route.Search && _state.value.selectedProfile?.id == profileId) {
-                val count = results.sections.flatMap { it.items }.distinctBy { HomeFocusPolicy.mediaKey(it) }.size
-                val baseStatus = if (count == 0) "No results. Try another title." else "$count results"
-                _state.value = _state.value.copy(
-                    searchSections = results.sections,
-                    searchResults = results.sections.flatMap(SearchSection::items),
-                    searchStatus = (if (results.partialFailure) "$baseStatus  Some sources couldn't load." else baseStatus) + " · " + results.coverage,
-                    loading = false,
-                )
+            if(isActive && _state.value.route==Route.Search && _state.value.selectedProfile?.id==profileId) {
+                val sections=combine(results.sections);val count=sections.flatMap {it.items}.distinctBy {HomeFocusPolicy.mediaKey(it)}.size
+                _state.value=_state.value.copy(searchSections=sections,searchResults=sections.flatMap {it.items},searchHasMore=results.hasMore,
+                    searchStatus="$count results · ${results.coverage}"+(if(results.partialFailure) " · Some sources couldn't load" else ""),loading=false)
             }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Throwable) {
-            if (isActive) _state.value = _state.value.copy(loading = false, searchStatus = "Searching…  Some sources couldn't load.")
-        }
+        } catch(cancelled:CancellationException){throw cancelled}
+        catch(error:Exception){if(isActive) _state.value=_state.value.copy(loading=false,searchStatus=error.message ?: "Search unavailable")}
     }
 }

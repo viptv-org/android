@@ -193,18 +193,25 @@ class VipTvHttpGateway(
     override suspend fun advancedSearch(query: String, filters: Map<String,String>, onUpdate: (SearchResults) -> Unit): SearchResults {
         val sections=mutableListOf<SearchSection>()
         var partial=false;var linked=false;var more=false
-        val categories=filters["category"]?.takeIf { it in listOf("movie","tv","anime") }?.let(::listOf) ?: listOf("movie","tv","anime")
-        for(category in categories) {
+        val categories=if(filters["category"]=="live") emptyList() else filters["category"]?.takeIf { it in listOf("movie","tv","anime") }?.let(::listOf) ?: listOf("movie","tv","anime")
+        for(category in categories.filter {it!="movie" || filters["sort"]!="last-air-date"}) {
             try {
                 val root=json("GET",discoverPath(if(category=="movie") "movie" else "series",catalog=if(category=="anime") "anime-today" else "today",skip=filters["skip"]?.toIntOrNull() ?: 0,search=query.takeIf { it.isNotBlank() },genre=filters["genre"],extras=filters.filterKeys { it !in listOf("category","skip","genre") }))
                 linked=linked || root.optBoolean("full_search",false);more=more || root.optBoolean("has_more",false)
-                val items=root.mediaArray()
+                val items=root.mediaArray().distinctBy {HomeFocusPolicy.mediaKey(it)}
                 if(items.isNotEmpty()) sections.add(SearchSection("SIMKL " + category,items,"simkl:" + category,if(category=="movie") "movie" else "series"))
                 onUpdate(SearchResults(sections.toList(),partial,if(linked) "Full SIMKL search" else "Public feeds and known titles · link SIMKL for full search",more))
             } catch(cancelled:CancellationException){throw cancelled} catch(_:Exception){partial=true}
         }
+        if(query.isNotBlank() && (filters["category"].isNullOrEmpty() || filters["category"]=="live") && (filters["skip"]?.toIntOrNull() ?: 0)==0) {
+            try {
+                val live=liveV2(LiveCatalogQuery(search=query,limit=24)).items.map {CoreModels.mediaNormalized(it)}
+                if(live.isNotEmpty()) sections.add(SearchSection("Live TV",live,"live","live"))
+            } catch(cancelled:CancellationException){throw cancelled} catch(_:Exception){partial=true}
+        }
         return SearchResults(sections,partial,if(linked) "Full SIMKL search" else "Public feeds and known titles · link SIMKL for full search",more)
     }
+    override suspend fun simklWatchlistItems(profileId:String):List<Media> = json("GET","/profiles/${enc(profileId)}/integrations/simkl/watchlist").mediaArray()
     override suspend fun simklInfo(profileId:String):String {
         val data=json("GET","/profiles/${enc(profileId)}/integrations/simkl")
         return if(data.optBoolean("connected")) "Connected as ${data.optString("user_name")} · ${data.optString("error").takeUnless { it == "null" }.orEmpty()}" else "Not linked · public discovery and local tracking are available"
@@ -234,7 +241,7 @@ class VipTvHttpGateway(
     override suspend fun simklWatchlist(profileId:String,media:Media,status:String) {
         val item=simklItem(media)
         json("PUT","/profiles/${enc(profileId)}/integrations/simkl/watchlist",JSONObject().put("item",item).put("status",status))
-        json("PUT","/profiles/${enc(profileId)}/favorites",item)
+
     }
     override suspend fun seriesProgress(profileId: String, seriesId: String): List<Media> =
         jsonArray("GET", "/profiles/${enc(profileId)}/progress/series?series_id=${enc(seriesId)}").objects().take(2000).map { it.media() }

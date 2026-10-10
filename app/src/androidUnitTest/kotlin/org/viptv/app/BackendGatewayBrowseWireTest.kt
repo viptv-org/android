@@ -116,7 +116,7 @@ class BackendGatewayBrowseWireTest {
     }
 
     @Test
-    fun `search keeps successful labelled catalogs and live results when one catalog fails`() = runBlocking {
+    fun `search keeps successful SIMKL categories and live results when another category fails`() = runBlocking {
         FixtureServer(4) { request ->
             when {
                 request.target == "/api/catalogs" -> FixtureResponse("""[
@@ -137,7 +137,7 @@ class BackendGatewayBrowseWireTest {
             val results = VipTvHttpGateway(server.origin).search("space opera")
 
             assertTrue(results.partialFailure)
-            assertEquals(listOf("Movie catalog", "Live TV"), results.sections.map(SearchSection::source))
+            assertEquals(listOf("SIMKL movie", "Live TV"), results.sections.map(SearchSection::source))
             assertEquals(listOf("movie-1", "movie-2"), results.sections[0].items.map(Media::id))
             assertEquals(listOf("live-1"), results.sections[1].items.map(Media::id))
             assertEquals(4, server.requests.size)
@@ -146,10 +146,10 @@ class BackendGatewayBrowseWireTest {
     }
 
     @Test
-    fun `catalog lookup failure retains live results and signals partial search`() = runBlocking {
-        FixtureServer(2) { request ->
+    fun `SIMKL failure retains live results and signals partial search`() = runBlocking {
+        FixtureServer(4) { request ->
             when {
-                request.target == "/api/catalogs" -> FixtureResponse("""{"error":"catalog index unavailable"}""", 503)
+                request.target.startsWith("/api/discover?") -> FixtureResponse("""{"error":"catalog index unavailable"}""", 503)
                 request.target.startsWith("/api/v2/iptv/live/channels?") -> FixtureResponse("""{"catalog_id":1,"generation":1,"items":[{"id":"live-2","name":"Still live"}],"next_cursor":null,"previous_cursor":null}""")
                 else -> error("Unexpected request ${request.target}")
             }

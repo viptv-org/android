@@ -164,6 +164,8 @@ data class AppState(
     /** Increments only for explicit Search navigation, never for a details return. */
     val searchEntryEpoch: Int = 0,
     val searchStatus: String = "Find your next favorite.",
+    val simklSearchFilters: Map<String,String> = emptyMap(),
+    val searchHasMore: Boolean = false,
     val searchSections: List<SearchSection> = emptyList(),
     val searchResults: List<Media> = emptyList(), // Compatibility projection for older surfaces.
     val discoverUi: DiscoverUiState = DiscoverUiState(),
