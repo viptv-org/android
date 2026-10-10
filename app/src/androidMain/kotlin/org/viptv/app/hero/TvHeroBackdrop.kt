@@ -114,8 +114,8 @@ import org.viptv.app.normalizedJson
     }
 
     val copyFade = remember(ground) {
-        Brush.horizontalGradient(0f to ground, 0.25f to ground.copy(alpha = .96f),
-            0.55f to ground.copy(alpha = .72f), 0.8f to Color.Transparent)
+        Brush.horizontalGradient(0f to ground.copy(alpha = .84f), 0.25f to ground.copy(alpha = .64f),
+            0.55f to Color.Transparent, 1f to Color.Transparent)
     }
     val lowerFadeStart = with(density) { LOWER_FADE_START.dp.toPx() }
     val lowerFade = remember(ground, lowerFadeStart) {
@@ -159,7 +159,7 @@ private const val MIN_FILL = 0.6f
 private const val ART_HEIGHT = 720
 private const val BACKDROP_HEIGHT = 950
 /** The lower fade runs from transparent here (logical px) to ground at the backdrop's bottom edge. */
-internal const val LOWER_FADE_START = 440
+internal const val LOWER_FADE_START = 650
 
 private class HeroArtwork(val sharp: Bitmap, val ambient: Bitmap)
 
