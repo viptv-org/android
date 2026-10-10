@@ -86,6 +86,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         buildConfigField("boolean", "PLAYBACK_DIAGNOSTICS", "false")
+        buildConfigField("String", "DEFAULT_SERVER_ORIGIN", "\"https://viptv.syek.tech\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     compileOptions {
@@ -163,6 +164,7 @@ val simklExperiment = providers.gradleProperty("simklExperiment").isPresent
 if (simklExperiment) {
     require(gradle.startParameter.taskNames.none { it.contains("release", ignoreCase = true) }) { "SIMKL experiment is debug-only" }
     android.buildTypes.getByName("debug").applicationIdSuffix = ".simkl"
+    android.buildTypes.getByName("debug").buildConfigField("String", "DEFAULT_SERVER_ORIGIN", "\"https://beta-viptv.syek.tech\"")
 }
 if (fixtureCa.isPresent) {
     require(simklExperiment || providers.gradleProperty("nativeTorrentFixtureArtifacts").isPresent || providers.gradleProperty("torrentRuntimeMediaQa").isPresent) {

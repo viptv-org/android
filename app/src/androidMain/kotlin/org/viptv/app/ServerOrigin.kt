@@ -11,7 +11,7 @@ import android.content.Context
 internal object ServerOrigin {
     private const val PREFS = "viptv.settings"
     private const val KEY = "origin"
-    val DEFAULT = "https://viptv.syek.tech"
+    val DEFAULT = BuildConfig.DEFAULT_SERVER_ORIGIN
 
     fun load(context: Context): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)?.takeIf { validate(it) != null } ?: DEFAULT
