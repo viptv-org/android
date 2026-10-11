@@ -526,11 +526,20 @@ class VipTvHttpGateway(
     override suspend fun savePreferences(profileId: String, preferences: PlaybackPreferences) {
         json("PUT", "/profiles/${enc(profileId)}/preferences", preferences.body())
     }
-    override suspend fun addons(): List<Addon> = jsonArray("GET", "/addons").objects().mapNotNull { it.addon() }
-    override suspend fun addAddon(manifestUrl: String): Addon = json("POST", "/addons", JSONObject().put("manifest_url", manifestUrl)).addon()
-    override suspend fun serverAbout(): ServerAbout = ServerAbout(json("GET", "/status").optBoolean("ffmpeg_available"))
-    override suspend fun setAddonEnabled(addon: Addon, enabled: Boolean) { json("PATCH", "/addons/${enc(addon.id)}", JSONObject().put("enabled", enabled)) }
-    override suspend fun removeAddon(addon: Addon) { json("DELETE", "/addons/${enc(addon.id)}") }
+    override suspend fun addons(): List<Addon> {
+        // Accounts have few addons; follow the bounded cursor pages so settings see them all.
+        val addons = mutableListOf<Addon>()
+        var cursor: String? = null
+        repeat(10) {
+            val page = json("GET", "/v2/addons?limit=200" + (cursor?.let { "&cursor=${enc(it)}" } ?: ""))
+            page.getJSONArray("items").objects().mapTo(addons) { it.addon() }
+            cursor = page.optString("next_cursor").takeIf { !page.isNull("next_cursor") && it.isNotEmpty() } ?: return addons
+        }
+        return addons
+    }
+    override suspend fun addAddon(manifestUrl: String): Addon = json("POST", "/v2/addons", JSONObject().put("manifest_url", manifestUrl)).addon()
+    override suspend fun setAddonEnabled(addon: Addon, enabled: Boolean) { json("PATCH", "/v2/addons/${enc(addon.id)}", JSONObject().put("enabled", enabled)) }
+    override suspend fun removeAddon(addon: Addon) { json("DELETE", "/v2/addons/${enc(addon.id)}") }
     override suspend fun createProfile(name: String, avatarStyle: String, avatarChoice: Int?): Profile =
         json("POST", "/profiles", profilePayload(name, avatarStyle, avatarChoice, setupComplete = false)).profile()
     override suspend fun updateProfile(profile: Profile, name: String, avatarStyle: String, avatarChoice: Int?): Profile =
@@ -551,7 +560,7 @@ class VipTvHttpGateway(
     }
     private suspend fun json(method: String, path: String, body: JSONObject? = null): JSONObject =
         withContext(Dispatchers.Default) { JSONObject(responseText(method, path, body)) }
-    /** `/addons` is deliberately a raw JSON array in the Rust API. */
+    /** Series progress is deliberately a raw JSON array in the Rust API. */
     private suspend fun jsonArray(method: String, path: String, body: JSONObject? = null): JSONArray =
         withContext(Dispatchers.Default) { JSONArray(responseText(method, path, body)) }
     private sealed interface CallResult
@@ -699,7 +708,7 @@ private fun JSONObject.source(eventProvider: String? = null): Source = CoreModel
 private fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }
 private fun JSONObject.array(vararg keys: String): List<Any?> = (keys.firstNotNullOfOrNull { optJSONArray(it) } ?: JSONArray()).let { array -> (0 until array.length()).map { index -> array.opt(index) } }
 private fun Any?.optJSONObject(): JSONObject? = this as? JSONObject
-private fun JSONObject.addon() = Addon(get("id").toString(), optString("name"), optString("manifest_url"), optBoolean("enabled", true))
+private fun JSONObject.addon() = Addon(get("id").toString(), optString("name"), optBoolean("enabled", true))
 // Ignore server `quality` values; preference reads and writes use only supported fields.
 private fun PlaybackPreferences.body() = JSONObject().put("audio_language", audioLanguage).put("subtitle_language", subtitleLanguage).put("subtitles_enabled", subtitlesEnabled).put("subtitle_size", subtitleSize).put("subtitle_style", subtitleStyle).put("autoplay", autoplay)
     // Servers without subtitle_mode reject unknown fields; send it only to servers that returned it.

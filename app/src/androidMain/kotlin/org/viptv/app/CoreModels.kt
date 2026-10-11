@@ -33,7 +33,6 @@ internal object CoreModels {
         return Profile(item.id, item.name, item.avatar, item.kid == true, item.primary == true, item.avatarStyle.orEmpty(), item.avatarChoice?.toInt(), item.setupComplete == true)
     }
     fun profile(value: JSONObject): Profile = profileNormalized(CoreJson.decode<org.viptv.core.wire.Profile>(normalize("profile", value.toString(), "")))
-    fun playback(value: JSONObject, origin: String): PlaybackLaunch = playbackNormalized(CoreJson.decode<PlaybackSession>(normalize("playback", value.toString(), origin)))
     fun playbackNormalized(it: PlaybackSession): PlaybackLaunch {
         return PlaybackLaunch(it.id, it.url, headers = buildMap {
             putAll(it.headers)

@@ -110,9 +110,7 @@ data class DeviceSession(val accessToken: String, val refreshToken: String, val 
 data class HomeShelf(val title: String, val items: List<Media>, val isQueueShelf: Boolean = false, val id: String = title, val contentType: String? = null, val catalogName: String? = null, val isMyListShelf: Boolean = false)
 
 data class NextResult(val status: String, val item: Media? = null)
-data class Addon(val id: String, val name: String, val manifestUrl: String, val enabled: Boolean)
-/** Deliberately minimal, account-safe facts for the informational Settings section. */
-data class ServerAbout(val mediaServiceAvailable: Boolean)
+data class Addon(val id: String, val name: String, val enabled: Boolean)
 /** A labelled source section retained when another search source fails. */
 data class SearchSection(val source: String, val items: List<Media>, val id: String = source, val type: String? = null)
 /** Partial failures are explicit so the UI can retain results without lying about coverage. */
@@ -179,7 +177,6 @@ data class AppState(
     val guide: List<GuideProgramme> = emptyList(),
     val guideUi: GuideUiState = GuideUiState(),
     val addons: List<Addon> = emptyList(),
-    val serverAbout: ServerAbout? = null,
     val preferences: PlaybackPreferences = PlaybackPreferences(),
     /** Measured decoder facts keep source recommendations reactive to the async probe. */
     val sourceCapabilities: PlaybackClientCapabilities? = null,

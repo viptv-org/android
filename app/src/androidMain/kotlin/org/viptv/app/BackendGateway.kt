@@ -57,7 +57,6 @@ interface BackendGateway {
     suspend fun savePreferences(profileId: String, preferences: PlaybackPreferences)
     suspend fun addons(): List<Addon>
     suspend fun addAddon(manifestUrl: String): Addon
-    suspend fun serverAbout(): ServerAbout
     suspend fun setAddonEnabled(addon: Addon, enabled: Boolean)
     suspend fun removeAddon(addon: Addon)
     suspend fun createProfile(name: String, avatarStyle: String, avatarChoice: Int?): Profile

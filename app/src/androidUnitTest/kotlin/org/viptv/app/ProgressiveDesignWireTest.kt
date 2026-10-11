@@ -30,7 +30,6 @@ class ProgressiveDesignWireTest {
                     failed -> """{"message":"Temporarily unavailable"}"""
                     path == "/api/discover" -> """{"metas":[{"id":"new-title","type":"movie","name":"New title"}]}"""
                     path.endsWith("/continue/page") || path.endsWith("/favorites/page") -> """{"items":[]}"""
-                    path == "/api/live" -> """{"channels":[]}"""
                     else -> """{"items":[]}"""
                 }.toByteArray()
                 exchange.responseHeaders.add("Content-Type", "application/json")
@@ -84,7 +83,6 @@ class ProgressiveDesignWireTest {
             path == "/api/catalogs" -> "[]"
             path.endsWith("/continue/page") -> """{"items":[$items]}"""
             path.endsWith("/favorites/page") -> """{"items":[]}"""
-            path == "/api/live" -> """{"channels":[]}"""
             path.startsWith("/api/meta/") -> { metadata.incrementAndGet(); """{"meta":{"id":"${path.substringAfterLast('/')}","type":"movie","name":"Enriched"}}""" }
             else -> error("Unexpected fixture path")
         } }.use { server ->
@@ -102,7 +100,6 @@ class ProgressiveDesignWireTest {
                 path == "/api/catalogs" -> { gate.await(3, TimeUnit.SECONDS); "[]" }
                 path.endsWith("/continue/page") -> """{"items":[{"id":"tt-series:1:1","type":"episode","series_id":"tt-series","name":"Series","season":1,"episode":1,"position":12,"duration":600},{"id":"tt-series:1:2","type":"episode","series_id":"tt-series","name":"Series","season":1,"episode":2,"position":20,"duration":600}]}"""
                 path.endsWith("/favorites/page") -> """{"items":[]}"""
-                path == "/api/live" -> """{"channels":[]}"""
                 path == "/api/meta/series/tt-series" -> { gate.await(3, TimeUnit.SECONDS); """{"meta":{"id":"tt-series","type":"series","name":"Series","description":"Hydrated description","videos":[]}}""" }
                 else -> error("Unexpected fixture path")
             }
@@ -133,7 +130,6 @@ class ProgressiveDesignWireTest {
         val server = ParallelFixture { path, query ->
             when (path) {
                 "/api/catalogs" -> """[{"id":"slow","type":"movie","name":"Slow","addon_id":1,"supports_search":true,"extra":[{"name":"search"}]},{"id":"fast","type":"movie","name":"Fast","addon_id":1,"supports_search":true,"extra":[{"name":"search"}]}]"""
-                "/api/live" -> """{"channels":[]}"""
                 "/api/discover" -> {
                     if (query.contains("catalog=slow")) { gate.await(3, TimeUnit.SECONDS); """{"metas":[{"id":"tt-slow","type":"movie","name":"Slow match"}]}""" }
                     else """{"metas":[{"id":"tt-fast","type":"movie","name":"Fast match"}]}"""
@@ -156,7 +152,6 @@ class ProgressiveDesignWireTest {
     @Test fun sameNamedCataloguesKeepTheirIdentityAndRepeatedTitles() = runBlocking {
         val server = ParallelFixture { path, _ -> when (path) {
             "/api/catalogs" -> """[{"id":"search","type":"movie","name":"Search","addon_id":1,"addon_name":"Provider One","supports_search":true},{"id":"search","type":"movie","name":"Search","addon_id":2,"addon_name":"Provider Two","supports_search":true}]"""
-            "/api/live" -> """{"channels":[]}"""
             "/api/discover" -> """{"metas":[{"id":"shared","type":"movie","name":"Shared title"},{"id":"shared","type":"movie","name":"Shared title"}]}"""
             else -> error("Unexpected request")
         } }

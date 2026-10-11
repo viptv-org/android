@@ -501,25 +501,23 @@ class BackendGatewayWireTest {
     }
 
     @Test
-    fun `add-on installation and server facts use bounded public wire fields`() = runBlocking {
+    fun `add-on installation and listing use the paged v2 wire`() = runBlocking {
         FixtureServer(3) { request ->
             when (request.target) {
-                "/api/addons" -> if (request.method == "GET") FixtureResponse("""[{"id":2,"name":"Fixture","manifest_url":"https://example.test/manifest.json","enabled":false}]""")
-                    else FixtureResponse("""{"id":4,"name":"Installed","manifest_url":"https://addons.example.test/manifest.json","enabled":true}""")
-                "/api/status" -> FixtureResponse("""{"providers":3,"addons":4,"profiles":8,"active_sessions":2,"ffmpeg_available":true,"video_acceleration":{"backend":"vaapi"}}""")
+                "/api/v2/addons" -> FixtureResponse("""{"id":4,"name":"Installed","manifest_url":null,"enabled":true}""")
+                "/api/v2/addons?limit=200" -> FixtureResponse("""{"items":[{"id":2,"name":"Fixture","manifest_url":null,"enabled":false}],"next_cursor":"page-2"}""")
+                "/api/v2/addons?limit=200&cursor=page-2" -> FixtureResponse("""{"items":[{"id":5,"name":"Second","manifest_url":null,"enabled":true}],"next_cursor":null}""")
                 else -> error("Unexpected request ${request.target}")
             }
         }.use { server ->
             val gateway = VipTvHttpGateway(server.origin)
             val addon = gateway.addAddon("https://addons.example.test/manifest.json")
-            val about = gateway.serverAbout()
             val addons = gateway.addons()
 
             assertEquals("POST", server.requests[0].method)
             assertEquals("https://addons.example.test/manifest.json", JSONObject(server.requests[0].body).getString("manifest_url"))
-            assertEquals(Addon("4", "Installed", "https://addons.example.test/manifest.json", true), addon)
-            assertTrue(about.mediaServiceAvailable)
-            assertEquals(listOf(Addon("2", "Fixture", "https://example.test/manifest.json", false)), addons)
+            assertEquals(Addon("4", "Installed", true), addon)
+            assertEquals(listOf(Addon("2", "Fixture", false), Addon("5", "Second", true)), addons)
             server.assertHealthy()
         }
     }

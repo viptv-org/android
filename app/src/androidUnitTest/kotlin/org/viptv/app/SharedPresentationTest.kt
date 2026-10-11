@@ -84,7 +84,7 @@ class SharedPresentationTest {
             assertEquals(listOf("addon:3", "addon:4"), producers.map { it.sourceId })
             assertEquals("addon_timeout", producers.first().errorCode)
             assertFalse(producers.first().errorMessage.orEmpty().contains("secret"))
-            val named = namedSourceProducers(producers, listOf(Addon("3", "Configured", "", true), Addon("9", "Catalog only", "", true)), rows)
+            val named = namedSourceProducers(producers, listOf(Addon("3", "Configured", true), Addon("9", "Catalog only", true)), rows)
             assertEquals(listOf("Configured", "addon:4"), named.map { it.label })
             server.assertHealthy()
         }

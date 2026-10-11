@@ -29,8 +29,8 @@ class DistinctSourceProducerWireTest {
     @Test fun configuredNamesStaySeparateEvenWhenOnlyOneAddonHasRows() {
         val observed = listOf("addon:3", "addon:4", "addon:8").map { SourceProducerOutcome(it) }
         val installed = listOf(
-            Addon("3", "Torrentio", "", true), Addon("4", "TorrentsDB", "", true),
-            Addon("8", "Torrentio TB", "", true), Addon("9", "Catalog only", "", true),
+            Addon("3", "Torrentio", true), Addon("4", "TorrentsDB", true),
+            Addon("8", "Torrentio TB", true), Addon("9", "Catalog only", true),
         )
         val playable = Source("playable-8", "Torrentio", addonId = "addon:8")
 

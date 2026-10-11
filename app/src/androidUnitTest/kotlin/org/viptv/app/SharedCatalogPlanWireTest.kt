@@ -47,7 +47,6 @@ class SharedCatalogPlanWireTest {
                 request.target.contains("/favorites/page") -> FixtureResponse(items("saved"))
                 request.target.startsWith("/api/v2/iptv/live/channels") -> FixtureResponse(
                     """{"catalog_id":1,"generation":1,"items":[{"id":"live-1","name":"Live one"}],"next_cursor":null,"previous_cursor":null}""")
-                request.target == "/api/live" -> FixtureResponse("""{"channels":[{"id":"now-1","name":"Now"}]}""")
                 else -> error("Unexpected request: ${request.target}")
             }
         }.use { server ->
