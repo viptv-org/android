@@ -41,7 +41,7 @@ class CoreLifecycleTest {
         assertEquals(HomeRevisionDecision.SCOPELOST, CoreLifecycle.homeRevision(false, "r3", "r2", true))
     }
 
-    @Test fun previewDecisionsRetainPartialResultsRetryEmptyAndRejectStaleOwner() {
+    @Test fun previewDecisionsRefreshCompletedResultsAndRejectStaleOwner() {
         val key = requireNotNull(SourcePreviewPolicy.key("p", media))
         val pending = SourcePreviewSnapshot(key)
         assertEquals(PreviewDecision.BEGINSETTLED, CoreLifecycle.preview(PreviewAction.START, key, null))
@@ -52,7 +52,7 @@ class CoreLifecycleTest {
         val failed = pending.copy(done = true, error = IllegalStateException("Sources unavailable"))
         assertEquals(PreviewDecision.FAILED, CoreLifecycle.preview(PreviewAction.RESULT, key, failed))
         val partial = failed.copy(sources = listOf(Source("s", "Fixture")))
-        assertEquals(PreviewDecision.RETAIN, CoreLifecycle.preview(PreviewAction.ADOPT, key, partial))
+        assertEquals(PreviewDecision.BEGINIMMEDIATE, CoreLifecycle.preview(PreviewAction.ADOPT, key, partial))
         assertEquals(PreviewDecision.READY, CoreLifecycle.preview(PreviewAction.RESULT, key, partial))
         assertEquals(PreviewDecision.REJECT, CoreLifecycle.preview(PreviewAction.UPDATE, key, partial, ownerMatches = false))
     }

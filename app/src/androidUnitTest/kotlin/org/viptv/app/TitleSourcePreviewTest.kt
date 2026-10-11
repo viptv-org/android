@@ -17,18 +17,17 @@ class TitleSourcePreviewTest {
     private val movie = Media("m", "movie", "Movie")
     private val row = Source("s", "Provider", "1080p h264 English audio", quality = "1080p")
 
-    @Test fun expiredHandlesAreReplacedBeforePickerReuse() = runTest {
+    @Test fun pickerNeverReusesCompletedDiscovery() = runTest {
         var calls = 0
         val preview = TitleSourcePreview(backgroundScope,
             { _, _, _ -> calls++; listOf(row.copy(id = "generation-$calls")) }, {},
             settleMillis = 0, reuseBudgetMillis = 100, elapsedRealtime = { testScheduler.currentTime })
         preview.start("p", movie); runCurrent()
-        advanceTimeBy(99); runCurrent()
-        assertEquals("generation-1", preview.adopt("p", movie, {}, {}).single().id)
-        advanceTimeBy(1); runCurrent()
+        assertEquals(1, calls)
         assertEquals("generation-2", preview.adopt("p", movie, {}, {}).single().id)
-        preview.cancel()
         assertEquals("generation-3", preview.adopt("p", movie, {}, {}).single().id)
+        preview.cancel()
+        assertEquals("generation-4", preview.adopt("p", movie, {}, {}).single().id)
     }
 
     @Test fun repeatedTitleRendersStartOneDiscoveryAfterSettling() = runTest {
@@ -73,11 +72,10 @@ class TitleSourcePreviewTest {
         assertEquals(1, calls)
     }
 
-    @Test fun completedRowsAreReusedButEmptyDiscoveryCanRetry() = runTest {
+    @Test fun emptyCompletedDiscoveryIsRetriedWhenThePickerOpens() = runTest {
         var calls = 0
         val preview = TitleSourcePreview(backgroundScope, { _, _, _ -> calls++; if (calls == 1) emptyList() else listOf(row) }, {}, settleMillis = 0)
         preview.start("p", movie); runCurrent()
-        assertEquals(listOf(row), preview.adopt("p", movie, {}, {}))
         assertEquals(listOf(row), preview.adopt("p", movie, {}, {}))
         assertEquals(2, calls)
     }
@@ -101,11 +99,11 @@ class TitleSourcePreviewTest {
         var latest: SourcePreviewSnapshot? = null
         val preview = TitleSourcePreview(backgroundScope, { _, _, rows -> rows(listOf(row)); awaitCancellation() },
             { latest = it }, settleMillis = 0, timeoutMillis = 100)
-        preview.start("p", movie); runCurrent()
-        advanceTimeBy(100); runCurrent()
+        val picked = async { preview.adopt("p", movie, {}, {}) }
+        runCurrent(); advanceTimeBy(100); runCurrent()
         assertTrue(latest?.done == true)
         assertTrue(latest?.error != null)
-        assertEquals(listOf(row), preview.adopt("p", movie, {}, {}))
+        assertEquals(listOf(row), picked.await())
     }
 
     @Test fun emptyTimedOutPickerFinishesAsRecoverableFailure() = runTest {

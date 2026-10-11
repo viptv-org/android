@@ -153,6 +153,7 @@ internal fun AppController.exitPlayer(route: Route.Player, media: Media) {
         dialog = null,
         message = null,
     )
+    if (returned is Route.Sources) refreshSourcesAfterPlayback(returned)
     refreshEpisodeDetailsAfterExit(media, profileId, finalSave, returned)
 }
 

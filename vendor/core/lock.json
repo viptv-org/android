@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/core",
-  "revision": "b6ee0548753483c9627cb1c73e7761b62f936933",
+  "revision": "61d81dcb81327ad2e0187675b1c1522b5f3c46ab",
   "files": {
     "Cargo.lock": "f69654cd47b20d98dce64ecfa3ad995e61a4e355510af0046e7377373b348654",
     "Cargo.toml": "aaadafb7d7043ae4788352e5784c05398c9020647acea903cc0940a158a77845",
@@ -46,7 +46,7 @@
     "crates/viptv-core/src/policy/presentation.rs": "cce2a56d25d94c7904dc392ec18e4510e895e8971e29305048c0d420bfc1a8f1",
     "crates/viptv-core/src/policy/progress.rs": "60aaf1cb02be4d4c43961af4e2fcf102b7abcecd65ed27e5dd0b1d53b618862b",
     "crates/viptv-core/src/policy/requests.rs": "53f820b6c97e0507178cd0a868c7bf4d9c79ac077ed48298ffc65f613504b836",
-    "crates/viptv-core/src/policy/shell_lifecycle.rs": "d3e8014836a13b37dacb84934425b907429f6a51c08d1b719f54a638b774184a",
+    "crates/viptv-core/src/policy/shell_lifecycle.rs": "9e45ed44d98058211fb88098bd1e289f01d05e8fa5303a086366fb18b2436021",
     "crates/viptv-core/src/policy/sources.rs": "bd85a1263b1deb3afc11bc7603e188aee341122d27f505f483423dbd7883d9af",
     "crates/viptv-core/src/torrent_runtime.rs": "f654a9e841529ea2db199c41721326229e0f6dd5685b28eead48e23ebba758e6",
     "crates/viptv-core/src/torrent_runtime_bridge.rs": "10b753b085249dcc05420a01fdae082a7cdf9cee23d00d41da293ec71a5a8fd7",
@@ -73,7 +73,7 @@
     "crates/viptv-core/tests/playback_protocol.rs": "3add7d2857ac0c107102fb28dadea91021e76bcb0639d150731e3b545b275a77",
     "crates/viptv-core/tests/presentation.rs": "7622a52409b76c3a44dc1cb22ef1db90611f68eaa3fdef2144079fd229b900e1",
     "crates/viptv-core/tests/shared_presentation_rules.rs": "20269562b98d1721212cc973c8737818355e55856d9c85d357682740b29efec0",
-    "crates/viptv-core/tests/shell_lifecycle.rs": "3e440d0102e906c0e26de956287b559a2066679c0dbd3490a075dea6e7e8ad65",
+    "crates/viptv-core/tests/shell_lifecycle.rs": "bd643abc964c7c531a7d9f2090598dddda315df828c79497e7dc2f29be04705b",
     "crates/viptv-core/tests/subtitle_selection.rs": "7de62d70f98921925084952d33b73e284a15180dd866dcd882e2698b6b3e7e79",
     "crates/viptv-core/tests/torrent_runtime_bridge.rs": "866ba975db38c810bf2c136534c15738cc61ffed5ea0418ae4ef1e8f9ceded7a",
     "crates/viptv-core/tests/torrent_runtime_grant.rs": "93f683a01595c18db8204b3630f77ab9bfd4adca14de92c7ad7a6f92e1082cb5",

@@ -3,6 +3,7 @@ package org.viptv.app
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /** Dispatch the core's card intent; Kotlin owns effects, not selection policy. */
@@ -101,41 +102,69 @@ internal fun AppController.chooseSources(media: Media, resume: Boolean = false, 
     sourceDiscovery = scope.launch {
         if (origin == SourceReturn.Home) detailReturnDestination = Destination.Home
         _state.value = _state.value.copy(route = route, sources = emptyList(), sourceProducers = emptyList(), loading = true, sourceLoading = true, message = null)
-        var observed = emptyList<SourceProducerOutcome>()
-        var configuredAddons = emptyList<Addon>()
-        fun publishProducers() {
-            if (ownsResults()) _state.value = _state.value.copy(
-                sourceProducers = namedSourceProducers(observed, configuredAddons, _state.value.sources))
+        val discovered = loadSources(this, media, ::ownsResults) ?: return@launch
+        if (_state.value.route !is Route.Sources || playbackGeneration != beforeStart) return@launch
+        val savedIdentity = ResumeIdentity.sourceIdentity(media.sourceAddonId, media.sourceFingerprint)
+        val intent = if (resume) PlaybackPolicy.forResume(savedIdentity, discovered, media.positionMillis) else PlaybackIntent.ChooseSource
+        if (intent is PlaybackIntent.Open) start(media, intent.source, explicitResume = true)
+        else if (discovered.isEmpty() || resume) update(message = when {
+            discovered.isEmpty() -> "No sources found. Choose another title or try again."
+            savedIdentity == null -> "Choose a source to resume. Your prior source cannot be verified."
+            else -> "Your previous source is unavailable. Choose a source."
+        })
+    }
+}
+
+/**
+ * Returning from the player re-runs discovery for the retained picker, because
+ * torrent availability changes while a title plays. The route object is kept so
+ * post-exit progress refresh still applies to it.
+ */
+internal fun AppController.refreshSourcesAfterPlayback(route: Route.Sources) {
+    val profile = _state.value.selectedProfile?.id
+    val key = SourcePreviewPolicy.key(profile, route.media)
+    fun ownsResults(): Boolean {
+        val active = _state.value.route
+        return _state.value.selectedProfile?.id == profile && active is Route.Sources &&
+            SourcePreviewPolicy.key(profile, active.media) == key
+    }
+    sourceDiscovery?.cancel()
+    sourceDiscovery = scope.launch {
+        _state.value = _state.value.copy(sources = emptyList(), sourceProducers = emptyList(), sourceLoading = true)
+        val discovered = loadSources(this, route.media, ::ownsResults) ?: return@launch
+        if (discovered.isEmpty()) update(message = "No sources found. Choose another title or try again.")
+    }
+}
+
+/** Streams discovery into the picker state; null when results are no longer owned or discovery failed. */
+private suspend fun AppController.loadSources(jobs: CoroutineScope, media: Media, ownsResults: () -> Boolean): List<Source>? {
+    var observed = emptyList<SourceProducerOutcome>()
+    var configuredAddons = emptyList<Addon>()
+    fun publishProducers() {
+        if (ownsResults()) _state.value = _state.value.copy(
+            sourceProducers = namedSourceProducers(observed, configuredAddons, _state.value.sources))
+    }
+    jobs.launch {
+        configuredAddons = try { gateway.addons() }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { emptyList() }
+        publishProducers()
+    }
+    return try {
+        val discovered = discoverSourcesFor(media, onSources = { arriving ->
+            if (ownsResults()) { _state.value = _state.value.copy(sources = arriving); publishProducers() }
+        }, onProducers = { outcomes -> observed = outcomes; publishProducers() })
+        if (!ownsResults()) return null
+        _state.value = _state.value.copy(sources = discovered, sourceLoading = false,
+            loading = _state.value.preparingSourceId != null)
+        discovered
+    } catch (error: CancellationException) { throw error }
+    catch (error: Throwable) {
+        if (ownsResults()) {
+            _state.value = _state.value.copy(sourceLoading = false)
+            if (_state.value.route is Route.Sources && _state.value.preparingSourceId == null) fail(error)
         }
-        launch {
-            configuredAddons = try { gateway.addons() }
-                catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: Exception) { emptyList() }
-            publishProducers()
-        }
-        try {
-            val discovered = discoverSourcesFor(media, onSources = { arriving ->
-                if (ownsResults()) { _state.value = _state.value.copy(sources = arriving); publishProducers() }
-            }, onProducers = { outcomes -> observed = outcomes; publishProducers() })
-            if (!ownsResults()) return@launch
-            _state.value = _state.value.copy(sources = discovered, sourceLoading = false,
-                loading = _state.value.preparingSourceId != null)
-            if (_state.value.route !is Route.Sources || playbackGeneration != beforeStart) return@launch
-            val savedIdentity = ResumeIdentity.sourceIdentity(media.sourceAddonId, media.sourceFingerprint)
-            val intent = if (resume) PlaybackPolicy.forResume(savedIdentity, discovered, media.positionMillis) else PlaybackIntent.ChooseSource
-            if (intent is PlaybackIntent.Open) start(media, intent.source, explicitResume = true)
-            else if (discovered.isEmpty() || resume) update(message = when {
-                discovered.isEmpty() -> "No sources found. Choose another title or try again."
-                savedIdentity == null -> "Choose a source to resume. Your prior source cannot be verified."
-                else -> "Your previous source is unavailable. Choose a source."
-            })
-        } catch (error: CancellationException) { throw error }
-        catch (error: Throwable) {
-            if (ownsResults()) {
-                _state.value = _state.value.copy(sourceLoading = false)
-                if (_state.value.route is Route.Sources && _state.value.preparingSourceId == null) fail(error)
-            }
-        }
+        null
     }
 }
 private fun AppController.sourceOrigin(): SourceReturn = when (_state.value.route) {
