@@ -2642,3 +2642,56 @@ navigation labels keep a fixed font weight. These edits have not been tested.
 
 The owner requested publication to GitHub after preview. Latest UI adjustments
 remain owner-validated; earlier automated pass counts do not cover later edits.
+
+# Home metadata early enrichment — 2026-10-09
+
+An uncommitted Android candidate based on `627ba4d6a9c49ceeb8ba158b887a7e713367acb7`
+was installed as an update on the physical Amazon AFTLAS01 (Android 11). The
+optimized APK SHA256 was
+`b1cd33daa8846ef39a3f60ec863dc4459a89f2c97b1e648110e8969f09f89f98`.
+App data and sign-in were preserved. The current backend had no metadata batch
+endpoint, so this run exercised the client's single-title fallback.
+
+The first Home capture shortly after launch already showed the focused title's
+description and facts. In a later capture, its title art and backdrop and all
+five visible Continue Watching card images were present. The app stayed active.
+The focused Android gateway wire tests and optimized APK build passed. This
+observation covers the visible first Home row on this device; other profiles,
+catalog rows and backend batch delivery were not exercised.
+
+The physical-TV remote was then moved down to Continue Watching and right
+through seven cards. Cards six and seven were beyond the initially visible
+set. Their metadata requests completed in 82 ms and 39 ms respectively;
+their hero artwork became ready 122 ms and 246 ms after each art load started.
+Captured focused states showed the description, title art, backdrop and card
+image for both. This confirms that later cards still fetch metadata only when
+they enter the composed row on the current backend, which lacks `/meta/batch`.
+The logs do not yet measure the full keypress-to-render interval or separate
+animation and image decode time, so these numbers are component timings rather
+than an end-to-end navigation latency.
+
+A later timestamped performance APK was installed and the same remote path was
+replayed after waking the TV. For the fifth and sixth focused cards, focus to
+hero artwork ready measured 554 ms and 425 ms. The metadata requests began
+121 ms and 148 ms after focus and completed in 56 ms and 46 ms. Artwork work
+started about 217 ms and 157 ms after metadata completed, then took 161 ms
+and 75 ms; its image decode portions took 140 ms and 52 ms. The difference
+between focus and these component times includes Compose state propagation,
+request scheduling and hero transition work. These markers end when the
+artwork bitmap is prepared, before final display presentation. The physical
+backend still lacked `/meta/batch`, so these cards were loaded individually.
+
+That timestamped performance APK remained installed on the TV (updated
+2026-10-09 21:52 UTC; versionCode 1, `armeabi-v7a`). Its on-device SHA256 is
+`dc63c265cf3a83132b0b75ae339e74a56f53fd176ab3ba5a94fb049098dc9c50`. On
+2026-10-11 the owner rated its Home responsiveness and loading as very good,
+making it the rollback baseline for later TV candidates.
+
+On 2026-10-11 an uncommitted candidate based on `136d71f` (main, with Home early
+enrichment moved onto main's scoped Home metadata cache) was installed as an
+update on the same TV. Its optimized APK SHA256 is
+`bdc06a0270217681258c56cdc71699e844857c7a7c059896e041c8c1b4d03f69`. All 340
+host unit tests passed. The app launched still signed in. A capture about 8 s after launch
+showed Home with the focused title's art, facts, description and backdrop and
+five Continue Watching card images. Responsiveness compared with the baseline
+awaits the owner's assessment.

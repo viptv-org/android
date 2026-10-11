@@ -143,7 +143,10 @@ class VipTvHttpGateway(
             when (shelf.role) {
                 HomeShelfRole.CONTINUEWATCHING -> {
                     val savedItems = optional(prior(title)) {
-                        json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=" + (shelf.limit ?: 40)).mediaArray()
+                        val started = System.nanoTime() / 1_000_000
+                        json("GET", "/profiles/" + enc(profileId) + "/continue/page?limit=" + (shelf.limit ?: 40)).mediaArray().also {
+                            if (BuildConfig.PLAYBACK_DIAGNOSTICS) homeTimingLog("event=queue_response elapsed_ms=${(System.nanoTime() / 1_000_000) - started}")
+                        }
                     }
                     val items = if (television) {
                         val metadataGate = Semaphore(3)
@@ -250,22 +253,61 @@ class VipTvHttpGateway(
     override suspend fun seriesProgress(profileId: String, seriesId: String): List<Media> =
         jsonArray("GET", "/profiles/${enc(profileId)}/progress/series?series_id=${enc(seriesId)}").objects().take(2000).map { it.media() }
     override suspend fun metadata(media: Media): Media {
+        val timingStart = System.nanoTime() / 1_000_000
         val target = SharedPresentation.metadataTargets(listOf(media)).single() ?: return media
         val key = target.type + "\u0000" + target.id
-        val epoch = synchronized(titleArtwork) { titleArtwork[key]?.let { return it }; metadataEpoch }
+        val epoch = synchronized(titleArtwork) { titleArtwork[key]?.let {
+            if (BuildConfig.PLAYBACK_DIAGNOSTICS) homeTimingLog("event=metadata_cache_hit")
+            return it
+        }; metadataEpoch }
         if (BuildConfig.PLAYBACK_DIAGNOSTICS) runCatching {
             android.util.Log.i("MetadataRequestDiagnostic", "request_count=${metadataRequests.incrementAndGet()}")
         }
-        val result = withContext(Dispatchers.Default) {
+        val result = try { withContext(Dispatchers.Default) {
             val request = org.viptv.core.wire.CoreJson.decode<org.viptv.core.wire.ApiRequest>(uniffi.viptv_core.normalize("request",
                 JSONObject().put("operation", "metadata").put("item", SharedPresentation.metadataFacts(media)).toString(), origin))
             json(request.method, request.path.removePrefix("/api")).optJSONObject("meta")?.media() ?: media
+        } } finally {
+            if (BuildConfig.PLAYBACK_DIAGNOSTICS) homeTimingLog("event=metadata_complete elapsed_ms=${(System.nanoTime() / 1_000_000) - timingStart}")
         }
         synchronized(titleArtwork) { if (epoch == metadataEpoch) {
             if (titleArtwork.size >= 256) titleArtwork.keys.firstOrNull()?.let { titleArtwork.remove(it) }
             titleArtwork[key] = result
         } }
         return result
+    }
+    override suspend fun metadataBatch(items: List<Media>): Map<String, Media> {
+        val epoch = synchronized(titleArtwork) { metadataEpoch }
+        val unique = items.filter { it.type != "live" }.distinctBy { it.type + ":" + it.id }.take(16)
+        if (unique.isEmpty()) return emptyMap()
+        val body = JSONObject().put("items", JSONArray().also { array -> unique.forEach { media ->
+            array.put(JSONObject().put("type", if (media.type == "episode") "series" else media.type)
+                .put("id", if (media.type == "episode") media.seriesId ?: media.id else media.id))
+        } })
+        val response = try { json("POST", "/meta/batch", body) }
+        catch (error: GatewayError) {
+            if (error.status != 404) throw error
+            return emptyMap()
+        }
+        val resolved = mutableMapOf<String, Media>()
+        val results = response.getJSONArray("items")
+        for (index in 0 until results.length()) {
+            val row = results.getJSONObject(index)
+            val meta = row.optJSONObject("meta") ?: continue
+            val rich = meta.media()
+            unique.filter { media ->
+                (if (media.type == "episode") "series" else media.type) == row.optString("type") &&
+                    (if (media.type == "episode") media.seriesId ?: media.id else media.id) == row.optString("id")
+            }.forEach { media ->
+                resolved[media.type + ":" + media.id] = rich
+                synchronized(titleArtwork) { if (epoch == metadataEpoch) {
+                    val type = if (media.type == "episode") "series" else media.type
+                    val id = if (type == "series") media.seriesId ?: media.id else media.id
+                    titleArtwork[type + "\u0000" + id] = rich
+                } }
+            }
+        }
+        return resolved
     }
     /** A failed enrichment lookup must never discard the item the caller already has. */
     private suspend fun metadataOr(fallback: Media, lookup: Media = fallback): Media = try {

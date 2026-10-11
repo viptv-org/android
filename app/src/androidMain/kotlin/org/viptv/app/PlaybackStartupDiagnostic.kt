@@ -19,3 +19,8 @@ internal suspend fun <T> measurePlaybackStartup(stage: PlaybackStartupStage, blo
         runCatching { android.util.Log.i("PlaybackStartupDiagnostic", "stage=${stage.name.lowercase()} elapsed_ms=$elapsed outcome=$outcome") }
     }
 }
+
+/** Home timing markers for diagnostic builds; JVM tests have no Android log. */
+internal fun homeTimingLog(message: String) {
+    runCatching { android.util.Log.i("HomeTimingDiagnostic", message) }
+}

@@ -80,6 +80,7 @@ class AppController(context: Context, private val origin: String) {
     internal var homeRefreshGeneration = 0L
     private val homeMetadataGate = Semaphore(3)
     private val homeMetadataRequested = mutableSetOf<String>()
+    private val homeMetadataPrefetched = mutableSetOf<String>()
     private val homeMetadataCache = linkedMapOf<String, Media>()
     private var homeMetadataOwner: String? = null
     private val homeEnrichmentMemo = linkedMapOf<String, Triple<Media, Media, Media>>()
@@ -403,17 +404,22 @@ class AppController(context: Context, private val origin: String) {
         }
     }
     internal suspend fun loadHome(profile: Profile, generation: Long = sessionRenderGeneration, enter: Boolean = false, atomicRefresh: Boolean = false): Boolean {
+        val timingStart = System.nanoTime() / 1_000_000
+        var firstQueueTimed = false
+        var firstCatalogTimed = false
         val job = currentCoroutineContext()[Job]
         if (homeJob !== job) homeJob?.cancel()
         homeJob = job
         val refresh = ++homeRefreshGeneration
         homeMetadataRequested.clear()
+        homeMetadataPrefetched.clear()
         ensureHomeMetadataScope(profile.id)
         val library = libraryRevision
         if (!atomicRefresh) _state.value = _state.value.copy(homeLoading = true)
         if (enter) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), selectedProfile = profile, loading = false)
         // This must precede /catalogs, including on the first Home load.
         val loadRevision = try { gateway.catalogRevision() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
+        if (BuildConfig.PLAYBACK_DIAGNOSTICS) homeTimingLog("event=catalog_revision elapsed_ms=${(System.nanoTime() / 1_000_000) - timingStart}")
         var staged: List<HomeShelf>? = null
         val partial = java.util.concurrent.atomic.AtomicBoolean(false)
         val result = runCatching { (if (atomicRefresh) gateway.refreshHome(profile.id, _state.value.shelves, { partial.set(true) }) { shelves ->
@@ -421,6 +427,18 @@ class AppController(context: Context, private val origin: String) {
         } else gateway.home(profile.id) { shelves ->
             if (generation == sessionRenderGeneration && refresh == homeRefreshGeneration && _state.value.selectedProfile?.id == profile.id) {
                 publishHomeShelves(shelves, library)
+                if (BuildConfig.PLAYBACK_DIAGNOSTICS) {
+                    val presented = _state.value.shelves
+                    if (!firstQueueTimed && presented.any { it.isQueueShelf && it.items.isNotEmpty() }) {
+                        firstQueueTimed = true
+                        homeTimingLog("event=first_queue elapsed_ms=${(System.nanoTime() / 1_000_000) - timingStart}")
+                    }
+                    if (!firstCatalogTimed && presented.any { !it.isQueueShelf && it.contentType != null && it.items.isNotEmpty() }) {
+                        firstCatalogTimed = true
+                        homeTimingLog("event=first_catalog elapsed_ms=${(System.nanoTime() / 1_000_000) - timingStart}")
+                    }
+                }
+                if (_state.value.route == Route.Browse(Destination.Home)) prefetchHomeMetadata(profile.id, refresh)
             }
         }) }
         if (atomicRefresh && result.isSuccess && generation == sessionRenderGeneration && refresh == homeRefreshGeneration &&
@@ -429,13 +447,14 @@ class AppController(context: Context, private val origin: String) {
             val previous = _state.value
             val presented = if (library == libraryRevision) shelves else shelves.map { if (it.id == "My List") it.copy(items = previous.favorites) else it }
             _state.value = previous.copy(shelves = presented,
-                queue = shelves.firstOrNull { it.isQueueShelf }?.items.orEmpty(),
+                queue = presented.firstOrNull { it.isQueueShelf }?.items.orEmpty(),
                 favorites = if (library == libraryRevision) shelves.firstOrNull { it.id == "My List" }?.items.orEmpty() else previous.favorites,
                 homeFocus = HomeFocusPolicy.reconcile(previous.homeFocus, previous.shelves, presented,
                     restoreFocusedCard = homeContentFocused && previous.dialog == null && previous.pinPrompt == null))
         }
         result.onFailure { if (!atomicRefresh && generation == sessionRenderGeneration && refresh == homeRefreshGeneration && it !is CancellationException) fail(it) }
         if (!atomicRefresh && generation == sessionRenderGeneration && refresh == homeRefreshGeneration) _state.value = _state.value.copy(homeLoading = false)
+        if (BuildConfig.PLAYBACK_DIAGNOSTICS) homeTimingLog("event=home_complete elapsed_ms=${(System.nanoTime() / 1_000_000) - timingStart}")
         val accepted = result.isSuccess && generation == sessionRenderGeneration && refresh == homeRefreshGeneration &&
             _state.value.selectedProfile?.id == profile.id &&
             (!atomicRefresh || (homeForeground && _state.value.route == Route.Browse(Destination.Home)))
@@ -443,7 +462,36 @@ class AppController(context: Context, private val origin: String) {
             val owner = "$origin\u0000${verifiedIdentity?.account?.id}\u0000${profile.id}"
             if (revisionOwner == owner) renderedCatalogRevision = loadRevision
         }
+        if (accepted && _state.value.route == Route.Browse(Destination.Home)) prefetchHomeMetadata(profile.id, refresh)
         return accepted && !partial.get()
+    }
+    private fun prefetchHomeMetadata(profileId: String, generation: Long) {
+        val remaining = 16 - homeMetadataPrefetched.size
+        if (remaining <= 0) return
+        val items = _state.value.shelves.asSequence().flatMap { it.items.take(6).asSequence() }
+            .filter { it.type != "live" }.distinctBy { it.type + ":" + it.id }
+            .filter { it.type + ":" + it.id !in homeMetadataPrefetched }.take(remaining)
+            .toList()
+        if (items.isEmpty()) return
+        items.forEach { homeMetadataPrefetched.add(it.type + ":" + it.id) }
+        scope.launch {
+            try {
+                val resolved = gateway.metadataBatch(items)
+                if (resolved.isEmpty()) return@launch
+                if (generation != homeRefreshGeneration || _state.value.selectedProfile?.id != profileId ||
+                    _state.value.route != Route.Browse(Destination.Home)) return@launch
+                ensureHomeMetadataScope(profileId)
+                resolved.forEach { (key, media) -> cacheHomeMetadata(key, media) }
+                val current = _state.value
+                val shelves = enrichedHomeShelves(current.shelves)
+                _state.value = current.copy(shelves = shelves, queue = shelves.firstOrNull { it.isQueueShelf }?.items.orEmpty())
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* Visible cards retain their individual retry path. */ }
+        }
+    }
+    private fun cacheHomeMetadata(key: String, media: Media) {
+        if (key !in homeMetadataCache && homeMetadataCache.size >= 256) homeMetadataCache.keys.firstOrNull()?.let { homeMetadataCache.remove(it) }
+        homeMetadataCache[key] = media
     }
     internal fun refreshProfileIdentity() { keepProfilesOnIdentityRefresh = true; coreSession.retry() }
     private fun ensureHomeMetadataScope(profile: String) {
@@ -496,13 +544,14 @@ class AppController(context: Context, private val origin: String) {
                 if (generation != homeRefreshGeneration || _state.value.selectedProfile?.id != profile ||
                     _state.value.route != Route.Browse(Destination.Home)) return@withPermit
                 ensureHomeMetadataScope(profile)
-                if (key !in homeMetadataCache && homeMetadataCache.size >= 256) homeMetadataCache.keys.firstOrNull()?.let { homeMetadataCache.remove(it) }
-                homeMetadataCache[key] = rich
+                cacheHomeMetadata(key, rich)
                 val state = _state.value
                 val shelves = state.shelves.map { shelf -> shelf.copy(items = shelf.items.map { item ->
                     if (item.type == media.type && item.id == media.id) enrichHomeItem(item, rich) else item
                 }) }
                 _state.value = state.copy(shelves = shelves, queue = shelves.firstOrNull { it.isQueueShelf }?.items.orEmpty())
+                if (BuildConfig.PLAYBACK_DIAGNOSTICS && shelves.firstOrNull()?.items?.firstOrNull()?.let { it.id == media.id && it.type == media.type } == true)
+                    homeTimingLog("event=hero_metadata_applied")
                 completed = true
             }
         } finally { if (!completed && generation == homeRefreshGeneration) homeMetadataRequested.remove(key) }

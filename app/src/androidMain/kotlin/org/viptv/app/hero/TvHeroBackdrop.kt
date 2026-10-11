@@ -1,5 +1,7 @@
 package org.viptv.app.hero
 
+import org.viptv.app.BuildConfig
+import org.viptv.app.homeTimingLog
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.os.Build
@@ -148,9 +150,11 @@ private class HeroArtwork(val sharp: Bitmap, val ambient: Bitmap)
 
 /** Decodes without upscaling, so the bitmap width reflects the artwork's real resolution. */
 private suspend fun loadArt(context: Context, url: String, width: Int, height: Int): HeroArtwork? {
+    val timingStart = System.nanoTime() / 1_000_000
     val request = ImageRequest.Builder(context).data(url).size(width, height).precision(Precision.INEXACT).allowHardware(false).build()
     val sharp = ((context.imageLoader.execute(request) as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap
         ?.takeIf { Build.VERSION.SDK_INT < 26 || it.config != Bitmap.Config.HARDWARE } ?: return null
+    if (BuildConfig.PLAYBACK_DIAGNOSTICS) homeTimingLog("event=hero_image_decode elapsed_ms=${(System.nanoTime() / 1_000_000) - timingStart}")
     return withContext(Dispatchers.Default) {
         // Keep blur/decode allocation off the input thread. The foreground stays sharp.
         val ambientWidth = minOf(160, sharp.width)
@@ -162,5 +166,7 @@ private suspend fun loadArt(context: Context, url: String, width: Int, height: I
         val ambient = Bitmap.createBitmap(blurred, ambientWidth, ambientHeight, Bitmap.Config.ARGB_8888)
         if (small !== sharp) small.recycle()
         HeroArtwork(sharp, ambient)
+    }.also {
+        if (BuildConfig.PLAYBACK_DIAGNOSTICS) homeTimingLog("event=hero_art_ready elapsed_ms=${(System.nanoTime() / 1_000_000) - timingStart} at_ms=${(System.nanoTime() / 1_000_000)}")
     }
 }

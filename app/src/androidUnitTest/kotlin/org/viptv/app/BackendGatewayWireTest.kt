@@ -16,6 +16,21 @@ import kotlin.test.assertTrue
  * mocking the gateway or its JSON helpers.
  */
 class BackendGatewayWireTest {
+    @Test fun `metadata batch keeps successful titles when another title is missing`() = runBlocking {
+        FixtureServer(1) { request ->
+            assertEquals("/api/meta/batch", request.target)
+            assertEquals("POST", request.method)
+            val items = JSONObject(request.body).getJSONArray("items")
+            assertEquals(2, items.length())
+            FixtureResponse("""{"items":[{"type":"movie","id":"one","meta":{"id":"one","type":"movie","name":"One","description":"Loaded"}},{"type":"movie","id":"two","meta":null}]}""")
+        }.use { server ->
+            val gateway = VipTvHttpGateway(server.origin)
+            val result = gateway.metadataBatch(listOf(Media("one", "movie", "One"), Media("two", "movie", "Two")))
+            assertEquals("Loaded", result["movie:one"]?.description)
+            assertFalse("movie:two" in result)
+            server.assertHealthy()
+        }
+    }
     @Test fun `profile replacement fetches metadata under the new authorization scope`() = runBlocking {
         var selected = false
         FixtureServer(3) { request ->

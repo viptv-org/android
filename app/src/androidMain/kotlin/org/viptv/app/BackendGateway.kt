@@ -15,6 +15,15 @@ interface BackendGateway {
     suspend fun discover(request: CatalogDiscoverRequest): DiscoverPage
     suspend fun search(query: String, onUpdate: (SearchResults) -> Unit = {}): SearchResults
     suspend fun metadata(media: Media): Media
+    suspend fun metadataBatch(items: List<Media>): Map<String, Media> {
+        val results = mutableMapOf<String, Media>()
+        for (media in items) {
+            try { results[media.type + ":" + media.id] = metadata(media) }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { /* A failed title does not block other metadata. */ }
+        }
+        return results
+    }
     suspend fun seriesProgress(profileId: String, seriesId: String): List<Media> = emptyList()
     suspend fun sources(media: Media, onProducerUpdate: (List<SourceProducerOutcome>) -> Unit = {}, onUpdate: (List<Source>) -> Unit = {}): List<Source>
     suspend fun playback(

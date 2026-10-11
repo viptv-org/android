@@ -252,6 +252,9 @@ internal fun AppController.recordHomeFocus(
     surface: HomeFocusSurface = HomeFocusSurface.Card,
 ) {
     if (_state.value.route == Route.Browse(Destination.Home)) {
+        if (BuildConfig.PLAYBACK_DIAGNOSTICS && surface == HomeFocusSurface.Card && shelfIndex == 0) {
+            homeTimingLog("event=queue_card_focused at_ms=${(System.nanoTime() / 1_000_000)}")
+        }
         _state.value = _state.value.copy(
             homeFocus = HomeFocusPolicy.record(_state.value.homeFocus, shelfIndex, shelfTitle, media, surface),
         )
