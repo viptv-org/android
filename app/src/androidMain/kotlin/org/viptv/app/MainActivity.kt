@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         if (::model.isInitialized) model.remote.onForeground()
         if (::model.isInitialized) model.controller.onForeground()
+        if (::model.isInitialized) model.updates.onForeground()
     }
     override fun onPause() {
         if (::model.isInitialized && !isChangingConfigurations) { model.remote.onBackground(); model.controller.onBackground() }
@@ -88,6 +89,7 @@ class MainActivity : ComponentActivity() {
 /** Keep credentials, requests and playback alive across phone rotation. */
 class ViptvModel(application: Application) : AndroidViewModel(application) {
     internal val remote = TvRemoteController(application)
+    internal val updates = AppUpdater(application)
     private val preferences = application.getSharedPreferences("viptv.display", 0)
     var oled by mutableStateOf(preferences.getBoolean("oled", false)); private set
     var accent by mutableStateOf(Color(preferences.getInt("accent", 0xFFF5C542.toInt()))); private set
@@ -101,7 +103,7 @@ class ViptvModel(application: Application) : AndroidViewModel(application) {
         ServerOrigin.save(getApplication(), value); origin = value
         controller = AppController(getApplication(), value)
     }
-    override fun onCleared() { remote.close(); controller.close() }
+    override fun onCleared() { remote.close(); controller.close(); updates.close() }
 }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -153,7 +155,7 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
     val entrance = rememberScreenEntrance(route, key)
     var railOpen by remember { mutableStateOf(false) }
     val keyboardVisible = WindowInsets.isImeVisible
-    val modalVisible = state.dialog != null || state.pinPrompt != null
+    val modalVisible = state.dialog != null || state.pinPrompt != null || model.updates.dialogVisible()
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     val railExpanded = televisionRailExpanded(railOpen, keyboardVisible, modalVisible, windowFocused)
     LaunchedEffect(tv, keyboardVisible, modalVisible, windowFocused) {
@@ -162,6 +164,8 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
     }
     val browse = route is Route.Browse || route is Route.Guide || route == Route.Search || route == Route.Settings || route == Route.Addons || route is Route.Details
     val tab = route is Route.Browse || route is Route.Guide
+    // AND-APP-UPDATE-001: checks and prompts only on signed-in screens, never over the player.
+    LaunchedEffect(browse) { if (browse) model.updates.onLaunchScreen() }
     BackHandler(controller.consumesBack(state)) { controller.handleBack() }
     BackHandler(tv && railExpanded) { if (focusMemory.restore(initial)) railOpen = false }
     CompositionLocalProvider(LocalRailFocus provides rail, LocalContentFocus provides initial, LocalFocusMemory provides focusMemory, LocalCloseRail provides { railOpen = false }) {
@@ -213,6 +217,7 @@ internal fun televisionRailExpanded(requested: Boolean, keyboardVisible: Boolean
             }
             state.dialog?.let { ActionDialog(it, controller) }
             state.pinPrompt?.let { PinDialog(it, controller) }
+            if (browse) AppUpdateDialogs(model.updates)
         }
     }
 }

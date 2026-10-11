@@ -53,7 +53,7 @@ private data class SettingRow(val title: String, val detail: String, val icon: S
         }),
         SettingRow("Addons", "Shared by your account", "addons", { page = "Addons" }),
         SettingRow("Server", model.origin, "settings", { server = true }),
-        SettingRow("About VIPTV", "Version " + BuildConfig.VERSION_NAME, "info", { about = true }),
+        SettingRow("About VIPTV", aboutRowDetail(model.updates.status, BuildConfig.VERSION_NAME), "info", { about = true }),
         SettingRow("Sign out", if (tv) "Sign out of this TV?" else "Sign out of this device?", "exit", { controller.requestDialog(DialogKind.SignOut, if (tv) "Sign out of this TV?" else "Sign out of this device?") }, true),
     ).let { existing ->
         if (!tv && page == "Settings") existing.toMutableList().apply {
@@ -100,7 +100,7 @@ private data class SettingRow(val title: String, val detail: String, val icon: S
     }
     choice?.let { ChoiceDialog(it.first, it.second, { choice = null }) }
     if (server) ServerAddressEntry(model) { server = false }
-    if (about) FullInfo("About VIPTV", "VIPTV " + BuildConfig.VERSION_NAME + "\n\nYour shows, channels and progress. All in one place.", { about = false })
+    if (about) AboutDialog(model.updates) { about = false }
 }
 
 @Composable private fun SettingGroupLabel(label: String) {

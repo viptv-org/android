@@ -176,6 +176,15 @@ Acceptance: on a 390 px phone, My List, Discover and Search show three 2:3
 posters per row with the whole poster visible and unchanged captions, ⋯ and
 long-press menus; missing art fills the 2:3 frame.
 
+## Android in-app updates (AND-APP-UPDATE-001)
+
+The 2026-10-11 owner request ships Android betas as GitHub releases and lets
+installed release builds update themselves: a quiet launch check at most every
+6 hours, a one-time prompt per version, and Check for updates inside About
+VIPTV. Nothing checks, prompts or installs in the player. There is one channel
+and no backend version contract; the prompt asks people to update their server
+too. See the [app updates contract](../specs/behavior/app-updates.md).
+
 ## Subtitle mode (PLAY-SUBTITLE-MODE-001)
 
 The 2026-10-11 owner request replaces the Subtitles on/off preference with
