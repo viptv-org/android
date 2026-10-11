@@ -5,7 +5,7 @@ Status: in-review
 Owner: Claude
 Triage: ready-for-agent
 Repositories: android
-Implementation commits: see `git log feat/app-updates` ("Version Android releases from tags…")
+Implementation commits: 8dffc54
 
 ## Acceptance
 

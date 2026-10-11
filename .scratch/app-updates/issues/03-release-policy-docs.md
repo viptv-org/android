@@ -5,7 +5,7 @@ Status: done
 Owner: Claude
 Triage: ready-for-agent
 Repositories: android, workspace (viptv-org root notes)
-Implementation commits: see `git log feat/app-updates` ("Version Android releases from tags…")
+Implementation commits: 8dffc54
 
 ## Acceptance
 
