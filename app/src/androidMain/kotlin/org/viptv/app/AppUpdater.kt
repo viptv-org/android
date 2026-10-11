@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -187,10 +188,17 @@ internal class AppUpdater(private val application: Application) {
         val manifest = (status as? UpdateStatus.Available)?.manifest ?: return
         flow = UpdateFlow.Downloading(manifest.versionName, 0)
         download = scope.launch {
+            val self = coroutineContext.job
             try {
+                var shown = 0
                 val apk = client.download(manifest) { downloaded, total ->
+                    // Progress arrives on the IO thread; apply it on main only while this download is current,
+                    // so a late report cannot reopen the dialog after Cancel.
                     val percent = (downloaded * 100 / total).toInt()
-                    if ((flow as? UpdateFlow.Downloading)?.percent != percent) flow = UpdateFlow.Downloading(manifest.versionName, percent)
+                    if (percent != shown) {
+                        shown = percent
+                        scope.launch { if (download === self) flow = UpdateFlow.Downloading(manifest.versionName, percent) }
+                    }
                 }
                 flow = UpdateFlow.Installing
                 withContext(Dispatchers.IO) { install(apk) }
@@ -203,7 +211,7 @@ internal class AppUpdater(private val application: Application) {
                     else -> UpdateFailure.Rejected
                 })
             } finally {
-                download = null
+                if (download === self) download = null
             }
         }
     }
