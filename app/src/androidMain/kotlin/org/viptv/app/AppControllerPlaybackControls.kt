@@ -115,7 +115,11 @@ internal fun AppController.cancelSeek() { _state.value = _state.value.copy(seekP
 /** Server-managed selection replaces the playback session; native track IDs are output-local. */
 internal fun AppController.selectAudioTrack(track: PlaybackTrack) {
     if (!track.selectable || !track.supported) return
-    track.nativeId?.let { if (nativeEffects?.authorizeRead() != false) player.selectAudioTrack(it); return }
+    track.nativeId?.let {
+        if (nativeEffects?.authorizeRead() != false) player.selectAudioTrack(it)
+        reapplyAutomaticSubtitles(track.language)
+        return
+    }
     val route = _state.value.route as? Route.Player ?: return
     val priorAudio = selectedAudioTrackIndex
     selectedAudioTrackIndex = track.inputIndex
@@ -124,7 +128,11 @@ internal fun AppController.selectAudioTrack(track: PlaybackTrack) {
 
 internal fun AppController.selectSubtitleTrack(track: PlaybackTrack?) {
     val route = _state.value.route as? Route.Player ?: return
-    if (_state.value.playbackDeliveryMode == "direct") { if (nativeEffects?.authorizeRead() != false) player.selectSubtitleTrack(track?.nativeId); return }
+    if (_state.value.playbackDeliveryMode == "direct") {
+        subtitlesChosenManually = true
+        if (nativeEffects?.authorizeRead() != false) player.selectSubtitleTrack(track?.nativeId)
+        return
+    }
     if (track != null && (!track.selectable || !track.supported)) return
     val priorSubtitle = selectedSubtitleTrackIndex
     val priorSubtitlesOff = subtitlesOff

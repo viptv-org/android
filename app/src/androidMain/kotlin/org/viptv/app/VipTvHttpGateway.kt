@@ -702,8 +702,11 @@ private fun Any?.optJSONObject(): JSONObject? = this as? JSONObject
 private fun JSONObject.addon() = Addon(get("id").toString(), optString("name"), optString("manifest_url"), optBoolean("enabled", true))
 // Ignore server `quality` values; preference reads and writes use only supported fields.
 private fun PlaybackPreferences.body() = JSONObject().put("audio_language", audioLanguage).put("subtitle_language", subtitleLanguage).put("subtitles_enabled", subtitlesEnabled).put("subtitle_size", subtitleSize).put("subtitle_style", subtitleStyle).put("autoplay", autoplay)
+    // Servers without subtitle_mode reject unknown fields; send it only to servers that returned it.
+    .also { if (subtitleModeStored) it.put("subtitle_mode", subtitleMode) }
 private fun JSONObject.preferences(): PlaybackPreferences {
     val item = JSONObject(uniffi.viptv_core.normalize("androidPreferences", toString(), ""))
-    return PlaybackPreferences(item.getString("audioLanguage"), item.getString("subtitleLanguage"), item.getBoolean("subtitlesEnabled"), item.getString("subtitleSize"), item.getString("subtitleStyle"), item.getBoolean("autoplay"))
+    return PlaybackPreferences(item.getString("audioLanguage"), item.getString("subtitleLanguage"), item.getBoolean("subtitlesEnabled"), item.getString("subtitleSize"), item.getString("subtitleStyle"), item.getBoolean("autoplay"),
+        item.getString("subtitleMode"), has("subtitle_mode"))
 }
 private fun seconds(millis: Long): Double = millis / 1_000.0

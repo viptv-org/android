@@ -33,12 +33,13 @@ private data class SettingRow(val title: String, val detail: String, val icon: S
     fun choices(title: String, values: List<Pair<String, String>>, apply: (String) -> Unit) {
         choice = title to values.map { (label, value) -> label to { apply(value); choice = null } }
     }
+    val subtitleModes = listOf("Always" to "always", "Foreign audio only" to "foreign", "Never" to "never")
     val languages = listOf("System default" to "", "English" to "en", "Spanish" to "es", "French" to "fr", "German" to "de", "Japanese" to "ja")
     fun language(code: String) = languages.firstOrNull { it.second == code }?.first ?: code
     val rows = if (page == "Playback preferences") listOf(
         SettingRow("Preferred audio", language(prefs.audioLanguage), "audio", { choices("Preferred audio", languages) { controller.setPreference(prefs.copy(audioLanguage = it)) } }),
         SettingRow("Subtitle language", language(prefs.subtitleLanguage), "captions", { choices("Subtitle language", languages) { controller.setPreference(prefs.copy(subtitleLanguage = it)) } }),
-        SettingRow("Subtitles", if (prefs.subtitlesEnabled) "On" else "Off", "captions", { controller.setPreference(prefs.copy(subtitlesEnabled = !prefs.subtitlesEnabled)) }, checked = prefs.subtitlesEnabled),
+        SettingRow("Subtitles", subtitleModes.firstOrNull { it.second == prefs.subtitleMode }?.first ?: "Never", "captions", { choices("Subtitles", subtitleModes) { controller.setPreference(prefs.withSubtitleMode(it)) } }),
         SettingRow("Subtitle size", prefs.subtitleSize, "captions", { choices("Subtitle size", listOf("Small" to "small", "Normal" to "normal", "Large" to "large")) { controller.setPreference(prefs.copy(subtitleSize = it)) } }),
         SettingRow("Subtitle appearance", prefs.subtitleStyle, "captions", { choices("Subtitle appearance", listOf("System default" to "system", "Text with shadow" to "shadow", "White text on black" to "opaque")) { controller.setPreference(prefs.copy(subtitleStyle = it)) } }),
         SettingRow("Autoplay next episode", if (prefs.autoplay) "On" else "Off", "next", { controller.setPreference(prefs.copy(autoplay = !prefs.autoplay)) }, checked = prefs.autoplay),

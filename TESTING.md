@@ -1,3 +1,23 @@
+# Subtitle mode: Always, Foreign audio only, Never — 2026-10-11
+
+Design `3eece98d920bd63104bd4c62812fd4f9bdb0cd2b` (PLAY-SUBTITLE-MODE-001) and
+core `b6ee0548753483c9627cb1c73e7761b62f936933` (`subtitleSelection`,
+`subtitleMode`). Settings › Playback preferences › Subtitles is a one-choice
+dialog. Foreign audio only starts direct playback without subtitles, runs the
+core decision when the player reports its selected audio, and re-runs it after
+an audio switch until the viewer picks subtitles. The production backend does
+not store `subtitle_mode` yet, so the device keeps `foreign` per profile while
+the server's `subtitles_enabled` is on; the mode is sent only to servers that
+return it.
+
+Host unit tests and `:app:assembleDebug` pass, including new gateway and policy
+cases. On `emulator-5580` against the production backend: the dialog saved
+Foreign audio only, and it survived an app restart. A dual-audio episode
+(ja/en) resumed with English audio and no subtitles; switching audio to
+Japanese selected the English subtitle track and cues appeared. Server-managed
+output, untagged audio, manual subtitle choice followed by an audio switch, and
+physical TV were not exercised.
+
 # TV My List 2:3 posters — 2026-10-11
 
 Design `4f3a1eae36399608f459b5973381ead969c2c2d1` (TV-MYLIST-POSTER-001). On

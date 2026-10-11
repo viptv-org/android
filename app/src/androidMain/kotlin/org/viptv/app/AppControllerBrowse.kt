@@ -183,7 +183,7 @@ internal fun AppController.openSettings() = scope.launch {
         if (_state.value.route != Route.Settings || _state.value.selectedProfile?.id != profileId) return@coroutineScope
         _state.value = _state.value.copy(
             route = Route.Settings,
-            preferences = prefResult.getOrElse { _state.value.preferences },
+            preferences = prefResult.map { withLocalSubtitleMode(profileId, it) }.getOrElse { _state.value.preferences },
             addons = addonResult.getOrElse { _state.value.addons },
             loading = false,
             message = null,
@@ -243,7 +243,28 @@ internal fun AppController.correctEpisode(media: Media, watched: Boolean) = scop
         }
     }
 }
-internal fun AppController.setPreference(preferences: PlaybackPreferences) = scope.launch { guarded("Enter parent PIN") { gateway.savePreferences(requireProfile(), preferences); _state.value = _state.value.copy(preferences = preferences, message = "Applies to your next playback. Manual track choices take priority.") } }
+internal fun AppController.setPreference(preferences: PlaybackPreferences) = scope.launch { guarded("Enter parent PIN") {
+    val profileId = requireProfile()
+    gateway.savePreferences(profileId, preferences)
+    playbackStore.edit().putString("subtitleMode:$profileId", preferences.subtitleMode).apply()
+    _state.value = _state.value.copy(preferences = preferences, message = "Applies to your next playback. Manual track choices take priority.")
+} }
+
+/** Playback needs the profile's subtitle mode without a visit to Settings. */
+internal fun AppController.refreshPlaybackPreferences(profileId: String) = scope.launch {
+    val loaded = runCatching { gateway.preferences(profileId) }.getOrNull() ?: return@launch
+    if (_state.value.selectedProfile?.id == profileId) _state.value = _state.value.copy(preferences = withLocalSubtitleMode(profileId, loaded))
+}
+
+/**
+ * A server that stores only subtitles_enabled cannot hold `foreign`; keep this
+ * device's choice while the server still has subtitles on.
+ */
+internal fun AppController.withLocalSubtitleMode(profileId: String, loaded: PlaybackPreferences): PlaybackPreferences {
+    if (loaded.subtitleModeStored) return loaded
+    val local = playbackStore.getString("subtitleMode:$profileId", null)
+    return if (local == "foreign" && loaded.subtitlesEnabled) loaded.copy(subtitleMode = "foreign") else loaded
+}
 internal fun AppController.toggleAddon(addon: Addon) = scope.launch { guarded("Enter parent PIN") { gateway.setAddonEnabled(addon, !addon.enabled); openSettings() } }
 internal fun AppController.removeAddon(addon: Addon) = scope.launch { guarded("Enter parent PIN") { gateway.removeAddon(addon); openSettings() } }
 internal fun AppController.editProfile(profile: Profile? = null) { _state.value = _state.value.copy(route = Route.ProfileEditor(profile), message = null) }

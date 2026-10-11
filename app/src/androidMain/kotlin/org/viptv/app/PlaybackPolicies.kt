@@ -27,6 +27,17 @@ object PlaybackPolicy {
     fun canAutoNext(media: Media, positionMillis: Long, durationMillis: Long?, playing: Boolean, seeking: Boolean, nextAvailable: Boolean, autoplay: Boolean = true): Boolean =
         CorePolicy.value("autoNext", JSONObject().put("type", media.type).put("position", positionMillis / 1000.0).putOpt("duration", durationMillis?.let { it / 1000.0 }).put("playing", playing).put("seeking", seeking).put("nextAvailable", nextAvailable).put("autoplay", autoplay)) == true
 
+    data class SubtitleChoice(val show: Boolean, val trackId: String?)
+    /** Core `subtitleSelection`: the automatic subtitle track once the selected audio is known. */
+    fun subtitleChoice(preferences: PlaybackPreferences, audioLanguage: String?, tracks: List<org.viptv.video.SubtitleTrack>): SubtitleChoice {
+        val input = JSONObject().put("mode", preferences.subtitleMode).put("preferredAudioLanguage", preferences.audioLanguage)
+            .put("subtitleLanguage", preferences.subtitleLanguage).putOpt("audioLanguage", audioLanguage)
+            .put("subtitleTracks", org.json.JSONArray().also { array -> tracks.forEach { track ->
+                array.put(JSONObject().put("id", track.id).putOpt("language", track.language).put("forced", track.isForced))
+            } })
+        val choice = CorePolicy.value("subtitleSelection", input) as JSONObject
+        return SubtitleChoice(choice.getBoolean("show"), choice.optString("trackId").takeIf { choice.has("trackId") && !choice.isNull("trackId") })
+    }
 }
 
 object ResumeIdentity {

@@ -77,6 +77,16 @@ class PlaybackPolicyTest {
         assertEquals(0, PlaybackTimelinePolicy.titleOffsetMillis("direct", 42_000))
     }
 
+    @Test fun `foreign audio subtitles follow the selected audio language`() {
+        val tracks = listOf(org.viptv.video.SubtitleTrack("forced", "Signs", "en", isForced = true), org.viptv.video.SubtitleTrack("full", "English", "eng"))
+        val foreign = PlaybackPreferences(subtitlesEnabled = true).withSubtitleMode("foreign")
+        assertEquals(PlaybackPolicy.SubtitleChoice(true, "full"), PlaybackPolicy.subtitleChoice(foreign, "jpn", tracks))
+        assertEquals(PlaybackPolicy.SubtitleChoice(false, null), PlaybackPolicy.subtitleChoice(foreign, "en", tracks))
+        assertEquals(PlaybackPolicy.SubtitleChoice(false, null), PlaybackPolicy.subtitleChoice(foreign, null, tracks))
+        assertEquals(PlaybackPolicy.SubtitleChoice(false, null), PlaybackPolicy.subtitleChoice(foreign.withSubtitleMode("never"), "jpn", tracks))
+        assertFalse(foreign.withSubtitleMode("never").subtitlesEnabled)
+    }
+
     @Test fun `next needs active unpaused series in final ten seconds`() {
         assertTrue(PlaybackPolicy.canAutoNext(Media("e", "series"), 91_000, 100_000, true, false, true))
         assertFalse(PlaybackPolicy.canAutoNext(Media("e", "series"), 91_000, 100_000, false, false, true))

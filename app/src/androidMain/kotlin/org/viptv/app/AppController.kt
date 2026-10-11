@@ -29,6 +29,8 @@ import kotlinx.coroutines.sync.withPermit
 class AppController(context: Context, private val origin: String) {
     private val television = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
     private val store = context.getSharedPreferences("viptv.auth", Context.MODE_PRIVATE)
+    /** Per-profile subtitle mode for servers that store only subtitles_enabled. */
+    internal val playbackStore = context.getSharedPreferences("viptv.playback", Context.MODE_PRIVATE)
     internal val gateway = VipTvHttpGateway(origin, store.getString("access", null), ::refreshAccessToken, television, org.viptv.video.AndroidMediaDns(context))
     internal val scope = CoroutineScope(Job() + Dispatchers.Main.immediate)
     private val coreSession = CoreSession(origin, store, scope, gateway::setAccessToken, ::renderSession)
@@ -104,6 +106,8 @@ class AppController(context: Context, private val origin: String) {
     internal var selectedAudioTrackIndex: Int? = null
     internal var selectedSubtitleTrackIndex: Int? = null
     internal var subtitlesOff = false
+    /** The viewer picked a subtitle track in this playback; automatic choices stop. */
+    internal var subtitlesChosenManually = false
     internal var continuationRestore: Route.Player? = null
     internal var continuationWasPlaying = false
     internal var detailReturnDestination: Destination? = null
@@ -417,6 +421,7 @@ class AppController(context: Context, private val origin: String) {
         val library = libraryRevision
         if (!atomicRefresh) _state.value = _state.value.copy(homeLoading = true)
         if (enter) _state.value = _state.value.copy(route = Route.Browse(Destination.Home), selectedProfile = profile, loading = false)
+        refreshPlaybackPreferences(profile.id)
         // This must precede /catalogs, including on the first Home load.
         val loadRevision = try { gateway.catalogRevision() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
         if (BuildConfig.PLAYBACK_DIAGNOSTICS) homeTimingLog("event=catalog_revision elapsed_ms=${(System.nanoTime() / 1_000_000) - timingStart}")

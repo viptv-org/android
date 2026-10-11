@@ -5,7 +5,9 @@ import org.viptv.video.PlaybackEvent
 import org.viptv.video.PlaybackErrorCode
 import org.viptv.video.PlaybackSource
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.withLock
 
 internal fun AppController.start(media: Media, source: Source, explicitResume: Boolean = false, deliveryOptions: PlaybackDeliveryOptions = PlaybackDeliveryOptions(), retryIntent: NativePlaybackRetryIntent? = null) {
@@ -107,7 +109,9 @@ private suspend fun AppController.prepareAndStartLocked(
                             options = org.viptv.video.PlaybackOptions(
                                 preferredAudioLanguage = retryIntent?.audioLanguage ?: launch.preferredAudioLanguage ?: launch.audioTracks.firstOrNull { it.selected }?.language ?: _state.value.preferences.audioLanguage.takeIf { it.isNotBlank() },
                                 preferredSubtitleLanguage = retryIntent?.subtitleLanguage ?: launch.preferredSubtitleLanguage ?: launch.subtitleTracks.firstOrNull { it.selected }?.language ?: _state.value.preferences.subtitleLanguage.takeIf { it.isNotBlank() },
-                                subtitlesEnabled = retryIntent?.subtitlesEnabled ?: launch.subtitlesEnabled ?: _state.value.preferences.subtitlesEnabled),
+                                // Foreign-audio subtitles start off; applyAutomaticSubtitles turns them on once the audio is known.
+                                subtitlesEnabled = retryIntent?.subtitlesEnabled ?: (if (_state.value.preferences.subtitleMode == "foreign") false else null)
+                                    ?: launch.subtitlesEnabled ?: _state.value.preferences.subtitlesEnabled),
                             title = media.name,
                             kindHint = if (launch.live || media.type == "live") PlaybackKind.Live else PlaybackKind.OnDemand,
                         ),
@@ -187,6 +191,7 @@ private suspend fun AppController.prepareAndStartLocked(
             continuationRestore = null
             startProgressPersistence(playbackMedia)
             schedulePlayerChromeDismissal()
+            if (resetTrackChoices && opened.timelineMode == "direct") applyAutomaticSubtitles(generation)
             true
     } catch (error: CancellationException) {
         if (nativeBoundaryCrossed) player.stop()
@@ -206,6 +211,34 @@ private suspend fun AppController.prepareAndStartLocked(
         if (PlaybackRequestPolicy.isCurrent(generation, playbackGeneration)) _state.value = _state.value.copy(preparingSourceId = null)
     }
 }
+/**
+ * Foreign-audio subtitles depend on the audio the player actually selected, so
+ * the core decision runs once the native player reports its tracks. It applies
+ * once per new playback; manual and retried track choices are left alone.
+ */
+private fun AppController.applyAutomaticSubtitles(generation: Long) {
+    subtitlesChosenManually = false
+    if (_state.value.preferences.subtitleMode != "foreign") return
+    scope.launch {
+        withTimeoutOrNull(15_000) { player.state.first { it.selectedAudioTrackId != null } } ?: return@launch
+        if (!PlaybackRequestPolicy.isCurrent(generation, playbackGeneration) || _state.value.route !is Route.Player) return@launch
+        val playback = player.state.value
+        applySubtitleChoice(player.audioTracks.value.firstOrNull { it.id == playback.selectedAudioTrackId }?.language)
+    }
+}
+
+/** A direct audio switch re-runs the foreign-audio decision until the viewer picks subtitles. */
+internal fun AppController.reapplyAutomaticSubtitles(audioLanguage: String?) {
+    if (_state.value.preferences.subtitleMode == "foreign" && !subtitlesChosenManually) applySubtitleChoice(audioLanguage)
+}
+
+private fun AppController.applySubtitleChoice(audioLanguage: String?) {
+    val choice = PlaybackPolicy.subtitleChoice(_state.value.preferences, audioLanguage, player.subtitleTracks.value)
+    if (BuildConfig.DEBUG) android.util.Log.i("SubtitleMode", "mode=foreign audio=$audioLanguage show=${choice.show} track=${choice.trackId}")
+    val target = if (choice.show) choice.trackId ?: return else null
+    if (target != player.state.value.selectedSubtitleTrackId && nativeEffects?.authorizeRead() != false) player.selectSubtitleTrack(target)
+}
+
 internal fun AppController.onPlayerEvent(event: PlaybackEvent) {
     if (event is PlaybackEvent.FirstFrame) { nativeEffects?.firstFrame(); return }
     if (event !is PlaybackEvent.Failed || _state.value.dialog?.kind == DialogKind.PlaybackRecovery || _state.value.preparingSourceId != null) return

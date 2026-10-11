@@ -121,7 +121,14 @@ data class SearchResults(val sections: List<SearchSection>, val partialFailure: 
 data class PlaybackPreferences(
     val audioLanguage: String = "en", val subtitleLanguage: String = "en", val subtitlesEnabled: Boolean = false,
     val subtitleSize: String = "normal", val subtitleStyle: String = "system", val autoplay: Boolean = true,
-)
+    /** `always`, `foreign` (only with audio in another language) or `never`; core `subtitleMode`. */
+    val subtitleMode: String = if (subtitlesEnabled) "always" else "never",
+    /** Whether the server stores [subtitleMode]; older servers keep only [subtitlesEnabled]. */
+    val subtitleModeStored: Boolean = false,
+) {
+    /** Older clients read subtitles_enabled, so only `never` turns it off. */
+    fun withSubtitleMode(mode: String) = copy(subtitleMode = mode, subtitlesEnabled = mode != "never")
+}
 /** Safe server-owned track facts only; URLs and request headers never enter UI state. */
 data class PlaybackTrackChoices(
     val audio: List<PlaybackTrack> = emptyList(),

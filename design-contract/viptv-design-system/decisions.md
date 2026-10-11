@@ -176,6 +176,15 @@ Acceptance: on a 390 px phone, My List, Discover and Search show three 2:3
 posters per row with the whole poster visible and unchanged captions, ⋯ and
 long-press menus; missing art fills the 2:3 frame.
 
+## Subtitle mode (PLAY-SUBTITLE-MODE-001)
+
+The 2026-10-11 owner request replaces the Subtitles on/off preference with
+`Always`, `Foreign audio only` and `Never`. Foreign audio only turns subtitles
+on when the audio that plays is not the preferred audio language; the shared
+core rule decides once the player knows its tracks and again after an audio
+switch, until the viewer picks subtitles. See the
+[subtitle mode contract](../specs/behavior/subtitle-mode.md).
+
 ## Android TV episode-number jump (AND-EPISODE-JUMP-001)
 
 The proposed compact `Episode #` chip beside the season badge opens a native

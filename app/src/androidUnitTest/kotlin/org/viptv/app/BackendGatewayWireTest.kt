@@ -87,7 +87,25 @@ class BackendGatewayWireTest {
             assertEquals("large", active.subtitleSize)
             assertEquals("shadow", active.subtitleStyle)
             assertFalse(active.autoplay)
+            // This server predates subtitle_mode: the mode is derived and never sent back.
+            assertEquals("always", active.subtitleMode)
+            assertFalse(active.subtitleModeStored)
             assertEquals("480p", stored.getString("quality"))
+            server.assertHealthy()
+        }
+    }
+    @Test fun `subtitle mode is sent only to servers that store it`() = runBlocking {
+        val stored = JSONObject("""{"audio_language":"en","subtitle_language":"en","subtitles_enabled":true,"subtitle_mode":"always","subtitle_size":"normal","subtitle_style":"system","autoplay":true}""")
+        FixtureServer(2) { request ->
+            if (request.method == "PUT") JSONObject(request.body).let { body -> for (name in body.keys()) stored.put(name, body.get(name)) }
+            FixtureResponse(stored.toString())
+        }.use { server ->
+            val gateway = VipTvHttpGateway(server.origin)
+            val loaded = gateway.preferences("profile-one")
+            assertTrue(loaded.subtitleModeStored)
+            gateway.savePreferences("profile-one", loaded.withSubtitleMode("foreign"))
+            assertEquals("foreign", stored.getString("subtitle_mode"))
+            assertTrue(stored.getBoolean("subtitles_enabled"))
             server.assertHealthy()
         }
     }
