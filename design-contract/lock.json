@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/design",
-  "revision": "3eece98d920bd63104bd4c62812fd4f9bdb0cd2b",
+  "revision": "bf1cbab789c8be4130f4d8d1c9cf76c82b0605b6",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
@@ -48,11 +48,11 @@
     },
     "design-contract/viptv-design-system/copy.md": {
       "source": "viptv-design-system/copy.md",
-      "sha256": "b5bfc142b5dac4cea5d55c578235c4ec656313caf42c809ac7b1a62bfd3e617f"
+      "sha256": "3da0272ae196788444f1b69188562531ec05321d25be7eccc64284e279081123"
     },
     "design-contract/viptv-design-system/decisions.md": {
       "source": "viptv-design-system/decisions.md",
-      "sha256": "a2c2acb07337a4c88076052a60d732e2e5b0311944c66163ad2c5e371043005f"
+      "sha256": "baadefc7d274693ab71ab579c5ec6f3a2c5fcd5370be656d1f61c0acd19e0432"
     },
     "design-contract/viptv-design-system/tokens/tokens.json": {
       "source": "viptv-design-system/tokens/tokens.json",
@@ -73,6 +73,10 @@
     "design-contract/specs/behavior/subtitle-mode.md": {
       "source": "specs/behavior/subtitle-mode.md",
       "sha256": "0b41029d0a7d4c5a9cea6a5bd510cceed5482bd4cc2c91d893571e26869fdff3"
+    },
+    "design-contract/specs/behavior/app-updates.md": {
+      "source": "specs/behavior/app-updates.md",
+      "sha256": "b535314f98f5eb8f221b7d9e3ec1bce964f351132156fe31d41249600b3c588c"
     },
     "app/src/androidMain/assets/design/fonts/README.md": {
       "source": "assets/fonts/README.md",

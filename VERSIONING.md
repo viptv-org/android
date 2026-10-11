@@ -31,9 +31,13 @@ A tag `vMAJOR.MINOR.PATCH` on a commit in `main` drives the release build with
 - `BuildConfig.UPDATE_MANIFEST_URL` points at
   `https://github.com/viptv-org/android/releases/latest/download/update.json`.
 
-Builds without the property keep `versionCode 1` / `0.1.0` and an empty update
-manifest URL, so development APKs never update themselves and any release
-installs over them.
+Builds without the property are development builds. They take the newest
+release tag reachable from `HEAD` (`git describe`), use `versionName`
+`X.Y.Z-dev` and `versionCode` one above that release, and fall back to
+`0.1.0` / `1` when no tag is reachable. So `adb install -r` of a development APK
+works over an installed release (no downgrade, sign-in kept), and the next
+release installs over it. Their update manifest URL is empty: development APKs
+never update themselves. CI checks out full history so tags are available.
 
 The release carries `viptv-android-<version>.apk`, `SHA256SUMS`, `build.json`
 and `update.json`:

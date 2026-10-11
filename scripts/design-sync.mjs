@@ -28,6 +28,8 @@ if (mode === 'sync') {
   if (names.includes(myListPosterContract)) docs.push(myListPosterContract);
   const subtitleModeContract = 'specs/behavior/subtitle-mode.md';
   if (names.includes(subtitleModeContract)) docs.push(subtitleModeContract);
+  const appUpdatesContract = 'specs/behavior/app-updates.md';
+  if (names.includes(appUpdatesContract)) docs.push(appUpdatesContract);
   const relocated = {
     'DESIGN_SYNC.md': 'docs/process/DESIGN_SYNC.md',
     'ANDROID_DESIGN.md': 'docs/platforms/ANDROID_DESIGN.md',

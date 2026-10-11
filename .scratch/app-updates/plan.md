@@ -23,8 +23,9 @@ phones, Android TV and Fire TV; Play Store distribution is out of scope.
 - A tag `vMAJOR.MINOR.PATCH` sets `-PviptvVersion=MAJOR.MINOR.PATCH`.
   `versionName` is that string; `versionCode` is
   `MAJOR * 1_000_000 + MINOR * 1_000 + PATCH` (MINOR and PATCH < 1000).
-  Untagged builds keep `versionCode 1` / `0.1.0` and have the updater disabled,
-  so local and main-branch builds never prompt to replace themselves.
+  Untagged builds are `X.Y.Z-dev` with versionCode one above the newest
+  reachable release tag (`0.1.0` / 1 without tags), so they install over a
+  release with `adb install -r`; their updater is disabled.
 - `build.yml` also runs for `v*` tags. On a tag it verifies the APK's
   versionCode, names the APK `viptv-android-<version>.apk`, writes
   `update.json`, and a `release` job publishes the GitHub release.

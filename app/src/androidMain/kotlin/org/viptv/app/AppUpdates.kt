@@ -34,6 +34,9 @@ internal sealed interface UpdateCheck {
 
 internal class UpdateManifestException(message: String) : IOException(message)
 
+/** The downloaded APK does not match the manifest's size or SHA-256. */
+internal class UpdateDamagedException(message: String) : IOException(message)
+
 private const val RELEASE_DOWNLOADS = "https://github.com/viptv-org/android/releases/download/"
 internal const val UPDATE_CHECK_INTERVAL_MILLIS = 6L * 60 * 60 * 1000
 private val updateJson = Json { ignoreUnknownKeys = true }
@@ -59,6 +62,8 @@ internal fun parseUpdateManifest(text: String, trustedUrl: (String) -> Boolean =
     check(trustedUrl(manifest.apk.url), "Untrusted update location")
     return manifest
 }
+
+internal fun updateManifestJson(manifest: UpdateManifest): String = updateJson.encodeToString(UpdateManifest.serializer(), manifest)
 
 internal fun evaluateUpdate(manifest: UpdateManifest, installedVersionCode: Int, sdkInt: Int): UpdateCheck = when {
     manifest.versionCode <= installedVersionCode -> UpdateCheck.UpToDate
@@ -110,15 +115,15 @@ internal class AppUpdateClient(
                             val count = input.read(buffer)
                             if (count < 0) break
                             downloaded += count
-                            if (downloaded > apk.size) throw IOException("Update download is larger than expected")
+                            if (downloaded > apk.size) throw UpdateDamagedException("Update download is larger than expected")
                             digest.update(buffer, 0, count)
                             output.write(buffer, 0, count)
                             onProgress(downloaded, apk.size)
                         }
                     }
                 }
-                if (downloaded != apk.size) throw IOException("Update download is incomplete")
-                if (digest.digest().toHex() != apk.sha256) throw IOException("Update checksum does not match")
+                if (downloaded != apk.size) throw UpdateDamagedException("Update download is incomplete")
+                if (digest.digest().toHex() != apk.sha256) throw UpdateDamagedException("Update checksum does not match")
             }
             target.delete()
             if (!partial.renameTo(target)) throw IOException("Could not store update")

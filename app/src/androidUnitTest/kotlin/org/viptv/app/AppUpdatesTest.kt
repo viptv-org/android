@@ -1,7 +1,6 @@
 package org.viptv.app
 
 import java.io.File
-import java.io.IOException
 import java.nio.file.Files
 import java.security.MessageDigest
 import kotlin.test.Test
@@ -106,8 +105,27 @@ class AppUpdatesTest {
         FixtureServer(expectedRequests = 1) { FixtureResponse(apkBytes.reversed()) }.use { server ->
             val updates = AppUpdateClient("${server.origin}/update.json", directory, OkHttpClient()) { it.startsWith(server.origin) }
             val manifest = parseUpdateManifest(manifestJson(url = "${server.origin}/v0.3.0/viptv-android-0.3.0.apk")) { true }
-            assertFailsWith<IOException> { updates.download(manifest) }
+            assertFailsWith<UpdateDamagedException> { updates.download(manifest) }
             assertEquals(emptyList<String>(), directory.list()!!.toList())
         }
+    }
+
+    @Test
+    fun remembersManifestAcrossRestarts() {
+        val manifest = parseUpdateManifest(manifestJson())
+        assertEquals(manifest, parseUpdateManifest(updateManifestJson(manifest)))
+    }
+
+    @Test
+    fun promptsOncePerVersionAndDescribesStatus() {
+        val available = UpdateStatus.Available(parseUpdateManifest(manifestJson()))
+        assertTrue(shouldPromptForUpdate(available, dismissedVersionCode = 0))
+        assertFalse(shouldPromptForUpdate(available, dismissedVersionCode = 3000))
+        assertFalse(shouldPromptForUpdate(UpdateStatus.UpToDate, dismissedVersionCode = 0))
+        assertEquals("Version 0.2.0 · Update available", aboutRowDetail(available, "0.2.0"))
+        assertEquals("Version 0.1.0", aboutRowDetail(UpdateStatus.Disabled, "0.1.0"))
+        assertEquals("VIPTV 0.3.0 is available.", aboutUpdateLine(available))
+        assertEquals("Updates are off for development builds.", aboutUpdateLine(UpdateStatus.Disabled))
+        assertEquals(null, aboutUpdateLine(UpdateStatus.Unknown))
     }
 }

@@ -12,13 +12,24 @@ if (legacyTorrentComparison) {
     require(gradle.startParameter.taskNames.none { it.contains("release", true) || it.contains("performance", true) }) { "Legacy torrent comparison is debug-only" }
 }
 
-// Release tags pass -PviptvVersion=MAJOR.MINOR.PATCH. Unversioned builds keep
-// versionCode 1 and an empty update manifest URL, so they never self-update.
-val releaseVersion = providers.gradleProperty("viptvVersion").orNull?.let { version ->
-    val parts = Regex("""(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)""").matchEntire(version)?.groupValues?.drop(1)?.map(String::toInt)
-    require(parts != null && parts[0] <= 2000 && parts[1] < 1000 && parts[2] < 1000) { "viptvVersion must be MAJOR.MINOR.PATCH with MAJOR <= 2000 and MINOR, PATCH below 1000" }
-    version to parts[0] * 1_000_000 + parts[1] * 1_000 + parts[2]
+// Release tags pass -PviptvVersion=MAJOR.MINOR.PATCH (see VERSIONING.md).
+fun versionCodeOf(version: String): Int? {
+    val parts = Regex("""(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)""").matchEntire(version)?.groupValues?.drop(1)?.map(String::toInt) ?: return null
+    return if (parts[0] <= 2000 && parts[1] < 1000 && parts[2] < 1000) parts[0] * 1_000_000 + parts[1] * 1_000 + parts[2] else null
 }
+val releaseVersion = providers.gradleProperty("viptvVersion").orNull?.let { version ->
+    val code = requireNotNull(versionCodeOf(version)) { "viptvVersion must be MAJOR.MINOR.PATCH with MAJOR <= 2000 and MINOR, PATCH below 1000" }
+    version to code
+}
+// Unversioned builds sit one above the newest reachable release tag, so `adb install -r`
+// of a development APK works over an installed release and the next release installs over it.
+// They have an empty update manifest URL and never update themselves.
+val developmentVersion = runCatching {
+    providers.exec {
+        commandLine("git", "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*.[0-9]*.[0-9]*")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim().removePrefix("v")
+}.getOrDefault("").let { tag -> versionCodeOf(tag)?.let { "$tag-dev" to it + 1 } ?: ("0.1.0" to 1) }
 
 kotlin {
     androidTarget { compilerOptions.jvmTarget.set(JvmTarget.JVM_17) }
@@ -91,8 +102,8 @@ android {
         minSdk = 24
         ndk { abiFilters += setOf("arm64-v8a", "armeabi-v7a", "x86_64") }
         targetSdk = 36
-        versionCode = releaseVersion?.second ?: 1
-        versionName = releaseVersion?.first ?: "0.1.0"
+        versionCode = (releaseVersion ?: developmentVersion).second
+        versionName = (releaseVersion ?: developmentVersion).first
         val updateManifestUrl = if (releaseVersion == null) "" else "https://github.com/viptv-org/android/releases/latest/download/update.json"
         buildConfigField("String", "UPDATE_MANIFEST_URL", "\"$updateManifestUrl\"")
         buildConfigField("boolean", "PLAYBACK_DIAGNOSTICS", "false")
