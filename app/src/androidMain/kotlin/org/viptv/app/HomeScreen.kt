@@ -288,7 +288,9 @@ internal class HomeCarouselScroll(private val leadingInset: Float) : BringIntoVi
                     if (!tv && shelf.isQueueShelf) QueueCard(media, action, hold)
                     else if (!tv && media.type == "live") LiveLogoTile(media, action, hold)
                     else MediaCard(media, Modifier.focusRequester(focuses[column]).then(if (column == horizontal.firstVisibleItemIndex && entryFocus != null) Modifier.focusRequester(entryFocus) else Modifier).onGloballyPositioned { if (column == 0) firstPlaced = true }.then(if (contentEntry && column == horizontal.firstVisibleItemIndex && tv) Modifier.focusRequester(initial) else Modifier).then(if (column == 0 && tv) Modifier.focusProperties { left = rail } else Modifier),
-                        shelf.isQueueShelf, action, hold, onFocused = { controller.recordHomeFocus(index, shelf.id, media) })
+                        shelf.isQueueShelf, action, hold, onFocused = { controller.recordHomeFocus(index, shelf.id, media) },
+                        // TV-MYLIST-POSTER-001: the TV My List shelf shows its saved posters at 2:3.
+                        portrait = tv && shelf.isMyListShelf, posterWidth = if (tv && shelf.isMyListShelf) 160.dp else null)
                 }
             }
         }

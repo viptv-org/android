@@ -1,6 +1,6 @@
 {
   "repository": "viptv-org/design",
-  "revision": "b5ad0f4592a4c1366585d755c788a9f9149a9850",
+  "revision": "4f3a1eae36399608f459b5973381ead969c2c2d1",
   "files": {
     "design-contract/DESIGN.md": {
       "source": "DESIGN.md",
@@ -44,7 +44,7 @@
     },
     "design-contract/viptv-design-system/components.md": {
       "source": "viptv-design-system/components.md",
-      "sha256": "9a282aa9d9c6d44a01cc04b1cb7349397bfa3e04175ad308d1aa153144c2c3af"
+      "sha256": "51807b08aa80d625707ef61c8ef3d132c1c64b2a29eee21121f6548c36fab90a"
     },
     "design-contract/viptv-design-system/copy.md": {
       "source": "viptv-design-system/copy.md",
@@ -52,11 +52,11 @@
     },
     "design-contract/viptv-design-system/decisions.md": {
       "source": "viptv-design-system/decisions.md",
-      "sha256": "5aa629baee1e1d8cfff893393e485eda1a62776c80fa8adc57109ad2007b5f00"
+      "sha256": "66d850e13f0577eebbf33086c4b3932fad84dd581321a4af48ee1e68b2dacaed"
     },
     "design-contract/viptv-design-system/tokens/tokens.json": {
       "source": "viptv-design-system/tokens/tokens.json",
-      "sha256": "3c502ddf30eb838d0de2955a319716bf309f062c0ee420771b5d4a36688ffd10"
+      "sha256": "9a1cc6ca62035a72907d595080a1cc55426b1ae0fb0de4df59bc1bc45380ad3d"
     },
     "design-contract/specs/behavior/torrent-native-android.md": {
       "source": "specs/behavior/torrent-native-android.md",
@@ -65,6 +65,10 @@
     "design-contract/specs/behavior/tv-ui-trial.md": {
       "source": "specs/behavior/tv-ui-trial.md",
       "sha256": "19b896764726aece6e9cd10cd783589b4004a0c8c91a5b1e483b4448464cacc8"
+    },
+    "design-contract/specs/behavior/tv-my-list-posters.md": {
+      "source": "specs/behavior/tv-my-list-posters.md",
+      "sha256": "f7423e409e93f7ca18f4cbd725b359d3b0e8ef697fd24af111f27fdbe6f6c6ab"
     },
     "app/src/androidMain/assets/design/fonts/README.md": {
       "source": "assets/fonts/README.md",
@@ -412,7 +416,7 @@
     },
     "app/src/androidMain/kotlin/org/viptv/app/theme/ViptvTokens.kt": {
       "source": "generated from pinned tokens",
-      "sha256": "c13b69f787d22503277266271b2de89f53af2a070a14074f8476e7342906c442"
+      "sha256": "4b78d16fe231cb429dbd0f91085a908a4fba4638f07f9010e8632619280f4fa9"
     }
   }
 }

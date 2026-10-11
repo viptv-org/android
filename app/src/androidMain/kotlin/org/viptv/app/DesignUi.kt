@@ -215,7 +215,8 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
     }
 }
 
-@Composable internal fun MediaCard(media: Media, modifier: Modifier = Modifier, queue: Boolean = false, onClick: () -> Unit, onHold: () -> Unit, onFocused: (() -> Unit)? = null, portrait: Boolean = false, wide: Boolean = false) {
+/** A [portrait] card fills its grid cell at 2:3 unless [posterWidth] fixes it (TV My List, TV-MYLIST-POSTER-001). */
+@Composable internal fun MediaCard(media: Media, modifier: Modifier = Modifier, queue: Boolean = false, onClick: () -> Unit, onHold: () -> Unit, onFocused: (() -> Unit)? = null, portrait: Boolean = false, wide: Boolean = false, posterWidth: Dp? = null) {
     val tv = LocalTv.current
     val closeRail = LocalCloseRail.current
     var focused by remember { mutableStateOf(false) }
@@ -224,7 +225,7 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
     val presentation = remember(media, portrait) { if (portrait) CoreModels.presentation(media) else null }
     val image = if (portrait) presentation?.posterImage ?: card.image else card.image
     val width = measure(if (wide) 360 else 320, 232)
-    Holdable(onClick, onHold, modifier.then(if (portrait) Modifier.fillMaxWidth() else Modifier.width(width)).onFocusChanged {
+    Holdable(onClick, onHold, modifier.then(if (portrait) posterWidth?.let { Modifier.width(it) } ?: Modifier.fillMaxWidth() else Modifier.width(width)).onFocusChanged {
         focused = it.isFocused; if (focused) { closeRail(); onFocused?.invoke() }
     }) {
       Column {
@@ -232,7 +233,7 @@ internal object VisibleFocusScroll : BringIntoViewSpec {
             .clip(RoundedCornerShape(measure(16, 16))).background(C.surfaceN2)
             .border(if (tv && focused) 4.dp else 0.dp, if (tv && focused) C.fillWhite else Color.Transparent, RoundedCornerShape(measure(16, 16))), contentAlignment = Alignment.Center) {
             if (image.isNullOrBlank()) VText(card.title, if (tv) 24 else if (portrait) 13 else 18, Modifier.padding(12.dp), color = C.textSecondary, bold = true, lines = 2, align = TextAlign.Center)
-            else SizedArtwork(image, card.title, Modifier.fillMaxSize(), fit = if (!portrait && card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
+            else SizedArtwork(image, card.title, Modifier.fillMaxSize(), fit = if (card.imageRole == "logo") ContentScale.Fit else ContentScale.Crop,
                 onError = { image.let { failed = failed + it } })
             val progress = card.progress?.toFloat() ?: 0f
             // AND-042: phones use a 6dp bar lifted 10dp off the art's sides and bottom.

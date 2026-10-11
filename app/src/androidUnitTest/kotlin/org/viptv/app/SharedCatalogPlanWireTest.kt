@@ -55,6 +55,8 @@ class SharedCatalogPlanWireTest {
             assertEquals(listOf("Continue watching", "Recently watched live TV", "Cinemeta · Popular", "My List", "Live now"),
                 shelves.map { it.title })
             assertTrue(shelves.first().isQueueShelf)
+            // TV-MYLIST-POSTER-001: only the My List shelf is drawn as posters on TV.
+            assertEquals(listOf("My List"), shelves.filter { it.isMyListShelf }.map { it.title })
             assertTrue(server.requests.any { it.target.contains("/continue/page?limit=40") })
             server.assertHealthy()
         }

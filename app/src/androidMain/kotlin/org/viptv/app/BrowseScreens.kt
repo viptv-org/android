@@ -1,6 +1,12 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 package org.viptv.app
 
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.lazy.grid.*
@@ -9,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.distinctUntilChanged
 import org.viptv.app.theme.ViptvColor as C
@@ -83,13 +90,27 @@ import org.viptv.app.theme.ViptvColor as C
             items(items, key = { HomeFocusPolicy.mediaKey(it) }) { media ->
                 QueueCard(media, { controller.activateCard(media, true) }, { controller.requestQueueManage(media) }, Modifier.fillMaxWidth())
             }
-        } else MediaGrid(items, queue = queue, onClick = { controller.activateCard(it, queue) },
+        } else MediaGrid(items, queue = queue, poster = tv && !queue, onClick = { controller.activateCard(it, queue) },
             onHold = { if (queue) controller.requestQueueManage(it) else controller.requestDialog(DialogKind.MyListManage, it.name, it) })
     }
 }
 
-@Composable internal fun MediaGrid(items: List<Media>, queue: Boolean = false, onClick: (Media) -> Unit, onHold: (Media) -> Unit, hasMore: Boolean = false, loading: Boolean = false, onMore: () -> Unit = {}) {
+/** TV-MYLIST-POSTER-001: focusing a poster row scrolls it to the top of the grid; the next row peeks below. */
+private object PosterRowScroll : BringIntoViewSpec {
+    override val scrollAnimationSpec: AnimationSpec<Float> = tween(220, easing = FastOutSlowInEasing)
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = offset
+}
+
+/** Exactly seven 200-wide poster columns, narrowing only if the viewport cannot fit them. */
+private object PosterColumns : GridCells {
+    override fun Density.calculateCrossAxisCellSizes(availableSize: Int, spacing: Int): List<Int> =
+        List(7) { minOf(200.dp.roundToPx(), (availableSize - 6 * spacing) / 7) }
+}
+
+/** [poster]: the TV My List grid of seven 200 × 300 posters (TV-MYLIST-POSTER-001). */
+@Composable internal fun MediaGrid(items: List<Media>, queue: Boolean = false, poster: Boolean = false, onClick: (Media) -> Unit, onHold: (Media) -> Unit, hasMore: Boolean = false, loading: Boolean = false, onMore: () -> Unit = {}) {
     val tv = LocalTv.current
+    val columns = if (poster) 7 else if (tv) 4 else 3
     val grid = rememberLazyGridState()
     val rail = LocalRailFocus.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -99,18 +120,20 @@ import org.viptv.app.theme.ViptvColor as C
             if (last >= items.size - 8 && hasMore && !loading) more()
         }
     }
-    LazyVerticalGrid(GridCells.Fixed(if (tv) 4 else 3), state = grid, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 4.dp, end = 4.dp, bottom = measure(0, 164)),
-        horizontalArrangement = Arrangement.spacedBy(measure(36, 12)), verticalArrangement = Arrangement.spacedBy(measure(40, 24))) {
+    CompositionLocalProvider(LocalBringIntoViewSpec provides if (poster) PosterRowScroll else LocalBringIntoViewSpec.current) {
+    LazyVerticalGrid(if (poster) PosterColumns else GridCells.Fixed(columns), state = grid, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 4.dp, end = 4.dp, bottom = measure(0, 164)),
+        horizontalArrangement = Arrangement.spacedBy(measure(36, 12), Alignment.Start), verticalArrangement = Arrangement.spacedBy(measure(40, 24))) {
         itemsIndexed(items, key = { _, item -> HomeFocusPolicy.mediaKey(item) }) { index, media ->
-            MediaCard(media, Modifier.then(if (tv && index % 4 == 0) Modifier.focusProperties { left = rail } else Modifier), queue,
-                onClick = { keyboard?.hide(); onClick(media) }, onHold = { onHold(media) }, portrait = !tv, wide = tv)
+            MediaCard(media, Modifier.then(if (tv && index % columns == 0) Modifier.focusProperties { left = rail } else Modifier), queue,
+                onClick = { keyboard?.hide(); onClick(media) }, onHold = { onHold(media) }, portrait = !tv || poster, wide = tv && !poster)
         }
         // AND-042-SKELETON: an appending page shows one row of placeholders, never copy.
-        if (loading) items(if (tv) 4 else 3, key = { "skeleton:$it" }) {
+        if (loading) items(columns, key = { "skeleton:$it" }) {
             Column {
-                SkeletonBlock(Modifier.fillMaxWidth().aspectRatio(if (tv) 16f / 9 else 2f / 3))
+                SkeletonBlock(Modifier.fillMaxWidth().aspectRatio(if (tv && !poster) 16f / 9 else 2f / 3))
                 SkeletonBlock(Modifier.padding(top = 10.dp).fillMaxWidth(.7f).height(12.dp), 6.dp)
             }
         }
+    }
     }
 }

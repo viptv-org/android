@@ -1,3 +1,22 @@
+# TV My List 2:3 posters — 2026-10-11
+
+Design `4f3a1eae36399608f459b5973381ead969c2c2d1` (TV-MYLIST-POSTER-001). On
+Android TV the My List segment draws seven 200 × 300 posters per row and
+scrolls the focused row to the grid top; Continue Watching keeps four landscape
+cards per row. The Home My List shelf (`HomeShelf.isMyListShelf`) draws
+160 × 240 posters. Phone cards were already 2:3 and are unchanged.
+
+Host unit tests (`:testDebugUnitTest :app:testDebugUnitTest`, one worker) and
+`:app:assembleDebug` pass. `SharedCatalogPlanWireTest` asserts that only the My
+List shelf is flagged. The debug APK was installed on `emulator-5580` with the
+owner's account: Home My List showed whole posters with the 4 px focus ring
+inside the 400 px shelf; My List showed seven posters per row, Down scrolled the
+focused row to the top, and Continue Watching kept its landscape grid. The
+previously installed emulator APK (SHA-256 `9972f1d6…1cf5`) was reinstalled
+afterwards. Removal reflow, the live-logo case and physical TV were not
+exercised. Home hero content for a focused My List poster is limited to its
+title because saved entries carry only a poster (TV-044 does not enrich on focus).
+
 # Static TV hero integration — 2026-10-09
 
 The integration combines main `9f58755` with `perf/static-tv-hero` at `26e8378`.

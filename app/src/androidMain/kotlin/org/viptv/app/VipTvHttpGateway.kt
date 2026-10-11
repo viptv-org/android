@@ -159,7 +159,7 @@ class VipTvHttpGateway(
                 HomeShelfRole.RECENTLIVE -> publish(HomeShelf(title, optional(prior(title)) {
                     liveV2(LiveCatalogQuery(collection = "recent", limit = (shelf.limit ?: 24).toInt())).items.map { CoreModels.mediaNormalized(it) }
                 }))
-                HomeShelfRole.MYLIST -> publish(HomeShelf(title, optional(prior(title)) { favorites(profileId) }))
+                HomeShelfRole.MYLIST -> publish(HomeShelf(title, optional(prior(title)) { favorites(profileId) }, isMyListShelf = true))
                 HomeShelfRole.LIVENOW -> publish(HomeShelf(title, optional(prior(title)) { this@VipTvHttpGateway.live().map(LiveChannel::asMedia) }))
                 HomeShelfRole.CATALOG -> Unit
             }

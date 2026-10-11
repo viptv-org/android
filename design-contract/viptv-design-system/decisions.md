@@ -151,6 +151,31 @@ text and non-media content keep their safe inset. The
 [media-row contract](../specs/behavior/android-tv-media-rows.md) defines the
 geometry, focus restoration and acceptance cases.
 
+## TV My List poster cards (TV-MYLIST-POSTER-001)
+
+The 2026-10-11 owner request shows TV My List cards at 2:3. My List saves only
+a portrait poster per title, which the 16:9 TV still crops to about 37 % of its
+height; fetching backdrops instead would add a metadata lookup and still fall
+back to posters for many IPTV titles. The My List segment uses a 7-column grid
+of 200 × 300 posters and the Home My List shelf uses 160 × 240. Continue
+Watching and all other TV cards keep their landscape shape. The
+[poster contract](../specs/behavior/tv-my-list-posters.md) defines geometry,
+scrolling, focus, removal and acceptance for every TV renderer.
+
+## Phone 2:3 posters (PHONE-POSTER-001)
+
+Proposed with the same 2026-10-11 request. Every phone poster card (My List,
+Discover, Search and poster shelves) uses a 2:3 frame instead of 4:5, so the
+whole poster shows; 4:5 cut about 17 % of its height. The 3-column grid,
+radius 16, captions, ⋯ button and gaps are unchanged; at 390 px wide a card is
+111 × 167 (`size.tile.phone-poster`). The phone reference renders still draw
+4:5 and are superseded on this point until re-exported. Native Android phone
+already draws 2:3; TV-web's responsive phone layout adopts it.
+
+Acceptance: on a 390 px phone, My List, Discover and Search show three 2:3
+posters per row with the whole poster visible and unchanged captions, ⋯ and
+long-press menus; missing art fills the 2:3 frame.
+
 ## Android TV episode-number jump (AND-EPISODE-JUMP-001)
 
 The proposed compact `Episode #` chip beside the season badge opens a native

@@ -106,7 +106,8 @@ data class DeviceSession(val accessToken: String, val refreshToken: String, val 
  * Queue controls follow this flag even when the row has just become empty.
  */
 /** [contentType]/[catalogName] identify a catalog shelf so phones can head it by content type (AND-042). */
-data class HomeShelf(val title: String, val items: List<Media>, val isQueueShelf: Boolean = false, val id: String = title, val contentType: String? = null, val catalogName: String? = null)
+/** [isMyListShelf]: TV draws its cards as 2:3 posters (TV-MYLIST-POSTER-001). */
+data class HomeShelf(val title: String, val items: List<Media>, val isQueueShelf: Boolean = false, val id: String = title, val contentType: String? = null, val catalogName: String? = null, val isMyListShelf: Boolean = false)
 
 data class NextResult(val status: String, val item: Media? = null)
 data class Addon(val id: String, val name: String, val manifestUrl: String, val enabled: Boolean)

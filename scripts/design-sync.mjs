@@ -24,6 +24,8 @@ if (mode === 'sync') {
   if (names.includes(nativeTorrentContract)) docs.push(nativeTorrentContract);
   const tvUiContract = 'specs/behavior/tv-ui-trial.md';
   if (names.includes(tvUiContract)) docs.push(tvUiContract);
+  const myListPosterContract = 'specs/behavior/tv-my-list-posters.md';
+  if (names.includes(myListPosterContract)) docs.push(myListPosterContract);
   const relocated = {
     'DESIGN_SYNC.md': 'docs/process/DESIGN_SYNC.md',
     'ANDROID_DESIGN.md': 'docs/platforms/ANDROID_DESIGN.md',

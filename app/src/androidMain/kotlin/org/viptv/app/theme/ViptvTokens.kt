@@ -285,7 +285,7 @@ object ViptvDimen {
     val sizeBannerIconDefault = 40.dp
     val sizeBannerIconTv = 72.dp
     val sizeTilePhonePosterWidth = 111.dp
-    val sizeTilePhonePosterHeight = 139.dp
+    val sizeTilePhonePosterHeight = 167.dp
     val sizeTilePhoneContinueWidth = 292.dp
     val sizeTilePhoneContinueHeight = 96.dp
     val sizeTilePhoneContinueThumbWidth = 60.dp
