@@ -2,6 +2,7 @@ name: Build Android APK
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,6 +15,14 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Release version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo "Release tags must be vMAJOR.MINOR.PATCH"; exit 1; }
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD || { echo "Release tags must point at a commit on main"; exit 1; }
+          echo "VIPTV_VERSION=$version" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -34,29 +43,36 @@ jobs:
       - run: scripts/prepare-core.sh host
       - run: ./gradlew --no-daemon :testDebugUnitTest :app:testDebugUnitTest
       - run: scripts/prepare-core.sh android
-      - run: ./gradlew --no-daemon :app:assemblePerformance :app:lintPerformance
+      - run: ./gradlew --no-daemon ${VIPTV_VERSION:+-PviptvVersion=$VIPTV_VERSION} :app:assemblePerformance :app:lintPerformance
       - run: python3 scripts/check-native-torrent-apk.py app/build/outputs/apk/performance/app-performance.apk
       - run: python3 scripts/check-ffmpeg-audio.py app/build/outputs/apk/performance/app-performance.apk
       - name: Package universal phone and TV APK
         env:
           BUILD_SHA: ${{ github.sha }}
         run: |
-          python3 - <<'PY'
-          import hashlib,json,os,pathlib,shutil,zipfile
-          source=pathlib.Path('app/build/outputs/apk/performance/app-performance.apk')
-          with zipfile.ZipFile(source) as archive:
-              names=archive.namelist()
-              assert not any('viptv_fixture_ca' in n for n in names), 'Fixture trust must not ship'
-              for abi in ['arm64-v8a','armeabi-v7a','x86_64']:
-                  assert f'lib/{abi}/libviptv_core.so' in names, f'Missing native core: {abi}'
-          output=pathlib.Path('artifacts');output.mkdir(exist_ok=True)
-          apk=output/f'viptv-android-phone-tv-development-{os.environ["BUILD_SHA"][:8]}.apk';shutil.copy2(source,apk)
-          (output/'SHA256SUMS').write_text(hashlib.sha256(apk.read_bytes()).hexdigest()+'  '+apk.name+'\n')
-          (output/'build.json').write_text(json.dumps({'revision':os.environ['BUILD_SHA'],'design':pathlib.Path('DESIGN_REF').read_text().strip(),'core':pathlib.Path('CORE_REF').read_text().strip(),'torrent_runtime':pathlib.Path('TORRENT_RUNTIME_REF').read_text().strip(),'torrent_comparison_packaged':False,'native_torrent_qualified':False,'signing':'stable development key','variant':'performance','debuggable':False,'optimized':True,'platforms':['phone','android-tv']}))
-          PY
+          export AAPT2="$(ls -d "$ANDROID_SDK_ROOT"/build-tools/*/ | sort -V | tail -n 1)aapt2"
+          python3 scripts/package-apk.py app/build/outputs/apk/performance/app-performance.apk artifacts
       - uses: actions/upload-artifact@v4
         with:
           name: android-phone-tv-${{ github.sha }}
           path: artifacts/*
           if-no-files-found: error
           retention-days: 30
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: apk
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-phone-tv-${{ github.sha }}
+          path: artifacts
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" artifacts/* --repo "$GITHUB_REPOSITORY" --verify-tag --latest \
+            --title "VIPTV Android ${GITHUB_REF_NAME#v}" --generate-notes \
+            --notes "Beta build for phones, Android TV and Fire TV. Update your VIPTV backend to the latest version together with this release."

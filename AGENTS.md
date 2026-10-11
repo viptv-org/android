@@ -1,8 +1,10 @@
 # VIPTV Android video agent guide
 
 Delivery policy: only Android, desktop, Roku and TV-web build workflows run,
-triggered by main pushes and manual dispatch. No PR gates, automatic releases,
-image publishing or deployment. Retain local checks.
+triggered by main pushes and manual dispatch. Android `vMAJOR.MINOR.PATCH` tags
+on main also publish a beta GitHub release (see VERSIONING.md); pushing a tag is
+an owner-approved action. No PR gates, image publishing or deployment. Retain
+local checks.
 
 Choose the development host from the current checkout, not a remembered host.
 Read DEVELOPMENT.md. In the Linux organization workspace, read the workspace

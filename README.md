@@ -99,9 +99,12 @@ scripts/prepare-core.sh android
 Hosted `.github/workflows/build.yml` builds the pinned native core for host tests
 and all three Android ABIs, runs library/app unit tests and lint, and packages a
 universal phone/TV optimized development APK with revision/pin metadata and SHA256SUMS. Main
-pushes and manual dispatch produce sideloading artifacts only. There are no PR
-gates, automatic releases, package/image publishing or deployments; retain local
-checks. Production delivery requires separate authorization.
+pushes and manual dispatch produce sideloading artifacts. A `vMAJOR.MINOR.PATCH`
+tag on main also publishes a beta GitHub release with the versioned APK and the
+`update.json` that installed apps read to update themselves; see
+[VERSIONING.md](VERSIONING.md). There are no PR gates, package/image publishing
+or deployments; retain local checks. Release notes tell users to update the
+backend to its latest version, which has no separate version contract.
 
 A passing build does not qualify physical playback hardware. Emulator and
 physical evidence and outstanding qualification limits are recorded in
@@ -111,7 +114,8 @@ acceptance are tracked in [README-performance-fixes.md](README-performance-fixes
 Use `app/build/outputs/apk/performance/app-performance.apk` for interactive
 phone/TV use. It applies R8 optimization, resource shrinking and non-debuggable
 execution, with the existing development signing key and application ID so an
-update preserves sign-in. It is a development artifact, not a store release.
+update preserves sign-in. Tagged GitHub releases ship this variant; it is not a
+store release.
 Use the debug variant for instrumentation, debugger/run-as access and fixtures;
 its timings do not represent the optimized APK.
 

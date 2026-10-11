@@ -254,5 +254,6 @@ changes in the owning repository, then sync the Android consumer and keep the
 TV-web core pin aligned. Pulling sibling repos does not update Android's pins.
 
 Retain local checks. Actions produce build artifacts on main pushes/manual
-runs for Android, desktop, Roku, and TV-web only. No PR gates, automatic
-releases, publishing, or deployments. Production delivery is separately authorized.
+runs for Android, desktop, Roku, and TV-web only. Android version tags also
+publish a beta GitHub release (VERSIONING.md). No PR gates, other publishing,
+or deployments. Production delivery is separately authorized.
