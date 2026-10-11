@@ -1,11 +1,11 @@
 # 04 — Design spec for in-app updates
 
 Blocked by: none (Fire TV permission check in 07 may adjust copy)
-Status: ready
-Owner: unassigned
+Status: in-review
+Owner: Claude
 Triage: ready-for-agent
 Repositories: design, then android design-contract sync
-Implementation commits: pending
+Implementation commits: design `1237115`, `bf1cbab` on `spec/app-updates`; android pin in `c54e510`
 
 ## Acceptance
 
@@ -18,4 +18,4 @@ Implementation commits: pending
 
 ## Evidence
 
-Pending.
+Spec `specs/behavior/app-updates.md` plus copy/decisions entries; `python3 scripts/validate.py` passes. Android `DESIGN_REF` pins `bf1cbab` and `design-sync.mjs check` passes. Design must merge to main before Android so the pin resolves on main.

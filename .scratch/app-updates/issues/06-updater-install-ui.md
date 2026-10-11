@@ -1,11 +1,11 @@
 # 06 — Install flow and update UI
 
 Blocked by: 04
-Status: blocked
-Owner: unassigned
+Status: in-review
+Owner: Claude
 Triage: ready-for-agent
 Repositories: android
-Implementation commits: pending
+Implementation commits: c54e510, e0ccf12
 
 ## Acceptance
 
@@ -25,4 +25,6 @@ Implementation commits: pending
 
 ## Evidence
 
-Pending.
+Unit: `AppUpdatesTest` 9 tests; full suites 404 tests, 0 failures. `-PviptvVersion=0.3.0 :app:assemblePerformance :app:lintPerformance` passes (lint error `ContextCastToActivity` fixed; `<queries>` added for the settings intent). Device evidence and the Cancel race fix are in TESTING.md, "In-app updates (AND-APP-UPDATE-001) — 2026-10-11".
+
+Development builds now use versionCode one above the newest reachable release tag (`X.Y.Z-dev`) so `adb install -r` of a development APK works over an installed release; verified with a temporary local `v0.3.0` tag (3001 / `0.3.0-dev`) and without tags (1 / `0.1.0`).

@@ -5,7 +5,7 @@ Status: done
 Owner: Claude
 Triage: ready-for-agent
 Repositories: android
-Implementation commits: see "Add verified update check and download core" on feat/app-updates
+Implementation commits: eac9514, e0ccf12 (UpdateDamagedException, manifest round trip)
 
 ## Acceptance
 

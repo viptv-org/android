@@ -2715,3 +2715,41 @@ host unit tests passed. The app launched still signed in. A capture about 8 s af
 showed Home with the focused title's art, facts, description and backdrop and
 five Continue Watching card images. Responsiveness compared with the baseline
 awaits the owner's assessment.
+
+# In-app updates (AND-APP-UPDATE-001) — 2026-10-11
+
+Tested on the shared serve-avd Android TV emulator (`sdk_google_atv64_x86_64`,
+API 36) with optimized APKs built from `c54e510` and, for the cancel retest,
+`e0ccf12`. To leave the owner's signed-in `org.viptv.app` untouched, the QA
+APKs used an uncommitted patch: application ID `org.viptv.app.updateqa`, an
+update manifest and trusted download prefix on a host-loopback HTTP server
+reached as `10.0.2.2`, and the launch check and dialogs enabled on the
+signed-out pairing screen. The QA package was uninstalled afterwards; the
+owner's app stayed at versionCode 1 in the foreground.
+
+Observed with D-pad/OK/Back input only:
+
+- QA 0.3.0 (versionCode 3000) fetched `update.json` on launch and showed
+  **Update available** for 0.3.1 with **Update now** focused, so schema-1
+  parsing works after R8.
+- **Update now** without permission showed **Allow updates**; **Open settings**
+  opened the system Install unknown apps panel for VIPTV. Turning it on and
+  pressing Back resumed the flow: the APK downloaded and the system "Do you
+  want to update this app?" confirmation appeared.
+- Cancelling the system confirmation returned to the app with no error and the
+  app still at 3000. After a restart the prompt returned without a new network
+  request (throttled check, remembered release) and reused the verified file.
+  Confirming **Update** installed 0.3.1 (versionCode 3001).
+- A manifest for 0.3.2 with a wrong SHA-256 showed **Downloading update** with
+  progress (29%, 68%), then **Couldn't update VIPTV** with the damaged-download
+  text; **Try again** repeated the download and the same error.
+- **Later** suppressed the prompt, including after a restart.
+- **Cancel** during download at 29% on `c54e510` left a frozen progress dialog
+  (late IO-thread progress overwrote the cleared flow). Fixed in `e0ccf12`; the
+  retest cancelled at 41% and the dialog stayed closed.
+
+Not exercised: the signed-in Settings › About VIPTV dialog and the launch check
+on signed-in screens (same composables and updater, different route gate), the
+real GitHub `latest/download` redirect (no release exists yet), network loss,
+an installation rejected by Android, phone layouts, and the Fire TV permission
+path. Captures are in ignored `qualification/artifacts/update-qa/`.
