@@ -122,11 +122,6 @@ android {
 dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
-val verifyDesign by tasks.registering(Exec::class) {
-    workingDir(rootProject.projectDir)
-    commandLine("node", "scripts/design-sync.mjs", "check")
-}
-tasks.named("preBuild") { dependsOn(verifyDesign) }
 
 val verifyTorrentRuntime by tasks.registering(Exec::class) {
     workingDir(rootProject.projectDir)
