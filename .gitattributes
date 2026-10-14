@@ -1,2 +1,0 @@
-# Native dependency snapshots preserve the producer's byte-exact hashes on Windows.
-/vendor/playback-gateway/** -text

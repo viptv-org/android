@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-14",
+  "branch": "experiment/kmp-v2",
+  "replacement": "https://github.com/viptv-org/app",
+  "historical_source_commit": "44792cac59e50f774e9622c2f4d5651fab6c076a",
+  "main_commit_preserved": "c7d489faf46f22082528d6d04ac3c1c373a00fc5",
+  "historical_tracked_entries": 1321,
+  "physical_historical_files_preserved": true,
+  "retained_root_licenses": [
+    "LICENSE-APACHE",
+    "LICENSE-MIT"
+  ]
+}
